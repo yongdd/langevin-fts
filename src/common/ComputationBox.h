@@ -431,7 +431,7 @@ public:
      *
      * @param sg Pointer to SpaceGroup, or nullptr to disable reduced basis mode
      */
-    void set_space_group(SpaceGroup* sg);
+    virtual void set_space_group(SpaceGroup* sg);
 
     /**
      * @brief Get the current space group.
@@ -447,7 +447,7 @@ public:
      *
      * @return Number of grid points (n_irreducible or total_grid)
      */
-    int get_n_grid() const;
+    int get_n_basis() const;
 
     /**
      * @brief Get the orbit counts for reduced basis weighting.
@@ -468,10 +468,20 @@ public:
      *   Computes: integral(g) = (V/M) * sum_i orbit_counts[i] * g[i]
      *   Array size: n_irreducible
      *
-     * @param g Field array (length: get_n_grid())
+     * @param g Field array (length: get_n_basis())
      * @return Volume integral of g
      */
     T integral(const T *g);
+
+    /**
+     * @brief Compute mean (spatial average) of a field.
+     *
+     * Computes: mean(g) = integral(g) / volume
+     *
+     * @param g Field array (length: get_n_basis())
+     * @return Spatial average of g
+     */
+    T mean(const T *g);
 
     /**
      * @brief Compute inner product of two fields.
@@ -484,8 +494,8 @@ public:
      *   Computes: <g|h> = (V/M) * sum_i orbit_counts[i] * g[i] * h[i]
      *   Array size: n_irreducible
      *
-     * @param g First field array (length: get_n_grid())
-     * @param h Second field array (length: get_n_grid())
+     * @param g First field array (length: get_n_basis())
+     * @param h Second field array (length: get_n_basis())
      * @return Inner product <g|h>
      */
     T inner_product(const T *g, const T *h);
@@ -497,8 +507,8 @@ public:
      *
      * When space group is set, operates on reduced basis arrays.
      *
-     * @param g First field array (length: get_n_grid())
-     * @param h Second field array (length: get_n_grid())
+     * @param g First field array (length: get_n_basis())
+     * @param h Second field array (length: get_n_basis())
      * @param w Weight field array (must be non-zero everywhere)
      * @return Weighted inner product
      */
@@ -514,8 +524,8 @@ public:
      *   Array size per component: n_irreducible
      *
      * @param n_comp Number of field components
-     * @param g First multi-component field (length: n_comp * get_n_grid())
-     * @param h Second multi-component field (length: n_comp * get_n_grid())
+     * @param g First multi-component field (length: n_comp * get_n_basis())
+     * @param h Second multi-component field (length: n_comp * get_n_basis())
      * @return Sum of inner products over all components
      */
     T multi_inner_product(int n_comp, const T *g, const T *h);
@@ -527,7 +537,7 @@ public:
      *
      * When space group is set, uses weighted mean with orbit_counts.
      *
-     * @param g Field array (length: get_n_grid(), modified in-place)
+     * @param g Field array (length: get_n_basis(), modified in-place)
      */
     void zero_mean(T *g);
 

@@ -44,6 +44,7 @@
 #include "Molecules.h"
 #include "CudaComputationReduceMemoryBase.h"
 #include "CudaCommon.h"
+#include "SpaceGroup.h"
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
@@ -84,6 +85,31 @@ private:
      * Tuple: (polymer_id, q_forward, q_backward, n_repeated)
      */
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
+
+    // ============== Reduced basis support ==============
+    /**
+     * @brief Device array for full_to_reduced_map.
+     * Maps each full grid point to its irreducible index.
+     */
+    int* d_full_to_reduced_map_;
+
+    /**
+     * @brief Device array for reduced_basis_indices.
+     * Flat indices of irreducible mesh points.
+     */
+    int* d_reduced_basis_indices_;
+
+    /**
+     * @brief Temporary device buffers for full grid propagator.
+     * d_q_full_[0] = input, d_q_full_[1] = output
+     * Only allocated when space group is set.
+     */
+    CuDeviceData<T>* d_q_full_[2];
+
+    /**
+     * @brief Buffer for expanding concentration to full grid (device).
+     */
+    CuDeviceData<T>* d_phi_full_buffer_;
 
     /**
      * @brief Compute concentration for one block.
@@ -129,7 +155,7 @@ public:
      */
     CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc,
         PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method,
-        std::string numerical_method = "");
+        std::string numerical_method = "", SpaceGroup* space_group = nullptr);
 
     /** @brief Destructor. Frees GPU and pinned memory. */
     ~CudaComputationReduceMemoryContinuous();
@@ -171,7 +197,6 @@ public:
 
     /** @brief Verify partition function consistency. */
     bool check_total_partition() override;
-
 };
 
 #endif

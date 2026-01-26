@@ -39,6 +39,7 @@
 
 #include "CudaComputationBox.h"
 #include "CudaCommon.h"
+#include "SpaceGroup.h"
 
 /**
  * @brief Construct CUDA computation box with device memory.
@@ -92,6 +93,8 @@ CudaComputationBox<T>::~CudaComputationBox()
     cudaFree(d_sum);
     cudaFree(d_sum_out);
     cudaFree(d_temp_storage);
+    if (d_orbit_counts_ != nullptr)
+        cudaFree(d_orbit_counts_);
 }
 //-----------------------------------------------------------
 template <typename T>
@@ -109,20 +112,64 @@ void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, s
 }
 //-----------------------------------------------------------
 template <typename T>
+void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
+{
+    // Call base class implementation
+    ComputationBox<T>::set_space_group(sg);
+
+    // Free old device orbit_counts if exists
+    if (d_orbit_counts_ != nullptr)
+    {
+        cudaFree(d_orbit_counts_);
+        d_orbit_counts_ = nullptr;
+    }
+
+    // Copy orbit_counts to device if space_group is set
+    if (sg != nullptr)
+    {
+        const auto& orbit_counts = sg->get_orbit_counts();
+        int N = sg->get_n_irreducible();
+        gpu_error_check(cudaMalloc((void**)&d_orbit_counts_, sizeof(int)*N));
+        gpu_error_check(cudaMemcpy(d_orbit_counts_, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
+    }
+}
+//-----------------------------------------------------------
+template <typename T>
 T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     T sum{0.0};
 
-    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, this->total_grid);
+    if (this->space_group_ != nullptr)
+    {
+        // Reduced basis mode: sum = Σ_j g[j] * orbit_counts[j] * dv_base
+        int N = this->n_irreducible_;
+        double dv_base = this->volume / this->total_grid;
 
-    if constexpr (std::is_same<T, double>::value)
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
+        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_orbit_counts_, N);
+
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum * static_cast<T>(dv_base);
+    }
     else
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
-    gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
-    return sum;
+    {
+        // Full grid mode: sum = Σ_i g[i] * dv[i]
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, this->total_grid);
+
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum;
+    }
 }
 //-----------------------------------------------------------
 template <typename T>

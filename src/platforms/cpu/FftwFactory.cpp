@@ -79,7 +79,7 @@ Molecules* FftwFactory<T>::create_molecules_information(
 }
 
 template <typename T>
-PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
+PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group)
 {
     try
     {
@@ -89,9 +89,9 @@ PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(Computat
         if (chain_model == "discrete")
         {
             if (!this->reduce_memory)
-                return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::FFTW);
+                return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::FFTW, space_group);
             else
-                return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::FFTW);
+                return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::FFTW, space_group);
         }
 
         // Continuous chain model: validate and use numerical_method
@@ -104,9 +104,9 @@ PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(Computat
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
         if (!this->reduce_memory)
-            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::FFTW);
+            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::FFTW, space_group);
         else
-            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::FFTW);
+            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::FFTW, space_group);
     }
     catch(std::exception& exc)
     {

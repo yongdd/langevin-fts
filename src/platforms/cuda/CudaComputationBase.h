@@ -95,6 +95,11 @@ protected:
 
     std::vector<CuDeviceData<T> *> d_phi_solvent;  ///< Solvent concentrations
 
+    // Reduced basis support (populated by derived class in set_space_group)
+    int* d_full_to_reduced_map_base_;     ///< Map from full grid to reduced basis (device)
+    int* d_reduced_basis_indices_base_;   ///< Indices of reduced basis points (device)
+    CuDeviceData<T>* d_phi_full_buffer_;  ///< Buffer for expanding to full grid (device)
+
 public:
     /**
      * @brief Construct CUDA computation base.

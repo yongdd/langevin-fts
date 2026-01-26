@@ -43,6 +43,7 @@
 #include "CudaCommon.h"
 #include "CudaSolver.h"
 #include "Scheduler.h"
+#include "SpaceGroup.h"
 
 /**
  * @class CudaComputationReduceMemoryDiscrete
@@ -97,6 +98,31 @@ private:
      */
     std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
 
+    // ============== Reduced basis support ==============
+    /**
+     * @brief Device array for full_to_reduced_map.
+     * Maps each full grid point to its irreducible index.
+     */
+    int* d_full_to_reduced_map_;
+
+    /**
+     * @brief Device array for reduced_basis_indices.
+     * Flat indices of irreducible mesh points.
+     */
+    int* d_reduced_basis_indices_;
+
+    /**
+     * @brief Temporary device buffers for full grid propagator.
+     * d_q_full_[0] = input, d_q_full_[1] = output
+     * Only allocated when space group is set.
+     */
+    CuDeviceData<T>* d_q_full_[2];
+
+    /**
+     * @brief Buffer for expanding concentration to full grid (device).
+     */
+    CuDeviceData<T>* d_phi_full_buffer_;
+
     /**
      * @brief Compute concentration for one block with recomputation.
      *
@@ -139,7 +165,7 @@ public:
      * @param propagator_computation_optimizer Optimization strategy
      */
     CudaComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules,
-        PropagatorComputationOptimizer *propagator_computation_optimizer);
+        PropagatorComputationOptimizer *propagator_computation_optimizer, SpaceGroup* space_group = nullptr);
 
     /** @brief Destructor. Frees GPU and pinned memory. */
     ~CudaComputationReduceMemoryDiscrete();
@@ -181,7 +207,6 @@ public:
 
     /** @brief Verify partition function consistency. */
     bool check_total_partition() override;
-
 };
 
 #endif

@@ -75,6 +75,11 @@ private:
     CuDeviceData<T> *d_sum_out;        ///< Output buffer for reduction
     /// @}
 
+    /// @name Space Group Support
+    /// @{
+    int* d_orbit_counts_ = nullptr;  ///< Device copy of orbit counts for reduced basis
+    /// @}
+
     /**
      * @brief Initialize GPU resources.
      *
@@ -122,6 +127,15 @@ public:
      * @param new_angles New lattice angles [alpha, beta, gamma] in degrees
      */
     void set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles) override;
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * Copies orbit_counts to device memory for GPU-accelerated reductions.
+     *
+     * @param sg Space group pointer (nullptr to disable reduced basis)
+     */
+    void set_space_group(SpaceGroup* sg) override;
 
     /// @name Device-Side Operations
     /// @{

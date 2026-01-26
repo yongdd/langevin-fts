@@ -863,10 +863,105 @@ __global__ void ker_etdrk4_krogstad_final_real(
     }
 }
 
+// ============================================================
+// Space group reduced basis kernels
+// ============================================================
+
+__global__ void ker_expand_reduced_basis(
+    double* dst, const double* src, const int* full_to_reduced_map, const int total_grid)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < total_grid)
+    {
+        dst[i] = src[full_to_reduced_map[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_expand_reduced_basis(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* full_to_reduced_map, const int total_grid)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < total_grid)
+    {
+        dst[i] = src[full_to_reduced_map[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_reduce_to_basis(
+    double* dst, const double* src, const int* reduced_basis_indices, const int n_irreducible)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_irreducible)
+    {
+        dst[i] = src[reduced_basis_indices[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_reduce_to_basis(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_irreducible)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_irreducible)
+    {
+        dst[i] = src[reduced_basis_indices[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi_gather(
+    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_irreducible)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_irreducible)
+    {
+        double val = src[reduced_basis_indices[i]];
+        dst[i] = val * val * norm;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi_gather(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_irreducible)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_irreducible)
+    {
+        cuDoubleComplex val = src[reduced_basis_indices[i]];
+        dst[i] = cuCmul(cuCmul(val, val), norm);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi_weight(
+    double* dst, const double* src, const int* weights, const int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n)
+    {
+        dst[i] = src[i] * static_cast<double>(weights[i]);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi_weight(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* weights, const int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n)
+    {
+        double w = static_cast<double>(weights[i]);
+        dst[i] = make_cuDoubleComplex(src[i].x * w, src[i].y * w);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 // Explicit template instantiation
 
-template std::map<std::string, const double*> 
+template std::map<std::string, const double*>
 reinterpret_map<double, double>(const std::map<std::string, const double*>& input);
 
-template std::map<std::string, const cuDoubleComplex*> 
+template std::map<std::string, const cuDoubleComplex*>
 reinterpret_map<std::complex<double>, cuDoubleComplex>(const std::map<std::string, const std::complex<double>*>& input);

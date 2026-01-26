@@ -33,7 +33,10 @@ CudaComputationBase<T>::CudaComputationBase(
       d_q_unity(nullptr),
       d_q_mask(nullptr),
       sc(nullptr),
-      d_phi(nullptr)
+      d_phi(nullptr),
+      d_full_to_reduced_map_base_(nullptr),
+      d_reduced_basis_indices_base_(nullptr),
+      d_phi_full_buffer_(nullptr)
 {
 }
 
@@ -70,30 +73,28 @@ void CudaComputationBase<T>::get_total_concentration(std::string monomer_type, T
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
 
-        // Initialize to zero
-        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*N));
 
-        // For each block
         for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             std::string key_left = std::get<1>(key);
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
+                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, N);
         }
         gpu_error_check(cudaPeekAtLastError());
 
-        // For each solvent
-        for(int s=0;s<this->molecules->get_n_solvent_types();s++)
+        for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
             if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
-                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_phi_solvent[s], M);
+                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_phi_solvent[s], N);
         }
         gpu_error_check(cudaPeekAtLastError());
-        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
+
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*N, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -108,17 +109,14 @@ void CudaComputationBase<T>::get_total_concentration(int p, std::string monomer_
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // Initialize to zero
-        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*N));
 
-        // For each block
         for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
@@ -126,10 +124,11 @@ void CudaComputationBase<T>::get_total_concentration(int p, std::string monomer_
             std::string key_left = std::get<1>(key);
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
+                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, N);
         }
         gpu_error_check(cudaPeekAtLastError());
-        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
+
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*N, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -144,17 +143,14 @@ void CudaComputationBase<T>::get_total_concentration_gce(double fugacity, int p,
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // Initialize to zero
-        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*N));
 
-        // For each block
         for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
@@ -170,11 +166,12 @@ void CudaComputationBase<T>::get_total_concentration_gce(double fugacity, int p,
                     norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
                 else
                     norm = stdToCuDoubleComplex(fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p]);
-                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_block.second, 1.0, d_phi, M);
+                ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_block.second, 1.0, d_phi, N);
             }
         }
         gpu_error_check(cudaPeekAtLastError());
-        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
+
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*N, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -187,10 +184,7 @@ void CudaComputationBase<T>::get_block_concentration(int p, T *phi)
 {
     try
     {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -198,9 +192,6 @@ void CudaComputationBase<T>::get_block_concentration(int p, T *phi)
 
         if (this->propagator_computation_optimizer->use_aggregation())
             throw_with_line_number("Disable 'aggregation' option to invoke 'get_block_concentration'.");
-
-        // Initialize to zero
-        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
 
         Polymer& pc = this->molecules->get_polymer(p);
         std::vector<Block>& blocks = pc.get_blocks();
@@ -212,9 +203,9 @@ void CudaComputationBase<T>::get_block_concentration(int p, T *phi)
             if (key_left < key_right)
                 key_left.swap(key_right);
 
-            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, key_left, key_right)], M);
-            gpu_error_check(cudaPeekAtLastError());
-            gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
+            CuDeviceData<T>* d_block = d_phi_block[std::make_tuple(p, key_left, key_right)];
+
+            gpu_error_check(cudaMemcpy(&phi[b*N], d_block, sizeof(T)*N, cudaMemcpyDeviceToHost));
         }
     }
     catch(std::exception& exc)
@@ -241,13 +232,13 @@ void CudaComputationBase<T>::get_solvent_concentration(int s, T *phi)
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int S = this->molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
             throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
 
-        gpu_error_check(cudaMemcpy(phi, d_phi_solvent[s], sizeof(T)*M, cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(phi, d_phi_solvent[s], sizeof(T)*N, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {

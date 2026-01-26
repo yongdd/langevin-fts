@@ -727,7 +727,16 @@ class SCFT:
         # Get numerical method
         numerical_method = params.get("numerical_method", "rqm4")
 
-        # Create PropagatorSolver instance
+        # Create space group object early (before PropagatorSolver) if specified
+        if "space_group" in params:
+            if "number" in params["space_group"]:
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
+            else:
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
+        else:
+            self.sg = None
+
+        # Create PropagatorSolver instance with space_group
         self.prop_solver = PropagatorSolver(
             nx=params["nx"],
             lx=params["lx"],
@@ -738,6 +747,7 @@ class SCFT:
             numerical_method=numerical_method,
             platform=platform,
             reduce_memory=reduce_memory,
+            space_group=self.sg,
         )
 
         # Set angles if provided (after initialization, before adding polymers)
@@ -789,14 +799,8 @@ class SCFT:
         else:
             self.scale_stress = 1
 
-        # Space group symmetry operations
-        if "space_group" in params:
-            # Create a space group object
-            if "number" in params["space_group"]:
-                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
-            else:
-                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
-
+        # Space group symmetry operations (self.sg was created above)
+        if self.sg is not None:
             crystal_system = self.sg.get_crystal_system()
             if not crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
                 raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
@@ -828,11 +832,7 @@ class SCFT:
                 n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
             else :
                 n_var = len(self.monomer_types)*n_reduced
-
-            # # Set symmetry operations to the solver
-            # solver.set_symmetry_operations(sg.get_symmetry_operations())
         else:
-            self.sg = None
 
             # Crystal system determines which lattice parameters can be optimized
             # Default: all box lengths can vary, angles are fixed at their initial values
@@ -919,10 +919,6 @@ class SCFT:
                 n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
-
-        # Set space group on PropagatorComputation for reduced basis operations
-        if self.sg is not None:
-            self.prop_solver._propagator_computation.set_space_group(self.sg)
 
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point

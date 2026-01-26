@@ -52,24 +52,17 @@ def test_propagator_computation_reduced_basis():
     # Create computation box
     cb = factory.create_computation_box(nx, lx, None, bc)
 
-    # Create optimizer and propagator computation
-    optimizer = factory.create_propagator_computation_optimizer(molecules, False)
-    propagator = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4")
-
-    # Test without space group
-    assert propagator.get_cb().get_n_grid() == total_grid, "n_grid should equal total_grid without space group"
-    print(f"  Without space group: n_grid = {propagator.get_cb().get_n_grid()} (total_grid = {total_grid})")
-
     # Create space group (Im-3m)
     sg = _core.SpaceGroup(nx, "Im-3m", 529)
     n_irreducible = sg.get_n_irreducible()
 
-    # Set space group
-    propagator.set_space_group(sg)
+    # Create optimizer and propagator computation WITH space group (passed to constructor)
+    optimizer = factory.create_propagator_computation_optimizer(molecules, False)
+    propagator = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", sg)
 
     # Test with space group
-    assert propagator.get_cb().get_n_grid() == n_irreducible, f"n_grid should equal {n_irreducible} with space group"
-    print(f"  With space group: n_grid = {propagator.get_cb().get_n_grid()} (n_irreducible = {n_irreducible})")
+    assert propagator.get_cb().get_n_basis() == n_irreducible, f"n_grid should equal {n_irreducible} with space group"
+    print(f"  With space group: n_grid = {propagator.get_cb().get_n_basis()} (n_irreducible = {n_irreducible})")
 
     # Test compute_propagators with reduced basis
     np.random.seed(42)
@@ -93,10 +86,11 @@ def test_propagator_computation_reduced_basis():
     assert abs(weighted_mean - 1.0) < 0.01, f"Material not conserved: {weighted_mean}"
     print(f"  Material conservation: weighted_mean(phi) = {weighted_mean:.6f}")
 
-    # Test clear space group
-    propagator.set_space_group(None)
-    assert propagator.get_cb().get_n_grid() == total_grid, "n_grid should return to total_grid after clearing"
-    print(f"  After clearing: n_grid = {propagator.get_cb().get_n_grid()}")
+    # Test without space group (create separate computation box and propagator)
+    cb_no_sg = factory.create_computation_box(nx, lx, None, bc)
+    propagator_no_sg = factory.create_propagator_computation(cb_no_sg, molecules, optimizer, "rqm4", None)
+    assert propagator_no_sg.get_cb().get_n_basis() == total_grid, "n_grid should equal total_grid without space group"
+    print(f"  Without space group: n_grid = {propagator_no_sg.get_cb().get_n_basis()} (total_grid = {total_grid})")
 
     print("  PASSED\n")
 
@@ -123,8 +117,8 @@ def test_computation_box_reduced_basis():
     # Set space group on computation box
     cb.set_space_group(sg)
 
-    assert cb.get_n_grid() == n_irreducible, f"cb.get_n_grid() should be {n_irreducible}"
-    print(f"  n_grid = {cb.get_n_grid()} (n_irreducible = {n_irreducible})")
+    assert cb.get_n_basis() == n_irreducible, f"cb.get_n_basis() should be {n_irreducible}"
+    print(f"  n_grid = {cb.get_n_basis()} (n_irreducible = {n_irreducible})")
 
     # Test integral with reduced basis (constant field = 1.0)
     field_ones = np.ones(n_irreducible)
@@ -141,8 +135,8 @@ def test_computation_box_reduced_basis():
 
     # Clear space group
     cb.set_space_group(None)
-    assert cb.get_n_grid() == total_grid, "n_grid should return to total_grid"
-    print(f"  After clearing: n_grid = {cb.get_n_grid()}")
+    assert cb.get_n_basis() == total_grid, "n_grid should return to total_grid"
+    print(f"  After clearing: n_grid = {cb.get_n_basis()}")
 
     print("  PASSED\n")
 

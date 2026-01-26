@@ -170,7 +170,8 @@ class PropagatorSolver:
         numerical_method: Optional[str] = None,
         platform: str = "auto",
         reduce_memory: bool = False,
-        mask: Optional[NDArray[np.floating]] = None
+        mask: Optional[NDArray[np.floating]] = None,
+        space_group: Optional[Any] = None
     ) -> None:
         """Initialize the propagator solver."""
 
@@ -277,7 +278,7 @@ class PropagatorSolver:
         self._computation_box = None
         self._propagator_optimizer = None
         self._fields_set = False
-        self._space_group = None
+        self._space_group = space_group
 
     def add_polymer(
         self,
@@ -358,10 +359,18 @@ class PropagatorSolver:
                     nx=self.nx, lx=self.lx, bc=self.bc
                 )
 
-        # Create solver
+        # Create solver with space_group if provided
+        # Handle both C++ SpaceGroup objects and Python wrappers with _cpp_sg attribute
+        if self._space_group is None:
+            cpp_space_group = None
+        elif hasattr(self._space_group, '_cpp_sg'):
+            cpp_space_group = self._space_group._cpp_sg
+        else:
+            # Already a C++ SpaceGroup object
+            cpp_space_group = self._space_group
         self._propagator_computation = self._factory.create_propagator_computation(
             self._computation_box, self._molecules, self._propagator_optimizer,
-            self.numerical_method
+            self.numerical_method, cpp_space_group
         )
 
     def compute_propagators(
@@ -642,7 +651,7 @@ class PropagatorSolver:
             Number of grid points (n_irreducible or total_grid).
         """
         if self._propagator_computation is not None:
-            return self._propagator_computation.get_cb().get_n_grid()
+            return self._propagator_computation.get_cb().get_n_basis()
         return self._total_grid
 
     @property
@@ -868,17 +877,21 @@ class PropagatorSolver:
         """
         Set space group for reduced basis representation.
 
-        When a space group is set, fields can be represented using only
-        irreducible mesh points, reducing memory usage.
+        .. deprecated::
+            Pass space_group to the constructor instead.
+            This method will be removed in a future version.
 
         Parameters
         ----------
         space_group : SpaceGroup
             SpaceGroup object from polymerfts.space_group module.
         """
-        self._initialize_solver()
+        if self._propagator_computation is not None:
+            raise RuntimeError(
+                "Cannot set space_group after solver initialization. "
+                "Pass space_group to the PropagatorSolver constructor instead."
+            )
         self._space_group = space_group
-        self._propagator_computation.set_space_group(space_group._cpp_sg)
 
     def to_reduced_basis(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
         """

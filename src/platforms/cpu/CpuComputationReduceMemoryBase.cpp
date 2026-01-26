@@ -77,30 +77,28 @@ void CpuComputationReduceMemoryBase<T>::get_total_concentration(std::string mono
 {
     try
     {
-        const int M = this->cb->get_total_grid();
-        // Initialize array
-        for(int i=0; i<M; i++)
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+
+        for(int i=0; i<N; i++)
             phi[i] = 0.0;
 
-        // For each block
         for(const auto& block: phi_block)
         {
             std::string key_left = std::get<1>(block.first);
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     phi[i] += block.second[i];
             }
         }
 
-        // For each solvent
-        for(int s=0;s<this->molecules->get_n_solvent_types();s++)
+        for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
             if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
             {
                 T *phi_solvent_ = phi_solvent[s];
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     phi[i] += phi_solvent_[i];
             }
         }
@@ -116,17 +114,15 @@ void CpuComputationReduceMemoryBase<T>::get_total_concentration(int p, std::stri
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // Initialize array
-        for(int i=0; i<M; i++)
+        for(int i=0; i<N; i++)
             phi[i] = 0.0;
 
-        // For each block
         for(const auto& block: phi_block)
         {
             int polymer_idx = std::get<0>(block.first);
@@ -134,7 +130,7 @@ void CpuComputationReduceMemoryBase<T>::get_total_concentration(int p, std::stri
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     phi[i] += block.second[i];
             }
         }
@@ -150,17 +146,15 @@ void CpuComputationReduceMemoryBase<T>::get_total_concentration_gce(double fugac
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // Initialize array
-        for(int i=0; i<M; i++)
+        for(int i=0; i<N; i++)
             phi[i] = 0.0;
 
-        // For each block
         for(const auto& block: phi_block)
         {
             int polymer_idx = std::get<0>(block.first);
@@ -170,7 +164,7 @@ void CpuComputationReduceMemoryBase<T>::get_total_concentration_gce(double fugac
             {
                 Polymer& pc = this->molecules->get_polymer(p);
                 T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     phi[i] += block.second[i]*norm;
             }
         }
@@ -186,7 +180,7 @@ void CpuComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -206,8 +200,9 @@ void CpuComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
                 key_left.swap(key_right);
 
             T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
-            for(int i=0; i<M; i++)
-                phi[i+b*M] = _essential_phi_block[i];
+
+            for(int i=0; i<N; i++)
+                phi[i+b*N] = _essential_phi_block[i];
         }
     }
     catch(std::exception& exc)
@@ -234,14 +229,15 @@ void CpuComputationReduceMemoryBase<T>::get_solvent_concentration(int s, T *phi)
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         const int S = this->molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
             throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
 
         T *phi_solvent_ = phi_solvent[s];
-        for(int i=0; i<M; i++)
+
+        for(int i=0; i<N; i++)
             phi[i] = phi_solvent_[i];
     }
     catch(std::exception& exc)
