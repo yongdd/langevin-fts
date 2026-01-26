@@ -135,6 +135,11 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }
 
+        // Note: Unlike CpuComputationReduceMemoryContinuous, we do NOT call propagator_solver->set_space_group()
+        // because this class handles expand/reduce externally using d_q_full_, d_reduced_basis_indices_,
+        // and d_full_to_reduced_map_ buffers with CUDA kernels. Calling set_space_group() would cause
+        // double expand/reduce (once here, once in solver).
+
         // Allocate memory for propagators
         if( this->propagator_computation_optimizer->get_computation_propagators().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");

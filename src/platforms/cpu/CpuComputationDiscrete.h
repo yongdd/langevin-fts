@@ -104,11 +104,6 @@ private:
     std::map<std::string, std::vector<T>> exp_dw_reduced_;
 
     /**
-     * @brief Mask in reduced basis (or full grid if no space group).
-     */
-    std::vector<double> q_mask_;
-
-    /**
      * @brief Segment pairs for partition function.
      *
      * Tuple: (polymer_id, q_forward, q_backward, monomer_type, n_repeated)

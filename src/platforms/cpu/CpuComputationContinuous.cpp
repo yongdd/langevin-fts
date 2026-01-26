@@ -266,19 +266,6 @@ void CpuComputationContinuous<T>::compute_propagators(
         // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
         this->propagator_solver->update_dw(w_input);
 
-        // Convert mask to reduced basis if space_group is set
-        const double *q_mask_full = this->cb->get_mask();
-        const double *q_mask = nullptr;
-        if (q_mask_full != nullptr)
-        {
-            q_mask_.resize(N);
-            if (this->space_group_ != nullptr)
-                this->space_group_->to_reduced_basis(q_mask_full, q_mask_.data(), 1);
-            else
-                std::copy(q_mask_full, q_mask_full + N, q_mask_.data());
-            q_mask = q_mask_.data();
-        }
-
         // For each time span
         #ifndef NDEBUG
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
@@ -415,9 +402,10 @@ void CpuComputationContinuous<T>::compute_propagators(
                     }
                 }
         
-                // Apply mask (already in reduced basis)
-                if (n_segment_from == 0 && q_mask != nullptr)
+                // Apply mask
+                if (n_segment_from == 0 && this->cb->get_mask() != nullptr)
                 {
+                    const double* q_mask = this->cb->get_mask();
                     for(int i=0; i<N; i++)
                         _propagator[0][i] *= q_mask[i];
                 }
@@ -444,7 +432,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                     this->propagator_solver->advance_propagator(
                             _propagator[n],
                             _propagator[n+1],
-                            monomer_type, q_mask, ds_index);
+                            monomer_type, this->cb->get_mask(), ds_index);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -515,9 +503,7 @@ void CpuComputationContinuous<T>::advance_propagator_single_segment(
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int ds_index = mapping.get_ds_index(block.contour_length);
 
-        // Assign a pointer for mask
-        const double *q_mask = this->cb->get_mask();
-        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, ds_index);
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, this->cb->get_mask(), ds_index);
     }
     catch(std::exception& exc)
     {

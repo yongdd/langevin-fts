@@ -321,8 +321,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = this->cb->get_total_grid();
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_cp = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -385,16 +383,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
-                        if (use_reduced_basis)
-                        {
-                            // Expand q_init from reduced to full grid on device
-                            gpu_error_check(cudaMemcpy(d_q_full_[0], q_init[g], sizeof(T)*N_cp, cudaMemcpyInputToDevice));
-                            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
-                        }
+                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
                         ker_multi<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], this->d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
                     }
                     else
@@ -430,16 +419,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                 source_ptr = this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
                             }
 
-                            if (use_reduced_basis)
-                            {
-                                // Expand from reduced basis to full grid
-                                gpu_error_check(cudaMemcpy(d_q_full_[0], source_ptr, sizeof(T)*N_cp, cudaMemcpyHostToDevice));
-                                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_propagator_sub_dep[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-                            }
-                            else
-                            {
-                                gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][0], source_ptr, sizeof(T)*M, cudaMemcpyHostToDevice));
-                            }
+                            gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][0], source_ptr, sizeof(T)*M, cudaMemcpyHostToDevice));
                             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(
                                     this->d_q_one[STREAM][0], 1.0, this->d_q_one[STREAM][0],
                                     sub_n_repeated, this->d_propagator_sub_dep[STREAM][0], M);
@@ -448,16 +428,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         // If n_segments of all deps are 0 (junction point)
                         if (std::get<1>(deps[0]) == 0)
                         {
-                            // Reduce and store half step checkpoint
-                            if (use_reduced_basis)
-                            {
-                                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][0], d_reduced_basis_indices_, N_cp);
-                                gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                            }
-                            else
-                            {
-                                gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                            }
+                            // Store half step checkpoint
+                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                             // Add half bond
                             this->propagator_solver->advance_propagator_half_bond_step(
@@ -496,16 +468,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             int sub_n_repeated    = std::get<2>(deps[d]);
 
                             T* source_ptr = propagator_half_steps_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
-                            if (use_reduced_basis)
-                            {
-                                // Expand from reduced basis to full grid
-                                gpu_error_check(cudaMemcpy(d_q_full_[0], source_ptr, sizeof(T)*N_cp, cudaMemcpyHostToDevice));
-                                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_propagator_sub_dep[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-                            }
-                            else
-                            {
-                                gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][0], source_ptr, sizeof(T)*M, cudaMemcpyHostToDevice));
-                            }
+                            gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][0], source_ptr, sizeof(T)*M, cudaMemcpyHostToDevice));
 
                             for(int r=0; r<sub_n_repeated; r++)
                             {
@@ -514,16 +477,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             }
                         }
 
-                        // Reduce and store half step checkpoint
-                        if (use_reduced_basis)
-                        {
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][0], d_reduced_basis_indices_, N_cp);
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                        }
+                        // Store half step checkpoint
+                        gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 0)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                         #ifndef NDEBUG
                         propagator_half_steps_finished[key][0] = true;
@@ -558,16 +513,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                     if (this->d_q_mask != nullptr)
                         ker_multi<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], this->d_q_one[STREAM][0], this->d_q_mask, 1.0, M);
 
-                    // Store at checkpoint (segment 1) - reduce to reduced basis if needed
-                    if (use_reduced_basis)
-                    {
-                        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][0], d_reduced_basis_indices_, N_cp);
-                        gpu_error_check(cudaMemcpy(this->propagator_at_check_point[std::make_tuple(key, 1)], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                    }
-                    else
-                    {
-                        gpu_error_check(cudaMemcpy(this->propagator_at_check_point[std::make_tuple(key, 1)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                    }
+                    // Store at checkpoint (segment 1)
+                    gpu_error_check(cudaMemcpy(this->propagator_at_check_point[std::make_tuple(key, 1)], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                     // q(r, 1+1/2) if at junction end
                     if (junction_ends.find(1) != junction_ends.end())
@@ -578,15 +525,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             this->d_q_one[STREAM][1],
                             monomer_type);
 
-                        if (use_reduced_basis)
-                        {
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][1], d_reduced_basis_indices_, N_cp);
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 1)], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 1)], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                        }
+                        gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, 1)], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                         #ifndef NDEBUG
                         propagator_half_steps_finished[key][1] = true;
@@ -596,16 +535,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 }
                 else
                 {
-                    // Load from checkpoint - expand from reduced basis to full grid if needed
-                    if (use_reduced_basis)
-                    {
-                        gpu_error_check(cudaMemcpy(d_q_full_[0], this->propagator_at_check_point[std::make_tuple(key, n_segment_from)], sizeof(T)*N_cp, cudaMemcpyHostToDevice));
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-                    }
-                    else
-                    {
-                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->propagator_at_check_point[std::make_tuple(key, n_segment_from)], sizeof(T)*M, cudaMemcpyHostToDevice));
-                    }
+                    // Load from checkpoint
+                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->propagator_at_check_point[std::make_tuple(key, n_segment_from)], sizeof(T)*M, cudaMemcpyHostToDevice));
                 }
 
                 int prev = 0;
@@ -627,19 +558,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                     this->propagator_finished[key][n+1] = true;
                     #endif
 
-                    // Store at checkpoint if this is a checkpoint position - reduce to reduced basis if needed
+                    // Store at checkpoint if this is a checkpoint position
                     auto checkpoint_key = std::make_tuple(key, n+1);
                     if (this->propagator_at_check_point.find(checkpoint_key) != this->propagator_at_check_point.end())
                     {
-                        if (use_reduced_basis)
-                        {
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][prev], d_reduced_basis_indices_, N_cp);
-                            gpu_error_check(cudaMemcpy(this->propagator_at_check_point[checkpoint_key], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpy(this->propagator_at_check_point[checkpoint_key], this->d_q_one[STREAM][prev], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                        }
+                        gpu_error_check(cudaMemcpy(this->propagator_at_check_point[checkpoint_key], this->d_q_one[STREAM][prev], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     }
 
                     // q(r, s+1/2) if at junction end
@@ -651,15 +574,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             this->d_q_one[STREAM][next],
                             monomer_type);
 
-                        if (use_reduced_basis)
-                        {
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_q_one[STREAM][next], d_reduced_basis_indices_, N_cp);
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, n+1)], d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, n+1)], this->d_q_one[STREAM][next], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                        }
+                        gpu_error_check(cudaMemcpy(propagator_half_steps_at_check_point[std::make_tuple(key, n+1)], this->d_q_one[STREAM][next], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                         #ifndef NDEBUG
                         propagator_half_steps_finished[key][n+1] = true;
@@ -684,38 +599,14 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             int n_aggregated         = std::get<4>(segment_info);
             CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
-            if (use_reduced_basis)
-            {
-                // Propagators are in reduced basis, need weighted inner product on host
-                const auto& orbit_counts = this->space_group_->get_orbit_counts();
-                const auto& reduced_basis_indices = this->space_group_->get_reduced_basis_indices();
+            // Copy propagators from host to device
+            gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_q_right, propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
 
-                // Download d_exp_dw from device to host
-                std::vector<T> exp_dw_host(M);
-                gpu_error_check(cudaMemcpy(exp_dw_host.data(), _d_exp_dw, sizeof(T)*M, cudaMemcpyDeviceToHost));
-
-                double dv_base = this->cb->get_volume() / M;
-                T sum = 0.0;
-                for(int i=0; i<N_cp; i++)
-                {
-                    // inner_product_inverse_weight divides by exp_dw at each point
-                    int full_idx = reduced_basis_indices[i];
-                    sum += propagator_left[i] * propagator_right[i] / exp_dw_host[full_idx] * static_cast<double>(orbit_counts[i]);
-                }
-                sum *= static_cast<T>(dv_base);
-                this->single_polymer_partitions[p] = sum / (n_aggregated * this->cb->get_volume());
-            }
-            else
-            {
-                // Copy propagators from host to device
-                gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_q_right, propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
-
-                this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
-                    d_q_left,   // q
-                    d_q_right,  // q^dagger
-                    _d_exp_dw)/(n_aggregated*this->cb->get_volume());
-            }
+            this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
+                d_q_left,   // q
+                d_q_right,  // q^dagger
+                _d_exp_dw)/(n_aggregated*this->cb->get_volume());
         }
     }
     catch(std::exception& exc)
@@ -780,8 +671,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
         const int M = this->cb->get_total_grid();
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_phi = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
 
         // Calculate segment concentrations
         for(const auto& block: this->phi_block)
@@ -798,7 +687,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
             // If there is no segment
             if(n_segment_right == 0)
             {
-                for(int i=0; i<N_phi; i++)
+                for(int i=0; i<M; i++)
                     block.second[i] = 0.0;
                 continue;
             }
@@ -856,8 +745,6 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
         const int k = this->checkpoint_interval;
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_cp = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
 
         // Set up local workspace pointers (see memory layout in header)
         CuDeviceData<T> *d_q_left = this->d_workspace[0];          // first M of this->d_workspace[0]
@@ -936,16 +823,8 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
             }
 
             // Skip from checkpoint to left_compute_start (don't store intermediate values)
-            // Load checkpoint - expand from reduced basis to full grid if needed
-            if (use_reduced_basis)
-            {
-                gpu_error_check(cudaMemcpy(d_q_full_[0], it->second, sizeof(T)*N_cp, cudaMemcpyHostToDevice));
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-            }
-            else
-            {
-                gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
-            }
+            // Load checkpoint
+            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
             for (int i = check_pos; i < left_compute_start; i++)
             {
                 this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
@@ -969,20 +848,8 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 auto it_right = this->propagator_at_check_point.find(std::make_tuple(key_right, n));
                 if (it_right != this->propagator_at_check_point.end())
                 {
-                    // Load from checkpoint, expand to full grid if needed
-                    if (use_reduced_basis)
-                    {
-                        gpu_error_check(cudaMemcpy(d_q_full_[0], it_right->second, sizeof(T)*N_cp, cudaMemcpyHostToDevice));
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
-                        // Store to q_pair for consistency with q_right_next/prev tracking
-                        gpu_error_check(cudaMemcpy(this->q_pair[prev_right], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                        q_right_next = this->q_pair[prev_right];
-                        std::swap(prev_right, next_right);
-                    }
-                    else
-                    {
-                        q_right_next = it_right->second;
-                    }
+                    // Load from checkpoint
+                    q_right_next = it_right->second;
                 }
                 else if (n > 1)
                 {
@@ -1011,16 +878,8 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         // Divide by exp_dw
         ker_divide<<<N_BLOCKS, N_THREADS>>>(this->d_phi, this->d_phi, _d_exp_dw, 1.0, M);
 
-        // Copy result to host - reduce to reduced basis if needed
-        if (use_reduced_basis)
-        {
-            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(d_q_full_[0], this->d_phi, d_reduced_basis_indices_, N_cp);
-            gpu_error_check(cudaMemcpy(phi, d_q_full_[0], sizeof(T)*N_cp, cudaMemcpyDeviceToHost));
-        }
-        else
-        {
-            gpu_error_check(cudaMemcpy(phi, this->d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
-        }
+        // Copy result to host
+        gpu_error_check(cudaMemcpy(phi, this->d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
