@@ -139,6 +139,17 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             d_rk_in_2_one[i] = nullptr;
         }
 
+        // Initialize space group support
+        space_group_ = nullptr;
+        d_reduced_basis_indices_ = nullptr;
+        d_full_to_reduced_map_ = nullptr;
+        n_basis_ = 0;
+        for(int i=0; i<MAX_STREAMS; i++)
+        {
+            d_q_full_in_[i] = nullptr;
+            d_q_full_out_[i] = nullptr;
+        }
+
         if (is_periodic_)
         {
             // Create cuFFT plans for periodic BC
@@ -320,6 +331,54 @@ CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
         cudaFree(d_q_multi[i]);
         cudaFree(d_temp_storage[i]);
     }
+
+    // Free space group work buffers
+    for(int i=0; i<n_streams; i++)
+    {
+        if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
+        if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
+    }
+}
+template <typename T>
+void CudaSolverPseudoRQM4<T>::set_space_group(
+    SpaceGroup* sg,
+    int* d_reduced_basis_indices,
+    int* d_full_to_reduced_map,
+    int n_basis)
+{
+    space_group_ = sg;
+    d_reduced_basis_indices_ = d_reduced_basis_indices;
+    d_full_to_reduced_map_ = d_full_to_reduced_map;
+    n_basis_ = n_basis;
+
+    if (sg != nullptr)
+    {
+        const int M = cb->get_total_grid();
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M));
+            if (d_q_full_out_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
+        }
+    }
+    else
+    {
+        // Free work buffers if space group is disabled
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] != nullptr)
+            {
+                cudaFree(d_q_full_in_[i]);
+                d_q_full_in_[i] = nullptr;
+            }
+            if (d_q_full_out_[i] != nullptr)
+            {
+                cudaFree(d_q_full_out_[i]);
+                d_q_full_out_[i] = nullptr;
+            }
+        }
+    }
 }
 template <typename T>
 void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
@@ -422,6 +481,20 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type, ds_index);
         const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, ds_index);
 
+        // Determine input/output pointers based on space group
+        CuDeviceData<T> *fft_in = d_q_in;
+        CuDeviceData<T> *fft_out = d_q_out;
+
+        if (space_group_ != nullptr)
+        {
+            // Expand reduced basis → full grid
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            fft_in = d_q_full_in_[STREAM];
+            fft_out = d_q_full_out_[STREAM];
+        }
+
         if (is_periodic_)
         {
             // ============================================================
@@ -431,8 +504,8 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             // step 1/2: Evaluate exp(-w*ds/2) in real space
             // step 1/4: Evaluate exp(-w*ds/4) in real space
             ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
-                &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
+                &d_q_step_1_two[STREAM][0], fft_in, _d_exp_dw,
+                &d_q_step_1_two[STREAM][M], fft_in, _d_exp_dw_half, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/2: Execute a forward FFT
@@ -501,7 +574,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
 
             // ===== Step 1: Full step =====
             // Evaluate exp(-w*ds/2) in real space
-            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_1_one[STREAM], d_q_in, _d_exp_dw, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_1_one[STREAM], fft_in, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Forward transform (DCT/DST)
@@ -520,7 +593,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
 
             // ===== Step 2: Two half steps =====
             // First half step
-            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_2_one[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_2_one[STREAM], fft_in, _d_exp_dw_half, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             fft_[STREAM]->forward(d_q_step_2, d_rk_in_2_one[STREAM]);
@@ -547,13 +620,21 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
 
         // ===== RQM4: Richardson extrapolation =====
         // Compute linear combination with 4/3 and -1/3 ratio
-        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
+        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
         gpu_error_check(cudaPeekAtLastError());
 
-        // Multiply mask
+        // Multiply mask (on full grid)
         if (d_q_mask != nullptr)
         {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+
+        // Reduce full grid → reduced basis
+        if (space_group_ != nullptr)
+        {
+            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
             gpu_error_check(cudaPeekAtLastError());
         }
     }
@@ -769,6 +850,41 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
+    }
+}
+
+template <typename T>
+void CudaSolverPseudoRQM4<T>::apply_mask(const int STREAM, CuDeviceData<T> *d_q, double *d_mask)
+{
+    if (d_mask == nullptr)
+        return;
+
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int M = cb->get_total_grid();
+    const int N = cb->get_n_basis();
+
+    if (space_group_ != nullptr)
+    {
+        // Expand to full grid, apply mask, reduce back
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_full_in_[STREAM], d_q, d_full_to_reduced_map_, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_full_in_[STREAM], d_q_full_in_[STREAM], d_mask, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q, d_q_full_in_[STREAM], d_reduced_basis_indices_, N);
+        gpu_error_check(cudaPeekAtLastError());
+    }
+    else
+    {
+        // Direct multiplication on full grid
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q, d_q, d_mask, 1.0, N);
+        gpu_error_check(cudaPeekAtLastError());
     }
 }
 

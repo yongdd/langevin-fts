@@ -62,6 +62,8 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
 
         // Set space group first so that get_n_basis() returns the correct size
         if (space_group != nullptr) {
+            throw_with_line_number("Space group symmetry is not yet supported for discrete chains on CUDA. "
+                "Use continuous chains or CPU platform instead.");
             PropagatorComputation<T>::set_space_group(space_group);
         }
 

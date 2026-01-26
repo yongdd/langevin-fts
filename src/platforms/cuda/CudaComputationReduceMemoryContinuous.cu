@@ -465,13 +465,22 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 // If it is leaf node
                 if(n_segment_from == 0 && deps.size() == 0)
                 {
-                    // q_init
+                    // q_init is in reduced basis when space_group is set, otherwise full grid
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
-                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
+                        if (use_reduced_basis)
+                        {
+                            // Expand q_init from reduced to full grid on device
+                            gpu_error_check(cudaMemcpy(d_q_full_[0], q_init[g], sizeof(T)*N_cp, cudaMemcpyInputToDevice));
+                            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], d_q_full_[0], d_full_to_reduced_map_, M);
+                        }
+                        else
+                        {
+                            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
+                        }
                     }
                     else
                     {

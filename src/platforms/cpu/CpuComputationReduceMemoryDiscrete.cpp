@@ -71,6 +71,8 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
 
         // Set space group first so that get_n_basis() returns the correct size
         if (space_group != nullptr) {
+            throw_with_line_number("Space group symmetry is not yet supported for discrete chains with reduce_memory=True. "
+                "Use reduce_memory=False or continuous chains instead.");
             PropagatorComputation<T>::set_space_group(space_group);
         }
 

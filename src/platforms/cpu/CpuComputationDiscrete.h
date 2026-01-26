@@ -96,6 +96,14 @@ private:
     #endif
 
     /**
+     * @brief exp(-w*ds) in reduced basis for concentration calculation.
+     *
+     * When space group symmetry is used, this stores the Boltzmann factor
+     * in reduced basis for efficient phi calculation without per-block conversion.
+     */
+    std::map<std::string, std::vector<T>> exp_dw_reduced_;
+
+    /**
      * @brief Segment pairs for partition function.
      *
      * Tuple: (polymer_id, q_forward, q_backward, monomer_type, n_repeated)

@@ -76,13 +76,8 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         #endif
 
         // Set space group first so that get_n_basis() returns the correct size
-        if (space_group != nullptr) {
+        if (space_group != nullptr)
             PropagatorComputation<T>::set_space_group(space_group);
-            // Allocate temporary full grid buffers for FFT operations
-            int total_grid = this->cb->get_total_grid();
-            q_full_in_.resize(total_grid);
-            q_full_out_.resize(total_grid);
-        }
 
         const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
 
@@ -109,6 +104,10 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }
+
+        // Set space group on solver for internal expand/reduce handling
+        if (space_group != nullptr)
+            this->propagator_solver->set_space_group(space_group);
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
@@ -322,27 +321,17 @@ void CpuComputationContinuous<T>::compute_propagators(
                 // If it is leaf node
                 if(n_segment_from == 0 && deps.size() == 0)
                 {
-                     // q_init
+                    // q_init is in reduced basis when space_group is set, otherwise full grid
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (!q_init.contains(g))
                             throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
-                        if (use_reduced_basis)
-                        {
-                            // q_init is on full grid, convert to reduced basis
-                            if constexpr (std::is_same_v<T, double>)
-                                this->space_group_->to_reduced_basis(q_init[g], _propagator[0], 1);
-                        }
-                        else
-                        {
-                            for(int i=0; i<M; i++)
-                                _propagator[0][i] = q_init[g][i];
-                        }
+                        for(int i=0; i<N; i++)
+                            _propagator[0][i] = q_init[g][i];
                     }
                     else
                     {
-                        // Initial condition q=1 is the same in reduced and full basis
                         for(int i=0; i<N; i++)
                             _propagator[0][i] = 1.0;
                     }
@@ -416,12 +405,9 @@ void CpuComputationContinuous<T>::compute_propagators(
                     }
                 }
         
-                // Multiply mask (mask should also be in reduced basis if using space group)
+                // Apply mask (solver handles expand/reduce internally)
                 if (n_segment_from == 0 && q_mask != nullptr)
-                {
-                    for(int i=0; i<N; i++)
-                        _propagator[0][i] *= q_mask[i];
-                }
+                    this->propagator_solver->apply_mask(_propagator[0], q_mask);
 
                 // Get ds_index from the key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
@@ -432,64 +418,24 @@ void CpuComputationContinuous<T>::compute_propagators(
                     this->propagator_solver->reset_internal_state();
 
                 // Advance propagator successively
-                if (use_reduced_basis)
+                // Solver handles expand/reduce internally when space_group is set
+                for(int n=n_segment_from; n<n_segment_to; n++)
                 {
-                    // Thread-local buffers for expand/reduce operations
-                    thread_local std::vector<T> q_full_in_local;
-                    thread_local std::vector<T> q_full_out_local;
-                    if (q_full_in_local.size() < static_cast<size_t>(M)) {
-                        q_full_in_local.resize(M);
-                        q_full_out_local.resize(M);
-                    }
+                    #ifndef NDEBUG
+                    if (!this->propagator_finished[key][n])
+                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                    if (this->propagator_finished[key][n+1])
+                        std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
+                    #endif
 
-                    for(int n=n_segment_from; n<n_segment_to; n++)
-                    {
-                        #ifndef NDEBUG
-                        if (!this->propagator_finished[key][n])
-                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                        if (this->propagator_finished[key][n+1])
-                            std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
-                        #endif
+                    this->propagator_solver->advance_propagator(
+                            _propagator[n],
+                            _propagator[n+1],
+                            monomer_type, q_mask, ds_index);
 
-                        // Expand reduced → full grid
-                        if constexpr (std::is_same_v<T, double>)
-                            this->space_group_->from_reduced_basis(_propagator[n], q_full_in_local.data(), 1);
-
-                        // Advance propagator on full grid (FFT operations)
-                        this->propagator_solver->advance_propagator(
-                                q_full_in_local.data(),
-                                q_full_out_local.data(),
-                                monomer_type, q_mask, ds_index);
-
-                        // Reduce full grid → reduced
-                        if constexpr (std::is_same_v<T, double>)
-                            this->space_group_->to_reduced_basis(q_full_out_local.data(), _propagator[n+1], 1);
-
-                        #ifndef NDEBUG
-                        this->propagator_finished[key][n+1] = true;
-                        #endif
-                    }
-                }
-                else
-                {
-                    for(int n=n_segment_from; n<n_segment_to; n++)
-                    {
-                        #ifndef NDEBUG
-                        if (!this->propagator_finished[key][n])
-                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                        if (this->propagator_finished[key][n+1])
-                            std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
-                        #endif
-
-                        this->propagator_solver->advance_propagator(
-                                _propagator[n],
-                                _propagator[n+1],
-                                monomer_type, q_mask, ds_index);
-
-                        #ifndef NDEBUG
-                        this->propagator_finished[key][n+1] = true;
-                        #endif
-                    }
+                    #ifndef NDEBUG
+                    this->propagator_finished[key][n+1] = true;
+                    #endif
                 }
                 // // Display job info
                 // #ifndef NDEBUG
@@ -704,9 +650,11 @@ void CpuComputationContinuous<T>::compute_stress()
         }
 
         const int DIM = this->cb->get_dim();
-
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
-        const int M   = this->cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
+
+        // Space group: propagators in reduced basis need expansion to full grid for FFT
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 
@@ -749,9 +697,6 @@ void CpuComputationContinuous<T>::compute_stress()
 
             // Compute stress contributions using Simpson's rule
             // Skip endpoint terms where propagator is initial condition (q=1)
-            // For non-periodic BC (DCT/DST), the initial condition q=1 doesn't transform
-            // correctly, causing errors in stress computation. This is consistent with
-            // how discrete chains handle leaf node endpoints.
             for(int n=0; n<=N_RIGHT; n++)
             {
                 // At n=0: q_2[0] is initial condition if key_right is leaf
@@ -759,14 +704,12 @@ void CpuComputationContinuous<T>::compute_stress()
                     continue;
 
                 // At n=N_RIGHT: q_1[0] is initial condition if key_left is leaf
-                // (assuming N_LEFT == N_RIGHT, which is typical)
                 if (n == N_RIGHT && left_is_leaf && N_LEFT == N_RIGHT)
                     continue;
 
+                // Solver handles expand/reduce internally when space_group is set
                 std::vector<T> segment_stress = this->propagator_solver->compute_single_segment_stress(
                     q_1[N_LEFT-n], q_2[n], monomer_type, false);
-
-                // std::cout << key_left << ", "  << key_right << ", " << n << ", " << segment_stress[0] << ", " << segment_stress[1] << ", " << segment_stress[2] << std::endl;
 
                 for(int d=0; d<N_STRESS; d++)
                     _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);

@@ -44,6 +44,7 @@
 #include "CpuSolver.h"
 #include "Pseudo.h"
 #include "FFTFactory.h"
+#include "SpaceGroup.h"
 
 /**
  * @class CpuSolverPseudoBase
@@ -96,6 +97,20 @@ protected:
 
     bool is_periodic_;           ///< True if all BCs are periodic
     int dim_;                    ///< Number of dimensions (1, 2, or 3)
+
+    /**
+     * @brief Space group for reduced basis operations (nullptr if not used).
+     */
+    SpaceGroup* space_group_;
+
+    /**
+     * @brief Full grid buffers for FFT operations with space group.
+     *
+     * When space group is set, propagators are stored in reduced basis
+     * but FFT requires full grid. These buffers are used for expand/reduce.
+     */
+    std::vector<T> q_full_in_;   ///< Input buffer for full grid FFT
+    std::vector<T> q_full_out_;  ///< Output buffer for full grid FFT
 
     /**
      * @brief Perform forward transform.
@@ -255,12 +270,22 @@ public:
     /**
      * @brief Default constructor.
      */
-    CpuSolverPseudoBase() : fft_(nullptr), pseudo(nullptr), is_periodic_(true), dim_(0) {}
+    CpuSolverPseudoBase() : fft_(nullptr), pseudo(nullptr), is_periodic_(true), dim_(0), space_group_(nullptr) {}
 
     /**
      * @brief Virtual destructor.
      */
     virtual ~CpuSolverPseudoBase() {}
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, propagator input/output uses reduced basis and the solver
+     * internally handles expand/reduce around FFT operations.
+     *
+     * @param sg Space group pointer (nullptr to disable reduced basis)
+     */
+    void set_space_group(SpaceGroup* sg);
 
     /**
      * @brief Update Fourier-space operators.
@@ -296,6 +321,17 @@ public:
      */
     std::vector<T> compute_single_segment_stress(
         T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length) override;
+
+    /**
+     * @brief Apply mask to propagator.
+     *
+     * When space_group is set, expands propagator to full grid, multiplies
+     * by mask, and reduces back to reduced basis. Otherwise multiplies directly.
+     *
+     * @param q      Propagator array (modified in place)
+     * @param mask   Mask array (always full grid, double type)
+     */
+    void apply_mask(T* q, const double* mask) override;
 };
 
 #endif

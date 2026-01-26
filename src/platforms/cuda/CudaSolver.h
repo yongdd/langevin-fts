@@ -34,6 +34,8 @@
 #include "ComputationBox.h"
 #include "CudaCommon.h"
 
+class SpaceGroup;  // Forward declaration
+
 /**
  * @class CudaSolver
  * @brief Abstract base class for GPU propagator solvers.
@@ -75,6 +77,23 @@ public:
      * @brief Virtual destructor.
      */
     virtual ~CudaSolver() {};
+
+    /**
+     * @brief Set space group for reduced basis expand/reduce operations.
+     *
+     * When set, the solver will internally handle expand (reduced→full) before
+     * FFT and reduce (full→reduced) after FFT. Input/output are in reduced basis.
+     *
+     * @param sg                      SpaceGroup pointer (nullptr to disable)
+     * @param d_reduced_basis_indices Device array mapping reduced→full indices
+     * @param d_full_to_reduced_map   Device array mapping full→reduced indices
+     * @param n_basis                 Number of reduced basis points
+     */
+    virtual void set_space_group(
+        [[maybe_unused]] SpaceGroup* sg,
+        [[maybe_unused]] int* d_reduced_basis_indices,
+        [[maybe_unused]] int* d_full_to_reduced_map,
+        [[maybe_unused]] int n_basis) {}
 
     /**
      * @brief Reset internal propagator states for a stream.
@@ -141,5 +160,20 @@ public:
         const int STREAM,
         CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) = 0;
+
+    /**
+     * @brief Apply mask to propagator.
+     *
+     * When space_group is set, expands propagator to full grid, multiplies
+     * by mask, and reduces back to reduced basis. Otherwise multiplies directly.
+     *
+     * @param STREAM  CUDA stream index
+     * @param d_q     Propagator array (device, modified in place)
+     * @param d_mask  Mask array (device, always full grid)
+     */
+    virtual void apply_mask(
+        [[maybe_unused]] const int STREAM,
+        [[maybe_unused]] CuDeviceData<T> *d_q,
+        [[maybe_unused]] double *d_mask) {}
 };
 #endif

@@ -36,6 +36,8 @@
 #include "ComputationBox.h"
 #include "FFT.h"
 
+class SpaceGroup;
+
 /**
  * @class CpuSolver
  * @brief Abstract base class for CPU-based propagator solvers.
@@ -113,6 +115,18 @@ public:
     virtual ~CpuSolver() {};
 
     /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, propagator input/output uses reduced basis and the solver
+     * internally handles expand/reduce around FFT operations.
+     *
+     * Default implementation does nothing (for solvers that don't support space groups).
+     *
+     * @param sg Space group pointer (nullptr to disable reduced basis)
+     */
+    virtual void set_space_group(SpaceGroup* /*sg*/) {}
+
+    /**
      * @brief Reset internal solver state for a new propagator.
      *
      * Called when starting a new propagator computation to reset any
@@ -164,8 +178,11 @@ public:
      *
      *     q(r, s+ds) = Propagator[ q(r, s), w(r) ]
      *
-     * @param q_in        Input propagator at contour s (size n_grid)
-     * @param q_out       Output propagator at contour s+ds (size n_grid)
+     * When space_group is set on the solver, input/output are in reduced basis
+     * and the solver handles expand/reduce around FFT operations internally.
+     *
+     * @param q_in        Input propagator at contour s (size n_grid or n_irreducible)
+     * @param q_out       Output propagator at contour s+ds (size n_grid or n_irreducible)
      * @param monomer_type Monomer type determining segment length and field
      * @param q_mask      Optional mask for impenetrable regions (nullptr if none)
      * @param ds_index    Index for the ds value to use (1-based, default: 1 for global ds)
@@ -191,8 +208,11 @@ public:
      *
      * where B^(1/2) is the half-bond convolution with ĝ^(1/2)(k) = exp(-b²|k|²ds/12).
      *
-     * @param q_in        Input propagator (size n_grid)
-     * @param q_out       Output propagator (size n_grid)
+     * When space_group is set on the solver, input/output are in reduced basis
+     * and the solver handles expand/reduce around FFT operations internally.
+     *
+     * @param q_in        Input propagator (size n_grid or n_irreducible)
+     * @param q_out       Output propagator (size n_grid or n_irreducible)
      * @param monomer_type Monomer type for segment length
      *
      * @note Only meaningful for discrete chain model. Empty implementation
@@ -220,5 +240,18 @@ public:
      */
     virtual std::vector<T> compute_single_segment_stress(
         T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) = 0;
+
+    /**
+     * @brief Apply mask to propagator.
+     *
+     * When space_group is set, expands propagator to full grid, multiplies
+     * by mask, and reduces back to reduced basis. Otherwise multiplies directly.
+     *
+     * Default implementation does nothing (for solvers that don't support masks).
+     *
+     * @param q      Propagator array (modified in place)
+     * @param mask   Mask array (always full grid, double type)
+     */
+    virtual void apply_mask([[maybe_unused]] T* q, [[maybe_unused]] const double* mask) {}
 };
 #endif

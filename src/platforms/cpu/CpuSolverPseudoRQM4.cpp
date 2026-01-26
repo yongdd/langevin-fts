@@ -170,9 +170,24 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
         const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, ds_index);
 
+        // Determine input pointer (expand reduced basis if space_group is set)
+        T* fft_in = q_in;
+
+        // Thread-local buffer for expand (called from OpenMP parallel regions)
+        thread_local std::vector<T> q_full_in_local;
+
+        if (this->space_group_ != nullptr)
+        {
+            q_full_in_local.resize(M);
+            // Expand reduced basis → full grid
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->from_reduced_basis(q_in, q_full_in_local.data(), 1);
+            fft_in = q_full_in_local.data();
+        }
+
         // ===== Step 1: Full step =====
         for (int i = 0; i < M; ++i)
-            q_out1[i] = _exp_dw[i] * q_in[i];
+            q_out1[i] = _exp_dw[i] * fft_in[i];
 
         this->transform_forward(q_out1.data(), k_q_in1.data());
         this->multiply_fourier_coeffs(k_q_in1.data(), _boltz_bond, M_COMPLEX);
@@ -184,7 +199,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // ===== Step 2: Two half steps =====
         // First half step
         for (int i = 0; i < M; ++i)
-            q_out2[i] = _exp_dw_half[i] * q_in[i];
+            q_out2[i] = _exp_dw_half[i] * fft_in[i];
 
         this->transform_forward(q_out2.data(), k_q_in2.data());
         this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
@@ -202,14 +217,27 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
             q_out2[i] *= _exp_dw_half[i];
 
         // ===== RQM4: Richardson extrapolation =====
+        // Result goes into q_out2 (reuse buffer)
         for (int i = 0; i < M; ++i)
-            q_out[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
+            q_out2[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 
         // Apply mask if provided
         if (q_mask != nullptr)
         {
             for (int i = 0; i < M; ++i)
-                q_out[i] *= q_mask[i];
+                q_out2[i] *= q_mask[i];
+        }
+
+        // Reduce output to reduced basis if space_group is set
+        if (this->space_group_ != nullptr)
+        {
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->to_reduced_basis(q_out2.data(), q_out, 1);
+        }
+        else
+        {
+            // No space group - copy result to output
+            std::copy(q_out2.begin(), q_out2.end(), q_out);
         }
     }
     catch (std::exception& exc)
