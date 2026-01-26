@@ -74,7 +74,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
     try{
         #ifndef NDEBUG
-        std::cout << "--------- Continuous Chain Solver, GPU Memoery Saving Version ---------" << std::endl;
+        std::cout << "--------- Continuous Chain Solver, GPU Memory Saving Version ---------" << std::endl;
         #endif
 
         // Set space group first so that get_n_basis() returns the correct size
@@ -908,7 +908,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
     }
 }
 template <typename T>
-std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
+std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalculate_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
 {
     try
     {

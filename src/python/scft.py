@@ -1592,9 +1592,9 @@ class SCFT:
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
         # Keep the level of field value
-        # integral() and get_volume() work correctly with reduced basis when space group is set
+        # mean() works correctly with reduced basis when space group is set
         for i in range(M):
-            w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
+            w[i] -= self.prop_solver.mean(w[i])
 
         # Iteration begins here
         # w is in reduced basis when space group is set, full grid otherwise
@@ -1625,7 +1625,7 @@ class SCFT:
 
             # Keep the level of functional derivatives
             for i in range(M):
-                w_diff[i] -= self.prop_solver.integral(w_diff[i])/self.prop_solver.get_volume()
+                w_diff[i] -= self.prop_solver.mean(w_diff[i])
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
@@ -1637,7 +1637,7 @@ class SCFT:
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
-            mass_error = self.prop_solver.integral(phi_diff)/self.prop_solver.get_volume()
+            mass_error = self.prop_solver.mean(phi_diff)
             
             if (self.box_is_altering):
                 # Calculate stress (only every stress_interval iterations to save time)
@@ -1821,9 +1821,9 @@ class SCFT:
                 w = np.reshape(w, (M, -1))
 
             # Normalize field values
-            # integral() works correctly with reduced basis when space group is set
+            # mean() works correctly with reduced basis when space group is set
             for i in range(M):
-                w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
+                w[i] -= self.prop_solver.mean(w[i])
 
         # Print free energy as per chain expression
         print("Free energy per chain (for each chain type):")

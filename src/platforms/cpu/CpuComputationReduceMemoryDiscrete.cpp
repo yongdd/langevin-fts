@@ -844,7 +844,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_concentrations()
             T *_phi = this->phi_solvent[s];
             T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
-            this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = this->cb->mean(_exp_dw);
             for(int i=0; i<M; i++)
                 _phi[i] = _exp_dw[i]*volume_fraction/this->single_solvent_partitions[s];
         }

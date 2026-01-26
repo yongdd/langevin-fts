@@ -703,7 +703,7 @@ class CLFTS:
 
             # Print progress
             if self.verbose_level >= 1:
-                mass_error = np.mean(h_deriv[M - 1])
+                mass_error = self.cb.mean(h_deriv[M - 1])
                 print(f"{langevin_step:8d} {mass_error.real:+.3E}{mass_error.imag:+.3E}j", end="  [ ")
                 for Q in total_partitions:
                     print(f"{Q.real:.6E}{Q.imag:+.6E}j", end=" ")

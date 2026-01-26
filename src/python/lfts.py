@@ -1295,7 +1295,7 @@ class LFTS:
                 hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
                 # Check the mass conservation
-                mass_error = np.mean(h_deriv[I-1])
+                mass_error = self.cb.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for Q in total_partitions:
                     print("%13.7E " % (Q), end=" ")
@@ -1316,6 +1316,6 @@ class LFTS:
             w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.prop_solver.n_grid])
 
         # Set mean of pressure field to zero
-        w_aux[M-1] -= np.mean(w_aux[M-1])
+        w_aux[M-1] -= self.cb.mean(w_aux[M-1])
 
         return phi, hamiltonian, saddle_iter, error_level

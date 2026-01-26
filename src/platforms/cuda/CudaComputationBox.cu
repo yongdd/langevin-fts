@@ -173,6 +173,12 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
 }
 //-----------------------------------------------------------
 template <typename T>
+T CudaComputationBox<T>::mean_device(const CuDeviceData<T> *d_g)
+{
+    return integral_device(d_g) / static_cast<T>(this->volume);
+}
+//-----------------------------------------------------------
+template <typename T>
 T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const CuDeviceData<T>* d_h)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();

@@ -350,43 +350,42 @@ void CudaComputationContinuous<T>::compute_propagators(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        // Store w on device for solvent computation
-        for(const auto& item: w_input)
-        {
-            std::string monomer_type = item.first;
-            const T* w = item.second;
-
-            if (d_w.find(monomer_type) == d_w.end())
-                gpu_error_check(cudaMalloc((void**)&d_w[monomer_type], sizeof(CuDeviceData<T>)*N));
-            cudaMemcpy(d_w[monomer_type], w, sizeof(CuDeviceData<T>)*N, cudaMemcpyInputToDevice);
-        }
-
-        // Update dw or d_exp_dw
-        // If space group is set, w_input is in reduced basis and needs to be expanded
+        // Store w on device for solvent computation (in reduced basis when space_group is set)
+        // Note: w_input is always on full grid here because compute_propagators_reduced()
+        // expands the field before calling compute_propagators()
         if (use_reduced_basis)
         {
-            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
-            std::map<std::string, std::vector<T>> w_expanded_storage;
-            std::map<std::string, const T*> w_full;
-
+            // Convert w_full to reduced basis for d_w storage
+            std::vector<T> w_reduced_temp(N);
             for(const auto& item: w_input)
             {
                 std::string monomer_type = item.first;
-                const T* w_reduced = item.second;
+                const T* w_full = item.second;
 
-                // Expand to full grid
-                w_expanded_storage[monomer_type].resize(M);
-                for(int i=0; i<M; i++)
-                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
+                if constexpr (std::is_same_v<T, double>)
+                    this->space_group_->to_reduced_basis(w_full, w_reduced_temp.data(), 1);
 
-                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
+                if (d_w.find(monomer_type) == d_w.end())
+                    gpu_error_check(cudaMalloc((void**)&d_w[monomer_type], sizeof(CuDeviceData<T>)*N));
+                cudaMemcpy(d_w[monomer_type], w_reduced_temp.data(), sizeof(CuDeviceData<T>)*N, cudaMemcpyInputToDevice);
             }
-            this->propagator_solver->update_dw(device, w_full);
         }
         else
         {
-            this->propagator_solver->update_dw(device, w_input);
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T* w = item.second;
+
+                if (d_w.find(monomer_type) == d_w.end())
+                    gpu_error_check(cudaMalloc((void**)&d_w[monomer_type], sizeof(CuDeviceData<T>)*N));
+                cudaMemcpy(d_w[monomer_type], w, sizeof(CuDeviceData<T>)*N, cudaMemcpyInputToDevice);
+            }
         }
+
+        // Update dw or d_exp_dw
+        // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
+        this->propagator_solver->update_dw(device, w_input);
 
         // For each time span
         #ifndef NDEBUG
@@ -776,8 +775,8 @@ void CudaComputationContinuous<T>::compute_concentrations()
             ker_exp<<<N_BLOCKS, N_THREADS>>>(d_phi_, d_w[monomer_type], 1.0, -ds, N_grid);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Partition function using integral_device
-            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(d_phi_) / this->cb->get_volume();
+            // Partition function using mean_device
+            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->mean_device(d_phi_);
 
             // Normalize: phi *= volume_fraction / partition
             CuDeviceData<T> norm;

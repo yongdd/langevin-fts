@@ -494,16 +494,15 @@ class SymmetricPolymerTheory:
         compute_h_deriv_chin : Compute dH/dχN for parameter sweeps.
         """
         M = len(self.monomer_types)
-        volume = cb.get_volume()
 
         # Compute Hamiltonian part that is related to fields
-        # Use cb.integral() for correct handling of space group symmetry
+        # Use cb.mean() for correct handling of space group symmetry
         hamiltonian_fields = 0.0
         for i in range(M):
             if not np.isclose(self.h_coef_mu2[i], 0.0):
-                hamiltonian_fields += self.h_coef_mu2[i]*cb.integral(w_aux[i]**2)/volume
+                hamiltonian_fields += self.h_coef_mu2[i]*cb.mean(w_aux[i]**2)
             if not np.isclose(self.h_coef_mu1[i], 0.0):
-                hamiltonian_fields += self.h_coef_mu1[i]*cb.integral(w_aux[i])/volume
+                hamiltonian_fields += self.h_coef_mu1[i]*cb.mean(w_aux[i])
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
