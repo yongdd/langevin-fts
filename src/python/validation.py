@@ -11,6 +11,7 @@ ensuring they work even when Python optimization is enabled (-O flag).
 
 from typing import Dict, List, Any, Optional, Union
 import itertools
+import numpy as np
 
 
 class ValidationError(Exception):
@@ -36,8 +37,12 @@ def validate_type(value: Any, expected_type: type, name: str) -> None:
         If value is not of expected type
     """
     if not isinstance(value, expected_type):
+        if isinstance(expected_type, tuple):
+            type_names = " or ".join(t.__name__ for t in expected_type)
+        else:
+            type_names = expected_type.__name__
         raise ValidationError(
-            f"'{name}' must be {expected_type.__name__}, got {type(value).__name__}"
+            f"'{name}' must be {type_names}, got {type(value).__name__}"
         )
 
 
@@ -140,19 +145,19 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
 
     # Validate nx (grid dimensions)
     nx = params["nx"]
-    validate_type(nx, (list, tuple), "nx")
+    validate_type(nx, (list, tuple, np.ndarray), "nx")
     if len(nx) not in (1, 2, 3):
         raise ValidationError("'nx' must have 1, 2, or 3 dimensions")
     for i, n in enumerate(nx):
-        if not isinstance(n, int) or n <= 0:
+        if not isinstance(n, (int, np.integer)) or n <= 0:
             raise ValidationError(f"nx[{i}] must be a positive integer, got {n}")
 
     # Validate lx (box dimensions)
     lx = params["lx"]
-    validate_type(lx, (list, tuple), "lx")
+    validate_type(lx, (list, tuple, np.ndarray), "lx")
     validate_list_length(lx, len(nx), "lx")
     for i, l in enumerate(lx):
-        if not isinstance(l, (int, float)) or l <= 0:
+        if not isinstance(l, (int, float, np.integer, np.floating)) or l <= 0:
             raise ValidationError(f"lx[{i}] must be a positive number, got {l}")
 
     # Validate ds (contour step)

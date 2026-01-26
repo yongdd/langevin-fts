@@ -151,6 +151,16 @@ public:
     T integral_device(const CuDeviceData<T> *d_g);
 
     /**
+     * @brief Compute mean (spatial average) of a device array.
+     *
+     * Calculates: (1/V) ∫ g(r) dr = integral_device(g) / volume
+     *
+     * @param d_g Device array (size n_grid)
+     * @return Mean value
+     */
+    T mean_device(const CuDeviceData<T> *d_g);
+
+    /**
      * @brief Compute inner product of two device arrays.
      *
      * Calculates: ∫ g(r) h(r) dr = Σᵢ g[i] * h[i] * dV

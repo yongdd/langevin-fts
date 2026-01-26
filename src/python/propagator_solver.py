@@ -727,6 +727,23 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.integral(field)
 
+    def mean(self, field: NDArray[np.floating]) -> float:
+        """
+        Compute the spatial average (mean) of a field.
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Field to average.
+
+        Returns
+        -------
+        float
+            Spatial average of the field (integral / volume).
+        """
+        self._initialize_solver()
+        return self._computation_box.mean(field)
+
     def inner_product(
         self,
         field1: NDArray[np.floating],

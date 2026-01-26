@@ -136,7 +136,7 @@ private:
      * @param monomer_type Monomer type
      * @return Vector of recalculated propagator pointers
      */
-    std::vector<T*> recalcaulte_propagator(std::string key,
+    std::vector<T*> recalculate_propagator(std::string key,
         const int N_START, const int N_RIGHT, std::string monomer_type);
 
 public:

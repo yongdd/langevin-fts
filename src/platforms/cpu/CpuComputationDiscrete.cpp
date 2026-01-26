@@ -251,32 +251,9 @@ void CpuComputationDiscrete<T>::compute_propagators(
         #endif
 
         // Update dw or exp_dw
-        // If space group is set, w_input is in reduced basis and needs to be expanded
+        // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
         const bool use_reduced_basis = (this->space_group_ != nullptr);
-        if (use_reduced_basis)
-        {
-            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
-            std::map<std::string, std::vector<T>> w_expanded_storage;
-            std::map<std::string, const T*> w_full;
-
-            for(const auto& item: w_input)
-            {
-                std::string monomer_type = item.first;
-                const T* w_reduced = item.second;
-
-                // Expand to full grid
-                w_expanded_storage[monomer_type].resize(M);
-                for(int i=0; i<M; i++)
-                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
-
-                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
-            }
-            this->propagator_solver->update_dw(w_full);
-        }
-        else
-        {
-            this->propagator_solver->update_dw(w_input);
-        }
+        this->propagator_solver->update_dw(w_input);
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -760,7 +737,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
-            this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = this->cb->mean(_exp_dw);
             for(int i=0; i<M; i++)
                 _phi[i] = _exp_dw[i]*volume_fraction/this->single_solvent_partitions[s];
         }

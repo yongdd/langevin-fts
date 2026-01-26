@@ -390,32 +390,9 @@ void CudaComputationDiscrete<T>::compute_propagators(
         }
 
         // Update dw or d_exp_dw
-        // If space group is set, w_input is in reduced basis and needs to be expanded
+        // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
         const bool use_reduced_basis = (this->space_group_ != nullptr);
-        if (use_reduced_basis)
-        {
-            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
-            std::map<std::string, std::vector<T>> w_expanded_storage;
-            std::map<std::string, const T*> w_full;
-
-            for(const auto& item: w_input)
-            {
-                std::string monomer_type = item.first;
-                const T* w_reduced = item.second;
-
-                // Expand to full grid
-                w_expanded_storage[monomer_type].resize(M);
-                for(int i=0; i<M; i++)
-                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
-
-                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
-            }
-            this->propagator_solver->update_dw(device, w_full);
-        }
-        else
-        {
-            this->propagator_solver->update_dw(device, w_input);
-        }
+        this->propagator_solver->update_dw(device, w_input);
 
         // For each time span
         #ifndef NDEBUG
@@ -901,7 +878,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
-            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->mean_device(_d_exp_dw);
 
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
