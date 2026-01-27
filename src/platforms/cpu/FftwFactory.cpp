@@ -96,9 +96,9 @@ PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(Computat
 
         // Continuous chain model: validate and use numerical_method
         std::string solver_type;
-        if (numerical_method == "rqm4" || numerical_method == "rk2" || numerical_method == "etdrk4")
+        if (numerical_method == "rqm4" || numerical_method == "rk2")
             solver_type = "pseudospectral";
-        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr")
+        else if (numerical_method == "cn-adi2")
             solver_type = "realspace";
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);

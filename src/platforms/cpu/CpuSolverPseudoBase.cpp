@@ -17,8 +17,14 @@
 #include <iostream>
 #include <cmath>
 #include <complex>
+#include <cstring>
+#include <type_traits>
 
 #include "CpuSolverPseudoBase.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 //------------------------------------------------------------------------------
 // Initialize shared components
@@ -120,6 +126,55 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         const int M = cb->get_total_grid();
         q_full_in_.resize(M);
         q_full_out_.resize(M);
+
+        // Initialize crystallographic FFT when applicable
+        if constexpr (std::is_same_v<T, double>)
+        {
+            use_crysfft_pmmm_ = false;
+            crysfft_pmmm_.reset();
+            crysfft_recursive_.reset();
+            crysfft_pmmm_full_indices_.clear();
+            crysfft_pmmm_reduced_indices_.clear();
+
+            if (dim_ == 3 && is_periodic_ && cb->is_orthogonal()
+                && space_group_->has_mirror_planes_xyz()
+                && space_group_->get_spacegroup_symbol() == "Pmmm")
+            {
+                auto nx = cb->get_nx();
+                if (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0)
+                {
+                    std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+                    auto lx = cb->get_lx();
+                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+                    crysfft_pmmm_ = std::make_unique<FftwCrysFFT>(nx_logical, cell_para);
+                    use_crysfft_pmmm_ = true;
+
+                    const int Nx2 = nx[0] / 2;
+                    const int Ny2 = nx[1] / 2;
+                    const int Nz2 = nx[2] / 2;
+                    const int M_phys = Nx2 * Ny2 * Nz2;
+
+                    crysfft_pmmm_full_indices_.resize(M_phys);
+                    crysfft_pmmm_reduced_indices_.resize(M_phys);
+
+                    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
+                    int idx = 0;
+                    for (int ix = 0; ix < Nx2; ++ix)
+                    {
+                        for (int iy = 0; iy < Ny2; ++iy)
+                        {
+                            for (int iz = 0; iz < Nz2; ++iz)
+                            {
+                                int full_idx = (ix * nx[1] + iy) * nx[2] + iz;
+                                crysfft_pmmm_full_indices_[idx] = full_idx;
+                                crysfft_pmmm_reduced_indices_[idx] = full_to_reduced[full_idx];
+                                ++idx;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     else
     {
@@ -128,7 +183,100 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         q_full_in_.shrink_to_fit();
         q_full_out_.clear();
         q_full_out_.shrink_to_fit();
+
+        if constexpr (std::is_same_v<T, double>)
+        {
+            use_crysfft_pmmm_ = false;
+            crysfft_pmmm_.reset();
+            crysfft_recursive_.reset();
+            crysfft_pmmm_full_indices_.clear();
+            crysfft_pmmm_reduced_indices_.clear();
+        }
     }
+}
+
+//------------------------------------------------------------------------------
+// ds value helpers
+//------------------------------------------------------------------------------
+template <typename T>
+double CpuSolverPseudoBase<T>::get_ds_value(int ds_index) const
+{
+    auto it = ds_values_.find(ds_index);
+    if (it == ds_values_.end())
+        throw_with_line_number("ds_index " + std::to_string(ds_index) + " not registered in solver.");
+    return it->second;
+}
+
+template <typename T>
+double CpuSolverPseudoBase<T>::get_effective_diffusion_coeff(
+    const std::string& monomer_type, int ds_index, bool half_step) const
+{
+    double ds = get_ds_value(ds_index);
+    if (half_step)
+        ds *= 0.5;
+
+    auto& bond_lengths = molecules->get_bond_lengths();
+    auto it = bond_lengths.find(monomer_type);
+    if (it == bond_lengths.end())
+        throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
+    double bond_length_sq = it->second * it->second;
+    return bond_length_sq * ds / 6.0;
+}
+
+//------------------------------------------------------------------------------
+// Pmmm grid helpers (reduced basis <-> Pmmm physical grid)
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoBase<T>::fill_pmmm_from_reduced(const double* reduced_in, double* pmmm_out) const
+{
+    if (!use_crysfft_pmmm_ || !crysfft_pmmm_)
+        throw_with_line_number("CrysFFT Pmmm requested but crysfft_pmmm_ is not initialized.");
+
+    const int M_phys = crysfft_pmmm_->get_M_physical();
+    for (int i = 0; i < M_phys; ++i)
+    {
+        pmmm_out[i] = reduced_in[crysfft_pmmm_reduced_indices_[i]];
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::reduce_pmmm_to_reduced(const double* pmmm_in, double* reduced_out) const
+{
+    if (!use_crysfft_pmmm_ || !crysfft_pmmm_)
+        throw_with_line_number("CrysFFT Pmmm requested but crysfft_pmmm_ is not initialized.");
+
+    // Expand the Pmmm physical grid back to the full grid using mirror symmetry,
+    // then use SpaceGroup reduction (which selects the representative index).
+    const std::vector<int>& nx = cb->get_nx();
+    const int Nx = nx[0];
+    const int Ny = nx[1];
+    const int Nz = nx[2];
+    const int Nx2 = Nx / 2;
+    const int Ny2 = Ny / 2;
+    const int Nz2 = Nz / 2;
+    const int M_full = cb->get_total_grid();
+
+    thread_local std::vector<double> full_buffer;
+    if (static_cast<int>(full_buffer.size()) != M_full)
+        full_buffer.resize(M_full);
+
+    for (int ix = 0; ix < Nx; ++ix)
+    {
+        const int ixp = (ix < Nx2) ? ix : (Nx - 1 - ix);
+        for (int iy = 0; iy < Ny; ++iy)
+        {
+            const int iyp = (iy < Ny2) ? iy : (Ny - 1 - iy);
+            for (int iz = 0; iz < Nz; ++iz)
+            {
+                const int izp = (iz < Nz2) ? iz : (Nz - 1 - iz);
+                const int phys_idx = (ixp * Ny2 + iyp) * Nz2 + izp;
+                const int full_idx = (ix * Ny + iy) * Nz + iz;
+                full_buffer[full_idx] = pmmm_in[phys_idx];
+            }
+        }
+    }
+
+    space_group_->to_reduced_basis(full_buffer.data(), reduced_out, 1);
 }
 
 //------------------------------------------------------------------------------
@@ -151,6 +299,15 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
             this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
+
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (use_crysfft_pmmm_ && crysfft_pmmm_)
+            {
+                auto lx = cb->get_lx();
+                crysfft_pmmm_->set_cell_para({lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2});
+            }
+        }
     }
     catch (std::exception& exc)
     {

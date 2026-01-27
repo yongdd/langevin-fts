@@ -98,8 +98,7 @@ ctest -R Pseudo  # runs all tests matching "Pseudo"
 ### Performance and Accuracy Benchmarks
 
 Benchmark scripts for numerical method comparison are in `tests/`:
-- `tests/benchmark_numerical_methods.py`: Comprehensive benchmark comparing RQM4, ETDRK4, CN-ADI2, CN-ADI4
-- `tests/benchmark_etdrk4_vs_rqm4.py`: Focused comparison of pseudo-spectral methods
+- `tests/benchmark_numerical_methods.py`: Benchmark comparing RQM4, RK2, and CN-ADI2
 
 **Running benchmarks with SLURM job scheduler:**
 
@@ -184,10 +183,10 @@ The central computational engine. Computes chain propagators using dynamic progr
 
 Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
-- **Continuous chains**: Pseudo-spectral method with RQM4, RK2, or ETDRK4 solving the modified diffusion equation
+- **Continuous chains**: Pseudo-spectral method with RQM4 or RK2 solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
-- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order) or CN-ADI4-LR (4th-order with Local Richardson extrapolation)
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"rk2"` (RK2), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), or `"cn-adi4-lr"` (CN-ADI4-LR)
+- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order).
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"rk2"` (RK2), or `"cn-adi2"` (CN-ADI2)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -235,7 +234,7 @@ CUDA code uses:
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
 
-**cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** This issue was discovered in the ETDRK4 solver where Fourier coefficients were corrupted after IFFT operations. See `CudaSolverPseudoETDRK4.cu` for the correct pattern using `cudaMemcpyAsync` to preserve input data.
+**cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** Several solvers rely on this pattern to avoid corruption after IFFT operations.
 
 ## Running Simulations
 
@@ -289,9 +288,7 @@ Simulations are configured via Python dictionaries with keys:
 - `numerical_method`: Algorithm for propagator computation
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
   - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting
-  - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
-  - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
 
 ### Common Issues and Solutions
 
@@ -389,18 +386,6 @@ Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen
 
 **Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
 
-#### ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
-Direct integration using matrix exponentials:
-1. Transform to Fourier space
-2. Solve using exponential integrating factor
-3. 4th-order Runge-Kutta for the nonlinear term
-
-**Order of accuracy**: 4th-order in ds
-
-**Material Conservation**: ETDRK4 does **not** conserve material exactly. The Krogstad scheme treats the potential term N(q)=-w·q asymmetrically across RK4 stages, breaking the Hermiticity condition (VU)†=VU required for exact conservation. Typical conservation errors |mean(φ)-1| are ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material conservation, use RQM4 or CN-ADI methods instead.
-
-**Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
-
 ### Real-Space Methods (Finite Difference)
 
 Real-space methods use **cell-centered grids** (same as pseudo-spectral methods) for consistent boundary condition handling:
@@ -415,23 +400,13 @@ Alternating Direction Implicit method with Crank-Nicolson time stepping:
 
 **Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
 
-#### CN-ADI4-LR (4th-order Local Richardson Extrapolation)
-Richardson extrapolation applied to CN-ADI2 at each contour step:
-$$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
-
-**Order of accuracy**: 4th-order in ds
-
-"LR" stands for "Local Richardson" - the extrapolation is applied independently at each step.
-
 ### Method Selection Guidelines
 
 | Method | Order | Material Conservation | Best For | Limitations |
 |--------|-------|----------------------|----------|-------------|
 | RQM4 | 4th | Exact (~10⁻¹⁶) | General use, default choice | None |
 | RK2 | 2nd | Exact (~10⁻¹⁶) | Fast iterations | Lower accuracy |
-| ETDRK4 | 4th | Approximate (~10⁻⁹) | Benchmarking, SCFT | Inexact conservation |
 | CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
-| CN-ADI4-LR | 4th | Exact (~10⁻¹⁵) | Real-space alternative | 2× cost of CN-ADI2 |
 
 All methods support periodic, reflecting, and absorbing boundary conditions.
 
@@ -518,7 +493,7 @@ FFT functions are called from multiple OpenMP threads simultaneously (propagator
    }
    ```
 
-3. **ALWAYS preserve input arrays after transforms**: FFTW c2r and cuFFT c2r/z2d **destroy the input array** even for "out-of-place" transforms. Always copy input to a local buffer before executing. This is critical for multi-stage algorithms like ETDRK4 that reuse k-space arrays.
+3. **ALWAYS preserve input arrays after transforms**: FFTW c2r and cuFFT c2r/z2d **destroy the input array** even for "out-of-place" transforms. Always copy input to a local buffer before executing when the input must be preserved across stages.
 
 4. **Use new-array execute functions**: In FFTW, use `fftw_execute_dft_r2c`, `fftw_execute_dft_c2r`, `fftw_execute_dft` (not plain `fftw_execute`) when operating on thread-local buffers.
 
@@ -572,5 +547,4 @@ The implementation is based on these publications:
 - RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
 - RK2 method: *J. Polym. Sci. B* **2002**, 40, 1777 (Rasmussen, Kalosakas)
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
-- ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
 - Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)

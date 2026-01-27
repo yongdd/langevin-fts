@@ -9,10 +9,8 @@
  *
  * **CN-ADI Method:**
  *
- * Implicit time-stepping with 2nd-order accuracy (CN-ADI2, default):
+ * Implicit time-stepping with 2nd-order accuracy (CN-ADI2):
  *     (I - ds/2 L) q(n+1) = (I + ds/2 L) q(n)
- *
- * With Richardson extrapolation enabled, achieves 4th-order (CN-ADI4).
  *
  * **ADI Splitting:**
  *
@@ -281,8 +279,6 @@ private:
 
     std::string chain_model;     ///< Chain model type
     bool reduce_memory;      ///< Checkpointing mode flag
-    bool use_4th_order;          ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
-
     int n_streams;               ///< Number of parallel streams
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
@@ -313,20 +309,6 @@ private:
     std::map<int, std::map<std::string, double*>> d_zh;  ///< Z-direction upper diagonal
     /// @}
 
-    /// @name Half-step Tridiagonal Coefficients for CN-ADI4
-    /// @{
-    std::map<int, std::map<std::string, double*>> d_xl_half;  ///< X-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> d_xd_half;  ///< X-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> d_xh_half;  ///< X-direction upper (ds/2)
-
-    std::map<int, std::map<std::string, double*>> d_yl_half;  ///< Y-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> d_yd_half;  ///< Y-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> d_yh_half;  ///< Y-direction upper (ds/2)
-
-    std::map<int, std::map<std::string, double*>> d_zl_half;  ///< Z-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> d_zd_half;  ///< Z-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> d_zh_half;  ///< Z-direction upper (ds/2)
-    /// @}
 
     /// @name Tridiagonal Solver Workspace (per stream)
     /// @{
@@ -335,8 +317,6 @@ private:
     double *d_c_star  [MAX_STREAMS];  ///< Modified upper diagonal
     double *d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
     double *d_temp    [MAX_STREAMS];  ///< General temporary
-    double *d_q_full  [MAX_STREAMS];  ///< Full step result for CN-ADI4
-    double *d_q_half  [MAX_STREAMS];  ///< Half step result for CN-ADI4
     /// @}
 
     /// @name Index Offset Arrays
@@ -415,11 +395,9 @@ public:
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
      * @param reduce_memory   Checkpointing mode
-     * @param use_4th_order       Use CN-ADI4 (4th order accuracy via Richardson
-     *                            extrapolation) instead of CN-ADI2 (2nd order, default)
      */
     CudaSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
-        int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory, bool use_4th_order = false);
+        int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
     /**
      * @brief Destructor. Frees GPU resources.

@@ -48,7 +48,6 @@
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoRK2.h"
-#include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
@@ -130,18 +129,18 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
                 this->propagator_solver = new CudaSolverPseudoRQM4<T>(cb, molecules, this->n_streams, this->streams, false);
             else if (numerical_method == "rk2")
                 this->propagator_solver = new CudaSolverPseudoRK2<T>(cb, molecules, this->n_streams, this->streams, false);
-            else if (numerical_method == "etdrk4")
-                this->propagator_solver = new CudaSolverPseudoETDRK4<T>(cb, molecules, this->n_streams, this->streams, false);
             else
-                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4', 'rk2', or 'etdrk4'.");
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
         }
         else if(method == "realspace")
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
-                bool use_4th_order = (numerical_method == "cn-adi4-lr");
-                this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
+                if (numerical_method != "" && numerical_method != "cn-adi2")
+                {
+                    throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
+                }
+                this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

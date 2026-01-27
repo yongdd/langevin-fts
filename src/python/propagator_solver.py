@@ -88,9 +88,7 @@ class PropagatorSolver:
         Only applicable for continuous chain model (default: 'rqm4'):
         - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation
         - "rk2": Pseudo-spectral with 2nd-order operator splitting
-        - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
-        - "cn-adi4-lr": Real-space with 4th-order CN-ADI
         Note: Discrete chain model has its own solver; this parameter is ignored.
     platform : str
         Computational platform: "cpu-fftw", "cpu-fftw", or "cuda".
@@ -142,7 +140,7 @@ class PropagatorSolver:
     ...     chain_model="discrete"
     ... )
 
-    2D thin film with real-space CN-ADI4 method (continuous only):
+    2D thin film with real-space CN-ADI2 method (continuous only):
 
     >>> solver = PropagatorSolver(
     ...     nx=[32, 24], lx=[4.0, 3.0],
@@ -150,14 +148,14 @@ class PropagatorSolver:
     ...     bond_lengths={"A": 1.0},
     ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     chain_model="continuous",
-    ...     numerical_method="cn-adi4-lr",
+    ...     numerical_method="cn-adi2",
     ...     platform="cuda"
     ... )
     """
 
     # Map numerical methods to solver types
-    _PSEUDO_METHODS = {"rqm4", "rk2", "etdrk4"}
-    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4-lr"}
+    _PSEUDO_METHODS = {"rqm4", "rk2"}
+    _REALSPACE_METHODS = {"cn-adi2"}
 
     def __init__(
         self,
@@ -488,6 +486,21 @@ class PropagatorSolver:
             )
 
         return self._propagator_computation.get_total_partition(polymer)
+
+    def check_total_partition(self) -> bool:
+        """
+        Check forward/backward partition function consistency.
+
+        Returns
+        -------
+        bool
+            True when the solver reports consistent total partitions.
+        """
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+        return bool(self._propagator_computation.check_total_partition())
 
     def compute_concentrations(self) -> None:
         """

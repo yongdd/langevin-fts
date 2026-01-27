@@ -23,12 +23,6 @@ D. Morse, D. Yong, and K. Chen, "Polymer Field Theory for Multimonomer Incompres
 ### RQM4 (Richardson Extrapolation)
 A. Ranjan, J. Qin, and D. C. Morse, "Linear Response and Stability of Ordered Phases of Block Copolymer Melts", *Macromolecules* **2008**, 41, 942-954
 
-### ETDRK4 (Exponential Time Differencing)
-J. Song, Y. Liu, and R. Zhang, "Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers", *Chinese J. Polym. Sci.* **2018**, 36, 488-496
-
-### ETDRK4 Coefficient Computation
-A.-K. Kassam and L. N. Trefethen, "Fourth-Order Time-Stepping for Stiff PDEs", *SIAM J. Sci. Comput.* **2005**, 26, 1214-1233
-
 ### Pseudo-Spectral Algorithm Benchmarks
 P. Stasiak and M. W. Matsen, "Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases", *Eur. Phys. J. E* **2011**, 34, 110
 

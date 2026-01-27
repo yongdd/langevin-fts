@@ -47,17 +47,13 @@
  *
  * @param cb            Computation box for grid and boundary info
  * @param molecules     Molecular system (must use continuous model)
- * @param use_4th_order Use CN-ADI4 (4th order accuracy via Richardson extrapolation)
- *                      instead of CN-ADI2 (2nd order, default)
- *
  * @throws Exception if discrete chain model is specified
  */
-CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order)
+CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
-        this->use_4th_order = use_4th_order;
         this->space_group_ = nullptr;
 
         if(molecules->get_model_name() != "continuous")
@@ -89,7 +85,6 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
             {
                 std::string monomer_type = item.first;
                 exp_dw     [ds_idx][monomer_type].resize(M);
-                exp_dw_half[ds_idx][monomer_type].resize(M);
 
                 // Full step coefficients
                 xl[ds_idx][monomer_type] = new double[M];
@@ -104,18 +99,6 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
                 zd[ds_idx][monomer_type] = new double[M];
                 zh[ds_idx][monomer_type] = new double[M];
 
-                // Half step coefficients for CN-ADI4
-                xl_half[ds_idx][monomer_type] = new double[M];
-                xd_half[ds_idx][monomer_type] = new double[M];
-                xh_half[ds_idx][monomer_type] = new double[M];
-
-                yl_half[ds_idx][monomer_type] = new double[M];
-                yd_half[ds_idx][monomer_type] = new double[M];
-                yh_half[ds_idx][monomer_type] = new double[M];
-
-                zl_half[ds_idx][monomer_type] = new double[M];
-                zd_half[ds_idx][monomer_type] = new double[M];
-                zh_half[ds_idx][monomer_type] = new double[M];
             }
         }
 
@@ -128,7 +111,7 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
 }
 CpuSolverCNADI::~CpuSolverCNADI()
 {
-    // exp_dw, exp_dw_half vectors are automatically cleaned up
+    // exp_dw vectors are automatically cleaned up
 
     // Full step coefficients: nested map [ds_index][monomer_type]
     for(const auto& ds_entry: xl)
@@ -161,36 +144,6 @@ CpuSolverCNADI::~CpuSolverCNADI()
         for(const auto& item: ds_entry.second)
             delete[] item.second;
 
-    // Half step coefficients
-    for(const auto& ds_entry: xl_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: xd_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: xh_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-
-    for(const auto& ds_entry: yl_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: yd_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: yh_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-
-    for(const auto& ds_entry: zl_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: zd_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: zh_half)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
 }
 int CpuSolverCNADI::max_of_two(int x, int y)
 {
@@ -227,14 +180,6 @@ void CpuSolverCNADI::update_laplacian_operator()
                     zl[ds_idx][monomer_type], zd[ds_idx][monomer_type], zh[ds_idx][monomer_type],
                     bond_length_sq, local_ds);
 
-                // Half step coefficients (local_ds/2) for CN-ADI4
-                FiniteDifference::get_laplacian_matrix(
-                    this->cb->get_boundary_conditions(),
-                    this->cb->get_nx(), this->cb->get_dx(),
-                    xl_half[ds_idx][monomer_type], xd_half[ds_idx][monomer_type], xh_half[ds_idx][monomer_type],
-                    yl_half[ds_idx][monomer_type], yd_half[ds_idx][monomer_type], yh_half[ds_idx][monomer_type],
-                    zl_half[ds_idx][monomer_type], zd_half[ds_idx][monomer_type], zh_half[ds_idx][monomer_type],
-                    bond_length_sq, local_ds*0.5);
             }
         }
     }
@@ -277,14 +222,11 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
             std::vector<double>& exp_dw_vec = exp_dw[ds_idx][monomer_type];
-            std::vector<double>& exp_dw_half_vec = exp_dw_half[ds_idx][monomer_type];
 
             for(int i=0; i<M; i++)
             {
                 // Full step: exp(-w*local_ds/2) for symmetric splitting
                 exp_dw_vec[i] = exp(-w[i]*local_ds*0.5);
-                // Half step: exp(-w*local_ds/4) for symmetric splitting with local_ds/2
-                exp_dw_half_vec[i] = exp(-w[i]*local_ds*0.25);
             }
         }
     }
@@ -321,110 +263,15 @@ void CpuSolverCNADI::advance_propagator(
             }
         }
 
-        // Get Boltzmann factors for full and half steps using ds_index
+        // CN-ADI2: single full step only (2nd order accuracy)
         const double *_exp_dw = exp_dw[ds_index][monomer_type].data();           // exp(-w*local_ds/2)
-
-        if (use_4th_order)
-        {
-            // CN-ADI4: 4th order accuracy via Richardson extrapolation
-            const double *_exp_dw_half = exp_dw_half[ds_index][monomer_type].data(); // exp(-w*local_ds/4)
-
-            // Temporary arrays
-            double q_out1[M];  // Full step result
-            double q_out2[M];  // Two half-steps result
-
-            //=====================================================================
-            // Full step (local_ds): exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
-            //=====================================================================
-            advance_propagator_step(
-                q_in_full, q_out1,
-                _exp_dw,
-                xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
-                yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
-                zl[ds_index][monomer_type], zd[ds_index][monomer_type], zh[ds_index][monomer_type],
-                nullptr);
-
-            //=====================================================================
-            // Two half-steps (local_ds/2 each)
-            // Structure: exp(-w*local_ds/4) * D(local_ds/2) * exp(-w*local_ds/2) * D(local_ds/2) * exp(-w*local_ds/4)
-            // where the middle exp(-w*local_ds/2) combines end of step1 and start of step2
-            //=====================================================================
-            {
-                const int DIM = this->cb->get_dim();
-                double q_temp[M];
-
-                // First half-step: exp(-w*local_ds/4) * Diffusion(local_ds/2) * exp(-w*local_ds/2)
-                // Apply exp(-w*local_ds/4) at start
-                for(int i=0; i<M; i++)
-                    q_temp[i] = _exp_dw_half[i] * q_in_full[i];
-
-                // ADI diffusion with half-step coefficients
-                if(DIM == 3)
-                    advance_propagator_3d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type],
-                        yl_half[ds_index][monomer_type], yd_half[ds_index][monomer_type], yh_half[ds_index][monomer_type],
-                        zl_half[ds_index][monomer_type], zd_half[ds_index][monomer_type], zh_half[ds_index][monomer_type]);
-                else if(DIM == 2)
-                    advance_propagator_2d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type],
-                        yl_half[ds_index][monomer_type], yd_half[ds_index][monomer_type], yh_half[ds_index][monomer_type]);
-                else if(DIM == 1)
-                    advance_propagator_1d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type]);
-
-                // Apply exp(-w*local_ds/2) at junction (combines local_ds/4 from end of step1 + local_ds/4 from start of step2)
-                for(int i=0; i<M; i++)
-                    q_out2[i] *= _exp_dw[i];
-
-                // Second half-step: Diffusion(local_ds/2) * exp(-w*local_ds/4)
-                // Copy for diffusion step
-                for(int i=0; i<M; i++)
-                    q_temp[i] = q_out2[i];
-
-                if(DIM == 3)
-                    advance_propagator_3d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type],
-                        yl_half[ds_index][monomer_type], yd_half[ds_index][monomer_type], yh_half[ds_index][monomer_type],
-                        zl_half[ds_index][monomer_type], zd_half[ds_index][monomer_type], zh_half[ds_index][monomer_type]);
-                else if(DIM == 2)
-                    advance_propagator_2d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type],
-                        yl_half[ds_index][monomer_type], yd_half[ds_index][monomer_type], yh_half[ds_index][monomer_type]);
-                else if(DIM == 1)
-                    advance_propagator_1d_step(
-                        this->cb->get_boundary_conditions(), q_temp, q_out2,
-                        xl_half[ds_index][monomer_type], xd_half[ds_index][monomer_type], xh_half[ds_index][monomer_type]);
-
-                // Apply exp(-w*local_ds/4) at end
-                for(int i=0; i<M; i++)
-                    q_out2[i] *= _exp_dw_half[i];
-            }
-
-            //=====================================================================
-            // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
-            //=====================================================================
-            for(int i=0; i<M; i++)
-                q_out_full[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
-        }
-        else
-        {
-            // CN-ADI2: single full step only (2nd order accuracy)
-            //=====================================================================
-            // Full step (local_ds): exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
-            //=====================================================================
-            advance_propagator_step(
-                q_in_full, q_out_full,
-                _exp_dw,
-                xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
-                yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
-                zl[ds_index][monomer_type], zd[ds_index][monomer_type], zh[ds_index][monomer_type],
-                nullptr);
-        }
+        advance_propagator_step(
+            q_in_full, q_out_full,
+            _exp_dw,
+            xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
+            yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
+            zl[ds_index][monomer_type], zd[ds_index][monomer_type], zh[ds_index][monomer_type],
+            nullptr);
 
         // Multiply mask
         if(q_mask_full != nullptr)
@@ -769,7 +616,7 @@ void CpuSolverCNADI::advance_propagator_1d(
 }
 
 // ============================================================================
-// Step methods with explicit coefficient parameters for CN-ADI4
+// Step methods with explicit coefficient parameters
 // ============================================================================
 
 void CpuSolverCNADI::advance_propagator_3d_step(

@@ -193,9 +193,8 @@ public :
      * @param propagator_computation_optimizer Computation scheduler
      * @param numerical_method                Numerical method:
      *                                        - "rqm4": 4th-order Richardson (pseudo-spectral)
-     *                                        - "etdrk4": Exponential time differencing RK4 (pseudo-spectral)
+     *                                        - "rk2":  2nd-order operator splitting (pseudo-spectral)
      *                                        - "cn-adi2": 2nd-order Crank-Nicolson ADI (real-space)
-     *                                        - "cn-adi4-lr": 4th-order CN-ADI, Local Richardson (real-space)
      * @return Platform-specific PropagatorComputation solver
      *
      * @note Real-space methods (cn-adi*) support non-periodic boundary conditions

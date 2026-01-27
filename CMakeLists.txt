@@ -87,7 +87,6 @@ ADD_LIBRARY(common
     src/common/PropagatorAggregator.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
-    src/common/ETDRK4Coefficients.cpp
     src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
@@ -120,12 +119,12 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
     ADD_LIBRARY(cpu-fftw
         src/platforms/cpu/FftwFFT.cpp
         src/platforms/cpu/FftwCrysFFT.cpp
+        src/platforms/cpu/FftwCrysFFTRecursive3m.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoBase.cpp
         src/platforms/cpu/CpuSolverPseudoRQM4.cpp
         src/platforms/cpu/CpuSolverPseudoRK2.cpp
-        src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverCNADI.cpp
         src/platforms/cpu/CpuComputationBase.cpp
@@ -181,7 +180,6 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaRealTransform.cu
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoRK2.cu
-        src/platforms/cuda/CudaSolverPseudoETDRK4.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
         src/platforms/cuda/CudaComputationBase.cu

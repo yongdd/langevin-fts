@@ -30,12 +30,10 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 |--------|-------------|-------------|
 | `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation |
 | `rk2` | Pseudo-spectral | RK2: 2nd-order Rasmussen-Kalosakas operator splitting |
-| `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
-| `cn-adi4-lr` | Real-space | CN-ADI4-LR: 4th-order CN-ADI (Local Richardson) |
 
 #### Pseudo-Spectral Method
-- RQM4 or ETDRK4 for continuous chains
+- RQM4 or RK2 for continuous chains
 - Supports both continuous and discrete chain models
 - Boundary conditions:
   - Periodic (FFT)
@@ -44,7 +42,7 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 
 #### Real-Space Method
 - CN-ADI (Crank-Nicolson Alternating Direction Implicit) finite difference scheme
-- CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order) selectable at runtime
+- CN-ADI2 (2nd-order) selectable at runtime
 - Supports only continuous chain model
 - Supports periodic, reflecting, and absorbing boundaries
 - See [RealSpaceMethod.md](RealSpaceMethod.md) for details
@@ -105,7 +103,7 @@ High-level simulation modules built on top of the core library.
 | Periodic BC | Yes (FFT) | Yes |
 | Reflecting BC | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes |
-| Numerical methods | RQM4, RK2, ETDRK4 | CN-ADI2, CN-ADI4 |
+| Numerical methods | RQM4, RK2 | CN-ADI2 |
 | Stress calculation | Yes | No |
 | Recommended for | Large grids, periodic systems | Non-periodic boundaries |
 
@@ -119,4 +117,3 @@ For implementation details and algorithms, see:
 - Multi-monomer theory: *Macromolecules* **2025**, 58, 816
 - RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
-- ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)

@@ -257,7 +257,6 @@ int main()
         std::vector<std::pair<std::string, std::string>> configs = {
             {"rqm4", "Continuous"},
             {"rk2", "Continuous"},
-            {"etdrk4", "Continuous"},
         };
 
         // Get available platforms

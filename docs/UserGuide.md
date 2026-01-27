@@ -37,9 +37,7 @@ You can select the numerical algorithm for propagator computation at runtime usi
 |--------|-------------|-------------|
 | `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation (default) |
 | `rk2` | Pseudo-spectral | RK2: 2nd-order Rasmussen-Kalosakas operator splitting |
-| `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
-| `cn-adi4-lr` | Real-space | CN-ADI4-LR: 4th-order CN-ADI (Local Richardson) |
 
 **Note**: `rqm4` is the default numerical method for `scft.py`, `lfts.py`, and `clfts.py`. It offers the best performance among 4th-order methods. See [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md) for benchmark comparisons.
 
@@ -47,7 +45,7 @@ Example:
 ```python
 params = {
     # ... other parameters ...
-    "numerical_method": "etdrk4"  # or "rqm4" (default), "rk2", "cn-adi2", "cn-adi4-lr"
+    "numerical_method": "rqm4"  # or "rk2", "cn-adi2"
 }
 scft = SCFT(params)
 ```
@@ -136,5 +134,5 @@ Simulations are configured via Python dictionaries with keys:
 | `chi_n` | Flory-Huggins interaction parameters × N_Ref |
 | `distinct_polymers` | Polymer architectures and volume fractions |
 | `platform` | `"cuda"` or `"cpu-fftw"` (auto-selected by default) |
-| `numerical_method` | `"rqm4"`, `"rk2"`, `"etdrk4"`, `"cn-adi2"`, or `"cn-adi4-lr"` |
+| `numerical_method` | `"rqm4"`, `"rk2"`, or `"cn-adi2"` |
 | `reduce_memory` | `True` to enable memory saving mode |

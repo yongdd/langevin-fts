@@ -35,7 +35,6 @@
  *
  * @see CpuSolverPseudoBase for shared functionality
  * @see CpuSolverPseudoDiscrete for discrete chain version
- * @see CpuSolverPseudoETDRK4 for ETDRK4 alternative
  * @see Pseudo for the pseudo-spectral implementation details
  */
 

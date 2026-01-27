@@ -33,6 +33,7 @@
 #include <iostream>
 #include <cmath>
 #include <complex>
+#include <type_traits>
 
 #include "CpuSolverPseudoRQM4.h"
 
@@ -62,6 +63,7 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->pseudo->add_ds_value(ds_idx, local_ds);
+            this->register_ds_value(ds_idx, local_ds);
 
             for (const auto& item : molecules->get_bond_lengths())
             {
@@ -111,18 +113,22 @@ const double* CpuSolverPseudoRQM4<T>::get_stress_boltz_bond(
 template <typename T>
 void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
 {
-    const int M = this->cb->get_total_grid();
+    const int M_full = this->cb->get_total_grid();
+    const int M_reduced = (this->space_group_ != nullptr)
+        ? this->space_group_->get_n_irreducible()
+        : M_full;
     const bool use_reduced_basis = (this->space_group_ != nullptr);
+    const bool use_pmmm = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr);
 
     std::map<std::string, std::vector<T>> w_full_cache;
-    if (use_reduced_basis)
+    if (use_reduced_basis && !use_pmmm)
     {
         if constexpr (std::is_same_v<T, double>)
         {
             for (const auto& item : w_input)
             {
                 const std::string& monomer_type = item.first;
-                w_full_cache[monomer_type].resize(M);
+                w_full_cache[monomer_type].resize(M_full);
                 this->space_group_->from_reduced_basis(item.second, w_full_cache[monomer_type].data(), 1);
             }
         }
@@ -144,7 +150,7 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            const T* w = use_reduced_basis ? w_full_cache[monomer_type].data() : item.second;
+            const T* w = (use_reduced_basis && !use_pmmm) ? w_full_cache[monomer_type].data() : item.second;
 
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
@@ -152,7 +158,11 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
             std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
             std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_idx][monomer_type];
 
-            for (int i = 0; i < M; ++i)
+            const int M_use = use_pmmm ? M_reduced : M_full;
+            exp_dw_vec.resize(M_use);
+            exp_dw_half_vec.resize(M_use);
+
+            for (int i = 0; i < M_use; ++i)
             {
                 exp_dw_vec[i] = std::exp(-w[i] * local_ds * 0.5);
                 exp_dw_half_vec[i] = std::exp(-w[i] * local_ds * 0.25);
@@ -170,7 +180,10 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int M_full = this->cb->get_total_grid();
+        const int M_reduced = (this->space_group_ != nullptr)
+            ? this->space_group_->get_n_irreducible()
+            : M_full;
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
         // For periodic BC, coefficient array is actually complex (interleaved real/imag)
@@ -178,7 +191,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
 
         // Temporary arrays
-        std::vector<T> q_out1(M), q_out2(M);
+        std::vector<T> q_out1(M_full), q_out2(M_full);
         std::vector<double> k_q_in1(coeff_size);
         std::vector<double> k_q_in2(coeff_size);
 
@@ -197,7 +210,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 
         if (this->space_group_ != nullptr)
         {
-            q_full_in_local.resize(M);
+            q_full_in_local.resize(M_full);
             // Expand reduced basis → full grid
             if constexpr (std::is_same_v<T, double>)
                 this->space_group_->from_reduced_basis(q_in, q_full_in_local.data(), 1);
@@ -205,45 +218,157 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         }
 
         // ===== Step 1: Full step =====
-        for (int i = 0; i < M; ++i)
-            q_out1[i] = _exp_dw[i] * fft_in[i];
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            {
+                thread_local std::vector<double> phys_in;
+                thread_local std::vector<double> phys_out;
+                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                if (static_cast<int>(phys_in.size()) != M_phys)
+                {
+                    phys_in.resize(M_phys);
+                    phys_out.resize(M_phys);
+                }
 
-        this->transform_forward(q_out1.data(), k_q_in1.data());
-        this->multiply_fourier_coeffs(k_q_in1.data(), _boltz_bond, M_COMPLEX);
-        this->transform_backward(k_q_in1.data(), q_out1.data());
+                // exp(-w·ds/2) on Pmmm grid
+                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_in[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                }
 
-        for (int i = 0; i < M; ++i)
-            q_out1[i] *= _exp_dw[i];
+                double coeff_full = this->get_effective_diffusion_coeff(monomer_type, ds_index, false);
+                this->crysfft_pmmm_->set_contour_step(coeff_full);
+                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                }
+
+                q_out1.resize(M_reduced);
+                this->reduce_pmmm_to_reduced(phys_out.data(), q_out1.data());
+            }
+            else
+            {
+                for (int i = 0; i < M_full; ++i)
+                    q_out1[i] = _exp_dw[i] * fft_in[i];
+
+                this->transform_forward(q_out1.data(), k_q_in1.data());
+                this->multiply_fourier_coeffs(k_q_in1.data(), _boltz_bond, M_COMPLEX);
+                this->transform_backward(k_q_in1.data(), q_out1.data());
+
+                for (int i = 0; i < M_full; ++i)
+                    q_out1[i] *= _exp_dw[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < M_full; ++i)
+                q_out1[i] = _exp_dw[i] * fft_in[i];
+
+            this->transform_forward(q_out1.data(), k_q_in1.data());
+            this->multiply_fourier_coeffs(k_q_in1.data(), _boltz_bond, M_COMPLEX);
+            this->transform_backward(k_q_in1.data(), q_out1.data());
+
+            for (int i = 0; i < M_full; ++i)
+                q_out1[i] *= _exp_dw[i];
+        }
 
         // ===== Step 2: Two half steps =====
-        // First half step
-        for (int i = 0; i < M; ++i)
-            q_out2[i] = _exp_dw_half[i] * fft_in[i];
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            {
+                thread_local std::vector<double> phys_in;
+                thread_local std::vector<double> phys_out;
+                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                if (static_cast<int>(phys_in.size()) != M_phys)
+                {
+                    phys_in.resize(M_phys);
+                    phys_out.resize(M_phys);
+                }
 
-        this->transform_forward(q_out2.data(), k_q_in2.data());
-        this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
-        this->transform_backward(k_q_in2.data(), q_out2.data());
+                double coeff_half = this->get_effective_diffusion_coeff(monomer_type, ds_index, true);
+                this->crysfft_pmmm_->set_contour_step(coeff_half);
 
-        for (int i = 0; i < M; ++i)
-            q_out2[i] *= _exp_dw[i];
+                // First half step
+                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_in[i] *= _exp_dw_half[this->crysfft_pmmm_reduced_indices_[i]];
+                }
+                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                }
 
-        // Second half step
-        this->transform_forward(q_out2.data(), k_q_in2.data());
-        this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
-        this->transform_backward(k_q_in2.data(), q_out2.data());
+                // Second half step
+                this->crysfft_pmmm_->diffusion(phys_out.data(), phys_in.data());
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_in[i] *= _exp_dw_half[this->crysfft_pmmm_reduced_indices_[i]];
+                }
 
-        for (int i = 0; i < M; ++i)
-            q_out2[i] *= _exp_dw_half[i];
+                q_out2.resize(M_reduced);
+                this->reduce_pmmm_to_reduced(phys_in.data(), q_out2.data());
+            }
+            else
+            {
+                // First half step
+                for (int i = 0; i < M_full; ++i)
+                    q_out2[i] = _exp_dw_half[i] * fft_in[i];
+
+                this->transform_forward(q_out2.data(), k_q_in2.data());
+                this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
+                this->transform_backward(k_q_in2.data(), q_out2.data());
+
+                for (int i = 0; i < M_full; ++i)
+                    q_out2[i] *= _exp_dw[i];
+
+                // Second half step
+                this->transform_forward(q_out2.data(), k_q_in2.data());
+                this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
+                this->transform_backward(k_q_in2.data(), q_out2.data());
+
+                for (int i = 0; i < M_full; ++i)
+                    q_out2[i] *= _exp_dw_half[i];
+            }
+        }
+        else
+        {
+            // First half step
+            for (int i = 0; i < M_full; ++i)
+                q_out2[i] = _exp_dw_half[i] * fft_in[i];
+
+            this->transform_forward(q_out2.data(), k_q_in2.data());
+            this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
+            this->transform_backward(k_q_in2.data(), q_out2.data());
+
+            for (int i = 0; i < M_full; ++i)
+                q_out2[i] *= _exp_dw[i];
+
+            // Second half step
+            this->transform_forward(q_out2.data(), k_q_in2.data());
+            this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
+            this->transform_backward(k_q_in2.data(), q_out2.data());
+
+            for (int i = 0; i < M_full; ++i)
+                q_out2[i] *= _exp_dw_half[i];
+        }
 
         // ===== RQM4: Richardson extrapolation =====
         // Result goes into q_out2 (reuse buffer)
-        for (int i = 0; i < M; ++i)
+        const int M_out = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr) ? M_reduced : M_full;
+        for (int i = 0; i < M_out; ++i)
             q_out2[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 
         // Apply mask if provided
         if (q_mask != nullptr)
         {
-            for (int i = 0; i < M; ++i)
+            for (int i = 0; i < M_out; ++i)
                 q_out2[i] *= q_mask[i];
         }
 
@@ -251,7 +376,12 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         if (this->space_group_ != nullptr)
         {
             if constexpr (std::is_same_v<T, double>)
-                this->space_group_->to_reduced_basis(q_out2.data(), q_out, 1);
+            {
+                if (this->use_crysfft_pmmm_)
+                    std::copy(q_out2.begin(), q_out2.begin() + M_out, q_out);
+                else
+                    this->space_group_->to_reduced_basis(q_out2.data(), q_out, 1);
+            }
         }
         else
         {

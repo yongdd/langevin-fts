@@ -8,7 +8,7 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 
 - Arbitrary acyclic branched polymers and their mixtures
 - Continuous and discrete chain models
-- Pseudo-spectral and real-space solvers (RQM4, ETDRK4, CN-ADI)
+- Pseudo-spectral and real-space solvers (RQM4, RK2, CN-ADI2)
 - Periodic, reflecting, and absorbing boundary conditions
 - CPU (FFTW) and GPU (NVIDIA CUDA) platforms
 
@@ -62,9 +62,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 |--------|------|-------------|
 | `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
 | `rk2` | Pseudo-spectral | 2nd-order Rasmussen-Kalosakas |
-| `etdrk4` | Pseudo-spectral | Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
-| `cn-adi4-lr` | Real-space | 4th-order CN-ADI (Local Richardson) |
 
 **Note**: `rqm4` is the default. See [benchmarks](docs/NumericalMethodsPerformance.md) for details.
 

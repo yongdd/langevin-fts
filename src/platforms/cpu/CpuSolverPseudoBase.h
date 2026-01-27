@@ -37,6 +37,7 @@
 #include <vector>
 #include <map>
 #include <complex>
+#include <memory>
 
 #include "Exception.h"
 #include "Molecules.h"
@@ -45,6 +46,8 @@
 #include "Pseudo.h"
 #include "FFTFactory.h"
 #include "SpaceGroup.h"
+#include "FftwCrysFFT.h"
+#include "FftwCrysFFTRecursive3m.h"
 
 /**
  * @class CpuSolverPseudoBase
@@ -111,6 +114,14 @@ protected:
      */
     std::vector<T> q_full_in_;   ///< Input buffer for full grid FFT
     std::vector<T> q_full_out_;  ///< Output buffer for full grid FFT
+
+    std::unique_ptr<FftwCrysFFT> crysfft_pmmm_;
+    std::unique_ptr<FftwCrysFFTRecursive3m> crysfft_recursive_;
+    bool use_crysfft_pmmm_ = false;
+    std::map<int, double> ds_values_;
+
+    std::vector<int> crysfft_pmmm_full_indices_;
+    std::vector<int> crysfft_pmmm_reduced_indices_;
 
     /**
      * @brief Perform forward transform.
@@ -286,6 +297,31 @@ public:
      * @param sg Space group pointer (nullptr to disable reduced basis)
      */
     void set_space_group(SpaceGroup* sg);
+
+    /**
+     * @brief Register contour step size for a ds index.
+     */
+    void register_ds_value(int ds_index, double ds) { ds_values_[ds_index] = ds; }
+
+    /**
+     * @brief Get the contour step size for a ds index.
+     */
+    double get_ds_value(int ds_index) const;
+
+    /**
+     * @brief Compute effective diffusion coefficient (b^2 * ds / 6).
+     */
+    double get_effective_diffusion_coeff(
+        const std::string& monomer_type, int ds_index, bool half_step) const;
+
+protected:
+    /**
+     * @brief Apply crystallographic FFT diffusion on a full grid.
+     *
+     * Requires Pmmm mirror symmetry and 3D periodic BC.
+     */
+    void fill_pmmm_from_reduced(const double* reduced_in, double* pmmm_out) const;
+    void reduce_pmmm_to_reduced(const double* pmmm_in, double* reduced_out) const;
 
     /**
      * @brief Update Fourier-space operators.

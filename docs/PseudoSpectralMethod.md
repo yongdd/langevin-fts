@@ -12,9 +12,8 @@ This document provides the mathematical derivation of the pseudo-spectral method
 4. [Fourier Transform in Non-Orthogonal Systems](#4-fourier-transform-in-non-orthogonal-systems)
 5. [Boltzmann Weight Calculation](#5-boltzmann-weight-calculation)
 6. [RQM4: 4th-Order Accuracy via Richardson Extrapolation](#6-rqm4-4th-order-accuracy-via-richardson-extrapolation)
-7. [ETDRK4: Alternative 4th-Order Method](#7-etdrk4-alternative-4th-order-method)
-8. [Stress Tensor Calculation](#8-stress-tensor-calculation)
-9. [Crystal System Constraints](#9-crystal-system-constraints)
+7. [Stress Tensor Calculation](#7-stress-tensor-calculation)
+8. [Crystal System Constraints](#8-crystal-system-constraints)
 
 ---
 
@@ -289,115 +288,7 @@ where `RK_step(q, ds)` implements the symmetric operator splitting from Section 
 
 ---
 
-## 7. ETDRK4: Alternative 4th-Order Method
-
-### 7.1 Overview
-
-**Exponential Time Differencing Runge-Kutta 4th-order (ETDRK4)** is an alternative to RQM4 for achieving 4th-order temporal accuracy. Originally developed by Cox and Matthews [9], ETDRK4 treats the linear diffusion term exactly while using a 4th-order Runge-Kutta scheme for the nonlinear potential term. Song, Liu, and Zhang [8] demonstrated that ETDRK4 can be more than 10 times more accurate than RQM4 at the same contour resolution, requiring fewer contour steps to achieve the same accuracy. The performance advantage is particularly pronounced at high segregation strengths.
-
-### 7.2 Algorithm Formulation
-
-The modified diffusion equation can be written as:
-
-$$\frac{\partial \hat{q}}{\partial s} = c \hat{q} + \hat{N}(q)$$
-
-where:
-- $c = -\frac{b^2 k^2}{6}$ is the diffusion eigenvalue (diagonal in Fourier space)
-- $\hat{N}(q) = \mathcal{F}[-w \cdot q]$ is the nonlinear potential term
-
-The ETDRK4 algorithm advances from $s_n$ to $s_{n+1} = s_n + h$ through four stages:
-
-**Stage a:**
-$$\hat{a} = E_2 \hat{q}_n + \alpha \hat{N}_n$$
-
-**Stage b:**
-$$\hat{b} = E_2 \hat{q}_n + \alpha \hat{N}_a$$
-
-**Stage c:**
-$$\hat{c} = E_2 \hat{a} + \alpha (2\hat{N}_b - \hat{N}_n)$$
-
-**Final combination:**
-$$\hat{q}_{n+1} = E \hat{q}_n + f_1 \hat{N}_n + f_2 (\hat{N}_a + \hat{N}_b) + f_3 \hat{N}_c$$
-
-where:
-- $E = e^{ch}$ (full-step exponential)
-- $E_2 = e^{ch/2}$ (half-step exponential)
-- $\alpha$, $f_1$, $f_2$, $f_3$ are coefficients derived from $\varphi$-functions
-
-### 7.3 Phi Functions
-
-The ETDRK4 coefficients are expressed using $\varphi$-functions:
-
-$$\varphi_1(z) = \frac{e^z - 1}{z}$$
-
-$$\varphi_2(z) = \frac{e^z - 1 - z}{z^2}$$
-
-$$\varphi_3(z) = \frac{e^z - 1 - z - z^2/2}{z^3}$$
-
-The coefficients are:
-- $\alpha = h \cdot \varphi_1(ch/2)$
-- $f_1 = h \cdot (\varphi_1 - 3\varphi_2 + 4\varphi_3)$
-- $f_2 = h \cdot 2(\varphi_2 - 2\varphi_3)$
-- $f_3 = h \cdot (-\varphi_2 + 4\varphi_3)$
-
-where all $\varphi$-functions are evaluated at $z = ch$.
-
-### 7.4 Kassam-Trefethen Stabilization
-
-For small $|ch|$, the $\varphi$-functions suffer from **catastrophic cancellation** due to subtraction of nearly equal terms. Kassam and Trefethen [10] proposed evaluating these functions using **contour integration**:
-
-$$\varphi_n(z) \approx \frac{1}{M} \sum_{m=0}^{M-1} \varphi_n(z + r e^{2\pi i m/M})$$
-
-With $M = 32$ points on a circle of radius $r = 1$, this achieves approximately 15 digits of accuracy for all $z$.
-
-### 7.5 Comparison: ETDRK4 vs RQM4
-
-| Property | RQM4 | ETDRK4 |
-|----------|------|--------|
-| Order | 4th | 4th |
-| FFT pairs per step | 6 | 8 |
-| Coefficient storage | 2 arrays | 6 arrays |
-| Stability | L-stable | L-stable |
-| Implementation | Simple | More complex |
-
-**Benchmark Results (32³ grid, single step):**
-
-| Metric | RQM4 | ETDRK4 |
-|--------|------|--------|
-| Max relative difference | — | $3.16 \times 10^{-5}$ |
-| After 10 steps | — | $2.91 \times 10^{-4}$ |
-
-Both methods produce nearly identical results, confirming equivalent 4th-order accuracy.
-
-### 7.6 Implementation
-
-ETDRK4 is implemented in:
-- `CpuSolverPseudoETDRK4` (CPU/FFTW)
-- `CudaSolverPseudoETDRK4` (CUDA)
-- `ETDRK4Coefficients` (shared coefficient computation)
-
-For the RQM4 method, see:
-- `CpuSolverPseudoRQM4` (CPU/FFTW)
-- `CudaSolverPseudoRQM4` (CUDA)
-
-The coefficients are precomputed once during initialization and reused for all propagator steps.
-
-### 7.7 Runtime Selection
-
-Both RQM4 and ETDRK4 can be selected at runtime using the `numerical_method` parameter:
-
-```python
-params = {
-    # ... other parameters ...
-    "numerical_method": "rqm4"   # RQM4 (Ranjan-Qin-Morse 4th-order)
-    # or
-    "numerical_method": "etdrk4"  # ETDRK4 (Exponential Time Differencing RK4)
-}
-```
-
----
-
-## 8. Stress Tensor Calculation
+## 7. Stress Tensor Calculation
 
 The stress tensor measures the response of the free energy to changes in lattice parameters and is essential for unit cell optimization in SCFT. A detailed derivation and implementation description is provided in [StressTensorCalculation.md](StressTensorCalculation.md).
 
@@ -419,11 +310,11 @@ At equilibrium, all stress components vanish ($\sigma_i = 0$). The unit cell par
 
 ---
 
-## 9. Crystal System Constraints
+## 8. Crystal System Constraints
 
 Different crystal systems impose constraints on the lattice parameters:
 
-### 9.1 Orthorhombic/Tetragonal/Cubic
+### 8.1 Orthorhombic/Tetragonal/Cubic
 
 $$\alpha = \beta = \gamma = 90°$$
 
@@ -434,7 +325,7 @@ Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero 
 - Tetragonal: $L_a = L_b \neq L_c$ (2 independent lengths)
 - Cubic: $L_a = L_b = L_c$ (1 independent length)
 
-### 9.2 Hexagonal/Trigonal
+### 8.2 Hexagonal/Trigonal
 
 $$\alpha = \beta = 90°, \quad \gamma = 120°$$
 
@@ -444,7 +335,7 @@ Cross-term $g_{12}^*$ is non-zero.
 - $L_a = L_b \neq L_c$ (2 independent lengths)
 - $\gamma$ fixed at 120°
 
-### 9.3 Monoclinic
+### 8.3 Monoclinic
 
 $$\alpha = \gamma = 90°, \quad \beta \neq 90°$$
 
@@ -455,7 +346,7 @@ Cross-term $g_{13}^*$ is non-zero.
 - $\beta$ is a free parameter (1 angle)
 - Off-diagonal stress $\sigma_{xz}$ drives $\beta$ optimization
 
-### 9.4 Triclinic
+### 8.4 Triclinic
 
 $$\alpha, \beta, \gamma \text{ arbitrary}$$
 

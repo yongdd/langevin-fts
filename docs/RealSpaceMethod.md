@@ -71,40 +71,14 @@ $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delt
 | Method | Order | Description |
 |--------|-------|-------------|
 | **cn-adi2** | 2nd | Standard Crank-Nicolson ADI |
-| **cn-adi4-lr** | 4th | CN-ADI with Local Richardson extrapolation |
-
-### Richardson Extrapolation for 4th-Order Accuracy
-
-The 4th-order methods use Richardson extrapolation combining one full step with two half-steps:
-
-$$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
-
-This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
-
-### CN-ADI4-LR (Local Richardson)
-
-CN-ADI4-LR applies Richardson extrapolation at each propagator step:
-
-```python
-for n in range(N_steps):
-    q_full[n+1] = advance(q[n], ds)
-    q_half_temp = advance(q[n], ds/2)
-    q_half[n+1] = advance(q_half_temp, ds/2)
-    q[n+1] = (4*q_half[n+1] - q_full[n+1]) / 3
-```
-
-This achieves approximately 4th-order convergence by canceling the leading $O(\Delta s^2)$ error term.
 
 ### Runtime Selection
 
 ```python
 from polymerfts import PropagatorSolver
 
-# CN-ADI2 (default - faster)
+# CN-ADI2 (default)
 solver = PropagatorSolver(..., numerical_method="cn-adi2")
-
-# CN-ADI4 with local Richardson (good accuracy/speed balance)
-solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
 ```
 
 ## Usage
@@ -153,8 +127,8 @@ Different boundary conditions can be specified for each direction:
 | File | Description |
 |------|-------------|
 | `src/common/FiniteDifference.cpp` | Tridiagonal matrix coefficient generation |
-| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4-LR solver |
-| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4-LR solver |
+| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2 solver |
+| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2 solver |
 
 ### Tridiagonal Systems
 
@@ -195,13 +169,13 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 
 ## When to Use Real-Space vs Pseudo-Spectral
 
-| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI) |
+| Criterion | Pseudo-Spectral (RQM4/RK2) | Real-Space (CN-ADI) |
 |-----------|------------------------------|-------------------------|
 | **Boundary conditions** | Periodic, reflecting, absorbing | Periodic, reflecting, absorbing |
 | **Performance** | Fastest (~3x faster) | Slower |
 | **Stress calculation** | Supported | Not yet implemented |
 | **Spatial accuracy** | Spectral (exponential) | O(Δx²) |
-| **Material conservation** | RQM4: Exact, ETDRK4: Approximate | All: Exact |
+| **Material conservation** | RQM4: Exact, RK2: Exact | All: Exact |
 
 **Note:** Both pseudo-spectral and real-space methods now support all boundary condition types. Pseudo-spectral methods use DCT (reflecting) and DST (absorbing) transforms, while real-space methods use modified tridiagonal matrices.
 
@@ -212,23 +186,21 @@ Material conservation requires that forward and backward partition functions are
 | Method | Conservation | Mechanism |
 |--------|--------------|-----------|
 | **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: exp(-w·ds/2)·exp(L·ds)·exp(-w·ds/2) |
-| **ETDRK4** | Approximate (~10⁻⁹) | Asymmetric Krogstad RK4 stages break Hermiticity |
 | **CN-ADI** | Exact (~10⁻¹⁵) | Symmetric Crank-Nicolson time stepping |
 
-**Note:** For applications requiring exact material conservation, use RQM4 or CN-ADI. The ETDRK4 conservation error (~10⁻⁹) is acceptable for most SCFT applications.
+**Note:** For applications requiring exact material conservation, use RQM4 or CN-ADI.
 
 ### Choosing Between Real-Space Methods
 
 | Method | Best For |
 |--------|----------|
 | **cn-adi2** | Fast prototyping, coarse grids |
-| **cn-adi4-lr** | General use, good accuracy/speed tradeoff |
 
 ### Use Pseudo-Spectral (RQM4) When:
 - Stress calculations are needed for box optimization
 - Maximum performance is required
 - Spectral accuracy is desired
-- Material conservation is important (use RQM4, not ETDRK4)
+- Material conservation is important
 
 ### Use Real-Space (CN-ADI) When:
 - Stress calculations are not needed
