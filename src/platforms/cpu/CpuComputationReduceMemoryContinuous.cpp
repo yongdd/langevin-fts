@@ -615,14 +615,31 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+            std::vector<T>& exp_dw_vec = this->propagator_solver->exp_dw[0][monomer_type];
+            const T *_exp_dw = exp_dw_vec.data();
 
             if (this->space_group_ != nullptr)
             {
-                // exp_dw is stored on the full grid; reduce it for reduced-basis
+                // exp_dw is normally stored on the full grid; reduce it for reduced-basis.
+                // In some CPU-only builds, exp_dw may already be reduced, so guard on size.
                 std::vector<T> exp_dw_reduced(N);
-                if constexpr (std::is_same_v<T, double>)
-                    this->space_group_->to_reduced_basis(_exp_dw, exp_dw_reduced.data(), 1);
+                if (static_cast<int>(exp_dw_vec.size()) == N)
+                {
+                    for (int i = 0; i < N; i++)
+                        exp_dw_reduced[i] = _exp_dw[i];
+                }
+                else if (static_cast<int>(exp_dw_vec.size()) == total_grid)
+                {
+                    if constexpr (std::is_same_v<T, double>)
+                        this->space_group_->to_reduced_basis(_exp_dw, exp_dw_reduced.data(), 1);
+                }
+                else
+                {
+                    throw_with_line_number(
+                        "Unexpected exp_dw size for solvent concentration: exp_dw.size()=" +
+                        std::to_string(exp_dw_vec.size()) + ", N=" + std::to_string(N) +
+                        ", total_grid=" + std::to_string(total_grid));
+                }
 
                 T sum = this->cb->inner_product(exp_dw_reduced.data(), exp_dw_reduced.data());
                 this->single_solvent_partitions[s] = sum/this->cb->get_volume();
