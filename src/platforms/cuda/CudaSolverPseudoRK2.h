@@ -44,6 +44,7 @@
 #include "CudaCommon.h"
 #include "CudaFFT.h"
 #include "FFT.h"
+#include "SpaceGroup.h"
 
 /**
  * @class CudaSolverPseudoRK2
@@ -113,6 +114,16 @@ private:
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
     /// @}
 
+    /// @name Space Group Support (reduced basis)
+    /// @{
+    SpaceGroup* space_group_;                       ///< Space group pointer (nullptr if not used)
+    int* d_reduced_basis_indices_;                   ///< Device array: reduced → full index mapping
+    int* d_full_to_reduced_map_;                     ///< Device array: full → reduced index mapping
+    int n_basis_;                                    ///< Number of reduced basis points
+    CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
+    CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
+    /// @}
+
 public:
     /**
      * @brief Construct GPU pseudo-spectral solver for continuous chains.
@@ -129,6 +140,17 @@ public:
      * @brief Destructor. Frees GPU memory and cuFFT plans.
      */
     ~CudaSolverPseudoRK2();
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, advance_propagator handles expand/reduce internally.
+     */
+    void set_space_group(
+        SpaceGroup* sg,
+        int* d_reduced_basis_indices,
+        int* d_full_to_reduced_map,
+        int n_basis) override;
 
     /** @brief Update Fourier-space operators for new box dimensions. */
     void update_laplacian_operator() override;

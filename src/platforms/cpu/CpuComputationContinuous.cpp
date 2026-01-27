@@ -234,36 +234,17 @@ void CpuComputationContinuous<T>::compute_propagators(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        // Store w for solvent computation (in reduced basis when space_group is set)
-        // Note: w_input is always on full grid here because compute_propagators_reduced()
-        // expands the field before calling compute_propagators()
-        if (use_reduced_basis)
+        // Store w for solvent computation (reduced basis when space_group is set)
+        for(const auto& item: w_input)
         {
-            // Convert w_full to reduced basis for w storage
-            for(const auto& item: w_input)
-            {
-                std::string monomer_type = item.first;
-                const T* w_full = item.second;
-                this->w[monomer_type].resize(N);
-
-                if constexpr (std::is_same_v<T, double>)
-                    this->space_group_->to_reduced_basis(w_full, this->w[monomer_type].data(), 1);
-            }
-        }
-        else
-        {
-            for(const auto& item: w_input)
-            {
-                std::string monomer_type = item.first;
-                const T* _w = item.second;
-                this->w[monomer_type].resize(N);
-                for(int i=0; i<N; i++)
-                    this->w[monomer_type][i] = _w[i];
-            }
+            std::string monomer_type = item.first;
+            const T* _w = item.second;
+            this->w[monomer_type].resize(N);
+            for(int i=0; i<N; i++)
+                this->w[monomer_type][i] = _w[i];
         }
 
         // Update dw or exp_dw
-        // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
         this->propagator_solver->update_dw(w_input);
 
         // For each time span

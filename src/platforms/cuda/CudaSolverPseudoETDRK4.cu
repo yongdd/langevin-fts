@@ -44,6 +44,15 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         this->dim_ = cb->get_dim();
+        this->space_group_ = nullptr;
+        this->d_reduced_basis_indices_ = nullptr;
+        this->d_full_to_reduced_map_ = nullptr;
+        this->n_basis_ = 0;
+        for (int i = 0; i < MAX_STREAMS; i++)
+        {
+            this->d_q_full_in_[i] = nullptr;
+            this->d_q_full_out_[i] = nullptr;
+        }
 
         // Initialize fft_ pointers to nullptr
         for(int i=0; i<MAX_STREAMS; i++)
@@ -385,6 +394,54 @@ CudaSolverPseudoETDRK4<T>::~CudaSolverPseudoETDRK4()
         cudaFree(d_qk_stress[i]);
         cudaFree(d_temp_storage[i]);
     }
+
+    // Free space group work buffers
+    for(int i=0; i<n_streams; i++)
+    {
+        if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
+        if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
+    }
+}
+
+template <typename T>
+void CudaSolverPseudoETDRK4<T>::set_space_group(
+    SpaceGroup* sg,
+    int* d_reduced_basis_indices,
+    int* d_full_to_reduced_map,
+    int n_basis)
+{
+    space_group_ = sg;
+    d_reduced_basis_indices_ = d_reduced_basis_indices;
+    d_full_to_reduced_map_ = d_full_to_reduced_map;
+    n_basis_ = n_basis;
+
+    if (sg != nullptr)
+    {
+        const int M = cb->get_total_grid();
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M));
+            if (d_q_full_out_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
+        }
+    }
+    else
+    {
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] != nullptr)
+            {
+                cudaFree(d_q_full_in_[i]);
+                d_q_full_in_[i] = nullptr;
+            }
+            if (d_q_full_out_[i] != nullptr)
+            {
+                cudaFree(d_q_full_out_[i]);
+                d_q_full_out_[i] = nullptr;
+            }
+        }
+    }
 }
 
 template <typename T>
@@ -450,6 +507,7 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();
+        const bool use_reduced_basis = (space_group_ != nullptr);
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -471,9 +529,39 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
             std::string monomer_type = item.first;
             const T *w = item.second;
 
-            gpu_error_check(cudaMemcpyAsync(
-                this->d_w_field[monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice));
+            if (use_reduced_basis && device == "gpu")
+            {
+                if constexpr (std::is_same_v<T, double>)
+                {
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                        this->d_w_field[monomer_type], w, d_full_to_reduced_map_, M);
+                }
+                else
+                {
+                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                }
+            }
+            else
+            {
+                const T* w_full = w;
+                std::vector<T> w_full_host;
+                if (use_reduced_basis)
+                {
+                    if constexpr (std::is_same_v<T, double>)
+                    {
+                        w_full_host.resize(M);
+                        space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                        w_full = w_full_host.data();
+                    }
+                    else
+                    {
+                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                    }
+                }
+                gpu_error_check(cudaMemcpyAsync(
+                    this->d_w_field[monomer_type], w_full,
+                    sizeof(T)*M, cudaMemcpyInputToDevice));
+            }
         }
 
         // Compute exp_dw and exp_dw_half for each ds_index
@@ -489,13 +577,13 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-                // Copy for exp computation
+                // Copy for exp computation (device-to-device)
                 gpu_error_check(cudaMemcpyAsync(
-                    this->d_exp_dw     [ds_idx][monomer_type], w,
-                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                    this->d_exp_dw     [ds_idx][monomer_type], this->d_w_field[monomer_type],
+                    sizeof(T)*M, cudaMemcpyDeviceToDevice));
                 gpu_error_check(cudaMemcpyAsync(
-                    this->d_exp_dw_half[ds_idx][monomer_type], w,
-                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                    this->d_exp_dw_half[ds_idx][monomer_type], this->d_w_field[monomer_type],
+                    sizeof(T)*M, cudaMemcpyDeviceToDevice));
 
                 // Compute d_exp_dw and d_exp_dw_half with local_ds
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
@@ -540,6 +628,18 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
         // Get raw w field for nonlinear term
         CuDeviceData<T>* _d_w = d_w_field[monomer_type];
 
+        // Determine input/output pointers based on space group
+        CuDeviceData<T> *q_in_full = d_q_in;
+        CuDeviceData<T> *q_out_full = d_q_out;
+        if (space_group_ != nullptr)
+        {
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            q_in_full = d_q_full_in_[STREAM];
+            q_out_full = d_q_full_out_[STREAM];
+        }
+
         if (is_periodic_)
         {
             // ============================================================
@@ -548,18 +648,18 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
 
             // Step 1: Compute N_n = -w * q_in
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_etdrk4_N_n[STREAM], _d_w, d_q_in, -1.0, M);
+                d_etdrk4_N_n[STREAM], _d_w, q_in_full, -1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Step 2: FFT of q_in and N_n
             if constexpr (std::is_same<T, double>::value)
             {
-                cufftExecD2Z(plan_for_one[STREAM], d_q_in, d_k_q[STREAM]);
+                cufftExecD2Z(plan_for_one[STREAM], q_in_full, d_k_q[STREAM]);
                 cufftExecD2Z(plan_for_one[STREAM], d_etdrk4_N_n[STREAM], d_k_N_n[STREAM]);
             }
             else
             {
-                cufftExecZ2Z(plan_for_one[STREAM], d_q_in, d_k_q[STREAM], CUFFT_FORWARD);
+                cufftExecZ2Z(plan_for_one[STREAM], q_in_full, d_k_q[STREAM], CUFFT_FORWARD);
                 cufftExecZ2Z(plan_for_one[STREAM], d_etdrk4_N_n[STREAM], d_k_N_n[STREAM], CUFFT_FORWARD);
             }
             gpu_error_check(cudaPeekAtLastError());
@@ -655,22 +755,22 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
 
             // IFFT to get final result
             if constexpr (std::is_same<T, double>::value)
-                cufftExecZ2D(plan_bak_one[STREAM], d_k_work[STREAM], d_q_out);
+                cufftExecZ2D(plan_bak_one[STREAM], d_k_work[STREAM], q_out_full);
             else
-                cufftExecZ2Z(plan_bak_one[STREAM], d_k_work[STREAM], d_q_out, CUFFT_INVERSE);
+                cufftExecZ2Z(plan_bak_one[STREAM], d_k_work[STREAM], q_out_full, CUFFT_INVERSE);
             gpu_error_check(cudaPeekAtLastError());
 
             // Normalize final result (divide by M for IFFT normalization)
             if constexpr (std::is_same<T, double>::value)
             {
                 ker_linear_scaling<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_out, d_q_out, 1.0/static_cast<double>(M), 0.0, M);
+                    q_out_full, q_out_full, 1.0/static_cast<double>(M), 0.0, M);
             }
             else
             {
                 cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
                 ker_linear_scaling<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_out, d_q_out, 1.0/static_cast<double>(M), zero, M);
+                    q_out_full, q_out_full, 1.0/static_cast<double>(M), zero, M);
             }
             gpu_error_check(cudaPeekAtLastError());
         }
@@ -705,11 +805,11 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 double* rk_work = reinterpret_cast<double*>(d_k_work[STREAM]);
 
                 // Step 1: Compute N_n = -w * q_in
-                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_N_n, _d_w, d_q_in, -1.0, M);
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_N_n, _d_w, q_in_full, -1.0, M);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // Step 2: Forward transforms
-                fft_[STREAM]->forward(d_q_in, rk_q);
+                fft_[STREAM]->forward(q_in_full, rk_q);
                 fft_[STREAM]->forward(d_N_n, rk_N_n);
 
                 // Stage a (Eq. 7a): â = E2·q̂ + α·N̂_n
@@ -768,14 +868,36 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 gpu_error_check(cudaPeekAtLastError());
 
                 // IFFT to get final result
-                fft_[STREAM]->backward(rk_work, d_q_out);
+                fft_[STREAM]->backward(rk_work, q_out_full);
             }
         }
 
         // Apply mask if provided
         if (d_q_mask != nullptr)
         {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            double* d_q_mask_full = d_q_mask;
+            if (space_group_ != nullptr)
+            {
+                if constexpr (std::is_same_v<T, double>)
+                {
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
+                    gpu_error_check(cudaPeekAtLastError());
+                    d_q_mask_full = d_q_full_in_[STREAM];
+                }
+                else
+                {
+                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                }
+            }
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(q_out_full, q_out_full, d_q_mask_full, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+
+        if (space_group_ != nullptr)
+        {
+            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, q_out_full, d_reduced_basis_indices_, n_basis_);
             gpu_error_check(cudaPeekAtLastError());
         }
     }
@@ -810,6 +932,26 @@ void CudaSolverPseudoETDRK4<T>::compute_single_segment_stress(
         const double* _d_fourier_basis_yz = pseudo->get_fourier_basis_yz();
         const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
+        CuDeviceData<T>* d_q_pair_full = d_q_pair;
+        CuDeviceData<T>* d_q_pair_full_2 = &d_q_pair[M];
+        if (space_group_ != nullptr)
+        {
+            if constexpr (std::is_same_v<T, double>)
+            {
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_in_[STREAM], d_q_pair, d_full_to_reduced_map_, M);
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_out_[STREAM], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                d_q_pair_full = d_q_full_in_[STREAM];
+                d_q_pair_full_2 = d_q_full_out_[STREAM];
+            }
+            else
+            {
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+            }
+        }
+
         if (is_periodic_)
         {
             // Execute forward FFT for both propagators
@@ -817,13 +959,13 @@ void CudaSolverPseudoETDRK4<T>::compute_single_segment_stress(
             if constexpr (std::is_same<T, double>::value)
             {
                 // Out-of-place D2Z: read from d_q_pair, write to d_qk_stress
-                cufftExecD2Z(plan_for_one[STREAM], d_q_pair, &d_qk_stress[STREAM][0]);
-                cufftExecD2Z(plan_for_one[STREAM], &d_q_pair[M], &d_qk_stress[STREAM][M_COMPLEX]);
+                cufftExecD2Z(plan_for_one[STREAM], d_q_pair_full, &d_qk_stress[STREAM][0]);
+                cufftExecD2Z(plan_for_one[STREAM], d_q_pair_full_2, &d_qk_stress[STREAM][M_COMPLEX]);
             }
             else
             {
-                cufftExecZ2Z(plan_for_one[STREAM], d_q_pair, &d_qk_stress[STREAM][0], CUFFT_FORWARD);
-                cufftExecZ2Z(plan_for_one[STREAM], &d_q_pair[M], &d_qk_stress[STREAM][M_COMPLEX], CUFFT_FORWARD);
+                cufftExecZ2Z(plan_for_one[STREAM], d_q_pair_full, &d_qk_stress[STREAM][0], CUFFT_FORWARD);
+                cufftExecZ2Z(plan_for_one[STREAM], d_q_pair_full_2, &d_qk_stress[STREAM][M_COMPLEX], CUFFT_FORWARD);
             }
             gpu_error_check(cudaPeekAtLastError());
 
@@ -850,8 +992,8 @@ void CudaSolverPseudoETDRK4<T>::compute_single_segment_stress(
             else
             {
                 // Non-periodic: use CudaFFT
-                double* d_q1 = d_q_pair;
-                double* d_q2 = &d_q_pair[M];
+                double* d_q1 = d_q_pair_full;
+                double* d_q2 = d_q_pair_full_2;
                 double* rk_1 = reinterpret_cast<double*>(d_k_q[STREAM]);
                 double* rk_2 = reinterpret_cast<double*>(d_k_work[STREAM]);
 

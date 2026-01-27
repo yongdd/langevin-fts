@@ -52,6 +52,15 @@ CudaSolverCNADI::CudaSolverCNADI(
         this->n_streams = n_streams;
         this->reduce_memory = reduce_memory;
         this->use_4th_order = use_4th_order;
+        this->space_group_ = nullptr;
+        this->d_reduced_basis_indices_ = nullptr;
+        this->d_full_to_reduced_map_ = nullptr;
+        this->n_basis_ = 0;
+        for (int i = 0; i < MAX_STREAMS; i++)
+        {
+            this->d_q_full_in_[i] = nullptr;
+            this->d_q_full_out_[i] = nullptr;
+        }
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -322,6 +331,10 @@ CudaSolverCNADI::~CudaSolverCNADI()
             cudaFree(d_temp[i]);
             cudaFree(d_q_full[i]);
             cudaFree(d_q_half[i]);
+            if (d_q_full_in_[i] != nullptr)
+                cudaFree(d_q_full_in_[i]);
+            if (d_q_full_out_[i] != nullptr)
+                cudaFree(d_q_full_out_[i]);
         }
         cudaFree(d_offset_xy);
         cudaFree(d_offset_yz);
@@ -337,6 +350,10 @@ CudaSolverCNADI::~CudaSolverCNADI()
             cudaFree(d_temp[i]);
             cudaFree(d_q_full[i]);
             cudaFree(d_q_half[i]);
+            if (d_q_full_in_[i] != nullptr)
+                cudaFree(d_q_full_in_[i]);
+            if (d_q_full_out_[i] != nullptr)
+                cudaFree(d_q_full_out_[i]);
         }
         cudaFree(d_offset_x);
         cudaFree(d_offset_y);
@@ -350,8 +367,36 @@ CudaSolverCNADI::~CudaSolverCNADI()
             cudaFree(d_q_sparse[i]);
             cudaFree(d_q_full[i]);
             cudaFree(d_q_half[i]);
+            if (d_q_full_in_[i] != nullptr)
+                cudaFree(d_q_full_in_[i]);
+            if (d_q_full_out_[i] != nullptr)
+                cudaFree(d_q_full_out_[i]);
         }
         cudaFree(d_offset);
+    }
+}
+
+void CudaSolverCNADI::set_space_group(
+    SpaceGroup* sg,
+    int* d_reduced_basis_indices,
+    int* d_full_to_reduced_map,
+    int n_basis)
+{
+    space_group_ = sg;
+    d_reduced_basis_indices_ = d_reduced_basis_indices;
+    d_full_to_reduced_map_ = d_full_to_reduced_map;
+    n_basis_ = n_basis;
+
+    const int M = cb->get_total_grid();
+    if (space_group_ != nullptr)
+    {
+        for (int i = 0; i < n_streams; i++)
+        {
+            if (d_q_full_in_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(double)*M));
+            if (d_q_full_out_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(double)*M));
+        }
     }
 }
 void CudaSolverCNADI::update_laplacian_operator()
@@ -446,6 +491,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
+        const bool use_reduced_basis = (space_group_ != nullptr);
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -474,13 +520,32 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
                 if (d_exp_dw[ds_idx].find(monomer_type) == d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-                // Copy field configurations from host to device
-                gpu_error_check(cudaMemcpyAsync(
-                    d_exp_dw     [ds_idx][monomer_type], w,
-                    sizeof(double)*M, cudaMemcpyInputToDevice));
-                gpu_error_check(cudaMemcpyAsync(
-                    d_exp_dw_half[ds_idx][monomer_type], w,
-                    sizeof(double)*M, cudaMemcpyInputToDevice));
+                if (use_reduced_basis && device == "gpu")
+                {
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                        d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                        d_exp_dw_half[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                }
+                else
+                {
+                    const double* w_full = w;
+                    std::vector<double> w_full_host;
+                    if (use_reduced_basis)
+                    {
+                        w_full_host.resize(M);
+                        space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                        w_full = w_full_host.data();
+                    }
+
+                    // Copy field configurations from host to device
+                    gpu_error_check(cudaMemcpyAsync(
+                        d_exp_dw     [ds_idx][monomer_type], w_full,
+                        sizeof(double)*M, cudaMemcpyInputToDevice));
+                    gpu_error_check(cudaMemcpyAsync(
+                        d_exp_dw_half[ds_idx][monomer_type], w_full,
+                        sizeof(double)*M, cudaMemcpyInputToDevice));
+                }
 
                 // Compute d_exp_dw and d_exp_dw_half
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
@@ -510,6 +575,19 @@ void CudaSolverCNADI::advance_propagator(
 
         const int M = this->cb->get_total_grid();
         const int DIM = this->cb->get_dim();
+        const bool use_reduced_basis = (space_group_ != nullptr);
+
+        double *d_q_in_full = d_q_in;
+        double *d_q_out_full = d_q_out;
+
+        if (use_reduced_basis)
+        {
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            d_q_in_full = d_q_full_in_[STREAM];
+            d_q_out_full = d_q_full_out_[STREAM];
+        }
 
         // Use the provided ds_index for per-block local_ds
         double *_d_exp_dw = d_exp_dw[ds_index][monomer_type];
@@ -523,7 +601,7 @@ void CudaSolverCNADI::advance_propagator(
             // Full step: exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             // ========================================
             // Apply exp(-w*local_ds/2) at start
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in, _d_exp_dw, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in_full, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Diffusion with full-step coefficients
@@ -545,7 +623,7 @@ void CudaSolverCNADI::advance_propagator(
             // Two half steps: exp(-w*local_ds/4) * Diffusion(local_ds/2) * exp(-w*local_ds/2) * Diffusion(local_ds/2) * exp(-w*local_ds/4)
             // ========================================
             // First half-step: exp(-w*local_ds/4) at start
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in_full, _d_exp_dw_half, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Diffusion with half-step coefficients
@@ -595,7 +673,7 @@ void CudaSolverCNADI::advance_propagator(
             // Use ker_lin_comb (dst = a*src1 + b*src2), NOT ker_add_lin_comb (dst += a*src1 + b*src2)
             // ========================================
             ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
+                d_q_out_full, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
             gpu_error_check(cudaPeekAtLastError());
         }
         else
@@ -605,29 +683,45 @@ void CudaSolverCNADI::advance_propagator(
             // Full step: exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             // ========================================
             // Apply exp(-w*local_ds/2) at start
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_in_full, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Diffusion with full-step coefficients
             if(DIM == 3)
                 advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type, ds_index);
+                    d_q_out_full, d_q_out_full, monomer_type, ds_index);
             else if(DIM == 2)
                 advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type, ds_index);
+                    d_q_out_full, d_q_out_full, monomer_type, ds_index);
             else if(DIM == 1)
                 advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type, ds_index);
+                    d_q_out_full, d_q_out_full, monomer_type, ds_index);
 
             // Apply exp(-w*local_ds/2) at end
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_out_full, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
         }
 
         // Multiply mask
         if (d_q_mask != nullptr)
         {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            double* d_q_mask_full = d_q_mask;
+            if (use_reduced_basis)
+            {
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                d_q_mask_full = d_q_full_in_[STREAM];
+            }
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out_full, d_q_out_full, d_q_mask_full, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+
+        if (use_reduced_basis)
+        {
+            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out_full, d_q_out, d_reduced_basis_indices_, n_basis_);
             gpu_error_check(cudaPeekAtLastError());
         }
     }

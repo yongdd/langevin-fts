@@ -54,6 +54,7 @@
 #include "ComputationBox.h"
 #include "CpuSolver.h"
 #include "FiniteDifference.h"
+#include "SpaceGroup.h"
 
 /**
  * @class CpuSolverCNADI
@@ -106,6 +107,7 @@ private:
     ComputationBox<double>* cb;  ///< Computation box for grid/boundary info
     Molecules *molecules;         ///< Molecules container
     bool use_4th_order;           ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
+    SpaceGroup* space_group_;     ///< Space group pointer (nullptr if not used)
 
     /// @name Tridiagonal coefficients per ds_index per monomer_type
     /// Nested map structure: [ds_index][monomer_type] -> coefficient array
@@ -247,6 +249,16 @@ public:
      * @brief Destructor. Frees tridiagonal coefficient arrays.
      */
     ~CpuSolverCNADI();
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, q_in/q_out are in reduced basis and the solver expands/reduces
+     * internally around finite-difference operations.
+     *
+     * @param sg Space group pointer (nullptr to disable)
+     */
+    void set_space_group(SpaceGroup* sg) override { space_group_ = sg; }
 
     /**
      * @brief Update finite difference coefficients.

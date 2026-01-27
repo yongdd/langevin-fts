@@ -1,0 +1,588 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is a polymer field theory simulation library implementing Self-Consistent Field Theory (SCFT) and Langevin Field-Theoretic Simulations (L-FTS). The codebase consists of high-performance C++/CUDA computational kernels exposed through Python interfaces via pybind11, enabling efficient polymer physics simulations with Python's ecosystem.
+
+## Build System
+
+### Build Commands
+```bash
+# Initial build (from repository root)
+mkdir build && cd build
+cmake ../ -DCMAKE_BUILD_TYPE=Release
+make -j8
+
+# Install Python modules to conda environment (required before testing)
+make install
+
+# Run basic tests (installation verification, ~40 sec)
+ctest -L basic
+
+# Run full tests (development validation, ~3 min)
+ctest
+
+# Clean build (if needed)
+cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make install
+```
+
+### Important Build Notes
+- Requires C++20 standard (set in CMakeLists.txt)
+- CUDA Toolkit 11.8+ required for GPU support
+- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:102 based on target GPU (default includes compute capabilities 60-90)
+- If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
+- Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
+
+### Environment Setup
+```bash
+# Activate conda environment (required before any work)
+conda activate polymerfts
+
+# Set stack size (important to avoid segfaults)
+ulimit -s unlimited
+export OMP_STACKSIZE=1G
+```
+
+### GPU Selection (Important!)
+**At the start of each session**, run `nvidia-smi` to check GPU utilization and select an idle GPU:
+```bash
+# Check GPU status
+nvidia-smi
+
+# Set CUDA_VISIBLE_DEVICES to an idle GPU before running tests
+export CUDA_VISIBLE_DEVICES=0  # or 1, 2, etc. based on which GPU is idle
+```
+This prevents conflicts with other users and ensures consistent test results.
+
+### Codex Sandbox / Escalation Note (Important!)
+In this environment, GPU/NVML access from Codex often fails inside the sandbox
+(e.g., `nvidia-smi` -> NVML Unknown Error, CUDA tests -> `cudaErrorOperatingSystem`).
+When running any GPU-related command or CUDA test from Codex, request escalated
+permissions and set the GPU inline:
+```bash
+# Example: run CUDA tests on an idle GPU with escalation
+CUDA_VISIBLE_DEVICES=1 ctest -L basic -R TestCudaFFT --output-on-failure
+```
+Assume GPU commands require `require_escalated` unless proven otherwise.
+
+## Testing
+
+### Basic vs Full Tests
+
+Two test modes are available:
+
+| Mode | Command | Tests | Time | Purpose |
+|------|---------|-------|------|---------|
+| **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~65 | ~3 min | Development validation |
+
+### Running Tests
+
+**Important:** Run `make install` before testing. Python tests import from the installed package.
+
+```bash
+# From build directory
+cd build
+
+# Install first (required for Python tests)
+make install
+
+# Basic tests (for users, installation verification)
+ctest -L basic
+
+# Full tests (for development)
+ctest
+
+# Run specific test (example)
+./tests/TestPseudoBranchedContinuous3D
+./tests/TestScft3D
+
+# Run tests with verbose output
+ctest -V
+
+# Run specific test pattern
+ctest -R Pseudo  # runs all tests matching "Pseudo"
+```
+
+### Performance and Accuracy Benchmarks
+
+Benchmark scripts for numerical method comparison are in `tests/`:
+- `tests/benchmark_numerical_methods.py`: Comprehensive benchmark comparing RQM4, ETDRK4, CN-ADI2, CN-ADI4
+- `tests/benchmark_etdrk4_vs_rqm4.py`: Focused comparison of pseudo-spectral methods
+
+**Running benchmarks with SLURM job scheduler:**
+
+Use the provided SLURM template `slurm_run.sh`:
+```bash
+#!/bin/bash
+#SBATCH --job-name=benchmark
+#SBATCH --partition=a10          # GPU partition (adjust for your cluster)
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1             # Request 1 GPU
+#SBATCH --cpus-per-task=4        # CPUs for OpenMP threads
+#SBATCH --time=02:00:00
+#SBATCH --output=%j.out
+#SBATCH --error=%j.out
+
+export OMP_MAX_ACTIVE_LEVELS=0
+export OMP_NUM_THREADS=4
+
+python -u tests/benchmark_numerical_methods.py
+```
+
+Submit the job:
+```bash
+sbatch slurm_run.sh
+```
+
+**Benchmark output:**
+- Convergence analysis (Q vs ds) following Stasiak & Matsen methodology
+- Performance comparison (time vs N) following Song et al. methodology
+- Cross-platform consistency verification (CPU vs CUDA)
+- Results saved to `benchmark_results.json`
+
+**Key metrics to verify:**
+- RQM4 convergence order ≈ 4.0
+- CN-ADI2 convergence order ≈ 2.0
+- CPU vs CUDA results identical within machine precision (~10^-13)
+
+### Testing Guidelines for Numerical Methods
+
+When testing propagator solvers or numerical methods, always follow these requirements:
+
+1. **Verify material conservation**: Check that total monomer concentration is conserved (sum of all species concentrations equals 1.0). This catches normalization errors in propagator computations.
+
+2. **Call `check_total_partition()`**: Always verify the total partition function during tests. This validates that forward and backward propagators are consistent and the chain statistics are computed correctly.
+
+3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 5. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
+
+4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
+
+Example test setup:
+```python
+# Generate test fields with std ~ 5
+w = np.random.normal(0.0, 5.0, size=nx)
+
+# After computing propagators, verify:
+# 1. Material conservation
+total_phi = sum(phi_species)
+np.mean(total_phi)  # Should be ~1.0
+
+# 2. Partition function consistency
+solver.check_total_partition()  # Should pass without error
+```
+
+## Code Architecture
+
+### Platform Abstraction (Abstract Factory Pattern)
+
+The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with FFTW, CUDA GPUs). This is a key architectural feature:
+
+- **Factory Selection**: `src/common/PlatformSelector.cpp` determines available platforms and creates appropriate factory instances
+- **Platform Implementations**:
+  - `src/platforms/cpu/`: FFTW-based CPU implementations using Intel Math Kernel Library for FFT and linear algebra
+  - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
+- **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
+
+When adding new computational features, you must implement them for both platforms unless explicitly platform-specific.
+
+### Core Components
+
+#### Propagator Computation (`src/common/PropagatorComputation.h`)
+The central computational engine. Computes chain propagators using dynamic programming to avoid redundant calculations for branched polymers. The optimization strategy is described in *J. Chem. Theory Comput.* **2025**, 21, 3676.
+
+Key concepts:
+- **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
+- **Continuous chains**: Pseudo-spectral method with RQM4, RK2, or ETDRK4 solving the modified diffusion equation
+- **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
+- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order) or CN-ADI4-LR (4th-order with Local Richardson extrapolation)
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: "rqm4" (RQM4), "rk2" (RK2), "etdrk4" (ETDRK4), "cn-adi2" (CN-ADI2), or "cn-adi4-lr" (CN-ADI4-LR)
+- **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
+
+#### Computation Box (`src/common/ComputationBox.h`)
+Manages simulation grid, FFT operations, and boundary conditions. Handles 1D/2D/3D simulations with periodic, reflecting, or absorbing boundary conditions. All numerical methods support all boundary condition types.
+
+#### Polymer and Molecules (`src/common/Polymer.h`, `src/common/Molecules.h`)
+Define polymer chain architectures:
+- Supports arbitrary acyclic branched polymers (star, comb, dendritic, bottle-brush, etc.)
+- Handles mixtures of block copolymers, homopolymers, and random copolymers
+- Stores chain topology as directed acyclic graph for propagator computation optimization
+
+#### Anderson Mixing (`src/common/AndersonMixing.h`)
+Iterative solver for SCFT equations. Accelerates convergence by mixing field history. Critical for SCFT convergence; parameters in examples show tuned values.
+
+### Python Layer
+
+#### High-Level Simulation Classes
+- `src/python/scft.py`: SCFT simulation orchestrator
+  - Handles field initialization, iteration loop, convergence checking
+  - Supports Anderson Mixing and ADAM optimizers
+  - Implements stress calculations for box size optimization
+  - Space group symmetry constraints (beta)
+
+- `src/python/lfts.py`: L-FTS simulation orchestrator
+  - Implements Langevin dynamics with Leimkuhler-Matthews method
+  - Structure function calculations
+  - Field compressors (Anderson Mixing, Linear Response)
+  - PCG64 random number generator
+
+- `src/python/polymer_field_theory.py`: Multi-monomer field theory transformations
+  - Converts between monomer potential fields and auxiliary fields
+  - Eigenvalue decomposition of interaction matrices
+  - Hamiltonian coefficient calculations for arbitrary chiN parameters
+
+#### Python-C++ Binding (`src/pybind11/polymerfts_core.cpp`)
+Exposes C++ classes to Python as the `_core` module. All C++ computational objects are accessible through this interface.
+
+### CUDA Implementation Details
+
+CUDA code uses:
+- **Multiple streams** (up to 4): Parallel propagator computations on GPU
+- **cuFFT**: GPU-accelerated Fast Fourier Transforms
+- **Shared memory**: Tridiagonal solvers for real-space methods use shared memory for performance
+- **Pinned memory**: Host-device transfers use pinned circular buffers for efficiency
+
+The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
+
+**cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** This issue was discovered in the ETDRK4 solver where Fourier coefficients were corrupted after IFFT operations. See `CudaSolverPseudoETDRK4.cu` for the correct pattern using `cudaMemcpyAsync` to preserve input data.
+
+## Running Simulations
+
+### SCFT Examples
+Located in `examples/scft/`:
+- `Lamella3D.py`: Lamellar phase of AB diblock
+- `Gyroid.py`: Gyroid phase with box relaxation
+- `ABC_Triblock_Sphere3D.py`: Spherical phase of ABC triblock
+- `phases/`: **Space group symmetry examples** - BCC, FCC, Gyroid, Double Diamond, Sigma, A15, and other complex phases with space group constraints for reduced memory usage and faster field operations
+
+Run from repository root:
+```bash
+cd examples/scft
+python Lamella3D.py
+```
+
+### Space Group Symmetry (Beta Feature)
+
+The `examples/scft/phases/` directory contains examples using space group symmetry to exploit crystallographic periodicity. Key features:
+
+- **Reduced basis representation**: Fields stored only at irreducible mesh points (e.g., 48-192x reduction for cubic space groups)
+- **Memory savings**: Proportional to grid reduction ratio
+- **Speedup**: ~5-10% from smaller field operations (propagator computation still uses full grid FFT)
+
+Example usage in params:
+```python
+"space_group": {
+    "symbol": "Im-3m",   # Hermann-Mauguin symbol (BCC)
+    "number": 529,       # Hall number (optional)
+}
+```
+
+See `examples/scft/phases/README.md` for available space groups and reduction factors.
+
+### L-FTS Examples
+Located in `examples/fts/`:
+- `Lamella.py`: Langevin dynamics of lamellar phase
+- `Gyroid.py`: Fluctuating gyroid phase
+- `MixtureBlockRandom.py`: Block/random copolymer mixture
+
+### Parameter Files
+
+Simulations are configured via Python dictionaries with keys:
+- `nx`, `lx`: Grid points and box size
+- `chain_model`: "discrete" or "continuous"
+- `ds`: Contour discretization (typically 1/N_Ref)
+- `segment_lengths`: Relative statistical segment lengths
+- `chi_n`: Flory-Huggins interaction parameters x N_Ref
+- `distinct_polymers`: Polymer architectures and volume fractions
+- `platform`: "cuda" or "cpu-fftw" (auto-selected by default: cuda for 2D/3D, cpu-fftw for 1D)
+- `numerical_method`: Algorithm for propagator computation
+  - "rqm4": RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
+  - "rk2": RK2 - Pseudo-spectral with 2nd-order operator splitting
+  - "etdrk4": ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
+  - "cn-adi2": CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
+  - "cn-adi4-lr": CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
+
+### Common Issues and Solutions
+
+**Segmentation fault**: Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G`
+
+**SCFT not converging**: Reduce mixing parameters:
+```python
+"optimizer": {
+    "name": "am",
+    "mix_min": 0.01,    # reduce from default
+    "mix_init": 0.01,   # reduce from default
+    "start_error": 1e-2
+}
+```
+
+**GPU architecture errors**: Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
+
+**Memory issues**: Set `"reduce_memory": True` in parameters
+
+**Single CPU core usage**: Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports
+
+## Chain Models
+
+This library supports two chain models with different mathematical formulations:
+
+### Continuous Chain Model (Gaussian Chain)
+
+Solves the **modified diffusion equation**:
+
+$$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)$$
+
+where $q(\mathbf{r}, s)$ is the chain propagator, $b$ is the statistical segment length, and $w(\mathbf{r})$ is the potential field.
+
+**Pseudo-spectral solution** (operator splitting):
+$$q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]$$
+
+The term $e^{-b^2 |\mathbf{k}|^2 \Delta s/6}$ is the **diffusion propagator** in Fourier space.
+
+### Discrete Chain Model (Chapman-Kolmogorov Equation)
+
+Solves the **Chapman-Kolmogorov integral equation** (NOT the modified diffusion equation):
+
+$$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'$$
+
+where $g(\mathbf{r})$ is the **bond function** representing the probability distribution of bond vectors.
+
+**Bead-spring (Gaussian) bond function**:
+$$g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)$$
+
+**Fourier transform of bond function**:
+$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)$$
+
+With the convention $a^2 = b^2 \Delta s$ (where $\Delta s = 1/N$), this becomes:
+$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)$$
+
+**Key distinction**: The formula $\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)$ appears in both models but has different physical meanings:
+- **Continuous**: Diffusion propagator from solving the modified diffusion equation
+- **Discrete**: Bond function (Fourier transform of Gaussian bond distribution)
+
+**Reference**: Park et al., *J. Chem. Phys.* **2019**, 150, 234901
+
+## Numerical Methods
+
+This library provides multiple numerical methods for solving the modified diffusion equation, each with different accuracy-performance tradeoffs.
+
+### Pseudo-Spectral Methods (Fourier Space)
+
+Pseudo-spectral methods use spectral transforms to solve the diffusion operator efficiently. The transform type depends on boundary conditions:
+- **Periodic BC**: Fast Fourier Transform (FFT)
+- **Reflecting BC**: Discrete Cosine Transform (DCT-II)
+- **Absorbing BC**: Discrete Sine Transform (DST-II)
+
+All pseudo-spectral methods use **cell-centered grids** where grid points are at $x_i = (i + 0.5) \cdot dx$ for $i = 0, 1, ..., N-1$, with boundaries at cell faces (not grid points).
+
+#### RQM4 (4th-order Richardson Extrapolation)
+The default method combining operator splitting with Richardson extrapolation:
+1. Split the operator: diffusion (Fourier space) + reaction (real space)
+2. Apply Strang splitting with half-steps
+3. Richardson extrapolation: $q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$ for 4th-order accuracy
+
+**Order of accuracy**: 4th-order in ds (convergence order approx 4.0)
+
+**Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
+
+#### RK2 (2nd-order Rasmussen-Kalosakas)
+Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen-Kalosakas, not Runge-Kutta):
+1. Split the operator: diffusion (Fourier space) + reaction (real space)
+2. Apply Strang splitting: $q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]$
+
+**Order of accuracy**: 2nd-order in ds (convergence order approx 2.0)
+
+**Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
+
+**Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains (Park et al. 2019). Both use the same Boltzmann factor $e^{-b^2 k^2 \Delta s / 6}$ in Fourier space.
+
+**Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
+
+#### ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
+Direct integration using matrix exponentials:
+1. Transform to Fourier space
+2. Solve using exponential integrating factor
+3. 4th-order Runge-Kutta for the nonlinear term
+
+**Order of accuracy**: 4th-order in ds
+
+**Material Conservation**: ETDRK4 does **not** conserve material exactly. The Krogstad scheme treats the potential term N(q)=-w*q asymmetrically across RK4 stages, breaking the Hermiticity condition (VU)dagger=VU required for exact conservation. Typical conservation errors |mean(phi)-1| are around 10^-9 to 10^-12 in SCFT simulations. For applications requiring exact material conservation, use RQM4 or CN-ADI methods instead.
+
+**Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
+
+### Real-Space Methods (Finite Difference)
+
+Real-space methods use **cell-centered grids** (same as pseudo-spectral methods) for consistent boundary condition handling:
+- **Reflecting BC**: Symmetric ghost cell ($q_{-1} = q_0$)
+- **Absorbing BC**: Antisymmetric ghost cell ($q_{-1} = -q_0$)
+
+#### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
+Alternating Direction Implicit method with Crank-Nicolson time stepping:
+1. Split 2D/3D problem into sequence of 1D problems
+2. Each direction solved implicitly with tridiagonal system
+3. 2nd-order accurate in space and time
+
+**Order of accuracy**: 2nd-order in ds (convergence order approx 2.0)
+
+#### CN-ADI4-LR (4th-order Local Richardson Extrapolation)
+Richardson extrapolation applied to CN-ADI2 at each contour step:
+$$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
+
+**Order of accuracy**: 4th-order in ds
+
+"LR" stands for "Local Richardson" - the extrapolation is applied independently at each step.
+
+### Method Selection Guidelines
+
+| Method | Order | Material Conservation | Best For | Limitations |
+|--------|-------|----------------------|----------|-------------|
+| RQM4 | 4th | Exact (~10^-16) | General use, default choice | None |
+| RK2 | 2nd | Exact (~10^-16) | Fast iterations | Lower accuracy |
+| ETDRK4 | 4th | Approximate (~10^-9) | Benchmarking, SCFT | Inexact conservation |
+| CN-ADI2 | 2nd | Exact (~10^-15) | Fast prototyping | Lower accuracy |
+| CN-ADI4-LR | 4th | Exact (~10^-15) | Real-space alternative | 2x cost of CN-ADI2 |
+
+All methods support periodic, reflecting, and absorbing boundary conditions.
+
+**Note on Material Conservation**: Methods with "Exact" conservation satisfy (VU)dagger=VU where V is the volume matrix and U is the evolution operator. This ensures forward and backward partition functions are equal to machine precision. See Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312 for the theoretical foundation.
+
+## Units and Conventions
+
+- Length unit: $b N^{1/2}$ where $b$ is reference statistical segment length, $N$ is reference polymerization index
+- Fields: Defined as "per reference chain" potential (multiply by `ds` to get "per segment" potential)
+- This follows notation in *Macromolecules* **2013**, 46, 8037
+
+## Development Notes
+
+### Workflow Rules
+
+- **Never commit without permission**: Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
+- **Default to extra-high reasoning**: State assumptions explicitly, check edge cases and plausible failure modes, and validate conclusions against repository constraints before giving the final answer.
+
+- **NEVER modify test parameters without explicit permission**: Test files in `tests/` contain carefully calibrated parameters. The following modifications are strictly forbidden unless the user explicitly requests them:
+  - NEVER increase tolerance values (e.g., changing 1e-7 to 1e-6 to make a test pass)
+  - NEVER decrease field strength or standard deviation values
+  - NEVER change grid sizes, box dimensions, or polymer parameters
+  - NEVER weaken any test conditions to make tests pass
+
+  If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
+
+- **Use SLURM for long-running jobs**: For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
+  ```bash
+  # Submit multiple jobs in parallel
+  for param in 100 200 400 800; do
+      sbatch --job-name="test_$param" --wrap="python script.py --param $param"
+  done
+  ```
+  See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
+
+- **Split large computations into smaller jobs**: For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
+
+### When Modifying C++ Code
+
+1. Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:
+   ```bash
+   cd build && make -j8 && make install
+   ```
+
+2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent
+
+3. Memory management: C++ uses raw pointers; ensure proper allocation/deallocation in constructors/destructors
+
+4. The propagator computation optimizer (`PropagatorComputationOptimizer`) automatically detects redundant calculations using hash tables of `PropagatorCode` objects - avoid manual optimization
+
+### Design Decisions
+
+**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4`, `CpuSolverPseudoRK2`, and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
+- FFT object management (`init_shared`/`cleanup_shared`)
+- Transform dispatch (`transform_forward`/`transform_backward`)
+- Laplacian operator updates (`update_laplacian_operator`)
+- Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
+
+Derived classes implement chain-model-specific behavior:
+- `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
+- `advance_propagator`: Different algorithms (RQM4 vs simple step)
+- `advance_propagator_half_bond_step`: Discrete-specific implementation
+- `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
+
+**Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
+```
+      FFT<T>              (abstract base - double* and complex* interfaces)
+        ^
+   FftwFFT<T, DIM>         (CPU: FFTW for FFT, DCT, DST)
+   FftwFFT<T, DIM>        (CPU: FFTW3 for FFT, DCT, DST - GPL license)
+   CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
+```
+
+**FFT Implementation Rules** (CRITICAL - frequently violated, causes subtle bugs):
+
+FFT functions are called from multiple OpenMP threads simultaneously (propagator-level parallelism). This requires careful implementation to avoid race conditions and data corruption.
+
+1. **DO NOT multi-thread inside FFT**: Disable internal threading in FFTW and cuFFT. Parallelism happens at the propagator level, not inside FFT calls.
+
+2. **DO NOT share buffers between threads**: Internal work buffers MUST be `thread_local`. The class member `work_buffer_` and `complex_buffer_` can only be used for plan creation, not execution. Example pattern:
+   ```cpp
+   void forward(T* rdata, double* cdata) {
+       thread_local std::vector<double> work_local;  // Thread-safe
+       // NOT: std::memcpy(work_buffer_, rdata, ...);  // Race condition!
+   }
+   ```
+
+3. **ALWAYS preserve input arrays after transforms**: FFTW c2r and cuFFT c2r/z2d **destroy the input array** even for "out-of-place" transforms. Always copy input to a local buffer before executing. This is critical for multi-stage algorithms like ETDRK4 that reuse k-space arrays.
+
+4. **Use new-array execute functions**: In FFTW, use `fftw_execute_dft_r2c`, `fftw_execute_dft_c2r`, `fftw_execute_dft` (not plain `fftw_execute`) when operating on thread-local buffers.
+
+Violating these rules causes tests to fail with garbage values (e.g., partition function = -10^7 instead of approx 1) or intermittent failures that are hard to debug.
+
+`FFT<T>` provides both interfaces:
+- `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
+- `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only
+
+`CudaFFT` additionally provides stream-aware methods for async execution:
+- `forward_stream(T*, double*, cudaStream_t)` / `backward_stream(double*, T*, cudaStream_t)`
+- `forward_stream(T*, complex<double>*, cudaStream_t)` / `backward_stream(complex<double>*, T*, cudaStream_t)`
+
+Solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimension-specific casting.
+
+### When Modifying Python Code
+
+Changes to `src/python/*.py` take effect after `make install` from build directory. No recompilation needed.
+
+### Deprecated/Internal Methods
+
+**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_chain_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
+
+### Adding New Monomer Types or Interactions
+
+Modify only the parameter dictionary - the code supports arbitrary numbers of monomer types. The `SymmetricPolymerTheory` class handles interaction matrix eigendecomposition automatically.
+
+### Validation
+
+Results must match:
+- **PSCF** (https://github.com/dmorse/pscfpp) for continuous chains with even contour steps
+- **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
+- Results should be **identical across platforms** (CUDA vs FFTW) within machine precision - verify by running same parameters on both platforms
+
+## Documentation and Learning
+
+- **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
+- **Examples**: `examples/scft/` and `examples/fts/` contain runnable simulation scripts
+- **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
+- **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
+
+## Key References
+
+The implementation is based on these publications:
+- Chain propagator optimization: *J. Chem. Theory Comput.* **2025**, 21, 3676
+- Discrete chain model: *J. Chem. Phys.* **2019**, 150, 234901 (Park et al.)
+- Multi-monomer theory: *Macromolecules* **2025**, 58, 816
+- L-FTS algorithm: *Polymers* **2021**, 13, 2437
+- Field update methods: *J. Chem. Phys.* **2023**, 158, 114117
+- CUDA implementation: *Eur. Phys. J. E* **2020**, 43, 15
+- RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
+- RK2 method: *J. Polym. Sci. B* **2002**, 40, 1777 (Rasmussen, Kalosakas)
+- Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
+- ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
+- Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)

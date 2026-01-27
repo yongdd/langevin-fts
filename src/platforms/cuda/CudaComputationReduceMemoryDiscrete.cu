@@ -911,6 +911,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
+        const int N_grid = this->cb->get_n_basis();
         const int STREAM = 0;
         const int k = this->checkpoint_interval;
 
@@ -979,22 +980,22 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     }
 
                     // Recalculate from checkpoint to N_LEFT
-                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
                     for (int i = left_check; i < N_LEFT; i++)
                     {
                         this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
-                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*N_grid, cudaMemcpyDeviceToDevice));
                     }
-                    gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*N_grid, cudaMemcpyDeviceToHost));
 
                     q_segment_1 = this->q_recal[0];
                     q_segment_2 = propagator_half_steps_at_check_point[std::make_tuple(key_right, 0)];
                     is_half_bond_length = true;
 
-                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][0], q_segment_1, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][N_grid], q_segment_2, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
 
-                    // Compute stress (this->d_workspace[0] is contiguous 2×M buffer)
+                    // Compute stress (this->d_workspace[0] is contiguous 2×N_grid buffer)
                     this->propagator_solver->compute_single_segment_stress(
                         STREAM, this->d_workspace[0], d_segment_stress, monomer_type, is_half_bond_length);
 
@@ -1034,20 +1035,20 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 }
 
                 // Skip from checkpoint to left_compute_start (don't store intermediate values)
-                gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
                 for (int i = check_pos; i < left_compute_start; i++)
                 {
                     this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
-                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*N_grid, cudaMemcpyDeviceToDevice));
                 }
 
                 // Store q_left from left_compute_start to left_end
-                gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*N_grid, cudaMemcpyDeviceToHost));
                 for (int i = 1; i <= left_end - left_compute_start; i++)
                 {
                     this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
-                    gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
-                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*N_grid, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*N_grid, cudaMemcpyDeviceToDevice));
                 }
                 // Now this->q_recal[i] = q_left[left_compute_start + i]
 
@@ -1065,9 +1066,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     else if (n > 1)
                     {
                         q_right_next = this->q_pair[prev_right];
-                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_right_prev, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_right_prev, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
                         this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 0);
-                        gpu_error_check(cudaMemcpy(q_right_next, this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                        gpu_error_check(cudaMemcpy(q_right_next, this->d_q_one[STREAM][1], sizeof(T)*N_grid, cudaMemcpyDeviceToHost));
                         std::swap(prev_right, next_right);
                     }
 
@@ -1100,10 +1101,10 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     }
 
                     // Copy propagator pair to device
-                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][0], q_segment_1, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&this->d_workspace[0][N_grid], q_segment_2, sizeof(T)*N_grid, cudaMemcpyHostToDevice));
 
-                    // Compute stress (this->d_workspace[0] is contiguous 2×M buffer)
+                    // Compute stress (this->d_workspace[0] is contiguous 2×N_grid buffer)
                     this->propagator_solver->compute_single_segment_stress(
                         STREAM, this->d_workspace[0], d_segment_stress, monomer_type, is_half_bond_length);
 

@@ -43,6 +43,7 @@
 
 #include "CudaPseudo.h"
 #include "CudaSolverPseudoDiscrete.h"
+#include "SpaceGroup.h"
 
 template <typename T>
 CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
@@ -355,6 +356,7 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = cb->get_total_grid();
+        const bool use_reduced_basis = (space_group_ != nullptr);
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -383,10 +385,42 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-                // Copy field configurations from host to device
-                gpu_error_check(cudaMemcpy(
-                    this->d_exp_dw[ds_idx][monomer_type], w,
-                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                if (use_reduced_basis && device == "gpu")
+                {
+                    if constexpr (std::is_same_v<T, double>)
+                    {
+                        // Expand reduced basis → full grid on device
+                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                            this->d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                    }
+                    else
+                    {
+                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                    }
+                }
+                else
+                {
+                    const T* w_full = w;
+                    std::vector<T> w_full_host;
+                    if (use_reduced_basis)
+                    {
+                        if constexpr (std::is_same_v<T, double>)
+                        {
+                            w_full_host.resize(M);
+                            space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                            w_full = w_full_host.data();
+                        }
+                        else
+                        {
+                            throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                        }
+                    }
+
+                    // Copy field configurations from host to device
+                    gpu_error_check(cudaMemcpy(
+                        this->d_exp_dw[ds_idx][monomer_type], w_full,
+                        sizeof(T)*M, cudaMemcpyInputToDevice));
+                }
 
                 // Compute exp_dw: exp(-w * local_ds)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
@@ -426,12 +460,19 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
         if (space_group_ != nullptr)
         {
-            // Expand reduced basis → full grid
-            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-            gpu_error_check(cudaPeekAtLastError());
-            fft_in = d_q_full_in_[STREAM];
-            fft_out = d_q_full_out_[STREAM];
+            if constexpr (std::is_same_v<T, double>)
+            {
+                // Expand reduced basis → full grid
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                fft_in = d_q_full_in_[STREAM];
+                fft_out = d_q_full_out_[STREAM];
+            }
+            else
+            {
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+            }
         }
 
         // Execute a forward FFT
@@ -454,7 +495,24 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
         // Multiply mask (on full grid)
         if (d_q_mask != nullptr)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask, 1.0, M);
+        {
+            double* d_q_mask_full = d_q_mask;
+            if (space_group_ != nullptr)
+            {
+                if constexpr (std::is_same_v<T, double>)
+                {
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
+                    gpu_error_check(cudaPeekAtLastError());
+                    d_q_mask_full = d_q_full_in_[STREAM];
+                }
+                else
+                {
+                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                }
+            }
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
+        }
 
         // Reduce full grid → reduced basis
         if (space_group_ != nullptr)
@@ -490,12 +548,19 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         if (space_group_ != nullptr)
         {
-            // Expand reduced basis → full grid
-            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-            gpu_error_check(cudaPeekAtLastError());
-            fft_in = d_q_full_in_[STREAM];
-            fft_out = d_q_full_out_[STREAM];
+            if constexpr (std::is_same_v<T, double>)
+            {
+                // Expand reduced basis → full grid
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                fft_in = d_q_full_in_[STREAM];
+                fft_out = d_q_full_out_[STREAM];
+            }
+            else
+            {
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+            }
         }
 
         // 3D fourier discrete transform, forward

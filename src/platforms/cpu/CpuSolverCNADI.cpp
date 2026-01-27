@@ -58,6 +58,7 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
         this->cb = cb;
         this->molecules = molecules;
         this->use_4th_order = use_4th_order;
+        this->space_group_ = nullptr;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -245,6 +246,18 @@ void CpuSolverCNADI::update_laplacian_operator()
 void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
+    const bool use_reduced_basis = (this->space_group_ != nullptr);
+
+    std::map<std::string, std::vector<double>> w_full_cache;
+    if (use_reduced_basis)
+    {
+        for (const auto& item : w_input)
+        {
+            const std::string& monomer_type = item.first;
+            w_full_cache[monomer_type].resize(M);
+            this->space_group_->from_reduced_basis(item.second, w_full_cache[monomer_type].data(), 1);
+        }
+    }
 
     // Get unique ds values from ContourLengthMapping
     const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -258,7 +271,7 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
         for(const auto& item: w_input)
         {
             const std::string& monomer_type = item.first;
-            const double *w = item.second;
+            const double *w = use_reduced_basis ? w_full_cache[monomer_type].data() : item.second;
 
             if( !exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
@@ -282,6 +295,31 @@ void CpuSolverCNADI::advance_propagator(
     try
     {
         const int M = this->cb->get_total_grid();
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
+
+        double* q_in_full = q_in;
+        double* q_out_full = q_out;
+        const double* q_mask_full = q_mask;
+
+        thread_local std::vector<double> q_full_in_local;
+        thread_local std::vector<double> q_full_out_local;
+        thread_local std::vector<double> q_mask_full_local;
+
+        if (use_reduced_basis)
+        {
+            q_full_in_local.resize(M);
+            q_full_out_local.resize(M);
+            this->space_group_->from_reduced_basis(q_in, q_full_in_local.data(), 1);
+            q_in_full = q_full_in_local.data();
+            q_out_full = q_full_out_local.data();
+
+            if (q_mask != nullptr)
+            {
+                q_mask_full_local.resize(M);
+                this->space_group_->from_reduced_basis(q_mask, q_mask_full_local.data(), 1);
+                q_mask_full = q_mask_full_local.data();
+            }
+        }
 
         // Get Boltzmann factors for full and half steps using ds_index
         const double *_exp_dw = exp_dw[ds_index][monomer_type].data();           // exp(-w*local_ds/2)
@@ -299,7 +337,7 @@ void CpuSolverCNADI::advance_propagator(
             // Full step (local_ds): exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             //=====================================================================
             advance_propagator_step(
-                q_in, q_out1,
+                q_in_full, q_out1,
                 _exp_dw,
                 xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
                 yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
@@ -318,7 +356,7 @@ void CpuSolverCNADI::advance_propagator(
                 // First half-step: exp(-w*local_ds/4) * Diffusion(local_ds/2) * exp(-w*local_ds/2)
                 // Apply exp(-w*local_ds/4) at start
                 for(int i=0; i<M; i++)
-                    q_temp[i] = _exp_dw_half[i] * q_in[i];
+                    q_temp[i] = _exp_dw_half[i] * q_in_full[i];
 
                 // ADI diffusion with half-step coefficients
                 if(DIM == 3)
@@ -371,7 +409,7 @@ void CpuSolverCNADI::advance_propagator(
             // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
             //=====================================================================
             for(int i=0; i<M; i++)
-                q_out[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
+                q_out_full[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
         }
         else
         {
@@ -380,7 +418,7 @@ void CpuSolverCNADI::advance_propagator(
             // Full step (local_ds): exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             //=====================================================================
             advance_propagator_step(
-                q_in, q_out,
+                q_in_full, q_out_full,
                 _exp_dw,
                 xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
                 yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
@@ -389,11 +427,14 @@ void CpuSolverCNADI::advance_propagator(
         }
 
         // Multiply mask
-        if(q_mask != nullptr)
+        if(q_mask_full != nullptr)
         {
             for(int i=0; i<M; i++)
-                q_out[i] *= q_mask[i];
+                q_out_full[i] *= q_mask_full[i];
         }
+
+        if (use_reduced_basis)
+            this->space_group_->to_reduced_basis(q_out_full, q_out, 1);
     }
     catch(std::exception& exc)
     {

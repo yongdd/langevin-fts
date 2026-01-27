@@ -255,7 +255,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
         this->time_complexity = 0;
         #endif
 
-        // Update dw or exp_dw (w_input is always on full grid)
+        // Update dw or exp_dw (solver handles reduced basis internally when enabled)
         this->propagator_solver->update_dw(w_input);
 
         // Compute exp_dw in reduced basis for later use in compute_concentrations
