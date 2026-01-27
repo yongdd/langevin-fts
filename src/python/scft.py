@@ -14,7 +14,7 @@ import scipy.io
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import validate_scft_params, ValidationError
+from .validation import validate_scft_params, validate_runtime_state, ValidationError
 from .config import load_config
 from .result import SCFTResult, IterationInfo
 from .utils import (
@@ -300,13 +300,12 @@ class SCFT:
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
             Reduces memory usage but increases computation time by 2-4x.
-        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr'}, optional
+        - numerical_method : {'rqm4', 'rk2', 'cn-adi2'}, optional
             Numerical algorithm for propagator computation (default: 'rqm4'):
 
             - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
-            - 'etdrk4': Pseudo-spectral with ETDRK4 exponential integrator
+            - 'rk2': Pseudo-spectral with 2nd-order operator splitting
             - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
-            - 'cn-adi4-lr': Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
 
         **Optimization Parameters:**
 
@@ -430,8 +429,8 @@ class SCFT:
 
     **Computational Details:**
 
-    - Pseudo-spectral methods: RQM4 (4th-order Richardson) or ETDRK4 (exponential integrator).
-    - Real-space methods: CN-ADI2 (2nd-order) or CN-ADI4 (4th-order Crank-Nicolson ADI).
+    - Pseudo-spectral methods: RQM4 (4th-order Richardson) or RK2 (2nd-order splitting).
+    - Real-space methods: CN-ADI2 (2nd-order Crank-Nicolson ADI).
     - Propagators use dynamic programming to avoid redundant calculations for
       branched polymers (see [1]_).
     - Anderson Mixing accelerates SCFT convergence by mixing field history.
@@ -792,6 +791,9 @@ class SCFT:
             self.cb.get_lx(),
             params.get("smearing", None)
         )
+
+        # Runtime validation guardrails (material conservation, partition consistency)
+        self.validation_runtime = params.get("validation_runtime", None)
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
@@ -1186,6 +1188,19 @@ class SCFT:
             phi[random_polymer_name] = self.prop_solver.get_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
+
+        # Runtime guardrails: validate material conservation and partition consistency.
+        # This is lightweight and helps catch subtle regressions early.
+        time_validation_start = time.time()
+        runtime_metrics = validate_runtime_state(
+            prop_solver=self.prop_solver,
+            phi=phi,
+            monomer_types=self.monomer_types,
+            numerical_method=self.prop_solver.numerical_method,
+            user_config=self.validation_runtime,
+        )
+        elapsed_time["validation"] = time.time() - time_validation_start
+        elapsed_time.update(runtime_metrics)
 
         return phi, elapsed_time
 
@@ -1601,7 +1616,13 @@ class SCFT:
         for iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
-            phi, _ = self.compute_concentrations(w)
+            phi, runtime_info = self.compute_concentrations(w)
+            if runtime_info.get("partition_ok", 1.0) < 0.5:
+                logger.warning(
+                    "Partition consistency check reported a mismatch at iteration %d (method=%s).",
+                    iter,
+                    self.prop_solver.numerical_method,
+                )
 
             # # Scaling phi
             # for monomer_type in self.monomer_types:

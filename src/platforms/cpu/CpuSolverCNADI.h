@@ -16,15 +16,9 @@
  *
  * where A_α = -(b²ds/12) ∂²/∂α² + (w·ds/6).
  *
- * **CN-ADI4 (4th Order via Richardson Extrapolation):**
+ * **Accuracy:**
  *
- * To achieve 4th order accuracy (CN-ADI4), Richardson extrapolation is applied:
- *
- *     q_out = (4·q_half - q_full) / 3
- *
- * where q_full is one full step (ds) and q_half is two half steps (ds/2 each).
- * This cancels the O(ds²) error term, yielding O(ds⁴) accuracy.
- * By default, CN-ADI2 (2nd order) is used.
+ * This solver implements CN-ADI2 (2nd order accuracy in ds).
  *
  * **ADI (Alternating Direction Implicit):**
  *
@@ -61,16 +55,7 @@
  * @brief CPU solver using CN-ADI (Crank-Nicolson ADI).
  *
  * Implements the CN-ADI scheme for solving the modified diffusion equation
- * with various boundary conditions. Supports CN-ADI2 (2nd order, default)
- * and CN-ADI4 (4th order via Richardson extrapolation).
- *
- * **CN-ADI4 (4th Order Accuracy):**
- *
- * Richardson extrapolation combines one full step and two half steps:
- *     q_out = (4·q_half - q_full) / 3
- *
- * This achieves O(ds⁴) accuracy in the contour step, matching the
- * pseudo-spectral continuous chain solver.
+ * with various boundary conditions. Provides CN-ADI2 (2nd order).
  *
  * **Tridiagonal Systems:**
  *
@@ -87,7 +72,6 @@
  * **Memory per Direction per Monomer:**
  *
  * - xl, xd, xh: Lower, diagonal, upper coefficients for x-direction (full step)
- * - xl_half, xd_half, xh_half: Same for half step (ds/2)
  * - Similar for y and z directions
  *
  * @note This is a beta feature. Stress calculation is not yet implemented.
@@ -106,7 +90,6 @@ class CpuSolverCNADI : public CpuSolver<double>
 private:
     ComputationBox<double>* cb;  ///< Computation box for grid/boundary info
     Molecules *molecules;         ///< Molecules container
-    bool use_4th_order;           ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
     SpaceGroup* space_group_;     ///< Space group pointer (nullptr if not used)
 
     /// @name Tridiagonal coefficients per ds_index per monomer_type
@@ -125,20 +108,6 @@ private:
     std::map<int, std::map<std::string, double*>> zh;  ///< z-direction upper diagonal
     /// @}
 
-    /// @name Half-step tridiagonal coefficients for CN-ADI4
-    /// @{
-    std::map<int, std::map<std::string, double*>> xl_half;  ///< x-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> xd_half;  ///< x-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> xh_half;  ///< x-direction upper (ds/2)
-
-    std::map<int, std::map<std::string, double*>> yl_half;  ///< y-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> yd_half;  ///< y-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> yh_half;  ///< y-direction upper (ds/2)
-
-    std::map<int, std::map<std::string, double*>> zl_half;  ///< z-direction lower (ds/2)
-    std::map<int, std::map<std::string, double*>> zd_half;  ///< z-direction diagonal (ds/2)
-    std::map<int, std::map<std::string, double*>> zh_half;  ///< z-direction upper (ds/2)
-    /// @}
 
     /**
      * @brief Return maximum of two integers.
@@ -182,8 +151,7 @@ private:
     /**
      * @brief Single ADI step with specified coefficients.
      *
-     * Core implementation of the ADI step used by both full and half-step
-     * propagation. This method performs:
+     * Core implementation of the ADI step. This method performs:
      * 1. Apply potential Boltzmann factor: q_exp = exp_dw * q_in
      * 2. ADI diffusion solve
      * 3. Apply potential Boltzmann factor: q_out *= exp_dw
@@ -240,10 +208,8 @@ public:
      *
      * @param cb            Computation box with boundary conditions
      * @param molecules     Molecules container with monomer types
-     * @param use_4th_order Use CN-ADI4 (4th order accuracy via Richardson extrapolation)
-     *                      instead of CN-ADI2 (2nd order, default)
      */
-    CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order = false);
+    CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules);
 
     /**
      * @brief Destructor. Frees tridiagonal coefficient arrays.

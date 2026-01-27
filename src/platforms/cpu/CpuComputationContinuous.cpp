@@ -41,7 +41,6 @@
 #include "SpaceGroup.h"
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoRK2.h"
-#include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
@@ -56,7 +55,7 @@
  * @param molecules                      Polymer/solvent species definitions
  * @param propagator_computation_optimizer Optimized computation schedule
  * @param method                         "pseudospectral" or "realspace"
- * @param numerical_method               Numerical algorithm (e.g., "rqm4", "etdrk4", "cn-adi2", "cn-adi4-lr")
+ * @param numerical_method               Numerical algorithm (e.g., "rqm4", "rk2", "cn-adi2")
  */
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
@@ -88,18 +87,18 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
                 this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules, backend);
             else if (numerical_method == "rk2")
                 this->propagator_solver = new CpuSolverPseudoRK2<T>(cb, molecules, backend);
-            else if (numerical_method == "etdrk4")
-                this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules, backend);
             else
-                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4', 'rk2', or 'etdrk4'.");
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
         }
         else if(method == "realspace")
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
-                bool use_4th_order = (numerical_method == "cn-adi4-lr");
-                this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
+                if (numerical_method != "" && numerical_method != "cn-adi2")
+                {
+                    throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
+                }
+                this->propagator_solver = new CpuSolverCNADI(cb, molecules);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

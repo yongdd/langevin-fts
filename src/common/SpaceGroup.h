@@ -156,6 +156,14 @@ public:
     const std::vector<int>& get_reduced_basis_indices() const { return reduced_basis_indices_; }
     const std::vector<int>& get_full_to_reduced_map() const { return full_to_reduced_map_; }
     const std::vector<int>& get_orbit_counts() const { return orbit_counts_; }
+
+    /**
+     * @brief Check for mirror planes perpendicular to x, y, and z axes.
+     *
+     * Returns true if symmetry operations include reflections x->-x,
+     * y->-y, and z->-z with zero translation (modulo lattice).
+     */
+    bool has_mirror_planes_xyz(double tol = 1e-10) const;
 };
 
 #endif // SPACE_GROUP_H_

@@ -30,7 +30,6 @@
  *
  * @see CpuSolverPseudoBase for shared functionality
  * @see CpuSolverPseudoRQM4 for 4th-order Richardson extrapolation version
- * @see CpuSolverPseudoETDRK4 for ETDRK4 alternative
  */
 
 #ifndef CPU_SOLVER_PSEUDO_RK2_H_

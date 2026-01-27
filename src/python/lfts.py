@@ -11,7 +11,7 @@ from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .compressor import LR, LRAM
 from .propagator_solver import PropagatorSolver
-from .validation import validate_lfts_params, ValidationError
+from .validation import validate_lfts_params, validate_runtime_state, ValidationError
 from .utils import (
     create_monomer_color_dict,
     draw_polymer_architecture,
@@ -189,13 +189,12 @@ class LFTS:
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
             Reduces memory usage but increases computation time by 2-4x.
-        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr'}, optional
+        - numerical_method : {'rqm4', 'rk2', 'cn-adi2'}, optional
             Numerical algorithm for propagator computation (default: 'rqm4'):
 
             - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
-            - 'etdrk4': Pseudo-spectral with ETDRK4 exponential integrator
+            - 'rk2': Pseudo-spectral with 2nd-order operator splitting
             - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
-            - 'cn-adi4-lr': Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
 
         **Advanced Options:**
 
@@ -570,6 +569,7 @@ class LFTS:
         self.verbose_level = params["verbose_level"]
         self.saddle = params["saddle"].copy()
         self.recording = params["recording"].copy()
+        self.validation_runtime = params.get("validation_runtime", None)
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -653,6 +653,18 @@ class LFTS:
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
         elapsed_time["phi"] = time.time() - time_phi_start
+
+        # Runtime guardrails: validate material conservation and partition consistency.
+        time_validation_start = time.time()
+        runtime_metrics = validate_runtime_state(
+            prop_solver=self.prop_solver,
+            phi=phi,
+            monomer_types=self.monomer_types,
+            numerical_method=self.prop_solver.numerical_method,
+            user_config=self.validation_runtime,
+        )
+        elapsed_time["validation"] = time.time() - time_validation_start
+        elapsed_time.update(runtime_metrics)
 
         return phi, elapsed_time
 
@@ -1276,7 +1288,13 @@ class LFTS:
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             
             # Compute total concentrations
-            phi, _ = self.compute_concentrations(w_aux)
+            phi, runtime_info = self.compute_concentrations(w_aux)
+            if runtime_info.get("partition_ok", 1.0) < 0.5:
+                logger.warning(
+                    "Partition consistency check reported a mismatch during saddle iteration %d (method=%s).",
+                    saddle_iter,
+                    self.prop_solver.numerical_method,
+                )
 
             # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_imag_idx)

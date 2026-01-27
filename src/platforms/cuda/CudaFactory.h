@@ -149,8 +149,8 @@ public :
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "rqm4", "etdrk4" (pseudo-spectral) or
-     *                                        "cn-adi2", "cn-adi4-lr" (real-space)
+     * @param numerical_method                "rqm4", "rk2" (pseudo-spectral) or
+     *                                        "cn-adi2" (real-space)
      * @return CUDA propagator solver
      */
     PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group=nullptr) override;

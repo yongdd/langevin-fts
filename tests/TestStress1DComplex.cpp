@@ -75,7 +75,7 @@ int main()
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
         std::vector<std::string> numerical_methods_discrete = {"rqm4"};
-        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2", "etdrk4"};
+        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
 
         for(std::string platform : avail_platforms)

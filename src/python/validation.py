@@ -285,3 +285,107 @@ def validate_lfts_params(params: Dict[str, Any]) -> None:
         raise ValidationError(
             f"langevin['dt'] must be positive, got {dt}"
         )
+
+
+# -------------------- Runtime Guardrails --------------------
+
+# Methods that are known to have approximate (not exact) material conservation.
+NON_EXACT_CONSERVATION_METHODS = set()
+
+# Conservative defaults that should not trip existing workflows while still
+# catching large regressions or numerical blow-ups.
+DEFAULT_RUNTIME_VALIDATION_EXACT = {
+    "enabled": True,
+    "mass_tol": 5e-8,
+    "partition_check": True,
+    "partition_enforce": True,
+    "report": True,
+}
+
+DEFAULT_RUNTIME_VALIDATION_APPROX = {
+    "enabled": True,
+    "mass_tol": 1e-6,
+    "partition_check": True,
+    # For approximate methods, report partition issues but do not raise by default.
+    "partition_enforce": False,
+    "report": True,
+}
+
+
+def _coerce_runtime_validation_config(
+    user_config: Optional[Dict[str, Any]],
+    numerical_method: Optional[str],
+) -> Dict[str, Any]:
+    """Merge user runtime validation config with method-aware defaults."""
+    method = (numerical_method or "").lower()
+    if method in NON_EXACT_CONSERVATION_METHODS:
+        config = dict(DEFAULT_RUNTIME_VALIDATION_APPROX)
+    else:
+        config = dict(DEFAULT_RUNTIME_VALIDATION_EXACT)
+
+    if user_config is None:
+        return config
+    if not isinstance(user_config, dict):
+        raise ValidationError(
+            f"'validation_runtime' must be a dict when provided, got {type(user_config).__name__}"
+        )
+
+    config.update(user_config)
+    return config
+
+
+def validate_runtime_state(
+    prop_solver: Any,
+    phi: Dict[str, np.ndarray],
+    monomer_types: List[str],
+    numerical_method: Optional[str],
+    user_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, float]:
+    """Validate material conservation and partition consistency at runtime.
+
+    This function is intentionally lightweight so it can be called inside
+    iteration loops without significant overhead.
+    """
+    config = _coerce_runtime_validation_config(user_config, numerical_method)
+    if not config.get("enabled", True):
+        return {
+            "mass_error_mean": 0.0,
+            "mass_error_max": 0.0,
+            "partition_ok": 1.0,
+        }
+
+    # Material conservation: mean(sum(phi_i)) should be close to 1.
+    total_phi = np.zeros_like(phi[monomer_types[0]])
+    for monomer_type in monomer_types:
+        total_phi = total_phi + phi[monomer_type]
+
+    mass_error_field = total_phi - 1.0
+    mass_error_mean = float(prop_solver.mean(mass_error_field))
+    mass_error_max = float(np.max(np.abs(mass_error_field)))
+
+    mass_tol = float(config.get("mass_tol", DEFAULT_RUNTIME_VALIDATION_EXACT["mass_tol"]))
+    if abs(mass_error_mean) > mass_tol:
+        raise ValidationError(
+            "Material conservation failed: "
+            f"mean(sum(phi)-1)={mass_error_mean:.3e} exceeds tolerance {mass_tol:.3e}"
+        )
+
+    # Partition consistency: use the C++ check when available.
+    partition_ok = True
+    if config.get("partition_check", True):
+        try:
+            partition_ok = bool(prop_solver.check_total_partition())
+        except Exception:
+            # Some solvers/methods may not expose this cleanly; treat as not ok.
+            partition_ok = False
+
+        if not partition_ok and config.get("partition_enforce", True):
+            raise ValidationError(
+                "Partition consistency check failed (forward/backward mismatch)."
+            )
+
+    return {
+        "mass_error_mean": mass_error_mean,
+        "mass_error_max": mass_error_max,
+        "partition_ok": 1.0 if partition_ok else 0.0,
+    }

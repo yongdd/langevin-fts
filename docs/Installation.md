@@ -201,7 +201,7 @@ Two test modes are available:
 - Platform initialization
 
 **Full tests** include additional validation:
-- All numerical methods (RQM4, RK2, ETDRK4, CN-ADI)
+- All numerical methods (RQM4, RK2, CN-ADI2)
 - Stress tensor calculations
 - Branched polymer architectures
 - Boundary conditions

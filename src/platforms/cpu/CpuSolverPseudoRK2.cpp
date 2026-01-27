@@ -31,6 +31,7 @@
 #include <iostream>
 #include <cmath>
 #include <complex>
+#include <type_traits>
 
 #include "CpuSolverPseudoRK2.h"
 
@@ -61,6 +62,7 @@ CpuSolverPseudoRK2<T>::CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *mole
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->pseudo->add_ds_value(ds_idx, local_ds);
+            this->register_ds_value(ds_idx, local_ds);
 
             for (const auto& item : molecules->get_bond_lengths())
             {
@@ -109,18 +111,22 @@ const double* CpuSolverPseudoRK2<T>::get_stress_boltz_bond(
 template <typename T>
 void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
 {
-    const int M = this->cb->get_total_grid();
+    const int M_full = this->cb->get_total_grid();
+    const int M_reduced = (this->space_group_ != nullptr)
+        ? this->space_group_->get_n_irreducible()
+        : M_full;
     const bool use_reduced_basis = (this->space_group_ != nullptr);
+    const bool use_pmmm = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr);
 
     std::map<std::string, std::vector<T>> w_full_cache;
-    if (use_reduced_basis)
+    if (use_reduced_basis && !use_pmmm)
     {
         if constexpr (std::is_same_v<T, double>)
         {
             for (const auto& item : w_input)
             {
                 const std::string& monomer_type = item.first;
-                w_full_cache[monomer_type].resize(M);
+                w_full_cache[monomer_type].resize(M_full);
                 this->space_group_->from_reduced_basis(item.second, w_full_cache[monomer_type].data(), 1);
             }
         }
@@ -142,14 +148,16 @@ void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            const T* w = use_reduced_basis ? w_full_cache[monomer_type].data() : item.second;
+            const T* w = (use_reduced_basis && !use_pmmm) ? w_full_cache[monomer_type].data() : item.second;
 
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
             std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
+            const int M_use = use_pmmm ? M_reduced : M_full;
+            exp_dw_vec.resize(M_use);
 
-            for (int i = 0; i < M; ++i)
+            for (int i = 0; i < M_use; ++i)
             {
                 exp_dw_vec[i] = std::exp(-w[i] * local_ds * 0.5);
             }
@@ -166,7 +174,10 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int M_full = this->cb->get_total_grid();
+        const int M_reduced = (this->space_group_ != nullptr)
+            ? this->space_group_->get_n_irreducible()
+            : M_full;
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
         // For periodic BC, coefficient array is actually complex (interleaved real/imag)
@@ -189,8 +200,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 
         if (this->space_group_ != nullptr)
         {
-            q_full_in_local.resize(M);
-            q_full_out_local.resize(M);
+            q_full_in_local.resize(M_full);
+            q_full_out_local.resize(M_full);
 
             // Expand reduced basis → full grid
             if constexpr (std::is_same_v<T, double>)
@@ -202,22 +213,79 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 
         // ===== RK2: Single full step =====
         // Step 1: exp(-w·ds/2) * q_in
-        for (int i = 0; i < M; ++i)
-            fft_out[i] = _exp_dw[i] * fft_in[i];
+        if (!(this->use_crysfft_pmmm_ && this->space_group_ != nullptr))
+        {
+            for (int i = 0; i < M_full; ++i)
+                fft_out[i] = _exp_dw[i] * fft_in[i];
+        }
 
         // Step 2-4: Forward FFT -> multiply by Boltzmann factor -> Backward FFT
-        this->transform_forward(fft_out, k_q_in.data());
-        this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
-        this->transform_backward(k_q_in.data(), fft_out);
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            {
+                thread_local std::vector<double> phys_in;
+                thread_local std::vector<double> phys_out;
+                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                if (static_cast<int>(phys_in.size()) != M_phys)
+                {
+                    phys_in.resize(M_phys);
+                    phys_out.resize(M_phys);
+                }
+
+                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_in[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                }
+
+                double coeff_full = this->get_effective_diffusion_coeff(monomer_type, ds_index, false);
+                this->crysfft_pmmm_->set_contour_step(coeff_full);
+                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                }
+
+                q_full_out_local.resize(M_reduced);
+                this->reduce_pmmm_to_reduced(phys_out.data(), q_full_out_local.data());
+                fft_out = q_full_out_local.data();
+            }
+            else
+            {
+                this->transform_forward(fft_out, k_q_in.data());
+                this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
+                this->transform_backward(k_q_in.data(), fft_out);
+            }
+        }
+        else
+        {
+            this->transform_forward(fft_out, k_q_in.data());
+            this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
+            this->transform_backward(k_q_in.data(), fft_out);
+        }
 
         // Step 5: exp(-w·ds/2) * result
-        for (int i = 0; i < M; ++i)
-            fft_out[i] *= _exp_dw[i];
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (!(this->use_crysfft_pmmm_ && this->space_group_ != nullptr))
+            {
+                for (int i = 0; i < M_full; ++i)
+                    fft_out[i] *= _exp_dw[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < M_full; ++i)
+                fft_out[i] *= _exp_dw[i];
+        }
 
         // Apply mask if provided
         if (q_mask != nullptr)
         {
-            for (int i = 0; i < M; ++i)
+            const int M_mask = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr) ? M_reduced : M_full;
+            for (int i = 0; i < M_mask; ++i)
                 fft_out[i] *= q_mask[i];
         }
 
@@ -225,7 +293,12 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         if (this->space_group_ != nullptr)
         {
             if constexpr (std::is_same_v<T, double>)
-                this->space_group_->to_reduced_basis(fft_out, q_out, 1);
+            {
+                if (this->use_crysfft_pmmm_)
+                    std::copy(fft_out, fft_out + M_reduced, q_out);
+                else
+                    this->space_group_->to_reduced_basis(fft_out, q_out, 1);
+            }
         }
     }
     catch (std::exception& exc)

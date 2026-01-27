@@ -468,3 +468,37 @@ void SpaceGroup::symmetrize(const double* field_in, double* field_out, int n_fie
     // Then symmetrize in-place
     symmetrize(field_out, n_fields);
 }
+
+bool SpaceGroup::has_mirror_planes_xyz(double tol) const
+{
+    auto is_zero_mod1 = [tol](double v) {
+        double r = std::fabs(v - std::round(v));
+        return r < tol;
+    };
+
+    bool has_x = false;
+    bool has_y = false;
+    bool has_z = false;
+
+    for (size_t i = 0; i < rotations_.size(); ++i)
+    {
+        const auto& R = rotations_[i];
+        const auto& t = translations_[i];
+
+        bool t_zero = is_zero_mod1(t[0]) && is_zero_mod1(t[1]) && is_zero_mod1(t[2]);
+        if (!t_zero)
+            continue;
+
+        if (R[0][0] == -1 && R[1][1] == 1 && R[2][2] == 1 &&
+            R[0][1] == 0 && R[0][2] == 0 && R[1][0] == 0 && R[1][2] == 0 && R[2][0] == 0 && R[2][1] == 0)
+            has_x = true;
+        if (R[0][0] == 1 && R[1][1] == -1 && R[2][2] == 1 &&
+            R[0][1] == 0 && R[0][2] == 0 && R[1][0] == 0 && R[1][2] == 0 && R[2][0] == 0 && R[2][1] == 0)
+            has_y = true;
+        if (R[0][0] == 1 && R[1][1] == 1 && R[2][2] == -1 &&
+            R[0][1] == 0 && R[0][2] == 0 && R[1][0] == 0 && R[1][2] == 0 && R[2][0] == 0 && R[2][1] == 0)
+            has_z = true;
+    }
+
+    return has_x && has_y && has_z;
+}
