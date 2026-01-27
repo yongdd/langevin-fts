@@ -618,18 +618,27 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             T *_phi = this->phi_solvent[s];
             std::vector<T>& exp_dw_vec = this->propagator_solver->exp_dw[0][monomer_type];
             const T *_exp_dw = exp_dw_vec.data();
+            const bool exp_dw_is_reduced = (exp_dw_vec.size() == static_cast<size_t>(N));
+            const bool exp_dw_is_full = (exp_dw_vec.size() == static_cast<size_t>(total_grid));
+            if (!exp_dw_is_reduced && !exp_dw_is_full)
+            {
+                throw_with_line_number(
+                    "Unexpected exp_dw size for solvent concentration: exp_dw.size()=" +
+                    std::to_string(exp_dw_vec.size()) + ", N=" + std::to_string(N) +
+                    ", total_grid=" + std::to_string(total_grid));
+            }
 
             if (this->space_group_ != nullptr)
             {
                 // exp_dw is normally stored on the full grid; reduce it for reduced-basis.
                 // In some CPU-only builds, exp_dw may already be reduced, so guard on size.
                 std::vector<T> exp_dw_reduced(N);
-                if (static_cast<int>(exp_dw_vec.size()) == N)
+                if (exp_dw_is_reduced)
                 {
                     for (int i = 0; i < N; i++)
                         exp_dw_reduced[i] = _exp_dw[i];
                 }
-                else if (static_cast<int>(exp_dw_vec.size()) == total_grid)
+                else if (exp_dw_is_full)
                 {
                     if constexpr (std::is_same_v<T, double>)
                         this->space_group_->to_reduced_basis(_exp_dw, exp_dw_reduced.data(), 1);
@@ -782,6 +791,8 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 
         // Number of blocks
         const int k = this->checkpoint_interval;
+        if (k < 1)
+            throw_with_line_number("checkpoint_interval must be >= 1, got " + std::to_string(k));
         const int num_blocks = (N_RIGHT + k) / k;
 
         // Pointers for q_right (ping-pong)
@@ -820,6 +831,15 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             // Skip phase uses this->q_skip[0-1] for ping-pong, storage uses this->q_recal[0+]
             const int steps_before = left_start - check_pos;  // Steps before we start storing
             const int storage_count = left_end - left_start + 1;  // Number of values to store
+            if (left_start < 0 || left_end < 0)
+                throw_with_line_number("Invalid left range: [" + std::to_string(left_start) +
+                    ", " + std::to_string(left_end) + "] for N_LEFT=" + std::to_string(N_LEFT) +
+                    ", N_RIGHT=" + std::to_string(N_RIGHT));
+            if (storage_count < 1)
+                throw_with_line_number("storage_count must be >= 1, got " + std::to_string(storage_count));
+            if (storage_count > k)
+                throw_with_line_number("storage_count (" + std::to_string(storage_count) +
+                    ") exceeds checkpoint_interval (" + std::to_string(k) + ")");
 
             // Load checkpoint (already in reduced basis, solver handles expand/reduce)
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(key_left, check_pos)];
