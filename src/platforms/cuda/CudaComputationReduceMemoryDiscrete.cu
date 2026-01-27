@@ -249,8 +249,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         // Copy mask to this->d_q_mask
         if (this->cb->get_mask() != nullptr)
         {
-            gpu_error_check(cudaMalloc((void**)&this->d_q_mask , sizeof(double)*M));
-            gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMalloc((void**)&this->d_q_mask , sizeof(double)*N));
+            gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*N, cudaMemcpyHostToDevice));
         }
         else
             this->d_q_mask = nullptr;

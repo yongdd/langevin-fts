@@ -543,7 +543,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
         std::cout << "compute_concentrations 0" << std::endl;
         #endif
 
-        const int M = this->cb->get_total_grid();
+        const int total_grid = this->cb->get_total_grid();
         const int N = this->cb->get_n_basis();
 
         // Calculate segment concentrations
@@ -609,8 +609,6 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
         #endif
 
         // Calculate partition functions and concentrations of solvents
-        // Note: phi_solvent is always in full grid (M)
-        // Note: _exp_dw is always in full grid (M) regardless of reduced basis
         for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
@@ -619,16 +617,29 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             T *_phi = this->phi_solvent[s];
             T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
-            // Compute inner product manually for full grid arrays
-            // dv_base = volume / total_grid for uniform grid
-            double dv_base = this->cb->get_volume() / M;
-            T sum = 0.0;
-            for(int i=0; i<M; i++)
-                sum += _exp_dw[i] * _exp_dw[i];
-            sum *= static_cast<T>(dv_base);
-            this->single_solvent_partitions[s] = sum/this->cb->get_volume();
-            for(int i=0; i<M; i++)
-                _phi[i] = _exp_dw[i]*_exp_dw[i]*volume_fraction/this->single_solvent_partitions[s];
+            if (this->space_group_ != nullptr)
+            {
+                // exp_dw is stored on the full grid; reduce it for reduced-basis
+                std::vector<T> exp_dw_reduced(N);
+                if constexpr (std::is_same_v<T, double>)
+                    this->space_group_->to_reduced_basis(_exp_dw, exp_dw_reduced.data(), 1);
+
+                T sum = this->cb->inner_product(exp_dw_reduced.data(), exp_dw_reduced.data());
+                this->single_solvent_partitions[s] = sum/this->cb->get_volume();
+                for(int i=0; i<N; i++)
+                    _phi[i] = exp_dw_reduced[i]*exp_dw_reduced[i]*volume_fraction/this->single_solvent_partitions[s];
+            }
+            else
+            {
+                double dv_base = this->cb->get_volume() / total_grid;
+                T sum = 0.0;
+                for(int i=0; i<total_grid; i++)
+                    sum += _exp_dw[i] * _exp_dw[i];
+                sum *= static_cast<T>(dv_base);
+                this->single_solvent_partitions[s] = sum/this->cb->get_volume();
+                for(int i=0; i<total_grid; i++)
+                    _phi[i] = _exp_dw[i]*_exp_dw[i]*volume_fraction/this->single_solvent_partitions[s];
+            }
         }
 
     }
@@ -940,7 +951,8 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
 
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
-        const int M    = this->cb->get_total_grid();
+        const int total_grid = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();
         const int k = this->checkpoint_interval;
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
@@ -1034,13 +1046,13 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                 // Skip phase uses this->q_skip[0-1] for ping-pong, storage uses this->q_recal[0+]
                 if(steps_before == 0)
                 {
-                    for(int i=0; i<M; i++)
+                    for(int i=0; i<N; i++)
                         this->q_recal[0][i] = q_checkpoint[i];
                     q_prev_left = this->q_recal[0];
                 }
                 else
                 {
-                    for(int i=0; i<M; i++)
+                    for(int i=0; i<N; i++)
                         this->q_skip[0][i] = q_checkpoint[i];
                     q_prev_left = this->q_skip[0];
                     int ping_pong = 1;
@@ -1053,7 +1065,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                         auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                         if(it != this->propagator_at_check_point.end())
                         {
-                            for(int i=0; i<M; i++)
+                            for(int i=0; i<N; i++)
                                 q_curr_left[i] = it->second[i];
                         }
                         else
@@ -1068,7 +1080,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        for(int i=0; i<M; i++)
+                        for(int i=0; i<N; i++)
                             this->q_recal[0][i] = it->second[i];
                     }
                     else
@@ -1087,7 +1099,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        for(int i=0; i<M; i++)
+                        for(int i=0; i<N; i++)
                             q_curr_left[i] = it->second[i];
                     }
                     else
@@ -1187,7 +1199,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
 
         // Normalization factor (from Boltzmann factor derivative)
         // Note: local_ds is already multiplied per-block in the stress loop above
-        double norm = -3.0 * M * M;
+        double norm = -3.0 * total_grid * total_grid;
 
         for(int p=0; p<n_polymer_types; p++)
         {
@@ -1322,7 +1334,7 @@ template <typename T>
 bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
 {
     // Uses block-based computation to minimize memory usage (O(sqrt(N)) workspace).
-    const int M = this->cb->get_total_grid();
+    const int N = this->cb->get_n_basis();
     const int k = this->checkpoint_interval;
     int n_polymer_types = this->molecules->get_n_polymer_types();
 
@@ -1410,13 +1422,13 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
             // Skip phase uses this->q_skip[0-1] for ping-pong, storage uses this->q_recal[0+]
             if(steps_before == 0)
             {
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     this->q_recal[0][i] = q_checkpoint[i];
                 q_prev_left = this->q_recal[0];
             }
             else
             {
-                for(int i=0; i<M; i++)
+                for(int i=0; i<N; i++)
                     this->q_skip[0][i] = q_checkpoint[i];
                 q_prev_left = this->q_skip[0];
                 int ping_pong = 1;
@@ -1429,7 +1441,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        for(int i=0; i<M; i++)
+                        for(int i=0; i<N; i++)
                             q_curr_left[i] = it->second[i];
                     }
                     else
@@ -1444,7 +1456,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    for(int i=0; i<M; i++)
+                    for(int i=0; i<N; i++)
                         this->q_recal[0][i] = it->second[i];
                 }
                 else
@@ -1463,7 +1475,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    for(int i=0; i<M; i++)
+                    for(int i=0; i<N; i++)
                         q_curr_left[i] = it->second[i];
                 }
                 else

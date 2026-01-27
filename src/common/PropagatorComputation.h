@@ -401,17 +401,5 @@ public:
         std::map<std::string, const T*> w_reduced,
         std::map<std::string, const T*> q_init = {});
 
-    /**
-     * @brief Get total concentration in reduced basis.
-     *
-     * @param monomer_type Monomer type label
-     * @param phi_reduced  Output array (size: n_irreducible)
-     *
-     * @pre compute_propagators() or compute_propagators_reduced() and
-     *      compute_concentrations() must be called first.
-     * @pre Space group must be set via set_space_group().
-     */
-    virtual void get_total_concentration_reduced(std::string monomer_type, T* phi_reduced);
-
 };
 #endif
