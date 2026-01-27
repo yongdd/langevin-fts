@@ -228,21 +228,11 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
             gpu_error_check(cudaMemcpy(&this->d_q_unity[i], &q_unity, sizeof(T), cudaMemcpyHostToDevice));
         }
 
-        // Copy mask to this->d_q_mask (in reduced basis if space_group is set)
+        // Copy mask to this->d_q_mask (already reduced when space_group is set)
         if (this->cb->get_mask() != nullptr)
         {
             gpu_error_check(cudaMalloc((void**)&this->d_q_mask, sizeof(double)*N));
-            if (this->space_group_ != nullptr)
-            {
-                // Convert mask to reduced basis on host, then copy to device
-                std::vector<double> mask_reduced(N);
-                this->space_group_->to_reduced_basis(this->cb->get_mask(), mask_reduced.data(), 1);
-                gpu_error_check(cudaMemcpy(this->d_q_mask, mask_reduced.data(), sizeof(double)*N, cudaMemcpyHostToDevice));
-            }
-            else
-            {
-                gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*N, cudaMemcpyHostToDevice));
-            }
+            gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*N, cudaMemcpyHostToDevice));
         }
         else
             this->d_q_mask = nullptr;

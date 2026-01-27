@@ -193,35 +193,6 @@ void PropagatorComputation<T>::compute_propagators_reduced(
     compute_propagators(w_reduced, q_init);
 }
 
-/**
- * @brief Get concentration in reduced basis.
- *
- * When concentrations are stored in reduced basis (after set_space_group()),
- * this method avoids the round-trip through full grid by getting the full
- * grid concentration and reducing it. The derived class stores concentrations
- * in reduced basis, so get_total_concentration() expands internally first.
- *
- * For efficiency, this still uses get_total_concentration() which expands
- * and accumulates, then we reduce the result. A more optimal implementation
- * would accumulate directly in reduced basis, but that requires access to
- * internal phi_block which is in the derived class.
- */
-template <typename T>
-void PropagatorComputation<T>::get_total_concentration_reduced(std::string monomer_type, T* phi_reduced)
-{
-    if (space_group_ == nullptr) {
-        throw_with_line_number("Space group not set. Call set_space_group() first.");
-    }
-
-    // Get full grid concentration (derived class expands internally)
-    get_total_concentration(monomer_type, phi_full_buffer_.data());
-
-    // Convert to reduced basis
-    if constexpr (std::is_same_v<T, double>) {
-        space_group_->to_reduced_basis(phi_full_buffer_.data(), phi_reduced, 1);
-    }
-}
-
 // Explicit template instantiation
 template class PropagatorComputation<double>;
 template class PropagatorComputation<std::complex<double>>;

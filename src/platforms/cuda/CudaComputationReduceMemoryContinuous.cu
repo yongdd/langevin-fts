@@ -320,20 +320,12 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         this->d_propagator_sub_dep[0][1] = this->d_workspace[0] + N_grid;  // second N_grid of this->d_workspace[0]
         this->d_phi = this->d_workspace[1] + N_grid;                       // second N_grid of this->d_workspace[1]
 
-        // Copy mask to this->d_q_mask (reduced basis when space group is set)
+        // Copy mask to this->d_q_mask (already reduced when space_group is set)
         if (this->cb->get_mask() != nullptr)
         {
             gpu_error_check(cudaMalloc((void**)&this->d_q_mask , sizeof(double)*N_grid));
-            if (this->space_group_ != nullptr)
-            {
-                std::vector<double> mask_reduced(N_grid);
-                this->space_group_->to_reduced_basis(this->cb->get_mask(), mask_reduced.data(), 1);
-                gpu_error_check(cudaMemcpy(this->d_q_mask, mask_reduced.data(), sizeof(double)*N_grid, cudaMemcpyHostToDevice));
-            }
-            else
-            {
-                gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*N_grid, cudaMemcpyHostToDevice));
-            }
+            gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(),
+                sizeof(double)*N_grid, cudaMemcpyHostToDevice));
         }
         else
             this->d_q_mask = nullptr;
