@@ -141,8 +141,9 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             }
 
             #ifndef NDEBUG
-            this->propagator_finished[key] = new bool[max_n_segment];
-            for(int i=0; i<max_n_segment;i++)
+            // +1 because later debug checks index n+1 up to max_n_segment
+            this->propagator_finished[key] = new bool[max_n_segment + 1];
+            for(int i=0; i<=max_n_segment; i++)
                 this->propagator_finished[key][i] = false;
             #endif
         }
