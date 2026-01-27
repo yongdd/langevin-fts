@@ -86,6 +86,13 @@ private:
      */
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
+    /**
+     * @brief Cached potential fields (reduced basis when space group is set).
+     *
+     * Stored to compute solvent concentrations without re-expanding fields.
+     */
+    std::map<std::string, std::vector<T>> w_;
+
     // ============== Reduced basis support ==============
     /**
      * @brief Device array for full_to_reduced_map.
@@ -98,18 +105,6 @@ private:
      * Flat indices of irreducible mesh points.
      */
     int* d_reduced_basis_indices_;
-
-    /**
-     * @brief Temporary device buffers for full grid propagator.
-     * d_q_full_[0] = input, d_q_full_[1] = output
-     * Only allocated when space group is set.
-     */
-    CuDeviceData<T>* d_q_full_[2];
-
-    /**
-     * @brief Buffer for expanding concentration to full grid (device).
-     */
-    CuDeviceData<T>* d_phi_full_buffer_;
 
     /**
      * @brief Compute concentration for one block.

@@ -110,6 +110,25 @@ template <typename T>
 void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
+    const bool use_reduced_basis = (this->space_group_ != nullptr);
+
+    std::map<std::string, std::vector<T>> w_full_cache;
+    if (use_reduced_basis)
+    {
+        if constexpr (std::is_same_v<T, double>)
+        {
+            for (const auto& item : w_input)
+            {
+                const std::string& monomer_type = item.first;
+                w_full_cache[monomer_type].resize(M);
+                this->space_group_->from_reduced_basis(item.second, w_full_cache[monomer_type].data(), 1);
+            }
+        }
+        else
+        {
+            throw_with_line_number("Space group reduced basis is only supported for real fields.");
+        }
+    }
 
     // Get unique ds values from ContourLengthMapping
     const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -123,7 +142,7 @@ void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            const T* w = item.second;
+            const T* w = use_reduced_basis ? w_full_cache[monomer_type].data() : item.second;
 
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");

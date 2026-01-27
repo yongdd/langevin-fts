@@ -140,11 +140,6 @@ protected:
     SpaceGroup* space_group_;
 
     /**
-     * @brief Temporary buffer for full grid fields when using reduced basis.
-     */
-    std::vector<T> w_full_buffer_;
-
-    /**
      * @brief Temporary buffer for full grid concentrations when using reduced basis.
      */
     std::vector<T> phi_full_buffer_;
@@ -393,8 +388,10 @@ public:
     /**
      * @brief Compute propagators using reduced basis input fields.
      *
-     * Expands reduced basis fields to full grid, computes propagators,
-     * and stores results. Concentrations can then be retrieved in reduced basis.
+     * Uses reduced basis fields directly. When a space group is set, the
+     * solver handles expand/reduce internally around FFT operations.
+     *
+     * If you are unsure how reduced basis works, see docs/SpaceGroup.md.
      *
      * @param w_reduced Map from monomer type to reduced basis field
      *                  (size: n_irreducible per field)

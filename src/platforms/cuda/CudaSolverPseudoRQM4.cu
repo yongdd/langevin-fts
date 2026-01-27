@@ -40,6 +40,7 @@
 
 #include "CudaPseudo.h"
 #include "CudaSolverPseudoRQM4.h"
+#include "SpaceGroup.h"
 
 template <typename T>
 CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
@@ -407,6 +408,7 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();
+        const bool use_reduced_basis = (space_group_ != nullptr);
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -435,13 +437,47 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-                // Copy field configurations from host to device
-                gpu_error_check(cudaMemcpyAsync(
-                    this->d_exp_dw[ds_idx][monomer_type], w,
-                    sizeof(T)*M, cudaMemcpyInputToDevice));
-                gpu_error_check(cudaMemcpyAsync(
-                    this->d_exp_dw_half[ds_idx][monomer_type], w,
-                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                if (use_reduced_basis && device == "gpu")
+                {
+                    if constexpr (std::is_same_v<T, double>)
+                    {
+                        // Expand reduced basis → full grid on device
+                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                            this->d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
+                            this->d_exp_dw_half[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                    }
+                    else
+                    {
+                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                    }
+                }
+                else
+                {
+                    const T* w_full = w;
+                    std::vector<T> w_full_host;
+                    if (use_reduced_basis)
+                    {
+                        if constexpr (std::is_same_v<T, double>)
+                        {
+                            w_full_host.resize(M);
+                            space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                            w_full = w_full_host.data();
+                        }
+                        else
+                        {
+                            throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                        }
+                    }
+
+                    // Copy field configurations from host to device
+                    gpu_error_check(cudaMemcpyAsync(
+                        this->d_exp_dw[ds_idx][monomer_type], w_full,
+                        sizeof(T)*M, cudaMemcpyInputToDevice));
+                    gpu_error_check(cudaMemcpyAsync(
+                        this->d_exp_dw_half[ds_idx][monomer_type], w_full,
+                        sizeof(T)*M, cudaMemcpyInputToDevice));
+                }
 
                 // Compute d_exp_dw = exp(-w * local_ds * 0.5)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
@@ -626,7 +662,22 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         // Multiply mask (on full grid)
         if (d_q_mask != nullptr)
         {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask, 1.0, M);
+            double* d_q_mask_full = d_q_mask;
+            if (space_group_ != nullptr)
+            {
+                if constexpr (std::is_same_v<T, double>)
+                {
+                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
+                    gpu_error_check(cudaPeekAtLastError());
+                    d_q_mask_full = d_q_full_in_[STREAM];
+                }
+                else
+                {
+                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                }
+            }
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
         }
 
@@ -671,13 +722,25 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
 
         const int M = this->cb->get_total_grid();
 
+        CuDeviceData<T>* d_q_pair_full = d_q_pair;
+        if (space_group_ != nullptr)
+        {
+            // Expand reduced basis → full grid (q1 and q2 into contiguous buffer)
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_step_1_two[STREAM], d_q_pair, d_full_to_reduced_map_, M);
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                &d_q_step_1_two[STREAM][M], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            d_q_pair_full = d_q_step_1_two[STREAM];
+        }
+
         if (is_periodic_)
         {
             // Periodic BC: Execute a forward FFT
             if constexpr (std::is_same<T, double>::value)
-                cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
+                cufftExecD2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM]);
             else
-                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
             gpu_error_check(cudaPeekAtLastError());
 
             // Multiply two propagators in the fourier spaces
@@ -699,8 +762,8 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             }
             else
             {
-                double* d_q1 = d_q_pair;
-                double* d_q2 = &d_q_pair[M];
+                double* d_q1 = d_q_pair_full;
+                double* d_q2 = &d_q_pair_full[M];
                 double* rk_1 = d_rk_in_1_one[STREAM];
                 double* rk_2 = d_rk_in_2_one[STREAM];
 

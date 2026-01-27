@@ -165,15 +165,10 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
     if (sg != nullptr) {
         // Allocate buffers for full grid operations
         int total_grid = this->cb->get_total_grid();
-        int n_monomer_types = this->molecules->get_bond_lengths().size();
 
-        // Buffer for all monomer type fields
-        w_full_buffer_.resize(n_monomer_types * total_grid);
         phi_full_buffer_.resize(total_grid);
     } else {
         // Release buffers
-        w_full_buffer_.clear();
-        w_full_buffer_.shrink_to_fit();
         phi_full_buffer_.clear();
         phi_full_buffer_.shrink_to_fit();
     }
@@ -182,11 +177,8 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
 /**
  * @brief Compute propagators using reduced basis input fields.
  *
- * Expands reduced basis fields to full grid before calling compute_propagators().
- * The propagator solver needs full grid fields for FFT operations.
- *
- * The derived class (e.g., CpuComputationContinuous) stores propagators in
- * reduced basis internally and handles expand/reduce around FFT operations.
+ * Uses reduced basis fields directly. The solver handles expand/reduce
+ * internally around FFT operations.
  */
 template <typename T>
 void PropagatorComputation<T>::compute_propagators_reduced(
@@ -197,24 +189,8 @@ void PropagatorComputation<T>::compute_propagators_reduced(
         throw_with_line_number("Space group not set. Call set_space_group() first.");
     }
 
-    int total_grid = this->cb->get_total_grid();
-
-    // Expand each reduced basis field to full grid for the solver
-    std::map<std::string, const T*> w_full;
-    int field_idx = 0;
-
-    for (auto& pair : w_reduced) {
-        T* full_ptr = w_full_buffer_.data() + field_idx * total_grid;
-        if constexpr (std::is_same_v<T, double>) {
-            space_group_->from_reduced_basis(pair.second, full_ptr, 1);
-        }
-        w_full[pair.first] = full_ptr;
-        field_idx++;
-    }
-
-    // Call the standard compute_propagators with full grid fields
-    // Propagators are stored in reduced basis by the derived class
-    compute_propagators(w_full, q_init);
+    // Call the standard compute_propagators with reduced basis fields
+    compute_propagators(w_reduced, q_init);
 }
 
 /**

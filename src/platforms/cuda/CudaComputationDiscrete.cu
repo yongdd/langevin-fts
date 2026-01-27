@@ -952,6 +952,7 @@ void CudaComputationDiscrete<T>::compute_stress()
 
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
+        const int N_grid = this->cb->get_n_basis();
 
         const int N_STRESS = 6;
         std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>> block_dq_dl[this->n_streams];
@@ -1036,8 +1037,8 @@ void CudaComputationDiscrete<T>::compute_stress()
 
             if (d_propagator_left != nullptr)
             {
-                gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][prev][0], d_propagator_left,  sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
-                gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][prev][M], d_propagator_right, sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
+                gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][prev][0], d_propagator_left,  sizeof(T)*N_grid, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
+                gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][prev][N_grid], d_propagator_right, sizeof(T)*N_grid, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
                 gpu_error_check(cudaEventRecord(memcpy_done, this->streams[STREAM][1]));
             }
             gpu_error_check(cudaStreamWaitEvent(this->streams[STREAM][0], memcpy_done, 0));
@@ -1052,8 +1053,8 @@ void CudaComputationDiscrete<T>::compute_stress()
 
                     if (d_propagator_left != nullptr)
                     {
-                        gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][next][0], d_propagator_left,  sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
-                        gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][next][M], d_propagator_right, sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
+                        gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][next][0], d_propagator_left,  sizeof(T)*N_grid, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
+                        gpu_error_check(cudaMemcpyAsync(&this->d_q_pair[STREAM][next][N_grid], d_propagator_right, sizeof(T)*N_grid, cudaMemcpyDeviceToDevice, this->streams[STREAM][1]));
                         gpu_error_check(cudaEventRecord(memcpy_done, this->streams[STREAM][1]));
                     }
                 }

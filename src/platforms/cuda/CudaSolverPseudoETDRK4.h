@@ -45,6 +45,7 @@
 #include "CudaFFT.h"
 #include "FFT.h"
 #include "ETDRK4Coefficients.h"
+#include "SpaceGroup.h"
 
 /**
  * @class CudaSolverPseudoETDRK4
@@ -123,6 +124,16 @@ private:
     cuDoubleComplex *d_qk_stress[MAX_STREAMS];     ///< Fourier coefficients for stress
     /// @}
 
+    /// @name Space Group Support (reduced basis)
+    /// @{
+    SpaceGroup* space_group_;                       ///< Space group pointer (nullptr if not used)
+    int* d_reduced_basis_indices_;                   ///< Device array: reduced → full index mapping
+    int* d_full_to_reduced_map_;                     ///< Device array: full → reduced index mapping
+    int n_basis_;                                    ///< Number of reduced basis points
+    CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
+    CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
+    /// @}
+
 public:
     /**
      * @brief Construct GPU ETDRK4 solver for continuous chains.
@@ -139,6 +150,17 @@ public:
      * @brief Destructor. Frees GPU memory and cuFFT plans.
      */
     ~CudaSolverPseudoETDRK4();
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, advance_propagator handles expand/reduce internally.
+     */
+    void set_space_group(
+        SpaceGroup* sg,
+        int* d_reduced_basis_indices,
+        int* d_full_to_reduced_map,
+        int n_basis) override;
 
     /** @brief Update Fourier-space operators for new box dimensions. */
     void update_laplacian_operator() override;

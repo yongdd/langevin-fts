@@ -49,6 +49,7 @@
 #include "FiniteDifference.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
+#include "SpaceGroup.h"
 
 /**
  * @brief Device function: max of two integers.
@@ -286,6 +287,16 @@ private:
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
+    /// @name Space group support (reduced basis)
+    /// @{
+    SpaceGroup* space_group_;           ///< Space group pointer (nullptr if not used)
+    int* d_reduced_basis_indices_;      ///< Device array: reduced → full index mapping
+    int* d_full_to_reduced_map_;        ///< Device array: full → reduced index mapping
+    int n_basis_;                       ///< Number of reduced basis points
+    double *d_q_full_in_[MAX_STREAMS];  ///< Work buffer: full grid input (per stream)
+    double *d_q_full_out_[MAX_STREAMS]; ///< Work buffer: full grid output (per stream)
+    /// @}
+
     /// @name Tridiagonal Coefficients per ds_index per monomer_type
     /// Nested map structure: [ds_index][monomer_type] -> coefficient array (device)
     /// @{
@@ -414,6 +425,18 @@ public:
      * @brief Destructor. Frees GPU resources.
      */
     ~CudaSolverCNADI();
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When set, input/output are in reduced basis and the solver expands/reduces
+     * internally around finite-difference operations.
+     */
+    void set_space_group(
+        SpaceGroup* sg,
+        int* d_reduced_basis_indices,
+        int* d_full_to_reduced_map,
+        int n_basis) override;
 
     /** @brief Update finite difference coefficients for new box. */
     void update_laplacian_operator() override;

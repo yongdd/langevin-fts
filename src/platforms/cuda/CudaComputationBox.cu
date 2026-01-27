@@ -185,16 +185,36 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     T sum{0.0};
 
-    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
-    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
+    if (this->space_group_ != nullptr)
+    {
+        // Reduced basis mode: sum = Σ_j g[j] * h[j] * orbit_counts[j] * dv_base
+        int N = this->n_irreducible_;
+        double dv_base = this->volume / this->total_grid;
 
-    if constexpr (std::is_same<T, double>::value)
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, N);
+        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_orbit_counts_, N);
+
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum * static_cast<T>(dv_base);
+    }
     else
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+    {
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
 
-    gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
-    return sum;
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum;
+    }
 }
 //-----------------------------------------------------------
 template <typename T>
@@ -204,16 +224,35 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     T sum{0.0};
 
-    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
-    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
-    ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, this->total_grid);
-    if constexpr (std::is_same<T, double>::value)
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
-    else
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+    if (this->space_group_ != nullptr)
+    {
+        int N = this->n_irreducible_;
+        double dv_base = this->volume / this->total_grid;
 
-    gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
-    return sum;
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, N);
+        ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, N);
+        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_orbit_counts_, N);
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum * static_cast<T>(dv_base);
+    }
+    else
+    {
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
+        ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, this->total_grid);
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        return sum;
+    }
 }
 //-----------------------------------------------------------
 template <typename T>
