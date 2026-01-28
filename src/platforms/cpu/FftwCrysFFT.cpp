@@ -10,6 +10,8 @@
 #include <cmath>
 #include <stdexcept>
 #include <cstring>
+#include <vector>
+#include <memory>
 
 #include "FftwCrysFFT.h"
 #include "Exception.h"
@@ -213,26 +215,97 @@ void FftwCrysFFT::generateBoltzmann(double ds)
 //------------------------------------------------------------------------------
 void FftwCrysFFT::diffusion(double* q_in, double* q_out)
 {
-    // Step 1: Copy input to io_buffer
-    std::memcpy(io_buffer_, q_in, sizeof(double) * M_physical_);
+    struct AlignedDeleter {
+        void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
+    };
+    struct ThreadBuffers {
+        std::unique_ptr<double, AlignedDeleter> io;
+        std::unique_ptr<double, AlignedDeleter> temp;
+        int size = 0;
+    };
 
-    // Step 2: Forward DCT-II
-    fftw_execute(plan_forward_);
+    thread_local ThreadBuffers buffers;
+    if (buffers.size != M_physical_)
+    {
+        buffers.io.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+        buffers.temp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+        if (!buffers.io || !buffers.temp)
+        {
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFT.");
+        }
+        buffers.size = M_physical_;
+    }
 
-    // Step 3: Apply Boltzmann factor
-    #pragma omp parallel for
+    // Step 1: Copy input
+    std::memcpy(buffers.io.get(), q_in, sizeof(double) * M_physical_);
+
+    // Step 2: Forward DCT-II (new-array execute)
+    fftw_execute_r2r(plan_forward_, buffers.io.get(), buffers.temp.get());
+
+    // Step 3: Apply Boltzmann factor (no internal threading)
+    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
     {
-        temp_buffer_[i] *= boltz_current_[i];
+        buffers.temp.get()[i] *= boltz_current_[i];
+    }
+
+    // Step 4: Backward DCT-III (new-array execute)
+    fftw_execute_r2r(plan_backward_, buffers.temp.get(), buffers.io.get());
+
+    // Step 5: Apply normalization and copy result to output (no internal threading)
+    #pragma omp simd
+    for (int i = 0; i < M_physical_; ++i)
+    {
+        q_out[i] = buffers.io.get()[i] * norm_factor_;
+    }
+}
+
+//------------------------------------------------------------------------------
+// Apply custom multiplier in Fourier space
+//------------------------------------------------------------------------------
+void FftwCrysFFT::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
+{
+    struct AlignedDeleter {
+        void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
+    };
+    struct ThreadBuffers {
+        std::unique_ptr<double, AlignedDeleter> io;
+        std::unique_ptr<double, AlignedDeleter> temp;
+        int size = 0;
+    };
+
+    thread_local ThreadBuffers buffers;
+    if (buffers.size != M_physical_)
+    {
+        buffers.io.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+        buffers.temp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+        if (!buffers.io || !buffers.temp)
+        {
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFT.");
+        }
+        buffers.size = M_physical_;
+    }
+
+    // Step 1: Copy input
+    std::memcpy(buffers.io.get(), q_in, sizeof(double) * M_physical_);
+
+    // Step 2: Forward DCT-II
+    fftw_execute_r2r(plan_forward_, buffers.io.get(), buffers.temp.get());
+
+    // Step 3: Apply multiplier (no internal threading)
+    #pragma omp simd
+    for (int i = 0; i < M_physical_; ++i)
+    {
+        buffers.temp.get()[i] *= multiplier[i];
     }
 
     // Step 4: Backward DCT-III
-    fftw_execute(plan_backward_);
+    fftw_execute_r2r(plan_backward_, buffers.temp.get(), buffers.io.get());
 
-    // Step 5: Apply normalization and copy result to output
-    #pragma omp parallel for
+    // Step 5: Apply normalization and copy result to output (no internal threading)
+    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
     {
-        q_out[i] = io_buffer_[i] * norm_factor_;
+        q_out[i] = buffers.io.get()[i] * norm_factor_;
     }
 }

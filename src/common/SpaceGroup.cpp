@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <numeric>
 #include <unordered_map>
+#include <limits>
 
 extern "C" {
 #include <spglib.h>
@@ -501,4 +502,85 @@ bool SpaceGroup::has_mirror_planes_xyz(double tol) const
     }
 
     return has_x && has_y && has_z;
+}
+
+bool SpaceGroup::get_m3_translations(std::array<double, 9>& g, double tol) const
+{
+    auto wrap01 = [](double v) {
+        v -= std::floor(v);
+        if (v < 0.0)
+            v += 1.0;
+        return v;
+    };
+    auto wrap_half = [](double v) {
+        // Map to [-0.5, 0.5) for norm comparison
+        v -= std::floor(v + 0.5);
+        return v;
+    };
+    auto norm2 = [&](const std::array<double, 3>& t) {
+        double x = wrap_half(t[0]);
+        double y = wrap_half(t[1]);
+        double z = wrap_half(t[2]);
+        return x * x + y * y + z * z;
+    };
+
+    bool found_x = false;
+    bool found_y = false;
+    bool found_z = false;
+    double best_x = std::numeric_limits<double>::infinity();
+    double best_y = std::numeric_limits<double>::infinity();
+    double best_z = std::numeric_limits<double>::infinity();
+
+    for (size_t i = 0; i < rotations_.size(); ++i)
+    {
+        const auto& R = rotations_[i];
+        const auto& t = translations_[i];
+
+        const bool off_diag_zero =
+            R[0][1] == 0 && R[0][2] == 0 &&
+            R[1][0] == 0 && R[1][2] == 0 &&
+            R[2][0] == 0 && R[2][1] == 0;
+
+        if (!off_diag_zero)
+            continue;
+
+        const std::array<double, 3> t_val = {t[0], t[1], t[2]};
+        const double t_norm = norm2(t_val);
+
+        if (R[0][0] == 1 && R[1][1] == 1 && R[2][2] == -1)
+        {
+            if (!found_z || t_norm + tol < best_z)
+            {
+                g[0] = wrap01(t[0]);
+                g[1] = wrap01(t[1]);
+                g[2] = wrap01(t[2]);
+                best_z = t_norm;
+                found_z = true;
+            }
+        }
+        if (R[0][0] == 1 && R[1][1] == -1 && R[2][2] == 1)
+        {
+            if (!found_y || t_norm + tol < best_y)
+            {
+                g[3] = wrap01(t[0]);
+                g[4] = wrap01(t[1]);
+                g[5] = wrap01(t[2]);
+                best_y = t_norm;
+                found_y = true;
+            }
+        }
+        if (R[0][0] == -1 && R[1][1] == 1 && R[2][2] == 1)
+        {
+            if (!found_x || t_norm + tol < best_x)
+            {
+                g[6] = wrap01(t[0]);
+                g[7] = wrap01(t[1]);
+                g[8] = wrap01(t[2]);
+                best_x = t_norm;
+                found_x = true;
+            }
+        }
+    }
+
+    return found_x && found_y && found_z;
 }

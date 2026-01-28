@@ -115,13 +115,34 @@ protected:
     std::vector<T> q_full_in_;   ///< Input buffer for full grid FFT
     std::vector<T> q_full_out_;  ///< Output buffer for full grid FFT
 
+    enum class CrysFFTMode
+    {
+        None,
+        PmmmDct,
+        Recursive3m
+    };
+
     std::unique_ptr<FftwCrysFFT> crysfft_pmmm_;
     std::unique_ptr<FftwCrysFFTRecursive3m> crysfft_recursive_;
-    bool use_crysfft_pmmm_ = false;
+    CrysFFTMode crysfft_mode_ = CrysFFTMode::None;
     std::map<int, double> ds_values_;
 
-    std::vector<int> crysfft_pmmm_full_indices_;
-    std::vector<int> crysfft_pmmm_reduced_indices_;
+    std::vector<int> crysfft_full_indices_;
+    std::vector<int> crysfft_reduced_indices_;
+    std::vector<double> crysfft_kx2_;
+    std::vector<double> crysfft_ky2_;
+    std::vector<double> crysfft_kz2_;
+    std::array<double, 3> crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
+
+    bool use_crysfft() const { return crysfft_mode_ != CrysFFTMode::None; }
+    bool use_crysfft_recursive() const { return crysfft_mode_ == CrysFFTMode::Recursive3m; }
+    bool use_crysfft_pmmm() const { return crysfft_mode_ == CrysFFTMode::PmmmDct; }
+
+    int get_crysfft_physical_size() const;
+    void crysfft_set_cell_para(const std::array<double, 6>& cell_para);
+    void crysfft_set_contour_step(double coeff);
+    void crysfft_diffusion(double* q_in, double* q_out) const;
+    void update_crysfft_k_cache();
 
     /**
      * @brief Perform forward transform.
@@ -320,8 +341,8 @@ protected:
      *
      * Requires Pmmm mirror symmetry and 3D periodic BC.
      */
-    void fill_pmmm_from_reduced(const double* reduced_in, double* pmmm_out) const;
-    void reduce_pmmm_to_reduced(const double* pmmm_in, double* reduced_out) const;
+    void fill_crysfft_from_reduced(const double* reduced_in, double* phys_out) const;
+    void reduce_crysfft_to_reduced(const double* phys_in, double* reduced_out) const;
 
     /**
      * @brief Update Fourier-space operators.

@@ -26,11 +26,22 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <mutex>
 #include <fftw3.h>
 
 class FftwCrysFFTRecursive3m
 {
 public:
+    enum class MultiplierType
+    {
+        Kx2,
+        Ky2,
+        Kz2,
+        ExpKx2,
+        ExpKy2,
+        ExpKz2
+    };
+
     FftwCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para,
@@ -42,6 +53,8 @@ public:
     void set_contour_step(double coeff);
 
     void diffusion(const double* q_in, double* q_out) const;
+
+    void apply_multiplier(const double* q_in, double* q_out, MultiplierType type, double coeff) const;
 
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }
     const std::array<int, 3>& get_nx_physical() const { return nx_physical_; }
@@ -73,12 +86,23 @@ private:
     const KCache* k_current_ = nullptr;
     double coeff_current_ = 0.0;
 
+    mutable std::map<double, KCache> exp_kx2_cache_;
+    mutable std::map<double, KCache> exp_ky2_cache_;
+    mutable std::map<double, KCache> exp_kz2_cache_;
+    mutable std::unique_ptr<KCache> kx2_cache_;
+    mutable std::unique_ptr<KCache> ky2_cache_;
+    mutable std::unique_ptr<KCache> kz2_cache_;
+    mutable std::mutex cache_mutex_;
+
     fftw_plan plan_forward_ = nullptr;
     fftw_plan plan_backward_ = nullptr;
 
     void init_fft_plans();
     void generate_twiddle_factors();
     void generate_k_cache(double coeff);
+    KCache generate_k_cache_from_multiplier(MultiplierType type, double coeff) const;
+    const KCache& get_multiplier_cache(MultiplierType type, double coeff) const;
+    void apply_with_cache(const KCache& cache, const double* q_in, double* q_out) const;
 
     // No public expansion helpers; mapping is handled by callers.
 };

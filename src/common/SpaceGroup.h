@@ -164,6 +164,25 @@ public:
      * y->-y, and z->-z with zero translation (modulo lattice).
      */
     bool has_mirror_planes_xyz(double tol = 1e-10) const;
+
+    /**
+     * @brief Get translational parts for 3m symmetry planes (x,y,z).
+     *
+     * Searches symmetry operations for reflections:
+     *  - z-plane: (x,y,z) -> (x,y,-z) + t_z
+     *  - y-plane: (x,y,z) -> (x,-y,z) + t_y
+     *  - x-plane: (x,y,z) -> (-x,y,z) + t_x
+     *
+     * The translational parts are returned as a 9-element array:
+     *   [t_zx, t_zy, t_zz,  t_yx, t_yy, t_yz,  t_xx, t_xy, t_xz]
+     *
+     * Values are normalized to [0, 1).
+     *
+     * @param g Output array of translational parts.
+     * @param tol Tolerance for matching rotations.
+     * @return True if all three symmetry planes are found.
+     */
+    bool get_m3_translations(std::array<double, 9>& g, double tol = 1e-10) const;
 };
 
 #endif // SPACE_GROUP_H_

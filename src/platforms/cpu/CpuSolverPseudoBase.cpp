@@ -19,6 +19,7 @@
 #include <complex>
 #include <cstring>
 #include <type_traits>
+#include <algorithm>
 
 #include "CpuSolverPseudoBase.h"
 
@@ -120,6 +121,18 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
 {
     space_group_ = sg;
 
+    auto reset_crysfft = [&]() {
+        crysfft_mode_ = CrysFFTMode::None;
+        crysfft_pmmm_.reset();
+        crysfft_recursive_.reset();
+        crysfft_full_indices_.clear();
+        crysfft_reduced_indices_.clear();
+        crysfft_kx2_.clear();
+        crysfft_ky2_.clear();
+        crysfft_kz2_.clear();
+        crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
+    };
+
     if (sg != nullptr)
     {
         // Allocate full grid buffers for expand/reduce around FFT
@@ -130,46 +143,91 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         // Initialize crystallographic FFT when applicable
         if constexpr (std::is_same_v<T, double>)
         {
-            use_crysfft_pmmm_ = false;
-            crysfft_pmmm_.reset();
-            crysfft_recursive_.reset();
-            crysfft_pmmm_full_indices_.clear();
-            crysfft_pmmm_reduced_indices_.clear();
+            reset_crysfft();
 
-            if (dim_ == 3 && is_periodic_ && cb->is_orthogonal()
-                && space_group_->has_mirror_planes_xyz()
-                && space_group_->get_spacegroup_symbol() == "Pmmm")
+            if (dim_ == 3 && is_periodic_ && cb->is_orthogonal())
             {
-                auto nx = cb->get_nx();
-                if (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0)
+                const auto nx = cb->get_nx();
+                const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
+                if (even_grid)
                 {
                     std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
                     auto lx = cb->get_lx();
                     std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
-                    crysfft_pmmm_ = std::make_unique<FftwCrysFFT>(nx_logical, cell_para);
-                    use_crysfft_pmmm_ = true;
 
-                    const int Nx2 = nx[0] / 2;
-                    const int Ny2 = nx[1] / 2;
-                    const int Nz2 = nx[2] / 2;
-                    const int M_phys = Nx2 * Ny2 * Nz2;
+                    std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0};
+                    const bool has_3m = space_group_->get_m3_translations(trans_part);
+                    const bool has_pmmm = space_group_->has_mirror_planes_xyz();
+                    const bool recursive_ok = ((nx[2] / 2) % 8) == 0;
 
-                    crysfft_pmmm_full_indices_.resize(M_phys);
-                    crysfft_pmmm_reduced_indices_.resize(M_phys);
-
+                    const int M_reduced = space_group_->get_n_irreducible();
                     const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-                    int idx = 0;
-                    for (int ix = 0; ix < Nx2; ++ix)
-                    {
-                        for (int iy = 0; iy < Ny2; ++iy)
+
+                    auto build_mapping = [&](bool even_indices) -> bool {
+                        const int Nx2 = nx[0] / 2;
+                        const int Ny2 = nx[1] / 2;
+                        const int Nz2 = nx[2] / 2;
+                        const int M_phys = Nx2 * Ny2 * Nz2;
+
+                        crysfft_full_indices_.resize(M_phys);
+                        crysfft_reduced_indices_.resize(M_phys);
+
+                        std::vector<int> coverage(M_reduced, 0);
+                        int idx = 0;
+                        for (int ix = 0; ix < Nx2; ++ix)
                         {
-                            for (int iz = 0; iz < Nz2; ++iz)
+                            const int fx = even_indices ? (2 * ix) : ix;
+                            for (int iy = 0; iy < Ny2; ++iy)
                             {
-                                int full_idx = (ix * nx[1] + iy) * nx[2] + iz;
-                                crysfft_pmmm_full_indices_[idx] = full_idx;
-                                crysfft_pmmm_reduced_indices_[idx] = full_to_reduced[full_idx];
-                                ++idx;
+                                const int fy = even_indices ? (2 * iy) : iy;
+                                for (int iz = 0; iz < Nz2; ++iz)
+                                {
+                                    const int fz = even_indices ? (2 * iz) : iz;
+                                    const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
+                                    crysfft_full_indices_[idx] = full_idx;
+                                    const int reduced_idx = full_to_reduced[full_idx];
+                                    crysfft_reduced_indices_[idx] = reduced_idx;
+                                    coverage[reduced_idx] += 1;
+                                    ++idx;
+                                }
                             }
+                        }
+
+                        for (int i = 0; i < M_reduced; ++i)
+                        {
+                            if (coverage[i] == 0)
+                                return false;
+                        }
+                        return true;
+                    };
+
+                    if (has_3m && recursive_ok)
+                    {
+                        crysfft_recursive_ = std::make_unique<FftwCrysFFTRecursive3m>(nx_logical, cell_para, trans_part);
+                        if (build_mapping(true))
+                        {
+                            crysfft_mode_ = CrysFFTMode::Recursive3m;
+                        }
+                        else
+                        {
+                            crysfft_recursive_.reset();
+                            crysfft_full_indices_.clear();
+                            crysfft_reduced_indices_.clear();
+                        }
+                    }
+
+                    if (crysfft_mode_ == CrysFFTMode::None && has_pmmm)
+                    {
+                        crysfft_pmmm_ = std::make_unique<FftwCrysFFT>(nx_logical, cell_para);
+                        if (build_mapping(false))
+                        {
+                            crysfft_mode_ = CrysFFTMode::PmmmDct;
+                        }
+                        else
+                        {
+                            crysfft_pmmm_.reset();
+                            crysfft_full_indices_.clear();
+                            crysfft_reduced_indices_.clear();
                         }
                     }
                 }
@@ -186,11 +244,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
 
         if constexpr (std::is_same_v<T, double>)
         {
-            use_crysfft_pmmm_ = false;
-            crysfft_pmmm_.reset();
-            crysfft_recursive_.reset();
-            crysfft_pmmm_full_indices_.clear();
-            crysfft_pmmm_reduced_indices_.clear();
+            reset_crysfft();
         }
     }
 }
@@ -224,59 +278,147 @@ double CpuSolverPseudoBase<T>::get_effective_diffusion_coeff(
 }
 
 //------------------------------------------------------------------------------
-// Pmmm grid helpers (reduced basis <-> Pmmm physical grid)
+// CrysFFT grid helpers (reduced basis <-> physical grid)
 //------------------------------------------------------------------------------
 template <typename T>
-void CpuSolverPseudoBase<T>::fill_pmmm_from_reduced(const double* reduced_in, double* pmmm_out) const
+void CpuSolverPseudoBase<T>::fill_crysfft_from_reduced(const double* reduced_in, double* phys_out) const
 {
-    if (!use_crysfft_pmmm_ || !crysfft_pmmm_)
-        throw_with_line_number("CrysFFT Pmmm requested but crysfft_pmmm_ is not initialized.");
+    if (!use_crysfft())
+        throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
-    const int M_phys = crysfft_pmmm_->get_M_physical();
+    const int M_phys = get_crysfft_physical_size();
     for (int i = 0; i < M_phys; ++i)
     {
-        pmmm_out[i] = reduced_in[crysfft_pmmm_reduced_indices_[i]];
+        phys_out[i] = reduced_in[crysfft_reduced_indices_[i]];
     }
 }
 
 template <typename T>
-void CpuSolverPseudoBase<T>::reduce_pmmm_to_reduced(const double* pmmm_in, double* reduced_out) const
+void CpuSolverPseudoBase<T>::reduce_crysfft_to_reduced(const double* phys_in, double* reduced_out) const
 {
-    if (!use_crysfft_pmmm_ || !crysfft_pmmm_)
-        throw_with_line_number("CrysFFT Pmmm requested but crysfft_pmmm_ is not initialized.");
+    if (!use_crysfft())
+        throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
-    // Expand the Pmmm physical grid back to the full grid using mirror symmetry,
-    // then use SpaceGroup reduction (which selects the representative index).
-    const std::vector<int>& nx = cb->get_nx();
-    const int Nx = nx[0];
-    const int Ny = nx[1];
-    const int Nz = nx[2];
-    const int Nx2 = Nx / 2;
-    const int Ny2 = Ny / 2;
-    const int Nz2 = Nz / 2;
-    const int M_full = cb->get_total_grid();
+    const int M_reduced = space_group_->get_n_irreducible();
+    std::fill(reduced_out, reduced_out + M_reduced, 0.0);
 
-    thread_local std::vector<double> full_buffer;
-    if (static_cast<int>(full_buffer.size()) != M_full)
-        full_buffer.resize(M_full);
-
-    for (int ix = 0; ix < Nx; ++ix)
+    const int M_phys = get_crysfft_physical_size();
+    for (int i = 0; i < M_phys; ++i)
     {
-        const int ixp = (ix < Nx2) ? ix : (Nx - 1 - ix);
-        for (int iy = 0; iy < Ny; ++iy)
+        reduced_out[crysfft_reduced_indices_[i]] = phys_in[i];
+    }
+}
+
+//------------------------------------------------------------------------------
+// CrysFFT helpers
+//------------------------------------------------------------------------------
+template <typename T>
+int CpuSolverPseudoBase<T>::get_crysfft_physical_size() const
+{
+    if (use_crysfft_recursive() && crysfft_recursive_)
+        return crysfft_recursive_->get_M_physical();
+    if (use_crysfft_pmmm() && crysfft_pmmm_)
+        return crysfft_pmmm_->get_M_physical();
+    throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::crysfft_set_cell_para(const std::array<double, 6>& cell_para)
+{
+    if (use_crysfft_recursive() && crysfft_recursive_)
+        crysfft_recursive_->set_cell_para(cell_para);
+    if (use_crysfft_pmmm() && crysfft_pmmm_)
+        crysfft_pmmm_->set_cell_para(cell_para);
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::crysfft_set_contour_step(double coeff)
+{
+    if (use_crysfft_recursive() && crysfft_recursive_)
+    {
+        crysfft_recursive_->set_contour_step(coeff);
+        return;
+    }
+    if (use_crysfft_pmmm() && crysfft_pmmm_)
+    {
+        crysfft_pmmm_->set_contour_step(coeff);
+        return;
+    }
+    throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::crysfft_diffusion(double* q_in, double* q_out) const
+{
+    if (use_crysfft_recursive() && crysfft_recursive_)
+    {
+        crysfft_recursive_->diffusion(q_in, q_out);
+        return;
+    }
+    if (use_crysfft_pmmm() && crysfft_pmmm_)
+    {
+        crysfft_pmmm_->diffusion(q_in, q_out);
+        return;
+    }
+    throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::update_crysfft_k_cache()
+{
+    if (!use_crysfft_pmmm() || !crysfft_pmmm_)
+        return;
+
+    if (dim_ != 3 || !is_periodic_ || !cb->is_orthogonal())
+        return;
+
+    auto lx = cb->get_lx();
+    if (crysfft_k_cache_lx_[0] == lx[0] &&
+        crysfft_k_cache_lx_[1] == lx[1] &&
+        crysfft_k_cache_lx_[2] == lx[2] &&
+        !crysfft_kx2_.empty())
+    {
+        return;
+    }
+
+    crysfft_k_cache_lx_[0] = lx[0];
+    crysfft_k_cache_lx_[1] = lx[1];
+    crysfft_k_cache_lx_[2] = lx[2];
+
+    const std::vector<int>& nx = cb->get_nx();
+    const int Nx2 = nx[0] / 2;
+    const int Ny2 = nx[1] / 2;
+    const int Nz2 = nx[2] / 2;
+    const int M_phys = get_crysfft_physical_size();
+
+    crysfft_kx2_.assign(M_phys, 0.0);
+    crysfft_ky2_.assign(M_phys, 0.0);
+    crysfft_kz2_.assign(M_phys, 0.0);
+
+    const double factor_x = 2.0 * M_PI / lx[0];
+    const double factor_y = 2.0 * M_PI / lx[1];
+    const double factor_z = 2.0 * M_PI / lx[2];
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        double kx = ix * factor_x;
+        double kx2 = kx * kx;
+        for (int iy = 0; iy < Ny2; ++iy)
         {
-            const int iyp = (iy < Ny2) ? iy : (Ny - 1 - iy);
-            for (int iz = 0; iz < Nz; ++iz)
+            double ky = iy * factor_y;
+            double ky2 = ky * ky;
+            for (int iz = 0; iz < Nz2; ++iz)
             {
-                const int izp = (iz < Nz2) ? iz : (Nz - 1 - iz);
-                const int phys_idx = (ixp * Ny2 + iyp) * Nz2 + izp;
-                const int full_idx = (ix * Ny + iy) * Nz + iz;
-                full_buffer[full_idx] = pmmm_in[phys_idx];
+                double kz = iz * factor_z;
+                double kz2 = kz * kz;
+                crysfft_kx2_[idx] = kx2;
+                crysfft_ky2_[idx] = ky2;
+                crysfft_kz2_[idx] = kz2;
+                ++idx;
             }
         }
     }
-
-    space_group_->to_reduced_basis(full_buffer.data(), reduced_out, 1);
 }
 
 //------------------------------------------------------------------------------
@@ -302,10 +444,14 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
 
         if constexpr (std::is_same_v<T, double>)
         {
-            if (use_crysfft_pmmm_ && crysfft_pmmm_)
+            if (use_crysfft())
             {
                 auto lx = cb->get_lx();
-                crysfft_pmmm_->set_cell_para({lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2});
+                crysfft_set_cell_para({lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2});
+            }
+            if (use_crysfft_pmmm())
+            {
+                update_crysfft_k_cache();
             }
         }
     }
@@ -352,6 +498,145 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
 
         // Get chain-model-specific Boltzmann bond factor
         const double* _boltz_bond = get_stress_boltz_bond(monomer_type, is_half_bond_length);
+
+        // =====================================================================
+        // CrysFFT stress path (reduced grid, no full-grid FFT)
+        // =====================================================================
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (use_crysfft() && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal())
+            {
+                const int M_full = cb->get_total_grid();
+                const int M_reduced = space_group_->get_n_irreducible();
+                const int M_phys = get_crysfft_physical_size();
+                const auto& orbit_counts = space_group_->get_orbit_counts();
+
+                thread_local std::vector<double> phys_q1;
+                thread_local std::vector<double> phys_q2;
+                thread_local std::vector<double> phys_tmp;
+                thread_local std::vector<double> reduced_tmp;
+
+                if (static_cast<int>(phys_q1.size()) != M_phys)
+                {
+                    phys_q1.resize(M_phys);
+                    phys_q2.resize(M_phys);
+                    phys_tmp.resize(M_phys);
+                }
+                if (static_cast<int>(reduced_tmp.size()) != M_reduced)
+                {
+                    reduced_tmp.resize(M_reduced);
+                }
+
+                // Reduced -> physical grid
+                fill_crysfft_from_reduced(q_1, phys_q1.data());
+                fill_crysfft_from_reduced(q_2, phys_q2.data());
+
+                if (use_crysfft_pmmm())
+                {
+                    // Ensure k-space cache for DCT physical grid
+                    update_crysfft_k_cache();
+
+                    auto accumulate_component = [&](const std::vector<double>& multiplier) -> double
+                    {
+                        crysfft_pmmm_->apply_multiplier(phys_q2.data(), phys_tmp.data(), multiplier.data());
+                        reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
+                        double sum = 0.0;
+                        for (int i = 0; i < M_reduced; ++i)
+                            sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
+                        return sum;
+                    };
+
+                    if (_boltz_bond == nullptr)
+                    {
+                        // Continuous chains: no Boltzmann bond factor
+                        double sum_xx = accumulate_component(crysfft_kx2_);
+                        double sum_yy = accumulate_component(crysfft_ky2_);
+                        double sum_zz = accumulate_component(crysfft_kz2_);
+
+                        stress[0] = bond_length_sq * M_full * sum_xx;
+                        stress[1] = bond_length_sq * M_full * sum_yy;
+                        stress[2] = bond_length_sq * M_full * sum_zz;
+                    }
+                    else
+                    {
+                        // Discrete chains: include Boltzmann bond factor in multiplier
+                        const double ds = molecules->get_global_ds();
+                        const double coeff = bond_length_sq * ds / 6.0;
+
+                        thread_local std::vector<double> boltz;
+                        thread_local std::vector<double> multiplier;
+
+                        if (static_cast<int>(boltz.size()) != M_phys)
+                        {
+                            boltz.resize(M_phys);
+                            multiplier.resize(M_phys);
+                        }
+
+                        for (int i = 0; i < M_phys; ++i)
+                        {
+                            double k2 = crysfft_kx2_[i] + crysfft_ky2_[i] + crysfft_kz2_[i];
+                            boltz[i] = std::exp(-k2 * coeff);
+                        }
+
+                        for (int i = 0; i < M_phys; ++i)
+                            multiplier[i] = boltz[i] * crysfft_kx2_[i];
+                        double sum_xx = accumulate_component(multiplier);
+
+                        for (int i = 0; i < M_phys; ++i)
+                            multiplier[i] = boltz[i] * crysfft_ky2_[i];
+                        double sum_yy = accumulate_component(multiplier);
+
+                        for (int i = 0; i < M_phys; ++i)
+                            multiplier[i] = boltz[i] * crysfft_kz2_[i];
+                        double sum_zz = accumulate_component(multiplier);
+
+                        stress[0] = bond_length_sq * M_full * sum_xx;
+                        stress[1] = bond_length_sq * M_full * sum_yy;
+                        stress[2] = bond_length_sq * M_full * sum_zz;
+                    }
+
+                    return stress;
+                }
+                else if (use_crysfft_recursive())
+                {
+                    auto accumulate_component = [&](FftwCrysFFTRecursive3m::MultiplierType type, double coeff) -> double
+                    {
+                        crysfft_recursive_->apply_multiplier(phys_q2.data(), phys_tmp.data(), type, coeff);
+                        reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
+                        double sum = 0.0;
+                        for (int i = 0; i < M_reduced; ++i)
+                            sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
+                        return sum;
+                    };
+
+                    if (_boltz_bond == nullptr)
+                    {
+                        double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kx2, 0.0);
+                        double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Ky2, 0.0);
+                        double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kz2, 0.0);
+
+                        stress[0] = bond_length_sq * M_full * sum_xx;
+                        stress[1] = bond_length_sq * M_full * sum_yy;
+                        stress[2] = bond_length_sq * M_full * sum_zz;
+                    }
+                    else
+                    {
+                        const double ds = molecules->get_global_ds();
+                        const double coeff = bond_length_sq * ds / 6.0;
+
+                        double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKx2, coeff);
+                        double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKy2, coeff);
+                        double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKz2, coeff);
+
+                        stress[0] = bond_length_sq * M_full * sum_xx;
+                        stress[1] = bond_length_sq * M_full * sum_yy;
+                        stress[2] = bond_length_sq * M_full * sum_zz;
+                    }
+
+                    return stress;
+                }
+            }
+        }
 
         // Allocate Fourier coefficient arrays
         int coeff_size = is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;

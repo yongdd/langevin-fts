@@ -239,6 +239,16 @@ void FftwCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_par
     k_cache_.clear();
     k_current_ = nullptr;
     coeff_current_ = 0.0;
+
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        exp_kx2_cache_.clear();
+        exp_ky2_cache_.clear();
+        exp_kz2_cache_.clear();
+        kx2_cache_.reset();
+        ky2_cache_.reset();
+        kz2_cache_.reset();
+    }
 }
 
 void FftwCrysFFTRecursive3m::set_contour_step(double coeff)
@@ -265,6 +275,19 @@ void FftwCrysFFTRecursive3m::diffusion(const double* q_in, double* q_out) const
         throw_with_line_number("FftwCrysFFTRecursive3m::set_contour_step must be called before diffusion().");
     }
 
+    apply_with_cache(*k_current_, q_in, q_out);
+}
+
+void FftwCrysFFTRecursive3m::apply_multiplier(
+    const double* q_in, double* q_out, MultiplierType type, double coeff) const
+{
+    const KCache& cache = get_multiplier_cache(type, coeff);
+    apply_with_cache(cache, q_in, q_out);
+}
+
+void FftwCrysFFTRecursive3m::apply_with_cache(
+    const KCache& cache, const double* q_in, double* q_out) const
+{
     struct ThreadBuffers {
         std::vector<double> iomat;
         std::unique_ptr<fftw_complex, AlignedDeleter> step1;
@@ -294,8 +317,8 @@ void FftwCrysFFTRecursive3m::diffusion(const double* q_in, double* q_out) const
     const int Nz2 = nx_physical_[2];
     const size_t Nz_qua = align_up(static_cast<size_t>(Nz2 / 2 + 1), kAlignment / 8);
 
-    const auto& k_re = k_current_->re;
-    const auto& k_im = k_current_->im;
+    const auto& k_re = cache.re;
+    const auto& k_im = cache.im;
 
     #pragma omp parallel for
     for (int ix = 0; ix < Nx2; ++ix)
@@ -330,6 +353,60 @@ void FftwCrysFFTRecursive3m::diffusion(const double* q_in, double* q_out) const
     fftw_execute_dft_c2r(plan_backward_, buffers.step2.get(), buffers.iomat.data());
 
     std::memcpy(q_out, buffers.iomat.data(), sizeof(double) * M_physical_);
+}
+
+const FftwCrysFFTRecursive3m::KCache& FftwCrysFFTRecursive3m::get_multiplier_cache(
+    MultiplierType type, double coeff) const
+{
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    switch (type)
+    {
+        case MultiplierType::Kx2:
+            if (!kx2_cache_)
+                kx2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *kx2_cache_;
+        case MultiplierType::Ky2:
+            if (!ky2_cache_)
+                ky2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *ky2_cache_;
+        case MultiplierType::Kz2:
+            if (!kz2_cache_)
+                kz2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *kz2_cache_;
+        case MultiplierType::ExpKx2:
+        {
+            auto it = exp_kx2_cache_.find(coeff);
+            if (it == exp_kx2_cache_.end())
+            {
+                auto inserted = exp_kx2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
+                it = inserted.first;
+            }
+            return it->second;
+        }
+        case MultiplierType::ExpKy2:
+        {
+            auto it = exp_ky2_cache_.find(coeff);
+            if (it == exp_ky2_cache_.end())
+            {
+                auto inserted = exp_ky2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
+                it = inserted.first;
+            }
+            return it->second;
+        }
+        case MultiplierType::ExpKz2:
+        {
+            auto it = exp_kz2_cache_.find(coeff);
+            if (it == exp_kz2_cache_.end())
+            {
+                auto inserted = exp_kz2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
+                it = inserted.first;
+            }
+            return it->second;
+        }
+        default:
+            throw_with_line_number("Unsupported multiplier type for FftwCrysFFTRecursive3m.");
+    }
 }
 
 void FftwCrysFFTRecursive3m::init_fft_plans()
@@ -488,4 +565,139 @@ void FftwCrysFFTRecursive3m::generate_k_cache(double coeff)
     }
 
     k_cache_.insert(std::make_pair(coeff, std::move(cache)));
+}
+
+FftwCrysFFTRecursive3m::KCache FftwCrysFFTRecursive3m::generate_k_cache_from_multiplier(
+    MultiplierType type, double coeff) const
+{
+    KCache cache;
+    for (int i = 0; i < 8; ++i)
+    {
+        cache.re[i].reset(alloc_aligned_double(M_physical_));
+        cache.im[i].reset(alloc_aligned_double(M_physical_));
+        if (!cache.re[i] || !cache.im[i])
+        {
+            throw_with_line_number("Failed to allocate K matrix buffers.");
+        }
+    }
+
+    const double Lx = cell_para_[0];
+    const double Ly = cell_para_[1];
+    const double Lz = cell_para_[2];
+
+    std::vector<double> kx(nx_logical_[0]);
+    std::vector<double> ky(nx_logical_[1]);
+    std::vector<double> kz(nx_logical_[2]);
+
+    double factor_Lx = 2.0 * M_PI / Lx;
+    factor_Lx *= factor_Lx;
+    double factor_Ly = 2.0 * M_PI / Ly;
+    factor_Ly *= factor_Ly;
+    double factor_Lz = 2.0 * M_PI / Lz;
+    factor_Lz *= factor_Lz;
+
+    for (int ix = 0; ix < nx_logical_[0]; ++ix)
+    {
+        int temp = (ix > nx_logical_[0] / 2) ? (nx_logical_[0] - ix) : ix;
+        kx[ix] = temp * temp * factor_Lx;
+    }
+    for (int iy = 0; iy < nx_logical_[1]; ++iy)
+    {
+        int temp = (iy > nx_logical_[1] / 2) ? (nx_logical_[1] - iy) : iy;
+        ky[iy] = temp * temp * factor_Ly;
+    }
+    for (int iz = 0; iz < nx_logical_[2]; ++iz)
+    {
+        int temp = (iz > nx_logical_[2] / 2) ? (nx_logical_[2] - iz) : iz;
+        kz[iz] = temp * temp * factor_Lz;
+    }
+
+    std::vector<double> tempmat(static_cast<size_t>(M_logical_));
+    double factor = 1.0 / static_cast<double>(M_logical_);
+
+    #pragma omp parallel for
+    for (int ix = 0; ix < nx_logical_[0]; ++ix)
+    {
+        for (int iy = 0; iy < nx_logical_[1]; ++iy)
+        {
+            size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
+            for (int iz = 0; iz < nx_logical_[2]; ++iz)
+            {
+                double kx2 = kx[ix];
+                double ky2 = ky[iy];
+                double kz2 = kz[iz];
+                double k2 = kx2 + ky2 + kz2;
+                double value = 0.0;
+
+                switch (type)
+                {
+                    case MultiplierType::Kx2:
+                        value = kx2;
+                        break;
+                    case MultiplierType::Ky2:
+                        value = ky2;
+                        break;
+                    case MultiplierType::Kz2:
+                        value = kz2;
+                        break;
+                    case MultiplierType::ExpKx2:
+                        value = std::exp(-k2 * coeff) * kx2;
+                        break;
+                    case MultiplierType::ExpKy2:
+                        value = std::exp(-k2 * coeff) * ky2;
+                        break;
+                    case MultiplierType::ExpKz2:
+                        value = std::exp(-k2 * coeff) * kz2;
+                        break;
+                    default:
+                        value = 0.0;
+                        break;
+                }
+
+                tempmat[base + iz] = value * factor;
+            }
+        }
+    }
+
+    std::array<double*, 8> k_split;
+    for (int i = 0; i < 8; ++i)
+    {
+        k_split[i] = alloc_aligned_double(M_physical_);
+        if (!k_split[i])
+        {
+            throw_with_line_number("Failed to allocate K split buffers.");
+        }
+    }
+
+    mat_split(tempmat.data(), k_split, nx_logical_);
+
+    std::array<int, 3> halfsize = nx_physical_;
+    constexpr std::array<std::pair<int, int>, 4> seq0{{{0,4},{1,5},{2,6},{3,7}}};
+    constexpr std::array<std::pair<int, int>, 4> seq1{{{0,2},{1,3},{4,6},{5,7}}};
+    constexpr std::array<std::pair<int, int>, 4> seq2{{{0,1},{2,3},{4,5},{6,7}}};
+    add_sub_by_seq(k_split, seq0, halfsize);
+    add_sub_by_seq(k_split, seq1, halfsize);
+    add_sub_by_seq(k_split, seq2, halfsize);
+
+    constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
+    mul_add_sub_by_seq(
+        { cache.re[0].get(), cache.re[1].get(), cache.re[2].get(), cache.re[3].get(),
+          cache.re[4].get(), cache.re[5].get(), cache.re[6].get(), cache.re[7].get() },
+        { cache.im[0].get(), cache.im[1].get(), cache.im[2].get(), cache.im[3].get(),
+          cache.im[4].get(), cache.im[5].get(), cache.im[6].get(), cache.im[7].get() },
+        { r_re_[0].get(), r_re_[1].get(), r_re_[2].get(), r_re_[3].get(),
+          r_re_[4].get(), r_re_[5].get(), r_re_[6].get(), r_re_[7].get() },
+        { r_im_[0].get(), r_im_[1].get(), r_im_[2].get(), r_im_[3].get(),
+          r_im_[4].get(), r_im_[5].get(), r_im_[6].get(), r_im_[7].get() },
+        { k_split[0], k_split[1], k_split[2], k_split[3],
+          k_split[4], k_split[5], k_split[6], k_split[7] },
+        seq3,
+        halfsize);
+
+    for (int i = 0; i < 8; ++i)
+    {
+        fftw_free(k_split[i]);
+    }
+
+    return cache;
 }
