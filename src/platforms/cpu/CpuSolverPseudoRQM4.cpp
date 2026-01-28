@@ -118,10 +118,10 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
         ? this->space_group_->get_n_irreducible()
         : M_full;
     const bool use_reduced_basis = (this->space_group_ != nullptr);
-    const bool use_pmmm = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr);
+    const bool use_crysfft = (this->use_crysfft() && this->space_group_ != nullptr);
 
     std::map<std::string, std::vector<T>> w_full_cache;
-    if (use_reduced_basis && !use_pmmm)
+    if (use_reduced_basis && !use_crysfft)
     {
         if constexpr (std::is_same_v<T, double>)
         {
@@ -150,7 +150,7 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            const T* w = (use_reduced_basis && !use_pmmm) ? w_full_cache[monomer_type].data() : item.second;
+            const T* w = (use_reduced_basis && !use_crysfft) ? w_full_cache[monomer_type].data() : item.second;
 
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
@@ -158,7 +158,7 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
             std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
             std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_idx][monomer_type];
 
-            const int M_use = use_pmmm ? M_reduced : M_full;
+            const int M_use = use_crysfft ? M_reduced : M_full;
             exp_dw_vec.resize(M_use);
             exp_dw_half_vec.resize(M_use);
 
@@ -220,11 +220,11 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // ===== Step 1: Full step =====
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            if (this->use_crysfft() && this->space_group_ != nullptr)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
-                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                const int M_phys = this->get_crysfft_physical_size();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);
@@ -232,23 +232,23 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
                 }
 
                 // exp(-w·ds/2) on Pmmm grid
-                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                this->fill_crysfft_from_reduced(q_in, phys_in.data());
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_in[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_in[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
                 }
 
                 double coeff_full = this->get_effective_diffusion_coeff(monomer_type, ds_index, false);
-                this->crysfft_pmmm_->set_contour_step(coeff_full);
-                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+                this->crysfft_set_contour_step(coeff_full);
+                this->crysfft_diffusion(phys_in.data(), phys_out.data());
 
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_out[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
                 }
 
                 q_out1.resize(M_reduced);
-                this->reduce_pmmm_to_reduced(phys_out.data(), q_out1.data());
+                this->reduce_crysfft_to_reduced(phys_out.data(), q_out1.data());
             }
             else
             {
@@ -279,11 +279,11 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // ===== Step 2: Two half steps =====
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            if (this->use_crysfft() && this->space_group_ != nullptr)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
-                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                const int M_phys = this->get_crysfft_physical_size();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);
@@ -291,29 +291,29 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
                 }
 
                 double coeff_half = this->get_effective_diffusion_coeff(monomer_type, ds_index, true);
-                this->crysfft_pmmm_->set_contour_step(coeff_half);
+                this->crysfft_set_contour_step(coeff_half);
 
                 // First half step
-                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                this->fill_crysfft_from_reduced(q_in, phys_in.data());
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_in[i] *= _exp_dw_half[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_in[i] *= _exp_dw_half[this->crysfft_reduced_indices_[i]];
                 }
-                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+                this->crysfft_diffusion(phys_in.data(), phys_out.data());
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_out[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
                 }
 
                 // Second half step
-                this->crysfft_pmmm_->diffusion(phys_out.data(), phys_in.data());
+                this->crysfft_diffusion(phys_out.data(), phys_in.data());
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_in[i] *= _exp_dw_half[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_in[i] *= _exp_dw_half[this->crysfft_reduced_indices_[i]];
                 }
 
                 q_out2.resize(M_reduced);
-                this->reduce_pmmm_to_reduced(phys_in.data(), q_out2.data());
+                this->reduce_crysfft_to_reduced(phys_in.data(), q_out2.data());
             }
             else
             {
@@ -361,7 +361,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 
         // ===== RQM4: Richardson extrapolation =====
         // Result goes into q_out2 (reuse buffer)
-        const int M_out = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr) ? M_reduced : M_full;
+        const int M_out = (this->use_crysfft() && this->space_group_ != nullptr) ? M_reduced : M_full;
         for (int i = 0; i < M_out; ++i)
             q_out2[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 
@@ -377,7 +377,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         {
             if constexpr (std::is_same_v<T, double>)
             {
-                if (this->use_crysfft_pmmm_)
+                if (this->use_crysfft())
                     std::copy(q_out2.begin(), q_out2.begin() + M_out, q_out);
                 else
                     this->space_group_->to_reduced_basis(q_out2.data(), q_out, 1);

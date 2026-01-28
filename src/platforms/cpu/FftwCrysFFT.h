@@ -140,6 +140,19 @@ public:
     void diffusion(double* q_in, double* q_out);
 
     /**
+     * @brief Apply custom multiplier in Fourier space using DCT-II/III.
+     *
+     * Computes: q_out = DCT-III[ multiplier * DCT-II[q_in] ]
+     *
+     * Input/output and multiplier are on the PHYSICAL grid ((N/2)³).
+     *
+     * @param q_in       Input field on physical grid
+     * @param q_out      Output field on physical grid
+     * @param multiplier Real multiplier on physical grid (same size as q_in)
+     */
+    void apply_multiplier(const double* q_in, double* q_out, const double* multiplier);
+
+    /**
      * @brief Get logical grid dimensions.
      */
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

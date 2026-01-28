@@ -119,10 +119,10 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
         ? this->space_group_->get_n_irreducible()
         : M_full;
     const bool use_reduced_basis = (this->space_group_ != nullptr);
-    const bool use_pmmm = (this->use_crysfft_pmmm_ && this->space_group_ != nullptr);
+    const bool use_crysfft = (this->use_crysfft() && this->space_group_ != nullptr);
 
     std::map<std::string, std::vector<T>> w_full_cache;
-    if (use_reduced_basis && !use_pmmm)
+    if (use_reduced_basis && !use_crysfft)
     {
         if constexpr (std::is_same_v<T, double>)
         {
@@ -151,13 +151,13 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            const T* w = (use_reduced_basis && !use_pmmm) ? w_full_cache[monomer_type].data() : item.second;
+            const T* w = (use_reduced_basis && !use_crysfft) ? w_full_cache[monomer_type].data() : item.second;
 
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
             std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
-            const int M_use = use_pmmm ? M_reduced : M_full;
+            const int M_use = use_crysfft ? M_reduced : M_full;
             exp_dw_vec.resize(M_use);
 
             for (int i = 0; i < M_use; ++i)
@@ -212,29 +212,29 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
 
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            if (this->use_crysfft() && this->space_group_ != nullptr)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
-                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                const int M_phys = this->get_crysfft_physical_size();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);
                     phys_out.resize(M_phys);
                 }
 
-                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                this->fill_crysfft_from_reduced(q_in, phys_in.data());
                 double coeff_full = this->get_effective_diffusion_coeff(monomer_type, ds_index, false);
-                this->crysfft_pmmm_->set_contour_step(coeff_full);
-                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+                this->crysfft_set_contour_step(coeff_full);
+                this->crysfft_diffusion(phys_in.data(), phys_out.data());
 
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_out[i] *= _exp_dw[this->crysfft_pmmm_reduced_indices_[i]];
+                    phys_out[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
                 }
 
                 q_full_out_local.resize(M_reduced);
-                this->reduce_pmmm_to_reduced(phys_out.data(), q_full_out_local.data());
+                this->reduce_crysfft_to_reduced(phys_out.data(), q_full_out_local.data());
                 fft_out = q_full_out_local.data();
             }
             else
@@ -255,7 +255,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
 
         // Evaluate exp(-w*ds) in real space and apply mask if provided
         // Combined into single loop to reduce memory traffic
-        if (!(this->use_crysfft_pmmm_ && this->space_group_ != nullptr))
+        if (!(this->use_crysfft() && this->space_group_ != nullptr))
         {
             if (q_mask != nullptr)
             {
@@ -279,7 +279,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         {
             if constexpr (std::is_same_v<T, double>)
             {
-                if (this->use_crysfft_pmmm_)
+            if (this->use_crysfft())
                     std::copy(fft_out, fft_out + M_reduced, q_out);
                 else
                     this->space_group_->to_reduced_basis(fft_out, q_out, 1);
@@ -337,24 +337,24 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft_pmmm_ && this->space_group_ != nullptr)
+            if (this->use_crysfft() && this->space_group_ != nullptr)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
-                const int M_phys = this->crysfft_pmmm_->get_M_physical();
+                const int M_phys = this->get_crysfft_physical_size();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);
                     phys_out.resize(M_phys);
                 }
 
-                this->fill_pmmm_from_reduced(q_in, phys_in.data());
+                this->fill_crysfft_from_reduced(q_in, phys_in.data());
                 double coeff_half = this->get_effective_diffusion_coeff(monomer_type, 0, true);
-                this->crysfft_pmmm_->set_contour_step(coeff_half);
-                this->crysfft_pmmm_->diffusion(phys_in.data(), phys_out.data());
+                this->crysfft_set_contour_step(coeff_half);
+                this->crysfft_diffusion(phys_in.data(), phys_out.data());
 
                 q_full_out_local.resize(M_reduced);
-                this->reduce_pmmm_to_reduced(phys_out.data(), q_full_out_local.data());
+                this->reduce_crysfft_to_reduced(phys_out.data(), q_full_out_local.data());
                 fft_out = q_full_out_local.data();
             }
             else
@@ -378,7 +378,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         {
             if constexpr (std::is_same_v<T, double>)
             {
-                if (this->use_crysfft_pmmm_)
+                if (this->use_crysfft())
                     std::copy(fft_out, fft_out + M_reduced, q_out);
                 else
                     this->space_group_->to_reduced_basis(fft_out, q_out, 1);
