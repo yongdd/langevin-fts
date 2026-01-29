@@ -98,6 +98,7 @@ private:
     cufftHandle plan_;           ///< cuFFT plan
     double* d_work_;             ///< Work buffer
     double* d_x1_;               ///< Auxiliary buffer
+    cudaStream_t stream_{0};     ///< CUDA stream for execution
     bool initialized_;
 
 public:
@@ -114,6 +115,12 @@ public:
      * @param d_data Device array
      */
     void execute(double* d_data);
+    void execute(double* d_data, cudaStream_t stream);
+
+    /**
+     * @brief Set CUDA stream for execution.
+     */
+    void set_stream(cudaStream_t stream);
 
     /**
      * @brief Get the input/output size.
@@ -163,6 +170,7 @@ private:
     double* d_x1_;               ///< Auxiliary buffer
 
     bool initialized_;
+    cudaStream_t stream_{0};     ///< CUDA stream for execution
 
     void init();
 
@@ -212,6 +220,12 @@ public:
      * @param d_data Device array
      */
     void execute(double* d_data);
+    void execute(double* d_data, cudaStream_t stream);
+
+    /**
+     * @brief Set CUDA stream for execution.
+     */
+    void set_stream(cudaStream_t stream);
 
     /**
      * @brief Get the input/output size.
@@ -268,6 +282,7 @@ private:
     double* d_x1_;               ///< Auxiliary buffer
 
     bool initialized_;
+    cudaStream_t stream_{0};     ///< CUDA stream for execution
 
     void init();
 
@@ -331,6 +346,12 @@ public:
      * @param d_data Device array
      */
     void execute(double* d_data);
+    void execute(double* d_data, cudaStream_t stream);
+
+    /**
+     * @brief Set CUDA stream for execution.
+     */
+    void set_stream(cudaStream_t stream);
 
     /**
      * @brief Get the input/output size.

@@ -54,20 +54,20 @@ def test_propagator_computation_reduced_basis():
 
     # Create space group (Im-3m)
     sg = _core.SpaceGroup(nx, "Im-3m", 529)
-    n_irreducible = sg.get_n_irreducible()
+    n_reduced = sg.get_n_reduced_basis()
 
     # Create optimizer and propagator computation WITH space group (passed to constructor)
     optimizer = factory.create_propagator_computation_optimizer(molecules, False)
     propagator = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", sg)
 
     # Test with space group
-    assert propagator.get_cb().get_n_basis() == n_irreducible, f"n_grid should equal {n_irreducible} with space group"
-    print(f"  With space group: n_grid = {propagator.get_cb().get_n_basis()} (n_irreducible = {n_irreducible})")
+    assert propagator.get_cb().get_n_basis() == n_reduced, f"n_grid should equal {n_reduced} with space group"
+    print(f"  With space group: n_grid = {propagator.get_cb().get_n_basis()} (n_reduced = {n_reduced})")
 
     # Test compute_propagators with reduced basis
     np.random.seed(42)
-    w_A = np.random.randn(n_irreducible) * 0.1
-    w_B = np.random.randn(n_irreducible) * 0.1
+    w_A = np.random.randn(n_reduced) * 0.1
+    w_B = np.random.randn(n_reduced) * 0.1
 
     propagator.compute_propagators({"A": w_A, "B": w_B})
     propagator.compute_concentrations()
@@ -76,8 +76,8 @@ def test_propagator_computation_reduced_basis():
     phi_A = propagator.get_total_concentration("A")
     phi_B = propagator.get_total_concentration("B")
 
-    assert len(phi_A) == n_irreducible, f"phi_A should have size {n_irreducible}"
-    assert len(phi_B) == n_irreducible, f"phi_B should have size {n_irreducible}"
+    assert len(phi_A) == n_reduced, f"phi_A should have size {n_reduced}"
+    assert len(phi_B) == n_reduced, f"phi_B should have size {n_reduced}"
     print(f"  phi_A size: {len(phi_A)}, phi_B size: {len(phi_B)}")
 
     # Test material conservation with weighted mean
@@ -112,24 +112,24 @@ def test_computation_box_reduced_basis():
 
     # Create space group
     sg = _core.SpaceGroup(nx, "Im-3m", 529)
-    n_irreducible = sg.get_n_irreducible()
+    n_reduced = sg.get_n_reduced_basis()
 
     # Set space group on computation box
     cb.set_space_group(sg)
 
-    assert cb.get_n_basis() == n_irreducible, f"cb.get_n_basis() should be {n_irreducible}"
-    print(f"  n_grid = {cb.get_n_basis()} (n_irreducible = {n_irreducible})")
+    assert cb.get_n_basis() == n_reduced, f"cb.get_n_basis() should be {n_reduced}"
+    print(f"  n_grid = {cb.get_n_basis()} (n_reduced = {n_reduced})")
 
     # Test integral with reduced basis (constant field = 1.0)
-    field_ones = np.ones(n_irreducible)
+    field_ones = np.ones(n_reduced)
     integral_result = cb.integral(field_ones)
     expected_integral = volume  # integral of 1 over volume = volume
     assert abs(integral_result - expected_integral) < 1e-10, f"Integral failed: {integral_result} != {expected_integral}"
     print(f"  integral(1) = {integral_result:.6f} (expected: {expected_integral})")
 
     # Test inner_product with reduced basis
-    field_A = np.random.randn(n_irreducible)
-    field_B = np.random.randn(n_irreducible)
+    field_A = np.random.randn(n_reduced)
+    field_B = np.random.randn(n_reduced)
     inner_prod = cb.inner_product(field_A, field_B)
     print(f"  inner_product computed successfully: {inner_prod:.6f}")
 

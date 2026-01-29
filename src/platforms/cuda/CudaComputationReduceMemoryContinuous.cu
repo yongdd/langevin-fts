@@ -76,7 +76,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             PropagatorComputation<T>::set_space_group(space_group);
             // Allocate and copy mapping arrays for solver expand/reduce
             const int M = this->cb->get_total_grid();
-            const int N_reduced = space_group->get_n_irreducible();
+            const int N_reduced = space_group->get_n_reduced_basis();
             gpu_error_check(cudaMalloc((void**)&d_reduced_basis_indices_, sizeof(int)*N_reduced));
             gpu_error_check(cudaMemcpy(d_reduced_basis_indices_, space_group->get_reduced_basis_indices().data(),
                                        sizeof(int)*N_reduced, cudaMemcpyHostToDevice));
@@ -85,7 +85,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                                        sizeof(int)*M, cudaMemcpyHostToDevice));
         }
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // The number of parallel streams is always 1 to reduce the memory usage
         this->n_streams = 1;
@@ -130,7 +130,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                 space_group,
                 d_reduced_basis_indices_,
                 d_full_to_reduced_map_,
-                space_group->get_n_irreducible());
+                space_group->get_n_reduced_basis());
         }
 
         // Allocate memory for propagators
@@ -1325,7 +1325,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
 
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 

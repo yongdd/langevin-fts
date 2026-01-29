@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from polymerfts import PropagatorSolver, SpaceGroup
 
@@ -27,8 +28,8 @@ def load_bcc_fields(path: Path, nx):
     return w_a, w_b
 
 
-def sphere_init(nx, lx):
-    w_a = np.zeros(int(np.prod(nx)), dtype=np.float64)
+def sphere_init(nx, lx, target_std=5.0):
+    w_a = np.zeros(list(nx), dtype=np.float64)
     w_b = np.zeros_like(w_a)
     positions = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
     for x, y, z in positions:
@@ -36,9 +37,14 @@ def sphere_init(nx, lx):
         mx = mx % nx[0]
         my = my % nx[1]
         mz = mz % nx[2]
-        idx = (mx * nx[1] + my) * nx[2] + mz
-        w_a[idx] = -1.0 / (np.prod(lx) / np.prod(nx))
-    return w_a, w_b
+        w_a[mx, my, mz] = -1.0
+    # Smooth to avoid large spikes and rescale to a stable amplitude.
+    w_a = gaussian_filter(w_a, sigma=np.min(nx) / 15, mode="wrap")
+    w_a = w_a - np.mean(w_a)
+    std = np.std(w_a)
+    if std > 0:
+        w_a = w_a * (target_std / std)
+    return w_a.reshape(-1), w_b.reshape(-1)
 
 
 def run_case(use_space_group, nx, lx, ds, f_a, iters, warmup, fields_path, sg, w_full_sym, w_red):
@@ -95,7 +101,7 @@ def main():
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--fields", type=str, default=None)
     parser.add_argument("--space-group-basis", type=str, default="irreducible",
-                        choices=["irreducible", "pmmm-physical"])
+                        choices=["irreducible", "pmmm-physical", "m3-physical"])
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
@@ -106,8 +112,16 @@ def main():
     sg = SpaceGroup(args.nx, "Im-3m", 529)
     if args.space_group_basis == "pmmm-physical":
         sg.enable_pmmm_physical_basis()
+    elif args.space_group_basis == "m3-physical":
+        if hasattr(sg, "enable_m3_physical_basis"):
+            sg.enable_m3_physical_basis()
+        else:
+            raise RuntimeError("SpaceGroup does not support M3 physical basis.")
     if fields_path and fields_path.exists():
-        w_a_full, w_b_full = load_bcc_fields(fields_path, args.nx)
+        try:
+            w_a_full, w_b_full = load_bcc_fields(fields_path, args.nx)
+        except ValueError:
+            w_a_full, w_b_full = sphere_init(args.nx, args.lx)
     else:
         w_a_full, w_b_full = sphere_init(args.nx, args.lx)
 

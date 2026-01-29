@@ -142,7 +142,31 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
     std::cout << "Crystal system: " << crystal_system_ << std::endl;
     std::cout << "Number of symmetry operations: " << n_symmetry_ops_ << std::endl;
     std::cout << "Original mesh size: " << total_grid_ << std::endl;
-    std::cout << "Irreducible mesh size: " << n_irreducible_ << std::endl;
+    std::cout << "Reduced basis size (irreducible): " << n_irreducible_ << std::endl;
+    if (nx_.size() == 3)
+    {
+        const bool even_grid = (nx_[0] % 2 == 0 && nx_[1] % 2 == 0 && nx_[2] % 2 == 0);
+        std::array<double, 9> m3_part = {0,0,0, 0,0,0, 0,0,0};
+        const bool has_m3 = even_grid && get_m3_translations(m3_part);
+        if (even_grid && has_mirror_planes_xyz())
+        {
+            const int pmmm_size = (nx_[0] / 2) * (nx_[1] / 2) * (nx_[2] / 2);
+            std::cout << "Pmmm physical basis size (if enabled): " << pmmm_size << std::endl;
+        }
+        else
+        {
+            std::cout << "Pmmm physical basis size (if enabled): n/a" << std::endl;
+        }
+        if (has_m3)
+        {
+            const int m3_size = (nx_[0] / 2) * (nx_[1] / 2) * (nx_[2] / 2);
+            std::cout << "M3 physical basis size (if enabled): " << m3_size << std::endl;
+        }
+        else
+        {
+            std::cout << "M3 physical basis size (if enabled): n/a" << std::endl;
+        }
+    }
 }
 
 void SpaceGroup::validate_grid()
@@ -408,8 +432,8 @@ void SpaceGroup::find_irreducible_mesh()
 
 void SpaceGroup::to_reduced_basis(const double* full_field, double* reduced_field, int n_fields) const
 {
-    const auto& reduced_indices = use_pmmm_physical_basis_ ? reduced_basis_indices_pmmm_ : reduced_basis_indices_;
-    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+    const auto& reduced_indices = reduced_basis_indices_;
+    const int n_reduced = n_irreducible_;
 
     for (int f = 0; f < n_fields; ++f)
     {
@@ -425,8 +449,8 @@ void SpaceGroup::to_reduced_basis(const double* full_field, double* reduced_fiel
 
 void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_field, int n_fields) const
 {
-    const auto& full_to_reduced = use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
-    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+    const auto& full_to_reduced = full_to_reduced_map_;
+    const int n_reduced = n_irreducible_;
 
     for (int f = 0; f < n_fields; ++f)
     {
@@ -442,9 +466,9 @@ void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_fi
 
 void SpaceGroup::symmetrize(double* field, int n_fields) const
 {
-    const auto& full_to_reduced = use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
-    const auto& orbit_counts = use_pmmm_physical_basis_ ? orbit_counts_pmmm_ : orbit_counts_;
-    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+    const auto& full_to_reduced = full_to_reduced_map_;
+    const auto& orbit_counts = orbit_counts_;
+    const int n_reduced = n_irreducible_;
 
     // Temporary buffer for orbit sums
     std::vector<double> orbit_sums(n_reduced);
@@ -617,10 +641,10 @@ void SpaceGroup::enable_pmmm_physical_basis()
     const int Ny2 = Ny / 2;
     const int Nz2 = Nz / 2;
 
-    n_irreducible_pmmm_ = Nx2 * Ny2 * Nz2;
-    reduced_basis_indices_pmmm_.resize(n_irreducible_pmmm_);
-    full_to_reduced_map_pmmm_.resize(total_grid_);
-    orbit_counts_pmmm_.assign(n_irreducible_pmmm_, 0);
+    n_irreducible_ = Nx2 * Ny2 * Nz2;
+    reduced_basis_indices_.resize(n_irreducible_);
+    full_to_reduced_map_.resize(total_grid_);
+    orbit_counts_.assign(n_irreducible_, 0);
 
     int idx = 0;
     for (int ix = 0; ix < Nx2; ++ix)
@@ -630,7 +654,7 @@ void SpaceGroup::enable_pmmm_physical_basis()
             for (int iz = 0; iz < Nz2; ++iz)
             {
                 const int full_idx = (ix * Ny + iy) * Nz + iz;
-                reduced_basis_indices_pmmm_[idx++] = full_idx;
+                reduced_basis_indices_[idx++] = full_idx;
             }
         }
     }
@@ -646,11 +670,151 @@ void SpaceGroup::enable_pmmm_physical_basis()
                 const int iz2 = (iz < Nz2) ? iz : (Nz - 1 - iz);
                 const int full_idx = (ix * Ny + iy) * Nz + iz;
                 const int reduced_idx = (ix2 * Ny2 + iy2) * Nz2 + iz2;
-                full_to_reduced_map_pmmm_[full_idx] = reduced_idx;
-                orbit_counts_pmmm_[reduced_idx] += 1;
+                full_to_reduced_map_[full_idx] = reduced_idx;
+                orbit_counts_[reduced_idx] += 1;
             }
         }
     }
 
     use_pmmm_physical_basis_ = true;
+    use_m3_physical_basis_ = false;
+    std::cout << "Pmmm physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
+}
+
+void SpaceGroup::enable_m3_physical_basis()
+{
+    if (use_m3_physical_basis_)
+        return;
+
+    if (nx_.size() != 3)
+        throw_with_line_number("M3 physical basis requires 3D grid.");
+
+    const int Nx = nx_[0];
+    const int Ny = nx_[1];
+    const int Nz = nx_[2];
+
+    if ((Nx % 2) != 0 || (Ny % 2) != 0 || (Nz % 2) != 0)
+        throw_with_line_number("M3 physical basis requires even grid dimensions.");
+
+    std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0};
+    if (!get_m3_translations(trans_part))
+        throw_with_line_number("Space group does not contain 3m translations for M3 physical basis.");
+
+    const int Nx2 = Nx / 2;
+    const int Ny2 = Ny / 2;
+    const int Nz2 = Nz / 2;
+
+    n_irreducible_ = Nx2 * Ny2 * Nz2;
+    reduced_basis_indices_.resize(n_irreducible_);
+    full_to_reduced_map_.assign(total_grid_, -1);
+    orbit_counts_.assign(n_irreducible_, 0);
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        const int fx = 2 * ix;
+        for (int iy = 0; iy < Ny2; ++iy)
+        {
+            const int fy = 2 * iy;
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                const int fz = 2 * iz;
+                const int full_idx = (fx * Ny + fy) * Nz + fz;
+                reduced_basis_indices_[idx++] = full_idx;
+            }
+        }
+    }
+
+    struct Op {
+        std::array<int, 3> diag;
+        std::array<double, 3> t;
+    };
+
+    std::vector<Op> ops;
+    ops.reserve(rotations_.size());
+    for (size_t i = 0; i < rotations_.size(); ++i)
+    {
+        const auto& R = rotations_[i];
+        const auto& t = translations_[i];
+        const bool off_diag_zero =
+            R[0][1] == 0 && R[0][2] == 0 &&
+            R[1][0] == 0 && R[1][2] == 0 &&
+            R[2][0] == 0 && R[2][1] == 0;
+        if (!off_diag_zero)
+            continue;
+        if (std::abs(R[0][0]) != 1 || std::abs(R[1][1]) != 1 || std::abs(R[2][2]) != 1)
+            continue;
+        ops.push_back({{R[0][0], R[1][1], R[2][2]}, {t[0], t[1], t[2]}});
+    }
+
+    if (ops.empty())
+        throw_with_line_number("Failed to find diagonal symmetry operations for M3 physical basis.");
+
+    auto wrap01 = [](double v) {
+        v -= std::floor(v);
+        if (v < 0.0)
+            v += 1.0;
+        return v;
+    };
+    auto to_index = [&](double v, int N) {
+        double w = wrap01(v);
+        double scaled = w * static_cast<double>(N);
+        int idx = static_cast<int>(std::floor(scaled + 1e-12));
+        if (idx >= N)
+            idx = 0;
+        return idx;
+    };
+    auto reduced_index = [&](int ix, int iy, int iz) {
+        return ((ix / 2) * Ny2 + (iy / 2)) * Nz2 + (iz / 2);
+    };
+
+    for (int ix = 0; ix < Nx; ++ix)
+    {
+        for (int iy = 0; iy < Ny; ++iy)
+        {
+            for (int iz = 0; iz < Nz; ++iz)
+            {
+                const int full_idx = (ix * Ny + iy) * Nz + iz;
+
+                int reduced_idx = -1;
+                if ((ix % 2 == 0) && (iy % 2 == 0) && (iz % 2 == 0))
+                {
+                    reduced_idx = reduced_index(ix, iy, iz);
+                }
+                else
+                {
+                    const double x = (static_cast<double>(ix) + 0.5) / static_cast<double>(Nx);
+                    const double y = (static_cast<double>(iy) + 0.5) / static_cast<double>(Ny);
+                    const double z = (static_cast<double>(iz) + 0.5) / static_cast<double>(Nz);
+
+                    for (const auto& op : ops)
+                    {
+                        const double x2 = op.diag[0] * x + op.t[0];
+                        const double y2 = op.diag[1] * y + op.t[1];
+                        const double z2 = op.diag[2] * z + op.t[2];
+
+                        const int jx = to_index(x2, Nx);
+                        const int jy = to_index(y2, Ny);
+                        const int jz = to_index(z2, Nz);
+
+                        if ((jx % 2 == 0) && (jy % 2 == 0) && (jz % 2 == 0))
+                        {
+                            reduced_idx = reduced_index(jx, jy, jz);
+                            break;
+                        }
+                    }
+                }
+
+                if (reduced_idx < 0)
+                    throw_with_line_number("Failed to map grid point to M3 physical basis.");
+
+                full_to_reduced_map_[full_idx] = reduced_idx;
+                orbit_counts_[reduced_idx] += 1;
+            }
+        }
+    }
+
+    use_m3_physical_basis_ = true;
+    use_pmmm_physical_basis_ = false;
+    std::cout << "M3 physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
 }

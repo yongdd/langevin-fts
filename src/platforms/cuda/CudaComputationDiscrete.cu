@@ -67,7 +67,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
             PropagatorComputation<T>::set_space_group(space_group);
         }
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
@@ -649,8 +649,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
 
                 if (n_segment_to == 0)
                 {
-                    gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][0]));
-                    gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][1]));
                     continue;
                 }
 
@@ -738,15 +736,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         #endif
                     }
                 }
-                gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][0]));
-                gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][1]));
-                
-                // #ifndef NDEBUG
-                // #pragma omp critical
-                // std::cout << job << " finished, " << 
-                //     std::chrono::duration_cast<std::chrono::microseconds>
-                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                // #endif
+                // Per-job stream sync removed; group-level sync is sufficient for dependencies.
             }
             gpu_error_check(cudaDeviceSynchronize());
         }
@@ -1214,7 +1204,7 @@ void CudaComputationDiscrete<T>::get_chain_propagator(T *q_out, int polymer, int
     // This is made for debugging and testing.
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 

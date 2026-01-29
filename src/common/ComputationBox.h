@@ -193,23 +193,23 @@ protected:
      * @brief Pointer to space group for reduced basis operations.
      *
      * When set, integral(), inner_product(), etc. operate on reduced basis
-     * arrays of size n_irreducible instead of full grid arrays.
+     * arrays of size n_basis instead of full grid arrays.
      */
     SpaceGroup* space_group_;
 
     /**
      * @brief Cached orbit counts from space group.
      *
-     * orbit_counts[i] is the multiplicity of the i-th irreducible point.
+     * orbit_counts[i] is the multiplicity of the i-th reduced-basis point.
      */
     std::vector<int> orbit_counts_;
 
     /**
-     * @brief Number of irreducible mesh points.
+     * @brief Number of reduced-basis points.
      *
      * When space_group_ is nullptr, this equals total_grid.
      */
-    int n_irreducible_;
+    int n_basis_;
 
     /**
      * @brief Compute lattice vectors from box lengths and angles.
@@ -426,7 +426,7 @@ public:
      * @brief Set space group for reduced basis operations.
      *
      * When a space group is set, integral(), inner_product(), multi_inner_product(),
-     * and zero_mean() operate on reduced basis arrays (size n_irreducible) instead
+     * and zero_mean() operate on reduced basis arrays (size n_basis) instead
      * of full grid arrays (size total_grid).
      *
      * @param sg Pointer to SpaceGroup, or nullptr to disable reduced basis mode
@@ -442,10 +442,10 @@ public:
     /**
      * @brief Get the number of grid points for field operations.
      *
-     * Returns n_irreducible if space group is set, otherwise total_grid.
+     * Returns n_basis if space group is set, otherwise total_grid.
      * Use this to determine the expected array size for integral(), inner_product(), etc.
      *
-     * @return Number of grid points (n_irreducible or total_grid)
+     * @return Number of grid points (n_basis or total_grid)
      */
     int get_n_basis() const;
 
@@ -466,7 +466,7 @@ public:
      *
      * When space group IS set (reduced basis mode):
      *   Computes: integral(g) = (V/M) * sum_i orbit_counts[i] * g[i]
-     *   Array size: n_irreducible
+     *   Array size: n_basis
      *
      * @param g Field array (length: get_n_basis())
      * @return Volume integral of g
@@ -492,7 +492,7 @@ public:
      *
      * When space group IS set (reduced basis mode):
      *   Computes: <g|h> = (V/M) * sum_i orbit_counts[i] * g[i] * h[i]
-     *   Array size: n_irreducible
+     *   Array size: n_basis
      *
      * @param g First field array (length: get_n_basis())
      * @param h Second field array (length: get_n_basis())
@@ -521,7 +521,7 @@ public:
      *   Array size per component: total_grid
      *
      * When space group IS set:
-     *   Array size per component: n_irreducible
+     *   Array size per component: n_basis
      *
      * @param n_comp Number of field components
      * @param g First multi-component field (length: n_comp * get_n_basis())

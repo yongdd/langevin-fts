@@ -195,6 +195,12 @@ void CudaCrysFFT::generateBoltzmann(double ds)
 //------------------------------------------------------------------------------
 void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
 {
+    diffusion(d_q_in, d_q_out, stream_);
+}
+
+void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
+{
+    set_stream(stream);
     int threads = 256;
     int blocks = (M_physical_ + threads - 1) / threads;
 
@@ -206,16 +212,28 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
     if (d_q_in != d_q_out)
     {
         // Single copy at start (instead of two copies before/after)
-        gpu_error_check(cudaMemcpy(d_q_out, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
+                                        cudaMemcpyDeviceToDevice, stream_));
     }
 
     // Step 1: Forward DCT-II (in-place)
     dct_forward_->execute(d_work);
 
     // Step 2: Apply Boltzmann factor (in-place)
-    kernel_apply_boltzmann_crys<<<blocks, threads>>>(d_work, d_boltz_current_, M_physical_);
+    kernel_apply_boltzmann_crys<<<blocks, threads, 0, stream_>>>(d_work, d_boltz_current_, M_physical_);
 
     // Step 3: Backward DCT-III (in-place)
     // Normalization is already included in Boltzmann factor (pre-multiplied in generateBoltzmann)
     dct_backward_->execute(d_work);
+}
+
+void CudaCrysFFT::set_stream(cudaStream_t stream)
+{
+    if (stream_ == stream)
+        return;
+    stream_ = stream;
+    if (dct_forward_)
+        dct_forward_->set_stream(stream_);
+    if (dct_backward_)
+        dct_backward_->set_stream(stream_);
 }

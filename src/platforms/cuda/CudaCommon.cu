@@ -444,6 +444,23 @@ __global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDo
     }
 }
 
+__global__ void ker_lin_comb_exp(
+    double* dst,
+    const double* src1, const double* exp1, double a,
+    const double* src2, const double* exp2, double b,
+    const double* mask, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double val = a * (src1[i] * exp1[i]) + b * (src2[i] * exp2[i]);
+        if (mask != nullptr)
+            val *= mask[i];
+        dst[i] = val;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_add_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -682,10 +699,10 @@ __global__ void ker_expand_reduced_basis(
 }
 
 __global__ void ker_reduce_to_basis(
-    double* dst, const double* src, const int* reduced_basis_indices, const int n_irreducible)
+    double* dst, const double* src, const int* reduced_basis_indices, const int n_basis)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    while (i < n_irreducible)
+    while (i < n_basis)
     {
         dst[i] = src[reduced_basis_indices[i]];
         i += blockDim.x * gridDim.x;
@@ -693,10 +710,10 @@ __global__ void ker_reduce_to_basis(
 }
 
 __global__ void ker_reduce_to_basis(
-    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_irreducible)
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_basis)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    while (i < n_irreducible)
+    while (i < n_basis)
     {
         dst[i] = src[reduced_basis_indices[i]];
         i += blockDim.x * gridDim.x;
@@ -715,10 +732,10 @@ __global__ void ker_multi_map(
 }
 
 __global__ void ker_multi_gather(
-    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_irreducible)
+    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_basis)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    while (i < n_irreducible)
+    while (i < n_basis)
     {
         double val = src[reduced_basis_indices[i]];
         dst[i] = val * val * norm;
@@ -727,10 +744,10 @@ __global__ void ker_multi_gather(
 }
 
 __global__ void ker_multi_gather(
-    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_irreducible)
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_basis)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    while (i < n_irreducible)
+    while (i < n_basis)
     {
         cuDoubleComplex val = src[reduced_basis_indices[i]];
         dst[i] = cuCmul(cuCmul(val, val), norm);

@@ -78,7 +78,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         if (space_group != nullptr)
             PropagatorComputation<T>::set_space_group(space_group);
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         this->method = method;
         if(method == "pseudospectral")
@@ -224,7 +224,7 @@ void CpuComputationContinuous<T>::compute_propagators(
     try
     {
         const int M = this->cb->get_total_grid();
-        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_irreducible() : M;
+        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_reduced_basis() : M;
         const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
@@ -496,7 +496,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
     try
     {
         const int M = this->cb->get_total_grid();
-        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_irreducible() : M;
+        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_reduced_basis() : M;
 
         // Calculate segment concentrations
         #pragma omp parallel for num_threads(this->n_streams)
@@ -584,7 +584,7 @@ void CpuComputationContinuous<T>::calculate_phi_one_block(
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
         // Compute segment concentration
@@ -804,7 +804,7 @@ void CpuComputationContinuous<T>::get_chain_propagator(T *q_out, int polymer, in
     // This is made for debugging and testing.
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 

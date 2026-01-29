@@ -113,7 +113,7 @@ void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M_full = this->cb->get_total_grid();
     const int M_reduced = (this->space_group_ != nullptr)
-        ? this->space_group_->get_n_irreducible()
+        ? this->space_group_->get_n_reduced_basis()
         : M_full;
     const bool use_reduced_basis = (this->space_group_ != nullptr);
     const bool use_crysfft = (this->use_crysfft() && this->space_group_ != nullptr);
@@ -176,7 +176,7 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
     {
         const int M_full = this->cb->get_total_grid();
         const int M_reduced = (this->space_group_ != nullptr)
-            ? this->space_group_->get_n_irreducible()
+            ? this->space_group_->get_n_reduced_basis()
             : M_full;
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
@@ -227,6 +227,7 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
                 const int M_phys = this->get_crysfft_physical_size();
+                const bool identity = this->use_crysfft_identity_map();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);
@@ -236,7 +237,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
                 this->fill_crysfft_from_reduced(q_in, phys_in.data());
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_in[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
+                    const int ridx = identity ? i : this->crysfft_reduced_indices_[i];
+                    phys_in[i] *= _exp_dw[ridx];
                 }
 
                 double coeff_full = this->get_effective_diffusion_coeff(monomer_type, ds_index, false);
@@ -245,7 +247,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 
                 for (int i = 0; i < M_phys; ++i)
                 {
-                    phys_out[i] *= _exp_dw[this->crysfft_reduced_indices_[i]];
+                    const int ridx = identity ? i : this->crysfft_reduced_indices_[i];
+                    phys_out[i] *= _exp_dw[ridx];
                 }
 
                 q_full_out_local.resize(M_reduced);

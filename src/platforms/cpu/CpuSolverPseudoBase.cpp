@@ -131,6 +131,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         crysfft_ky2_.clear();
         crysfft_kz2_.clear();
         crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
+        crysfft_identity_map_ = false;
     };
 
     if (sg != nullptr)
@@ -160,7 +161,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                     const bool has_pmmm = space_group_->has_mirror_planes_xyz();
                     const bool recursive_ok = ((nx[2] / 2) % 8) == 0;
 
-                    const int M_reduced = space_group_->get_n_irreducible();
+                    const int M_reduced = space_group_->get_n_reduced_basis();
                     const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
 
                     auto build_mapping = [&](bool even_indices) -> bool {
@@ -171,6 +172,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
 
                         crysfft_full_indices_.resize(M_phys);
                         crysfft_reduced_indices_.resize(M_phys);
+                        crysfft_identity_map_ = false;
 
                         std::vector<int> coverage(M_reduced, 0);
                         int idx = 0;
@@ -198,6 +200,20 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                             if (coverage[i] == 0)
                                 return false;
                         }
+
+                        if (M_reduced == M_phys)
+                        {
+                            bool identity = true;
+                            for (int i = 0; i < M_phys; ++i)
+                            {
+                                if (crysfft_reduced_indices_[i] != i)
+                                {
+                                    identity = false;
+                                    break;
+                                }
+                            }
+                            crysfft_identity_map_ = identity;
+                        }
                         return true;
                     };
 
@@ -213,6 +229,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                             crysfft_recursive_.reset();
                             crysfft_full_indices_.clear();
                             crysfft_reduced_indices_.clear();
+                            crysfft_identity_map_ = false;
                         }
                     }
 
@@ -228,6 +245,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                             crysfft_pmmm_.reset();
                             crysfft_full_indices_.clear();
                             crysfft_reduced_indices_.clear();
+                            crysfft_identity_map_ = false;
                         }
                     }
                 }
@@ -287,7 +305,7 @@ void CpuSolverPseudoBase<T>::fill_crysfft_from_reduced(const double* reduced_in,
         throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
     const int M_phys = get_crysfft_physical_size();
-    if (space_group_ != nullptr && space_group_->using_pmmm_physical_basis() && use_crysfft_pmmm())
+    if (crysfft_identity_map_)
     {
         std::memcpy(phys_out, reduced_in, sizeof(double) * M_phys);
         return;
@@ -305,13 +323,13 @@ void CpuSolverPseudoBase<T>::reduce_crysfft_to_reduced(const double* phys_in, do
         throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
     const int M_phys = get_crysfft_physical_size();
-    if (space_group_ != nullptr && space_group_->using_pmmm_physical_basis() && use_crysfft_pmmm())
+    if (crysfft_identity_map_)
     {
         std::memcpy(reduced_out, phys_in, sizeof(double) * M_phys);
         return;
     }
 
-    const int M_reduced = space_group_->get_n_irreducible();
+    const int M_reduced = space_group_->get_n_reduced_basis();
     std::fill(reduced_out, reduced_out + M_reduced, 0.0);
 
     for (int i = 0; i < M_phys; ++i)
@@ -518,7 +536,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             if (use_crysfft() && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal())
             {
                 const int M_full = cb->get_total_grid();
-                const int M_reduced = space_group_->get_n_irreducible();
+                const int M_reduced = space_group_->get_n_reduced_basis();
                 const int M_phys = get_crysfft_physical_size();
                 const auto& orbit_counts = space_group_->get_orbit_counts();
 

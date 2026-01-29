@@ -263,6 +263,11 @@ __global__ void ker_add_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1,
 __global__ void ker_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
 __global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
+__global__ void ker_lin_comb_exp(
+    double* dst,
+    const double* src1, const double* exp1, double a,
+    const double* src2, const double* exp2, double b,
+    const double* mask, const int M);
 
 __global__ void ker_add_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_add_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
@@ -314,11 +319,11 @@ __global__ void ker_complex_real_multi_bond_four(
 /**
  * @brief Expand reduced basis to full grid.
  *
- * Broadcasts values from n_irreducible points to total_grid points
+ * Broadcasts values from reduced-basis points to total_grid points
  * using the full_to_reduced_map lookup table.
  *
  * @param dst Output full grid array (size: total_grid)
- * @param src Input reduced basis array (size: n_irreducible)
+ * @param src Input reduced basis array (size: n_basis)
  * @param full_to_reduced_map Map from full grid index to reduced basis index
  * @param total_grid Number of full grid points
  */
@@ -331,24 +336,24 @@ __global__ void ker_expand_reduced_basis(
 /**
  * @brief Reduce full grid to reduced basis.
  *
- * Extracts values at irreducible mesh points from full grid.
+ * Extracts values at reduced-basis points from full grid.
  *
- * @param dst Output reduced basis array (size: n_irreducible)
+ * @param dst Output reduced basis array (size: n_basis)
  * @param src Input full grid array (size: total_grid)
- * @param reduced_basis_indices Flat indices of irreducible points
- * @param n_irreducible Number of irreducible points
+ * @param reduced_basis_indices Flat indices of reduced-basis points
+ * @param n_basis Number of reduced-basis points
  */
 __global__ void ker_reduce_to_basis(
-    double* dst, const double* src, const int* reduced_basis_indices, const int n_irreducible);
+    double* dst, const double* src, const int* reduced_basis_indices, const int n_basis);
 
 __global__ void ker_reduce_to_basis(
-    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_irreducible);
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_basis);
 
 /**
  * @brief Multiply physical-grid array by reduced-basis multiplier using mapping.
  *
  * @param dst Physical grid array (size: n_phys)
- * @param reduced_multiplier Reduced basis array (size: n_irreducible)
+ * @param reduced_multiplier Reduced basis array (size: n_basis)
  * @param phys_to_reduced_map Map from physical index to reduced basis index
  * @param n_phys Number of physical grid points
  */
@@ -361,17 +366,17 @@ __global__ void ker_multi_map(
  * Used for solvent concentration computation in reduced basis.
  * More efficient than computing on full grid then reducing (O(N) vs O(M+N)).
  *
- * @param dst Output reduced basis array (size: n_irreducible)
+ * @param dst Output reduced basis array (size: n_basis)
  * @param src Input full grid array (size: total_grid)
- * @param reduced_basis_indices Flat indices of irreducible points
+ * @param reduced_basis_indices Flat indices of reduced-basis points
  * @param norm Normalization factor
- * @param n_irreducible Number of irreducible points
+ * @param n_basis Number of reduced-basis points
  */
 __global__ void ker_multi_gather(
-    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_irreducible);
+    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_basis);
 
 __global__ void ker_multi_gather(
-    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_irreducible);
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_basis);
 
 /**
  * @brief Multiply array by integer weights: dst[i] = src[i] * weights[i]

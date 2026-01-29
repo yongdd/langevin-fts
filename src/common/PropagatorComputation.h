@@ -394,7 +394,7 @@ public:
      * If you are unsure how reduced basis works, see docs/SpaceGroup.md.
      *
      * @param w_reduced Map from monomer type to reduced basis field
-     *                  (size: n_irreducible per field)
+     *                  (size: n_basis per field)
      * @param q_init    Optional: initial conditions for grafted chains
      */
     virtual void compute_propagators_reduced(

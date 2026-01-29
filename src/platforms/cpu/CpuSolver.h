@@ -181,8 +181,8 @@ public:
      * When space_group is set on the solver, input/output are in reduced basis
      * and the solver handles expand/reduce around FFT operations internally.
      *
-     * @param q_in        Input propagator at contour s (size n_grid or n_irreducible)
-     * @param q_out       Output propagator at contour s+ds (size n_grid or n_irreducible)
+     * @param q_in        Input propagator at contour s (size n_grid or n_basis)
+     * @param q_out       Output propagator at contour s+ds (size n_grid or n_basis)
      * @param monomer_type Monomer type determining segment length and field
      * @param q_mask      Optional mask for impenetrable regions (nullptr if none)
      * @param ds_index    Index for the ds value to use (1-based, default: 1 for global ds)
@@ -211,8 +211,8 @@ public:
      * When space_group is set on the solver, input/output are in reduced basis
      * and the solver handles expand/reduce around FFT operations internally.
      *
-     * @param q_in        Input propagator (size n_grid or n_irreducible)
-     * @param q_out       Output propagator (size n_grid or n_irreducible)
+     * @param q_in        Input propagator (size n_grid or n_basis)
+     * @param q_out       Output propagator (size n_grid or n_basis)
      * @param monomer_type Monomer type for segment length
      *
      * @note Only meaningful for discrete chain model. Empty implementation

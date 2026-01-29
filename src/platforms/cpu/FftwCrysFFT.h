@@ -31,7 +31,11 @@
 #define FFTW_CRYS_FFT_H_
 
 #include <array>
+#include <atomic>
+#include <cstdint>
+#include <limits>
 #include <map>
+#include <memory>
 #include <fftw3.h>
 
 /**
@@ -57,10 +61,20 @@ private:
     // Cell parameters (Lx, Ly, Lz, alpha, beta, gamma)
     std::array<double, 6> cell_para_;
 
-    // Boltzmann factors - per ds value
-    std::map<double, double*> boltzmann_;
-    double* boltz_current_;
-    double ds_current_;
+    struct BoltzDeleter {
+        void operator()(double* ptr) const { delete[] ptr; }
+    };
+    struct ThreadState
+    {
+        std::map<double, std::unique_ptr<double, BoltzDeleter>> boltzmann;
+        const double* boltz_current = nullptr;
+        double ds_current = std::numeric_limits<double>::quiet_NaN();
+        uint64_t epoch = 0;
+        uint64_t instance_id = 0;
+    };
+    inline static std::atomic<uint64_t> next_instance_id_{1};
+    uint64_t instance_id_{0};
+    mutable std::atomic<uint64_t> cache_epoch_{1};
 
     // FFTW plans for DCT-II/III
     fftw_plan plan_forward_;    ///< Forward DCT-II (REDFT10)
@@ -77,7 +91,7 @@ private:
      * @brief Generate Boltzmann factors for given ds.
      * @param ds Contour step size
      */
-    void generateBoltzmann(double ds);
+    double* generateBoltzmann(double ds) const;
 
     /**
      * @brief Initialize FFTW DCT-II/III plans.
@@ -88,6 +102,7 @@ private:
      * @brief Free Boltzmann factor memory.
      */
     void freeBoltzmann();
+    ThreadState& get_thread_state() const;
 
 public:
     /**

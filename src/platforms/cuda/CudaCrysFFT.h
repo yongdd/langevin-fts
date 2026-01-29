@@ -27,12 +27,37 @@
 class CudaRealTransform3D;
 
 /**
+ * @brief CrysFFT mode selection for CUDA solvers.
+ */
+enum class CudaCrysFFTMode
+{
+    None,
+    Recursive3m,
+    PmmmDct
+};
+
+/**
+ * @class CudaCrysFFTBase
+ * @brief Abstract base for CUDA crystallographic FFT implementations.
+ */
+class CudaCrysFFTBase
+{
+public:
+    virtual ~CudaCrysFFTBase() = default;
+    virtual void set_cell_para(const std::array<double, 6>& cell_para) = 0;
+    virtual void set_contour_step(double ds) = 0;
+    virtual void diffusion(double* d_q_in, double* d_q_out) = 0;
+    virtual void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) = 0;
+    virtual void set_stream(cudaStream_t stream) = 0;
+};
+
+/**
  * @class CudaCrysFFT
  * @brief CUDA crystallographic FFT using DCT-II/III.
  *
  * Physical grid: (Nx/2) × (Ny/2) × (Nz/2)
  */
-class CudaCrysFFT
+class CudaCrysFFT : public CudaCrysFFTBase
 {
 private:
     std::array<int, 3> nx_logical_;    ///< Logical grid dimensions (Nx, Ny, Nz)
@@ -57,6 +82,7 @@ private:
 
     // Normalization factor
     double norm_factor_;
+    cudaStream_t stream_{0};      ///< CUDA stream for execution
 
     /**
      * @brief Generate Boltzmann factors for given ds.
@@ -100,6 +126,8 @@ public:
      * @param d_q_out Output field on device (physical grid)
      */
     void diffusion(double* d_q_in, double* d_q_out);
+    void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream);
+    void set_stream(cudaStream_t stream);
 
     // Getters
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

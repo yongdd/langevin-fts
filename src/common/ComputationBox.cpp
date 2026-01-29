@@ -224,7 +224,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
 
         // Initialize space group (disabled by default)
         space_group_ = nullptr;
-        n_irreducible_ = total_grid;
+        n_basis_ = total_grid;
     }
     catch(std::exception& exc)
     {
@@ -385,7 +385,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
 
         // Initialize space group (disabled by default)
         space_group_ = nullptr;
-        n_irreducible_ = total_grid;
+        n_basis_ = total_grid;
     }
     catch(std::exception& exc)
     {
@@ -756,14 +756,14 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
 
     if (sg != nullptr)
     {
-        // Cache orbit counts and n_irreducible for fast access
+        // Cache orbit counts and reduced-basis size for fast access
         orbit_counts_ = sg->get_orbit_counts();
-        n_irreducible_ = sg->get_n_irreducible();
+        n_basis_ = sg->get_n_reduced_basis();
 
         // Convert mask to reduced basis
         if (!mask.empty())
         {
-            std::vector<double> mask_reduced(n_irreducible_);
+            std::vector<double> mask_reduced(n_basis_);
             sg->to_reduced_basis(mask.data(), mask_reduced.data(), 1);
             mask = std::move(mask_reduced);
         }
@@ -772,7 +772,7 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
     {
         // Clear cached values
         orbit_counts_.clear();
-        n_irreducible_ = total_grid;
+        n_basis_ = total_grid;
     }
 }
 
@@ -785,7 +785,7 @@ SpaceGroup* ComputationBox<T>::get_space_group() const
 template <typename T>
 int ComputationBox<T>::get_n_basis() const
 {
-    return n_irreducible_;
+    return n_basis_;
 }
 
 template <typename T>
@@ -799,7 +799,7 @@ const std::vector<int>& ComputationBox<T>::get_orbit_counts() const
 /**
  * @brief Compute volume integral of a field.
  *
- * When space_group_ is set, operates on reduced basis (size n_irreducible).
+ * When space_group_ is set, operates on reduced basis (size n_basis).
  * Otherwise, operates on full grid (size total_grid).
  */
 template <typename T>
@@ -811,7 +811,7 @@ T ComputationBox<T>::integral(const T *g)
     {
         // Reduced basis mode
         double dv_base = volume / total_grid;
-        for (int i = 0; i < n_irreducible_; i++)
+        for (int i = 0; i < n_basis_; i++)
             sum += static_cast<T>(orbit_counts_[i]) * g[i];
         return sum * static_cast<T>(dv_base);
     }
@@ -847,7 +847,7 @@ T ComputationBox<T>::inner_product(const T *g, const T *h)
     {
         // Reduced basis mode
         double dv_base = volume / total_grid;
-        for (int i = 0; i < n_irreducible_; i++)
+        for (int i = 0; i < n_basis_; i++)
             sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i];
         return sum * static_cast<T>(dv_base);
     }
@@ -874,7 +874,7 @@ T ComputationBox<T>::inner_product_inverse_weight(const T *g, const T *h, const 
     {
         // Reduced basis mode
         double dv_base = volume / total_grid;
-        for (int i = 0; i < n_irreducible_; i++)
+        for (int i = 0; i < n_basis_; i++)
             sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i] / w[i];
         return sum * static_cast<T>(dv_base);
     }
@@ -903,8 +903,8 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
         double dv_base = volume / total_grid;
         for (int n = 0; n < n_comp; n++)
         {
-            for (int i = 0; i < n_irreducible_; i++)
-                sum += static_cast<T>(orbit_counts_[i]) * g[i + n * n_irreducible_] * h[i + n * n_irreducible_];
+            for (int i = 0; i < n_basis_; i++)
+                sum += static_cast<T>(orbit_counts_[i]) * g[i + n * n_basis_] * h[i + n * n_basis_];
         }
         return sum * static_cast<T>(dv_base);
     }
@@ -934,14 +934,14 @@ void ComputationBox<T>::zero_mean(T *g)
     {
         // Reduced basis mode: compute weighted mean
         int total_count = 0;
-        for (int i = 0; i < n_irreducible_; i++)
+        for (int i = 0; i < n_basis_; i++)
         {
             sum += static_cast<T>(orbit_counts_[i]) * g[i];
             total_count += orbit_counts_[i];
         }
         T mean = sum / static_cast<T>(total_count);
 
-        for (int i = 0; i < n_irreducible_; i++)
+        for (int i = 0; i < n_basis_; i++)
             g[i] -= mean;
     }
     else

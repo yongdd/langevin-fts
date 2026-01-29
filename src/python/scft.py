@@ -365,8 +365,10 @@ class SCFT:
 
         - space_group_basis : str, optional
             Basis used when space_group is set:
-            - 'irreducible' (default): full space-group irreducible basis
+            - 'auto' (default): try 'm3-physical' then 'pmmm-physical', fallback to 'irreducible'
+            - 'irreducible': full space-group irreducible basis
             - 'pmmm-physical': 1/8 physical grid for Pmmm mirror symmetry
+            - 'm3-physical': 1/8 even-index grid for 3m (2x2x2) symmetry
 
         - scale_stress : float, optional
             Scaling factor for stress in box relaxation (default: 1.0).
@@ -732,19 +734,12 @@ class SCFT:
         numerical_method = params.get("numerical_method", "rqm4")
 
         # Create space group object early (before PropagatorSolver) if specified
-        space_group_basis = params.get("space_group_basis", "irreducible")
+        space_group_basis = params.get("space_group_basis", "auto")
         if "space_group" in params:
             if "number" in params["space_group"]:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
-            if space_group_basis == "pmmm-physical":
-                self.sg.enable_pmmm_physical_basis()
-            elif space_group_basis not in ("irreducible", None):
-                raise ValueError(
-                    f"Unknown space_group_basis: {space_group_basis}. "
-                    "Use 'irreducible' or 'pmmm-physical'."
-                )
         else:
             self.sg = None
 
@@ -760,6 +755,7 @@ class SCFT:
             platform=platform,
             reduce_memory=reduce_memory,
             space_group=self.sg,
+            space_group_basis=space_group_basis,
         )
 
         # Set angles if provided (after initialization, before adding polymers)
@@ -842,7 +838,7 @@ class SCFT:
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
             # Using reduced basis from space group symmetry
-            n_reduced = self.sg.get_n_irreducible()
+            n_reduced = self.sg.get_n_reduced_basis()
             if params["box_is_altering"]:
                 n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
             else :
@@ -1604,7 +1600,7 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        # When space group is set, n_grid = n_irreducible; otherwise n_grid = total_grid
+        # When space group is set, n_grid = n_reduced; otherwise n_grid = total_grid
         w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
 
         if self.sg is not None:
