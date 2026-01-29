@@ -80,6 +80,10 @@ Selection order:
 2. **Pmmm DCT** if the space group has mirror planes in x/y/z.
 3. Otherwise, fall back to standard FFT.
 
+The solver always prefers the 3m recursive path when available, and falls back
+to the Pmmm DCT path only when 3m is not supported for the current grid or space
+group.
+
 CrysFFT is used in pseudo-spectral solvers for continuous (RQM4/RK2) and discrete chains (full and half-bond steps), and in the stress computation path when applicable.
 
 ---

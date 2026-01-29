@@ -812,7 +812,7 @@ class SCFT:
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
             # Using reduced basis from space group symmetry
-            n_reduced = self.sg.get_n_reduced_basis()
+            n_reduced = self.sg.get_n_reduced_basis_full()
             if params["box_is_altering"]:
                 n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
             else :
@@ -1141,6 +1141,10 @@ class SCFT:
         M = len(self.monomer_types)
         elapsed_time = {}
 
+        # Field optimizer operates on irreducible grid when space group is set.
+        if self.sg is not None:
+            w = self.sg.irreducible_to_reduced(w)
+
         # Make a dictionary for input fields
         w_input = {}
         for i in range(M):
@@ -1171,6 +1175,10 @@ class SCFT:
             phi[random_polymer_name] = self.prop_solver.get_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
+
+        # Convert concentrations back to irreducible grid for optimizer.
+        if self.sg is not None:
+            phi = {name: self.sg.reduced_to_irreducible(phi[name]) for name in phi}
 
         # Runtime guardrails: validate material conservation and partition consistency.
         # This is lightweight and helps catch subtle regressions early.
@@ -1563,17 +1571,21 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        # When space group is set, n_grid = n_reduced; otherwise n_grid = total_grid
+        # When space group is set, field optimizer uses irreducible grid.
         w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
 
         if self.sg is not None:
-            # User provides full grid initial_fields, convert to reduced basis
+            # User provides full grid initial_fields, convert to irreducible basis
             w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
             for i in range(M):
                 w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
-            # Symmetrize full grid fields, then convert to reduced basis
+            # Symmetrize full grid fields, then convert to irreducible basis
             w_full = self.sg.symmetrize(w_full)
             w = self.sg.to_reduced_basis(w_full)
+            try:
+                w = self.sg.reduced_to_irreducible(w)
+            except Exception:
+                pass
         else:
             for i in range(M):
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
@@ -1720,7 +1732,7 @@ class SCFT:
                 break
 
             # Calculate new fields using simple and Anderson mixing
-            # Note: w and w_diff are in reduced basis when space group is set
+            # Note: w and w_diff are in irreducible basis when space group is set
             if self.box_is_altering:
                 # Stress components:
                 # [0,1,2] = σ_xx, σ_yy, σ_zz (diagonal) - for box lengths
@@ -1813,6 +1825,8 @@ class SCFT:
             # mean() works correctly with reduced basis when space group is set
             for i in range(M):
                 w[i] -= self.prop_solver.mean(w[i])
+
+            # Irreducible grid remains valid without extra symmetrization.
 
         # Print free energy as per chain expression
         print("Free energy per chain (for each chain type):")
