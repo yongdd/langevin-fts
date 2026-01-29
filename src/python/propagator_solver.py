@@ -102,12 +102,6 @@ class PropagatorSolver:
         Useful for simulating polymers around nanoparticles or in confined geometries.
     space_group : SpaceGroup, optional
         Space group symmetry for reduced basis representation.
-    space_group_basis : str, optional
-        Basis used when space_group is set:
-        - "auto" (default): try "m3-physical" then "pmmm-physical", fallback to "irreducible"
-        - "irreducible": full space-group irreducible basis
-        - "pmmm-physical": 1/8 physical grid for Pmmm mirror symmetry (faster, less reduction)
-        - "m3-physical": 1/8 even-index grid for 3m (2x2x2) symmetry
 
     Attributes
     ----------
@@ -177,8 +171,7 @@ class PropagatorSolver:
         platform: str = "auto",
         reduce_memory: bool = False,
         mask: Optional[NDArray[np.floating]] = None,
-        space_group: Optional[Any] = None,
-        space_group_basis: str = "auto"
+        space_group: Optional[Any] = None
     ) -> None:
         """Initialize the propagator solver."""
 
@@ -287,48 +280,27 @@ class PropagatorSolver:
         self._fields_set = False
         if space_group is not None:
             cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
-            basis = space_group_basis.lower() if isinstance(space_group_basis, str) else space_group_basis
             activated = "irreducible"
 
-            if basis in (None, "auto"):
-                m3_enabled = False
-                if hasattr(cpp_sg, "enable_m3_physical_basis"):
-                    try:
-                        cpp_sg.enable_m3_physical_basis()
-                        activated = "m3-physical"
-                        m3_enabled = True
-                    except Exception:
-                        m3_enabled = False
-                if not m3_enabled:
-                    if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
-                        try:
-                            cpp_sg.enable_pmmm_physical_basis()
-                            activated = "pmmm-physical"
-                        except Exception:
-                            activated = "irreducible"
-                    else:
-                        activated = "irreducible"
-            elif basis == "pmmm-physical":
-                if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
-                    cpp_sg.enable_pmmm_physical_basis()
-                    activated = "pmmm-physical"
-                else:
-                    raise RuntimeError("SpaceGroup does not support Pmmm physical basis.")
-            elif basis == "m3-physical":
-                if hasattr(cpp_sg, "enable_m3_physical_basis"):
+            m3_enabled = False
+            if hasattr(cpp_sg, "enable_m3_physical_basis"):
+                try:
                     cpp_sg.enable_m3_physical_basis()
                     activated = "m3-physical"
+                    m3_enabled = True
+                except Exception:
+                    m3_enabled = False
+            if not m3_enabled:
+                if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
+                    try:
+                        cpp_sg.enable_pmmm_physical_basis()
+                        activated = "pmmm-physical"
+                    except Exception:
+                        activated = "irreducible"
                 else:
-                    raise RuntimeError("SpaceGroup does not support M3 physical basis.")
-            elif basis == "irreducible":
-                activated = "irreducible"
-            else:
-                raise ValueError(
-                    f"Unknown space_group_basis: {space_group_basis}. "
-                    "Use 'auto', 'irreducible', 'pmmm-physical', or 'm3-physical'."
-                )
+                    activated = "irreducible"
 
-            if activated == "irreducible" and basis in (None, "auto"):
+            if activated == "irreducible":
                 print("Space-group basis: irreducible (physical basis not available)")
             else:
                 print(f"Space-group basis: {activated}")

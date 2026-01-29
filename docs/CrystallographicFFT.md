@@ -104,7 +104,8 @@ The irreducible basis stores one representative per symmetry orbit. It is the\n+
 - Mapping becomes identity (no gather/scatter).
 - Available when the space group provides 3m translations and the grid is even.
 
-These basis options are controlled via `space_group_basis` (see Usage below).
+The solver automatically selects the fastest compatible physical basis when
+space-group symmetry is enabled.
 
 ---
 
@@ -120,8 +121,6 @@ params = {
         "symbol": "Ia-3d",
         "number": 530,
     },
-    # Choose one of: "irreducible" (default), "pmmm-physical", "m3-physical"
-    "space_group_basis": "m3-physical",
 }
 ```
 
@@ -134,11 +133,11 @@ solver = PropagatorSolver(
     cb,
     molecules,
     space_group=sg,
-    space_group_basis="pmmm-physical",
 )
 ```
 
-If the requested basis is incompatible with the space group or grid constraints, an exception is raised.
+The solver selects `m3-physical` when possible, otherwise `pmmm-physical`, and
+falls back to the irreducible basis if neither is available.
 
 ---
 
@@ -174,7 +173,7 @@ If the requested basis is incompatible with the space group or grid constraints,
 ## 8. Performance Notes
 
 - Speedup depends on grid size, symmetry, and whether mapping is required.
-- Using a physical basis (`pmmm-physical` or `m3-physical`) avoids gather/scatter overhead.
+- Automatic physical-basis selection avoids gather/scatter overhead when possible.
 - Small grids may show limited speedup due to fixed overheads.
 - The 3m recursive algorithm typically outperforms Pmmm DCT when available.
 

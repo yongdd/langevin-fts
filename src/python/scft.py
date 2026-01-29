@@ -2,7 +2,6 @@ import os
 import time
 import logging
 import numpy as np
-import sys
 import json
 import yaml
 import copy
@@ -24,8 +23,6 @@ from .utils import (
     validate_polymers,
     process_polymer_blocks,
     process_random_copolymer,
-    DEFAULT_MONOMER_COLORS,
-    configure_logging,
 )
 from .smearing import Smearing
 
@@ -363,13 +360,6 @@ class SCFT:
             - number : int, optional
                 Hall number for space group.
 
-        - space_group_basis : str, optional
-            Basis used when space_group is set:
-            - 'auto' (default): try 'm3-physical' then 'pmmm-physical', fallback to 'irreducible'
-            - 'irreducible': full space-group irreducible basis
-            - 'pmmm-physical': 1/8 physical grid for Pmmm mirror symmetry
-            - 'm3-physical': 1/8 even-index grid for 3m (2x2x2) symmetry
-
         - scale_stress : float, optional
             Scaling factor for stress in box relaxation (default: 1.0).
         - aggregate_propagator_computation : bool, optional
@@ -558,10 +548,12 @@ class SCFT:
     - examples/scft/ABC_Triblock_Sphere3D.py - Spherical phase
     - examples/scft/phases/ - Various morphologies
     """
-    def __init__(self, params): #, phi_target=None, mask=None):
+    def __init__(self, params):
 
         # Validate input parameters
         validate_scft_params(params)
+        params = copy.deepcopy(params)
+        params.pop("space_group_basis", None)
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -619,21 +611,6 @@ class SCFT:
         self.matrix_chi = matrix_chi
         matrix_chi_inv = np.linalg.inv(matrix_chi)
         self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        # print(matrix_chi)
-        # print(matrix_chin)
-
-        # if phi_target is None:
-        #     phi_target = np.ones(params["nx"])
-        # self.phi_target = np.reshape(phi_target, (-1))
-
-        # self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
-        # print(self.matrix_p)
-
-        # # Scaling rate of total polymer concentration
-        # if mask is None:
-        #     mask = np.ones(params["nx"])
-        # self.mask = np.reshape(mask, (-1))
-        # self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
 
         # Validate polymer chain definitions
         validate_polymers(self.distinct_polymers)
@@ -719,7 +696,6 @@ class SCFT:
                 angles = angles_reordered
 
             # Update params for PropagatorSolver creation
-            params = copy.deepcopy(params)
             params["nx"] = nx_reordered
             params["lx"] = lx_reordered
 
@@ -734,7 +710,6 @@ class SCFT:
         numerical_method = params.get("numerical_method", "rqm4")
 
         # Create space group object early (before PropagatorSolver) if specified
-        space_group_basis = params.get("space_group_basis", "auto")
         if "space_group" in params:
             if "number" in params["space_group"]:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
@@ -755,7 +730,6 @@ class SCFT:
             platform=platform,
             reduce_memory=reduce_memory,
             space_group=self.sg,
-            space_group_basis=space_group_basis,
         )
 
         # Set angles if provided (after initialization, before adding polymers)
@@ -1344,17 +1318,6 @@ class SCFT:
             else:
                 m_dic["phi_" + name] = self.phi[name]
 
-        # if self.mask is not None:
-        #     m_dic["mask"] = self.mask
-            
-        # if self.phi_target is not None:
-        #     m_dic["phi_target"] = self.phi_target
-
-        # phi_total = np.zeros(self.cb.get_total_grid())
-        # for name in self.monomer_types:
-        #     phi_total += self.phi[name]
-        # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
-
         # Convert numpy arrays to lists
         for data in m_dic:
             if type(m_dic[data]).__module__ == np.__name__  :
@@ -1632,10 +1595,6 @@ class SCFT:
                     iter,
                     self.prop_solver.numerical_method,
                 )
-
-            # # Scaling phi
-            # for monomer_type in self.monomer_types:
-            #     phi[monomer_type] *= self.phi_rescaling
 
             # Convert monomer fields to auxiliary fields
             w_aux = self.mpt.to_aux_fields(w)

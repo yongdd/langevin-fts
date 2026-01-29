@@ -47,6 +47,20 @@ def sphere_init(nx, lx, target_std=5.0):
     return w_a.reshape(-1), w_b.reshape(-1)
 
 
+def auto_select_basis(sg):
+    if hasattr(sg, "enable_m3_physical_basis"):
+        try:
+            sg.enable_m3_physical_basis()
+            return "m3-physical"
+        except Exception:
+            pass
+    try:
+        sg.enable_pmmm_physical_basis()
+        return "pmmm-physical"
+    except Exception:
+        return "irreducible"
+
+
 def run_case(use_space_group, nx, lx, ds, f_a, iters, warmup, fields_path, sg, w_full_sym, w_red):
 
     solver = PropagatorSolver(
@@ -100,8 +114,6 @@ def main():
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--fields", type=str, default=None)
-    parser.add_argument("--space-group-basis", type=str, default="irreducible",
-                        choices=["irreducible", "pmmm-physical", "m3-physical"])
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
@@ -110,13 +122,8 @@ def main():
     )
 
     sg = SpaceGroup(args.nx, "Im-3m", 529)
-    if args.space_group_basis == "pmmm-physical":
-        sg.enable_pmmm_physical_basis()
-    elif args.space_group_basis == "m3-physical":
-        if hasattr(sg, "enable_m3_physical_basis"):
-            sg.enable_m3_physical_basis()
-        else:
-            raise RuntimeError("SpaceGroup does not support M3 physical basis.")
+    selected_basis = auto_select_basis(sg)
+    print(f"Space-group basis (auto): {selected_basis}")
     if fields_path and fields_path.exists():
         try:
             w_a_full, w_b_full = load_bcc_fields(fields_path, args.nx)
