@@ -15,19 +15,29 @@ Many polymer phases (BCC, gyroid, HCP, etc.) have crystallographic symmetry. By 
 - Faster convergence: Field updates operate on smaller arrays
 - Enforced symmetry: Results guaranteed to have correct space group symmetry
 
+When CrysFFT is available (periodic 3D, orthogonal box, even grid), the solver
+automatically switches to a **physical grid** (1/8 size) to avoid
+gather/scatter mapping during diffusion steps. See
+[CrystallographicFFT.md](CrystallographicFFT.md).
+
 ## Common Space Groups for Polymer Phases
 
 | Phase | Symbol | No. | Hall | Ops | Crystal System | Grid Constraint |
 |-------|--------|-----|------|-----|----------------|-----------------|
+| A15 | Pm-3n | 223 | 520 | 48 | Cubic | nx = ny = nz |
 | BCC | Im-3m | 229 | 529 | 96 | Cubic | nx = ny = nz |
 | FCC | Fm-3m | 225 | 523 | 192 | Cubic | nx = ny = nz |
-| A15 | Pm-3n | 223 | 520 | 48 | Cubic | nx = ny = nz |
-| Gyroid | Ia-3d | 230 | 530 | 96 | Cubic | nx = ny = nz |
-| Diamond | Fd-3m | 227 | 525 | 192 | Cubic | nx = ny = nz |
-| HCP | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
-| PL | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
-| C14 | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
+| SC | Pm-3m | 221 | 517 | 48 | Cubic | nx = ny = nz |
+| SD (Diamond) | Fd-3m | 227 | 526 | 192 | Cubic | nx = ny = nz |
+| DG (Gyroid) | Ia-3d | 230 | 530 | 96 | Cubic | nx = ny = nz |
+| DP | Im-3m | 229 | 529 | 96 | Cubic | nx = ny = nz |
+| DD | Pn-3m | 224 | 522 | 48 | Cubic | nx = ny = nz |
+| SG | I4_132 | 214 | 510 | 48 | Cubic | nx = ny = nz |
+| SP | Pm-3m | 221 | 517 | 48 | Cubic | nx = ny = nz |
 | Sigma | P4_2/mnm | 136 | 419 | 16 | Tetragonal | nx = ny |
+| HCP | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
+| PL | P6/mmm | 191 | 485 | 24 | Hexagonal | nx = ny |
+| Fddd | Fddd | 70 | 336 | 32 | Orthorhombic | none |
 
 ## Mathematical Foundation
 
@@ -135,7 +145,7 @@ params = {
     "space_group": {
         "symbol": "Ia-3d",      # ITA symbol
         "number": 530           # Hall number (optional if unique)
-    }
+    },
 }
 
 scft = SCFT(params)
@@ -172,6 +182,14 @@ print(w_reconstructed.shape)  # (2, 262144)
 # Symmetrize a field (average over orbits)
 w_symmetrized = sg.symmetrize(w_full)
 ```
+
+### Physical Bases for CrysFFT
+
+When CrysFFT is available, the solver may switch the reduced basis from the
+irreducible mesh to a **physical basis** (1/8 grid) to avoid gather/scatter
+mapping during diffusion. This selection is automatic: it prefers the 3m
+physical basis when compatible, otherwise falls back to the Pmmm physical basis,
+and finally uses the irreducible basis if neither is available.
 
 ## Crystal Systems and Grid Constraints
 

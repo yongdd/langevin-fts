@@ -53,6 +53,10 @@ For detailed performance benchmarks and method comparisons, see [NumericalMethod
 - **Dimensions**: 1D, 2D, and 3D
 - **Impenetrable regions**: Can set masked regions where polymers cannot enter
 - **Space group symmetries**: Constrain field symmetries during SCFT iterations (**beta**)
+- **Crystallographic FFT (CrysFFT)**: Symmetry-accelerated pseudo-spectral diffusion
+  - Pmmm DCT (mirror symmetry) and 3m recursive algorithm
+  - Works for periodic, orthogonal 3D boxes with even grids
+  - Automatically selects the fastest compatible physical basis to avoid mapping overhead
 
 ### Platforms and Performance
 - **CPU**: FFTW backend with OpenMP parallelization
