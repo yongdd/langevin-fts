@@ -7,6 +7,8 @@
 #include "Exception.h"
 #include <cstring>
 #include <cmath>
+#include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -16,6 +18,18 @@
 extern "C" {
 #include <spglib.h>
 }
+
+namespace {
+bool env_flag_enabled(const char* name)
+{
+    const char* env = std::getenv(name);
+    if (env == nullptr || *env == '\0')
+        return false;
+
+    char c = static_cast<char>(std::tolower(static_cast<unsigned char>(env[0])));
+    return c == '1' || c == 't' || c == 'y' || c == 'o';
+}
+}  // namespace
 
 SpaceGroup::SpaceGroup(std::vector<int> nx, int hall_number)
 {
@@ -133,6 +147,13 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
 
     // Find irreducible mesh
     find_irreducible_mesh();
+
+    // Preserve full-space-group irreducible mapping
+    n_irreducible_full_ = n_irreducible_;
+    reduced_basis_indices_full_ = reduced_basis_indices_;
+    full_to_reduced_map_full_ = full_to_reduced_map_;
+    orbit_counts_full_ = orbit_counts_;
+    reduced_to_irreducible_map_.clear();
 
     // Print info
     std::cout << "---------- Space Group ----------" << std::endl;
@@ -447,6 +468,81 @@ void SpaceGroup::to_reduced_basis(const double* full_field, double* reduced_fiel
     }
 }
 
+void SpaceGroup::reduced_to_irreducible(const double* reduced_field, double* irreducible_field, int n_fields) const
+{
+    if (n_irreducible_full_ <= 0 || reduced_to_irreducible_map_.empty() || orbit_counts_full_.empty())
+    {
+        const int n_reduced = n_irreducible_;
+        for (int f = 0; f < n_fields; ++f)
+        {
+            std::memcpy(irreducible_field + f * n_reduced,
+                        reduced_field + f * n_reduced,
+                        sizeof(double) * n_reduced);
+        }
+        return;
+    }
+
+    const int n_reduced = n_irreducible_;
+    const int n_irreducible = n_irreducible_full_;
+
+    std::vector<double> orbit_sums(n_irreducible, 0.0);
+    std::vector<int> orbit_weights(n_irreducible, 0);
+
+    for (int f = 0; f < n_fields; ++f)
+    {
+        const double* src = reduced_field + f * n_reduced;
+        double* dst = irreducible_field + f * n_irreducible;
+
+        std::fill(orbit_sums.begin(), orbit_sums.end(), 0.0);
+        std::fill(orbit_weights.begin(), orbit_weights.end(), 0);
+
+        for (int i = 0; i < n_reduced; ++i)
+        {
+            const int ridx = reduced_to_irreducible_map_[i];
+            const int weight = orbit_counts_[i];
+            orbit_sums[ridx] += static_cast<double>(weight) * src[i];
+            orbit_weights[ridx] += weight;
+        }
+
+        for (int i = 0; i < n_irreducible; ++i)
+        {
+            if (orbit_weights[i] > 0)
+                dst[i] = orbit_sums[i] / static_cast<double>(orbit_weights[i]);
+            else
+                dst[i] = 0.0;
+        }
+    }
+}
+
+void SpaceGroup::irreducible_to_reduced(const double* irreducible_field, double* reduced_field, int n_fields) const
+{
+    if (n_irreducible_full_ <= 0 || reduced_to_irreducible_map_.empty())
+    {
+        const int n_reduced = n_irreducible_;
+        for (int f = 0; f < n_fields; ++f)
+        {
+            std::memcpy(reduced_field + f * n_reduced,
+                        irreducible_field + f * n_reduced,
+                        sizeof(double) * n_reduced);
+        }
+        return;
+    }
+
+    const int n_reduced = n_irreducible_;
+    const int n_irreducible = n_irreducible_full_;
+
+    for (int f = 0; f < n_fields; ++f)
+    {
+        const double* src = irreducible_field + f * n_irreducible;
+        double* dst = reduced_field + f * n_reduced;
+
+        for (int i = 0; i < n_reduced; ++i)
+        {
+            dst[i] = src[reduced_to_irreducible_map_[i]];
+        }
+    }
+}
+
 void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_field, int n_fields) const
 {
     const auto& full_to_reduced = full_to_reduced_map_;
@@ -502,6 +598,44 @@ void SpaceGroup::symmetrize(const double* field_in, double* field_out, int n_fie
 
     // Then symmetrize in-place
     symmetrize(field_out, n_fields);
+}
+
+void SpaceGroup::symmetrize_reduced_basis(double* reduced_field, int n_fields) const
+{
+    if (!use_pmmm_physical_basis_ && !use_m3_physical_basis_)
+        return;
+    if (reduced_to_irreducible_map_.empty() || orbit_counts_full_.empty())
+        return;
+
+    const int n_reduced = n_irreducible_;
+    const int n_irreducible = n_irreducible_full_;
+
+    std::vector<double> orbit_sums(n_irreducible, 0.0);
+    std::vector<int> orbit_weights(n_irreducible, 0);
+
+    for (int f = 0; f < n_fields; ++f)
+    {
+        double* data = reduced_field + f * n_reduced;
+
+        std::fill(orbit_sums.begin(), orbit_sums.end(), 0.0);
+        std::fill(orbit_weights.begin(), orbit_weights.end(), 0);
+
+        for (int i = 0; i < n_reduced; ++i)
+        {
+            const int ridx = reduced_to_irreducible_map_[i];
+            const int weight = orbit_counts_[i];
+            orbit_sums[ridx] += static_cast<double>(weight) * data[i];
+            orbit_weights[ridx] += weight;
+        }
+
+        for (int i = 0; i < n_reduced; ++i)
+        {
+            const int ridx = reduced_to_irreducible_map_[i];
+            const int weight = orbit_weights[ridx];
+            if (weight > 0)
+                data[i] = orbit_sums[ridx] / static_cast<double>(weight);
+        }
+    }
 }
 
 bool SpaceGroup::has_mirror_planes_xyz(double tol) const
@@ -676,6 +810,20 @@ void SpaceGroup::enable_pmmm_physical_basis()
         }
     }
 
+    if (!full_to_reduced_map_full_.empty())
+    {
+        reduced_to_irreducible_map_.resize(n_irreducible_);
+        for (int i = 0; i < n_irreducible_; ++i)
+        {
+            const int full_idx = reduced_basis_indices_[i];
+            reduced_to_irreducible_map_[i] = full_to_reduced_map_full_[full_idx];
+        }
+    }
+    else
+    {
+        reduced_to_irreducible_map_.clear();
+    }
+
     use_pmmm_physical_basis_ = true;
     use_m3_physical_basis_ = false;
     std::cout << "Pmmm physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
@@ -812,6 +960,20 @@ void SpaceGroup::enable_m3_physical_basis()
                 orbit_counts_[reduced_idx] += 1;
             }
         }
+    }
+
+    if (!full_to_reduced_map_full_.empty())
+    {
+        reduced_to_irreducible_map_.resize(n_irreducible_);
+        for (int i = 0; i < n_irreducible_; ++i)
+        {
+            const int full_idx = reduced_basis_indices_[i];
+            reduced_to_irreducible_map_[i] = full_to_reduced_map_full_[full_idx];
+        }
+    }
+    else
+    {
+        reduced_to_irreducible_map_.clear();
     }
 
     use_m3_physical_basis_ = true;

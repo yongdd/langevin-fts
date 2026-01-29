@@ -36,6 +36,7 @@
 #include "CudaSolverPseudoRK2.h"
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
+#include "CrysFFTSelector.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -405,23 +406,45 @@ void CudaSolverPseudoRK2<T>::set_space_group(
         if (space_group_ != nullptr && dim_ == 3 && is_periodic_ && cb->is_orthogonal())
         {
             const auto nx = cb->get_nx();
-            const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
-            if (even_grid)
+            std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+            const auto selection = select_crysfft_mode(space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal());
+            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm)
             {
-                std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0};
-                const bool has_3m = space_group_->get_m3_translations(trans_part);
-                const bool has_pmmm = space_group_->has_mirror_planes_xyz();
-                const bool recursive_ok = ((nx[2] / 2) % 8) == 0;
-
                 const int Nx2 = nx[0] / 2;
                 const int Ny2 = nx[1] / 2;
                 const int Nz2 = nx[2] / 2;
                 const int M_phys = Nx2 * Ny2 * Nz2;
                 const int M_reduced = space_group_->get_n_reduced_basis();
                 const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
+                const bool use_m3_basis = space_group_->using_m3_physical_basis();
+                const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
 
                 std::vector<int> phys_to_reduced;
                 std::vector<int> reduced_to_phys;
+
+                auto check_identity = [&](bool even_indices) -> bool {
+                    if (M_reduced != M_phys)
+                        return false;
+                    int idx = 0;
+                    for (int ix = 0; ix < Nx2; ++ix)
+                    {
+                        const int fx = even_indices ? (2 * ix) : ix;
+                        for (int iy = 0; iy < Ny2; ++iy)
+                        {
+                            const int fy = even_indices ? (2 * iy) : iy;
+                            for (int iz = 0; iz < Nz2; ++iz)
+                            {
+                                const int fz = even_indices ? (2 * iz) : iz;
+                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
+                                const int reduced_idx = full_to_reduced[full_idx];
+                                if (reduced_idx != idx)
+                                    return false;
+                                ++idx;
+                            }
+                        }
+                    }
+                    return true;
+                };
 
                 auto build_mapping = [&](bool even_indices) -> bool {
                     phys_to_reduced.resize(M_phys);
@@ -455,19 +478,23 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                     return true;
                 };
 
-                auto finalize_crysfft = [&](CudaCrysFFTMode mode) {
+                auto finalize_crysfft = [&](CudaCrysFFTMode mode, bool identity_forced) {
                     crysfft_physical_size_ = M_phys;
                     crysfft_reduced_size_ = M_reduced;
 
-                    bool identity = (M_reduced == M_phys);
-                    if (identity)
+                    bool identity = identity_forced;
+                    if (!identity_forced)
                     {
-                        for (int i = 0; i < M_phys; ++i)
+                        identity = (M_reduced == M_phys);
+                        if (identity)
                         {
-                            if (phys_to_reduced[i] != i || reduced_to_phys[i] != i)
+                            for (int i = 0; i < M_phys; ++i)
                             {
-                                identity = false;
-                                break;
+                                if (phys_to_reduced[i] != i || reduced_to_phys[i] != i)
+                                {
+                                    identity = false;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -483,14 +510,13 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                                                    sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
                     }
 
-                    std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
                     auto lx = cb->get_lx();
                     std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
 
                     for (int i = 0; i < n_streams; i++)
                     {
                         if (mode == CudaCrysFFTMode::Recursive3m)
-                            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, trans_part);
+                            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, selection.m3_translations);
                         else
                             crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
                         gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
@@ -500,16 +526,36 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                     use_crysfft_ = true;
                 };
 
-                if (has_3m && recursive_ok)
+                if (selection.mode == CrysFFTChoice::Recursive3m)
                 {
-                    if (build_mapping(true))
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m);
+                    if (use_pmmm_basis)
+                        throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
+                    if (use_m3_basis)
+                    {
+                        if (!check_identity(true))
+                            throw_with_line_number("M3 physical basis does not match recursive 3m CrysFFT grid ordering.");
+                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, true);
+                    }
+                    else if (build_mapping(true))
+                    {
+                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, false);
+                    }
                 }
 
-                if (!use_crysfft_ && has_pmmm)
+                if (!use_crysfft_ && selection.can_pmmm)
                 {
-                    if (build_mapping(false))
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct);
+                    if (use_m3_basis)
+                        throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
+                    if (use_pmmm_basis)
+                    {
+                        if (!check_identity(false))
+                            throw_with_line_number("Pmmm physical basis does not match Pmmm CrysFFT grid ordering.");
+                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, true);
+                    }
+                    else if (build_mapping(false))
+                    {
+                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, false);
+                    }
                 }
             }
         }
@@ -690,12 +736,8 @@ void CudaSolverPseudoRK2<T>::advance_propagator(
                     }
                     return;
                 }
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaPeekAtLastError());
-
-                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
+                ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], d_q_in, _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
                 gpu_error_check(cudaPeekAtLastError());
 
                 crysfft_[STREAM]->set_contour_step(coeff_full);

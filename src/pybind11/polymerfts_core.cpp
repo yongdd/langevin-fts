@@ -702,6 +702,8 @@ Example:
              "Total number of grid points.")
         .def("get_n_reduced_basis", &SpaceGroup::get_n_reduced_basis,
              "Number of reduced-basis points.")
+        .def("get_n_reduced_basis_full", &SpaceGroup::get_n_reduced_basis_full,
+             "Number of irreducible-basis points (full space group).")
         .def("get_n_symmetry_ops", &SpaceGroup::get_n_symmetry_ops,
              "Number of symmetry operations.")
         .def("get_reduced_basis_indices", &SpaceGroup::get_reduced_basis_indices,
@@ -738,6 +740,67 @@ Example:
                                  n_fields);
             return reduced_field;
         }, "Convert full grid field to reduced basis. Returns (n_fields, n_reduced) array.")
+        .def("symmetrize_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
+        {
+            py::buffer_info buf = reduced_field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_n_reduced_basis();
+            if (total_size != n_fields * obj.get_n_reduced_basis())
+                throw_with_line_number("Field size must be multiple of n_reduced_basis");
+
+            obj.symmetrize_reduced_basis(static_cast<double*>(buf.ptr), n_fields);
+            return reduced_field;
+        }, "Symmetrize reduced-basis fields in-place using full space-group orbits.")
+        .def("reduced_to_irreducible", [](SpaceGroup& obj, py::array_t<double> reduced_field) -> py::object
+        {
+            py::buffer_info buf = reduced_field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_n_reduced_basis();
+            if (total_size != n_fields * obj.get_n_reduced_basis())
+                throw_with_line_number("Reduced field size must be multiple of n_reduced_basis");
+
+            py::array_t<double> irreducible_field({n_fields, obj.get_n_reduced_basis_full()});
+            obj.reduced_to_irreducible(static_cast<double*>(buf.ptr),
+                                       static_cast<double*>(irreducible_field.request().ptr),
+                                       n_fields);
+            if (n_fields == 1)
+                return py::reinterpret_steal<py::object>(irreducible_field.attr("__getitem__")(0).release());
+            return py::reinterpret_steal<py::object>(irreducible_field.release());
+        }, "Convert reduced-basis field to irreducible-basis field (full space-group orbits).")
+        .def("irreducible_to_reduced", [](SpaceGroup& obj, py::array_t<double> irreducible_field) -> py::object
+        {
+            py::buffer_info buf = irreducible_field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_n_reduced_basis_full();
+            if (total_size != n_fields * obj.get_n_reduced_basis_full())
+                throw_with_line_number("Irreducible field size must be multiple of n_irreducible_basis");
+
+            py::array_t<double> reduced_field({n_fields, obj.get_n_reduced_basis()});
+            obj.irreducible_to_reduced(static_cast<double*>(buf.ptr),
+                                       static_cast<double*>(reduced_field.request().ptr),
+                                       n_fields);
+            if (n_fields == 1)
+                return py::reinterpret_steal<py::object>(reduced_field.attr("__getitem__")(0).release());
+            return py::reinterpret_steal<py::object>(reduced_field.release());
+        }, "Convert irreducible-basis field to reduced-basis field (physical/irreducible basis).")
         .def("from_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();

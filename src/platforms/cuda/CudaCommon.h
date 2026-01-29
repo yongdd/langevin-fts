@@ -334,6 +334,21 @@ __global__ void ker_expand_reduced_basis(
     cuDoubleComplex* dst, const cuDoubleComplex* src, const int* full_to_reduced_map, const int total_grid);
 
 /**
+ * @brief Expand reduced basis and apply reduced multiplier in one pass.
+ *
+ * dst[i] = src[phys_to_reduced_map[i]] * reduced_multiplier[phys_to_reduced_map[i]]
+ *
+ * @param dst Output physical grid array (size: n_phys)
+ * @param src Input reduced basis array (size: n_basis)
+ * @param reduced_multiplier Reduced basis multiplier array (size: n_basis)
+ * @param phys_to_reduced_map Map from physical index to reduced basis index
+ * @param n_phys Number of physical grid points
+ */
+__global__ void ker_expand_reduced_basis_multi(
+    double* dst, const double* src, const double* reduced_multiplier,
+    const int* phys_to_reduced_map, const int n_phys);
+
+/**
  * @brief Reduce full grid to reduced basis.
  *
  * Extracts values at reduced-basis points from full grid.

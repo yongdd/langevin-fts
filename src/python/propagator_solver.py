@@ -282,23 +282,56 @@ class PropagatorSolver:
             cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
             activated = "irreducible"
 
-            m3_enabled = False
-            if hasattr(cpp_sg, "enable_m3_physical_basis"):
+            preselected = False
+            if hasattr(cpp_sg, "using_m3_physical_basis"):
                 try:
-                    cpp_sg.enable_m3_physical_basis()
-                    activated = "m3-physical"
-                    m3_enabled = True
+                    if cpp_sg.using_m3_physical_basis():
+                        activated = "m3-physical"
+                        preselected = True
                 except Exception:
-                    m3_enabled = False
-            if not m3_enabled:
-                if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
-                    try:
-                        cpp_sg.enable_pmmm_physical_basis()
+                    preselected = False
+            if not preselected and hasattr(cpp_sg, "using_pmmm_physical_basis"):
+                try:
+                    if cpp_sg.using_pmmm_physical_basis():
                         activated = "pmmm-physical"
+                        preselected = True
+                except Exception:
+                    preselected = False
+
+            if not preselected:
+                physical_size = None
+                if (self.dim == 3 and
+                    (self.nx[0] % 2 == 0) and (self.nx[1] % 2 == 0) and (self.nx[2] % 2 == 0)):
+                    physical_size = (self.nx[0] // 2) * (self.nx[1] // 2) * (self.nx[2] // 2)
+                irreducible_size = None
+                try:
+                    irreducible_size = cpp_sg.get_n_reduced_basis()
+                except Exception:
+                    irreducible_size = None
+                allow_physical = (physical_size is not None and irreducible_size == physical_size)
+
+                m3_enabled = False
+                recursive_ok = (
+                    self.dim == 3 and
+                    (self.nx[0] % 2 == 0) and (self.nx[1] % 2 == 0) and (self.nx[2] % 2 == 0) and
+                    (self.nx[2] // 2) % 8 == 0
+                )
+                if allow_physical and recursive_ok and hasattr(cpp_sg, "enable_m3_physical_basis"):
+                    try:
+                        cpp_sg.enable_m3_physical_basis()
+                        activated = "m3-physical"
+                        m3_enabled = True
                     except Exception:
+                        m3_enabled = False
+                if not m3_enabled:
+                    if allow_physical and hasattr(cpp_sg, "enable_pmmm_physical_basis"):
+                        try:
+                            cpp_sg.enable_pmmm_physical_basis()
+                            activated = "pmmm-physical"
+                        except Exception:
+                            activated = "irreducible"
+                    else:
                         activated = "irreducible"
-                else:
-                    activated = "irreducible"
 
             if activated == "irreducible":
                 print("Space-group basis: irreducible (physical basis not available)")

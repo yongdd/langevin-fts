@@ -698,6 +698,19 @@ __global__ void ker_expand_reduced_basis(
     }
 }
 
+__global__ void ker_expand_reduced_basis_multi(
+    double* dst, const double* src, const double* reduced_multiplier,
+    const int* phys_to_reduced_map, const int n_phys)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_phys)
+    {
+        int ridx = phys_to_reduced_map[i];
+        dst[i] = src[ridx] * reduced_multiplier[ridx];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_reduce_to_basis(
     double* dst, const double* src, const int* reduced_basis_indices, const int n_basis)
 {

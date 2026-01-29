@@ -9,6 +9,8 @@
 #include <cmath>
 #include <stdexcept>
 #include <cstdio>
+#include <atomic>
+#include <cstdlib>
 #include <algorithm>
 #include <vector>
 
@@ -4548,13 +4550,45 @@ void CudaRealTransform3D::executeZ_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
     if (dct2_sin_z_ && dct2_cos_z_)
         kernel_dct2_3d_postOp_z_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
     else
         kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT2 Z] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeZ_DCT3(double* d_data)
@@ -4564,6 +4598,18 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
     int numBlocks_postOp = (M_ + blockSize - 1) / blockSize;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
 
     if (dct3_sin_z_ && dct3_cos_z_)
@@ -4571,11 +4617,31 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
             d_temp_, Nx_, Ny_, Nz_, dct3_sin_z_, dct3_cos_z_);
     else
         kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_z_, d_temp_, d_complex);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
 
     kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT3 Z] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeZ_DCT4(double* d_data)
@@ -4681,13 +4747,45 @@ void CudaRealTransform3D::executeY_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     kernel_dct2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
     if (dct2_sin_y_ && dct2_cos_y_)
         kernel_dct2_3d_postOp_y_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
     else
         kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT2 Y] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeY_DCT3(double* d_data)
@@ -4697,16 +4795,48 @@ void CudaRealTransform3D::executeY_DCT3(double* d_data)
     int total_preOp = Nx_ * Nz_ * (Ny_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     if (dct3_sin_y_ && dct3_cos_y_)
         kernel_dct3_3d_preOp_y_strided_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
             d_temp_, Nx_, Ny_, Nz_, dct3_sin_y_, dct3_cos_y_);
     else
         kernel_dct3_3d_preOp_y_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_y_, d_temp_, d_complex);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
 
     kernel_dct3_3d_postOp_y<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT3 Y] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeY_DCT4(double* d_data)
@@ -4812,13 +4942,45 @@ void CudaRealTransform3D::executeX_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     kernel_dct2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
     if (dct2_sin_x_ && dct2_cos_x_)
         kernel_dct2_3d_postOp_x_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
     else
         kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT2 X] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeX_DCT3(double* d_data)
@@ -4828,16 +4990,48 @@ void CudaRealTransform3D::executeX_DCT3(double* d_data)
     int total_preOp = Ny_ * Nz_ * (Nx_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
+    static std::atomic<bool> prof_once{false};
+    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
+    const bool profile_this = do_profile && !prof_once.exchange(true);
+    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
+    if (profile_this) {
+        cudaEventCreate(&ev0);
+        cudaEventCreate(&ev1);
+        cudaEventCreate(&ev2);
+        cudaEventCreate(&ev3);
+        cudaEventRecord(ev0, stream_);
+    }
+
     if (dct3_sin_x_ && dct3_cos_x_)
         kernel_dct3_3d_preOp_x_strided_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
             d_temp_, Nx_, Ny_, Nz_, dct3_sin_x_, dct3_cos_x_);
     else
         kernel_dct3_3d_preOp_x_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    if (profile_this)
+        cudaEventRecord(ev1, stream_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_x_, d_temp_, d_complex);
+    if (profile_this)
+        cudaEventRecord(ev2, stream_);
 
     kernel_dct3_3d_postOp_x<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_, Nz_);
+
+    if (profile_this) {
+        cudaEventRecord(ev3, stream_);
+        cudaEventSynchronize(ev3);
+        float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
+        cudaEventElapsedTime(&t_pre, ev0, ev1);
+        cudaEventElapsedTime(&t_fft, ev1, ev2);
+        cudaEventElapsedTime(&t_post, ev2, ev3);
+        cudaEventElapsedTime(&t_total, ev0, ev3);
+        std::printf("[CrysFFT-DCT3D DCT3 X] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
+                    t_pre, t_fft, t_post, t_total);
+        cudaEventDestroy(ev0);
+        cudaEventDestroy(ev1);
+        cudaEventDestroy(ev2);
+        cudaEventDestroy(ev3);
+    }
 }
 
 void CudaRealTransform3D::executeX_DCT4(double* d_data)

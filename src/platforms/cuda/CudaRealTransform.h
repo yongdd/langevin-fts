@@ -98,6 +98,13 @@ private:
     cufftHandle plan_;           ///< cuFFT plan
     double* d_work_;             ///< Work buffer
     double* d_x1_;               ///< Auxiliary buffer
+    // Optional lookup tables for DCT2/DCT3/DCT4 and DST2/3/4
+    double* dct2_sin_{nullptr};
+    double* dct2_cos_{nullptr};
+    double* dct3_sin_{nullptr};
+    double* dct3_cos_{nullptr};
+    double* dct4_sin_{nullptr};
+    double* dct4_cos_{nullptr};
     cudaStream_t stream_{0};     ///< CUDA stream for execution
     bool initialized_;
 
@@ -168,6 +175,20 @@ private:
     double* d_work_;             ///< Work buffer
     double* d_temp_;             ///< Temporary buffer
     double* d_x1_;               ///< Auxiliary buffer
+
+    // Optional lookup tables for DCT2/DCT3/DCT4 and DST2/3/4
+    double* dct2_sin_x_{nullptr};
+    double* dct2_cos_x_{nullptr};
+    double* dct2_sin_y_{nullptr};
+    double* dct2_cos_y_{nullptr};
+    double* dct3_sin_x_{nullptr};
+    double* dct3_cos_x_{nullptr};
+    double* dct3_sin_y_{nullptr};
+    double* dct3_cos_y_{nullptr};
+    double* dct4_sin_x_{nullptr};
+    double* dct4_cos_x_{nullptr};
+    double* dct4_sin_y_{nullptr};
+    double* dct4_cos_y_{nullptr};
 
     bool initialized_;
     cudaStream_t stream_{0};     ///< CUDA stream for execution
@@ -280,6 +301,26 @@ private:
     double* d_work_;             ///< Work buffer
     double* d_temp_;             ///< Temporary buffer
     double* d_x1_;               ///< Auxiliary buffer
+
+    // Optional lookup tables for DCT2/DCT3 (reduce sincos overhead)
+    double* dct2_sin_x_{nullptr};
+    double* dct2_cos_x_{nullptr};
+    double* dct2_sin_y_{nullptr};
+    double* dct2_cos_y_{nullptr};
+    double* dct2_sin_z_{nullptr};
+    double* dct2_cos_z_{nullptr};
+    double* dct3_sin_x_{nullptr};
+    double* dct3_cos_x_{nullptr};
+    double* dct3_sin_y_{nullptr};
+    double* dct3_cos_y_{nullptr};
+    double* dct3_sin_z_{nullptr};
+    double* dct3_cos_z_{nullptr};
+    double* dct4_sin_x_{nullptr};
+    double* dct4_cos_x_{nullptr};
+    double* dct4_sin_y_{nullptr};
+    double* dct4_cos_y_{nullptr};
+    double* dct4_sin_z_{nullptr};
+    double* dct4_cos_z_{nullptr};
 
     bool initialized_;
     cudaStream_t stream_{0};     ///< CUDA stream for execution
