@@ -177,6 +177,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaFFT.cu
         src/platforms/cuda/CudaCrysFFT.cu
+        src/platforms/cuda/CudaCrysFFTRecursive3m.cu
         src/platforms/cuda/CudaRealTransform.cu
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoRK2.cu

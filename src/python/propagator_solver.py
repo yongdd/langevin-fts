@@ -104,8 +104,10 @@ class PropagatorSolver:
         Space group symmetry for reduced basis representation.
     space_group_basis : str, optional
         Basis used when space_group is set:
-        - "irreducible": default full space-group irreducible basis
+        - "auto" (default): try "m3-physical" then "pmmm-physical", fallback to "irreducible"
+        - "irreducible": full space-group irreducible basis
         - "pmmm-physical": 1/8 physical grid for Pmmm mirror symmetry (faster, less reduction)
+        - "m3-physical": 1/8 even-index grid for 3m (2x2x2) symmetry
 
     Attributes
     ----------
@@ -176,7 +178,7 @@ class PropagatorSolver:
         reduce_memory: bool = False,
         mask: Optional[NDArray[np.floating]] = None,
         space_group: Optional[Any] = None,
-        space_group_basis: str = "irreducible"
+        space_group_basis: str = "auto"
     ) -> None:
         """Initialize the propagator solver."""
 
@@ -285,16 +287,51 @@ class PropagatorSolver:
         self._fields_set = False
         if space_group is not None:
             cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
-            if space_group_basis == "pmmm-physical":
+            basis = space_group_basis.lower() if isinstance(space_group_basis, str) else space_group_basis
+            activated = "irreducible"
+
+            if basis in (None, "auto"):
+                m3_enabled = False
+                if hasattr(cpp_sg, "enable_m3_physical_basis"):
+                    try:
+                        cpp_sg.enable_m3_physical_basis()
+                        activated = "m3-physical"
+                        m3_enabled = True
+                    except Exception:
+                        m3_enabled = False
+                if not m3_enabled:
+                    if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
+                        try:
+                            cpp_sg.enable_pmmm_physical_basis()
+                            activated = "pmmm-physical"
+                        except Exception:
+                            activated = "irreducible"
+                    else:
+                        activated = "irreducible"
+            elif basis == "pmmm-physical":
                 if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
                     cpp_sg.enable_pmmm_physical_basis()
+                    activated = "pmmm-physical"
                 else:
                     raise RuntimeError("SpaceGroup does not support Pmmm physical basis.")
-            elif space_group_basis not in ("irreducible", None):
+            elif basis == "m3-physical":
+                if hasattr(cpp_sg, "enable_m3_physical_basis"):
+                    cpp_sg.enable_m3_physical_basis()
+                    activated = "m3-physical"
+                else:
+                    raise RuntimeError("SpaceGroup does not support M3 physical basis.")
+            elif basis == "irreducible":
+                activated = "irreducible"
+            else:
                 raise ValueError(
                     f"Unknown space_group_basis: {space_group_basis}. "
-                    "Use 'irreducible' or 'pmmm-physical'."
+                    "Use 'auto', 'irreducible', 'pmmm-physical', or 'm3-physical'."
                 )
+
+            if activated == "irreducible" and basis in (None, "auto"):
+                print("Space-group basis: irreducible (physical basis not available)")
+            else:
+                print(f"Space-group basis: {activated}")
         self._space_group = space_group
 
     def add_polymer(
@@ -674,13 +711,13 @@ class PropagatorSolver:
         """
         Number of grid points for field operations.
 
-        Returns n_irreducible when space group is set on the propagator
+        Returns n_reduced when space group is set on the propagator
         computation, otherwise returns total_grid.
 
         Returns
         -------
         int
-            Number of grid points (n_irreducible or total_grid).
+            Number of grid points (n_reduced or total_grid).
         """
         if self._propagator_computation is not None:
             return self._propagator_computation.get_cb().get_n_basis()
@@ -954,7 +991,7 @@ class PropagatorSolver:
         Returns
         -------
         numpy.ndarray
-            Field on reduced basis (n_irreducible,).
+            Field on reduced basis (n_reduced,).
         """
         if self._space_group is None:
             raise RuntimeError(
@@ -970,7 +1007,7 @@ class PropagatorSolver:
         Parameters
         ----------
         field_reduced : numpy.ndarray
-            Field on reduced basis (n_irreducible,).
+            Field on reduced basis (n_reduced,).
 
         Returns
         -------

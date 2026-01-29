@@ -337,16 +337,13 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
             }
             gpu_error_check(cudaPeekAtLastError());
 
-            // Execute forward transform (DCT-2 or DST-2)
-            // Note: CudaRealTransform doesn't support streams yet, synchronize first
-            cudaStreamSynchronize(stream);
-
+            // Execute forward transform (DCT-2 or DST-2) on the given stream
             if constexpr (DIM == 1)
-                static_cast<CudaRealTransform1D*>(rt_forward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform1D*>(rt_forward_)->execute(d_work_buffer_, stream);
             else if constexpr (DIM == 2)
-                static_cast<CudaRealTransform2D*>(rt_forward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform2D*>(rt_forward_)->execute(d_work_buffer_, stream);
             else if constexpr (DIM == 3)
-                static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_work_buffer_, stream);
 
             // Copy to output
             ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_cdata, d_work_buffer_, total_complex_grid_);
@@ -404,16 +401,13 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
             ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work_buffer_, d_cdata, total_complex_grid_);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Execute backward transform (DCT-3 or DST-3)
-            // Note: CudaRealTransform doesn't support streams yet, synchronize first
-            cudaStreamSynchronize(stream);
-
+            // Execute backward transform (DCT-3 or DST-3) on the given stream
             if constexpr (DIM == 1)
-                static_cast<CudaRealTransform1D*>(rt_backward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform1D*>(rt_backward_)->execute(d_work_buffer_, stream);
             else if constexpr (DIM == 2)
-                static_cast<CudaRealTransform2D*>(rt_backward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform2D*>(rt_backward_)->execute(d_work_buffer_, stream);
             else if constexpr (DIM == 3)
-                static_cast<CudaRealTransform3D*>(rt_backward_)->execute(d_work_buffer_);
+                static_cast<CudaRealTransform3D*>(rt_backward_)->execute(d_work_buffer_, stream);
 
             // Normalize: DCT/DST round-trip scaling is 2*N per dimension
             double scale = 1.0;

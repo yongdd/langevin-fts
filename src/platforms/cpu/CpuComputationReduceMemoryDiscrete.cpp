@@ -76,7 +76,7 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
             PropagatorComputation<T>::set_space_group(space_group);
         }
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, backend);
 
@@ -1342,7 +1342,7 @@ void CpuComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int p
     try
     {
         const int M = this->cb->get_total_grid();
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 

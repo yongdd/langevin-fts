@@ -128,7 +128,7 @@ void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
     if (sg != nullptr)
     {
         const auto& orbit_counts = sg->get_orbit_counts();
-        int N = sg->get_n_irreducible();
+        int N = sg->get_n_reduced_basis();
         gpu_error_check(cudaMalloc((void**)&d_orbit_counts_, sizeof(int)*N));
         gpu_error_check(cudaMemcpy(d_orbit_counts_, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
     }
@@ -144,7 +144,7 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
     if (this->space_group_ != nullptr)
     {
         // Reduced basis mode: sum = Σ_j g[j] * orbit_counts[j] * dv_base
-        int N = this->n_irreducible_;
+        int N = this->n_basis_;
         double dv_base = this->volume / this->total_grid;
 
         ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_orbit_counts_, N);
@@ -188,7 +188,7 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
     if (this->space_group_ != nullptr)
     {
         // Reduced basis mode: sum = Σ_j g[j] * h[j] * orbit_counts[j] * dv_base
-        int N = this->n_irreducible_;
+        int N = this->n_basis_;
         double dv_base = this->volume / this->total_grid;
 
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, N);
@@ -226,7 +226,7 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
 
     if (this->space_group_ != nullptr)
     {
-        int N = this->n_irreducible_;
+        int N = this->n_basis_;
         double dv_base = this->volume / this->total_grid;
 
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, N);

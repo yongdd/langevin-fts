@@ -9,6 +9,9 @@
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <tuple>
+#include <unordered_map>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -53,7 +56,6 @@ void twiddle_factor(
     const int Ny = range[1];
     const int Nz = range[2];
 
-    #pragma omp parallel for
     for (size_t itr_task = 0; itr_task < data.size(); ++itr_task)
     {
         auto dstcos = std::get<0>(data[itr_task]);
@@ -88,7 +90,6 @@ void mat_split(
     const int Ny2 = Ny / 2;
     const int Nz2 = Nz / 2;
 
-    #pragma omp parallel for
     for (int part = 0; part < 8; ++part)
     {
         const double* local_src = src
@@ -119,7 +120,6 @@ void add_sub_by_seq(
     const int Nz = halfsize[2];
     const int NxNy = Nx * Ny;
 
-    #pragma omp parallel for
     for (size_t itr_seq = 0; itr_seq < seq.size(); ++itr_seq)
     {
         double* dst0 = dst[seq[itr_seq].first];
@@ -151,7 +151,6 @@ void mul_add_sub_by_seq(
     const int Nz = halfsize[2];
     const int NxNy = Nx * Ny;
 
-    #pragma omp parallel for
     for (size_t itr_seq = 0; itr_seq < seq.size(); ++itr_seq)
     {
         int i0 = seq[itr_seq].first;
@@ -198,7 +197,8 @@ FftwCrysFFTRecursive3m::FftwCrysFFTRecursive3m(
     std::array<double, 9> translational_part)
     : nx_logical_(nx_logical),
       cell_para_(cell_para),
-      translational_part_(translational_part)
+      translational_part_(translational_part),
+      instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
 {
     for (int d = 0; d < 3; ++d)
     {
@@ -218,6 +218,7 @@ FftwCrysFFTRecursive3m::FftwCrysFFTRecursive3m(
 
     init_fft_plans();
     generate_twiddle_factors();
+
 }
 
 FftwCrysFFTRecursive3m::~FftwCrysFFTRecursive3m()
@@ -236,46 +237,61 @@ void FftwCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_par
     }
 
     cell_para_ = cell_para;
-    k_cache_.clear();
-    k_current_ = nullptr;
-    coeff_current_ = 0.0;
-
-    {
-        std::lock_guard<std::mutex> lock(cache_mutex_);
-        exp_kx2_cache_.clear();
-        exp_ky2_cache_.clear();
-        exp_kz2_cache_.clear();
-        kx2_cache_.reset();
-        ky2_cache_.reset();
-        kz2_cache_.reset();
-    }
+    cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void FftwCrysFFTRecursive3m::set_contour_step(double coeff)
 {
-    if (coeff == coeff_current_ && k_current_ != nullptr)
-    {
+    ThreadState& state = get_thread_state();
+    if (state.k_current != nullptr && state.coeff_current == coeff)
         return;
-    }
 
-    coeff_current_ = coeff;
-    auto it = k_cache_.find(coeff);
-    if (it == k_cache_.end())
+    const KCache* cache = nullptr;
+    auto it = state.k_cache.find(coeff);
+    if (it == state.k_cache.end())
     {
-        generate_k_cache(coeff);
-        it = k_cache_.find(coeff);
+        auto inserted = state.k_cache.emplace(coeff, generate_k_cache(coeff));
+        it = inserted.first;
     }
-    k_current_ = &it->second;
+    cache = &it->second;
+    state.coeff_current = coeff;
+    state.k_current = cache;
 }
 
 void FftwCrysFFTRecursive3m::diffusion(const double* q_in, double* q_out) const
 {
-    if (!k_current_)
-    {
+    ThreadState& state = get_thread_state();
+    if (!state.k_current)
         throw_with_line_number("FftwCrysFFTRecursive3m::set_contour_step must be called before diffusion().");
-    }
 
-    apply_with_cache(*k_current_, q_in, q_out);
+    apply_with_cache(*state.k_current, q_in, q_out);
+}
+
+FftwCrysFFTRecursive3m::ThreadState& FftwCrysFFTRecursive3m::get_thread_state() const
+{
+    struct ThreadLocalStates
+    {
+        std::unordered_map<const FftwCrysFFTRecursive3m*, ThreadState> states;
+    };
+    thread_local ThreadLocalStates tls;
+
+    ThreadState& state = tls.states[this];
+    const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
+    if (state.instance_id != instance_id_ || state.epoch != epoch)
+    {
+        state.k_current = nullptr;
+        state.coeff_current = std::numeric_limits<double>::quiet_NaN();
+        state.k_cache.clear();
+        state.exp_kx2_cache.clear();
+        state.exp_ky2_cache.clear();
+        state.exp_kz2_cache.clear();
+        state.kx2_cache.reset();
+        state.ky2_cache.reset();
+        state.kz2_cache.reset();
+        state.epoch = epoch;
+        state.instance_id = instance_id_;
+    }
+    return state;
 }
 
 void FftwCrysFFTRecursive3m::apply_multiplier(
@@ -295,7 +311,8 @@ void FftwCrysFFTRecursive3m::apply_with_cache(
         int size = 0;
     };
 
-    thread_local ThreadBuffers buffers;
+    thread_local ThreadBuffers tls_buffers;
+    ThreadBuffers& buffers = tls_buffers;
     if (buffers.size != M_physical_)
     {
         buffers.iomat.resize(M_physical_);
@@ -320,7 +337,6 @@ void FftwCrysFFTRecursive3m::apply_with_cache(
     const auto& k_re = cache.re;
     const auto& k_im = cache.im;
 
-    #pragma omp parallel for
     for (int ix = 0; ix < Nx2; ++ix)
     {
         for (int iy = 0; iy < Ny2; ++iy)
@@ -358,50 +374,40 @@ void FftwCrysFFTRecursive3m::apply_with_cache(
 const FftwCrysFFTRecursive3m::KCache& FftwCrysFFTRecursive3m::get_multiplier_cache(
     MultiplierType type, double coeff) const
 {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-
+    ThreadState& state = get_thread_state();
     switch (type)
     {
         case MultiplierType::Kx2:
-            if (!kx2_cache_)
-                kx2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-            return *kx2_cache_;
+            if (!state.kx2_cache)
+                state.kx2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *state.kx2_cache;
         case MultiplierType::Ky2:
-            if (!ky2_cache_)
-                ky2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-            return *ky2_cache_;
+            if (!state.ky2_cache)
+                state.ky2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *state.ky2_cache;
         case MultiplierType::Kz2:
-            if (!kz2_cache_)
-                kz2_cache_ = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-            return *kz2_cache_;
+            if (!state.kz2_cache)
+                state.kz2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
+            return *state.kz2_cache;
         case MultiplierType::ExpKx2:
         {
-            auto it = exp_kx2_cache_.find(coeff);
-            if (it == exp_kx2_cache_.end())
-            {
-                auto inserted = exp_kx2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
-                it = inserted.first;
-            }
+            auto it = state.exp_kx2_cache.find(coeff);
+            if (it == state.exp_kx2_cache.end())
+                it = state.exp_kx2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
             return it->second;
         }
         case MultiplierType::ExpKy2:
         {
-            auto it = exp_ky2_cache_.find(coeff);
-            if (it == exp_ky2_cache_.end())
-            {
-                auto inserted = exp_ky2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
-                it = inserted.first;
-            }
+            auto it = state.exp_ky2_cache.find(coeff);
+            if (it == state.exp_ky2_cache.end())
+                it = state.exp_ky2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
             return it->second;
         }
         case MultiplierType::ExpKz2:
         {
-            auto it = exp_kz2_cache_.find(coeff);
-            if (it == exp_kz2_cache_.end())
-            {
-                auto inserted = exp_kz2_cache_.emplace(coeff, generate_k_cache_from_multiplier(type, coeff));
-                it = inserted.first;
-            }
+            auto it = state.exp_kz2_cache.find(coeff);
+            if (it == state.exp_kz2_cache.end())
+                it = state.exp_kz2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
             return it->second;
         }
         default:
@@ -464,7 +470,7 @@ void FftwCrysFFTRecursive3m::generate_twiddle_factors()
     twiddle_factor(twiddle, halfsize);
 }
 
-void FftwCrysFFTRecursive3m::generate_k_cache(double coeff)
+FftwCrysFFTRecursive3m::KCache FftwCrysFFTRecursive3m::generate_k_cache(double coeff) const
 {
     KCache cache;
     for (int i = 0; i < 8; ++i)
@@ -511,7 +517,6 @@ void FftwCrysFFTRecursive3m::generate_k_cache(double coeff)
     std::vector<double> tempmat(static_cast<size_t>(M_logical_));
     double factor = 1.0 / static_cast<double>(M_logical_);
 
-    #pragma omp parallel for
     for (int ix = 0; ix < nx_logical_[0]; ++ix)
     {
         for (int iy = 0; iy < nx_logical_[1]; ++iy)
@@ -564,7 +569,7 @@ void FftwCrysFFTRecursive3m::generate_k_cache(double coeff)
         fftw_free(k_split[i]);
     }
 
-    k_cache_.insert(std::make_pair(coeff, std::move(cache)));
+    return cache;
 }
 
 FftwCrysFFTRecursive3m::KCache FftwCrysFFTRecursive3m::generate_k_cache_from_multiplier(
@@ -615,7 +620,6 @@ FftwCrysFFTRecursive3m::KCache FftwCrysFFTRecursive3m::generate_k_cache_from_mul
     std::vector<double> tempmat(static_cast<size_t>(M_logical_));
     double factor = 1.0 / static_cast<double>(M_logical_);
 
-    #pragma omp parallel for
     for (int ix = 0; ix < nx_logical_[0]; ++ix)
     {
         for (int iy = 0; iy < nx_logical_[1]; ++iy)

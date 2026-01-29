@@ -10,8 +10,8 @@
 #include <cmath>
 #include <stdexcept>
 #include <cstring>
-#include <vector>
 #include <memory>
+#include <unordered_map>
 
 #include "FftwCrysFFT.h"
 #include "Exception.h"
@@ -29,8 +29,7 @@ FftwCrysFFT::FftwCrysFFT(
     std::array<double, 9> /* trans_part - ignored for DCT-II/III */)
     : nx_logical_(nx_logical),
       cell_para_(cell_para),
-      boltz_current_(nullptr),
-      ds_current_(0.0),
+      instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed)),
       plan_forward_(nullptr),
       plan_backward_(nullptr),
       io_buffer_(nullptr),
@@ -67,6 +66,7 @@ FftwCrysFFT::FftwCrysFFT(
 
     // Initialize FFTW plans
     initFFTPlans();
+
 }
 
 //------------------------------------------------------------------------------
@@ -124,12 +124,7 @@ void FftwCrysFFT::initFFTPlans()
 //------------------------------------------------------------------------------
 void FftwCrysFFT::freeBoltzmann()
 {
-    for (auto& kv : boltzmann_)
-    {
-        if (kv.second) delete[] kv.second;
-    }
-    boltzmann_.clear();
-    boltz_current_ = nullptr;
+    cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 //------------------------------------------------------------------------------
@@ -149,7 +144,6 @@ void FftwCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
 
     // Invalidate all Boltzmann factors
     freeBoltzmann();
-    ds_current_ = 0.0;
 }
 
 //------------------------------------------------------------------------------
@@ -157,22 +151,25 @@ void FftwCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
 //------------------------------------------------------------------------------
 void FftwCrysFFT::set_contour_step(double ds)
 {
-    if (ds == ds_current_ && boltzmann_.count(ds) > 0) return;
+    ThreadState& state = get_thread_state();
+    if (state.boltz_current != nullptr && state.ds_current == ds)
+        return;
 
-    ds_current_ = ds;
-
-    if (boltzmann_.count(ds) == 0)
+    auto it = state.boltzmann.find(ds);
+    if (it == state.boltzmann.end())
     {
-        generateBoltzmann(ds);
+        std::unique_ptr<double, BoltzDeleter> boltz(generateBoltzmann(ds));
+        it = state.boltzmann.emplace(ds, std::move(boltz)).first;
     }
 
-    boltz_current_ = boltzmann_[ds];
+    state.ds_current = ds;
+    state.boltz_current = it->second.get();
 }
 
 //------------------------------------------------------------------------------
 // Generate Boltzmann factors for a specific ds value
 //------------------------------------------------------------------------------
-void FftwCrysFFT::generateBoltzmann(double ds)
+double* FftwCrysFFT::generateBoltzmann(double ds) const
 {
     double* boltz = new double[M_physical_];
 
@@ -207,7 +204,7 @@ void FftwCrysFFT::generateBoltzmann(double ds)
         }
     }
 
-    boltzmann_[ds] = boltz;
+    return boltz;
 }
 
 //------------------------------------------------------------------------------
@@ -215,6 +212,12 @@ void FftwCrysFFT::generateBoltzmann(double ds)
 //------------------------------------------------------------------------------
 void FftwCrysFFT::diffusion(double* q_in, double* q_out)
 {
+    ThreadState& state = get_thread_state();
+    if (!state.boltz_current)
+    {
+        throw_with_line_number("FftwCrysFFT::set_contour_step must be called before diffusion().");
+    }
+
     struct AlignedDeleter {
         void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
     };
@@ -243,21 +246,36 @@ void FftwCrysFFT::diffusion(double* q_in, double* q_out)
     fftw_execute_r2r(plan_forward_, buffers.io.get(), buffers.temp.get());
 
     // Step 3: Apply Boltzmann factor (no internal threading)
-    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
-    {
-        buffers.temp.get()[i] *= boltz_current_[i];
-    }
+        buffers.temp.get()[i] *= state.boltz_current[i];
 
     // Step 4: Backward DCT-III (new-array execute)
     fftw_execute_r2r(plan_backward_, buffers.temp.get(), buffers.io.get());
 
     // Step 5: Apply normalization and copy result to output (no internal threading)
-    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
-    {
         q_out[i] = buffers.io.get()[i] * norm_factor_;
+}
+
+FftwCrysFFT::ThreadState& FftwCrysFFT::get_thread_state() const
+{
+    struct ThreadLocalStates
+    {
+        std::unordered_map<const FftwCrysFFT*, ThreadState> states;
+    };
+    thread_local ThreadLocalStates tls;
+
+    ThreadState& state = tls.states[this];
+    const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
+    if (state.instance_id != instance_id_ || state.epoch != epoch)
+    {
+        state.boltzmann.clear();
+        state.boltz_current = nullptr;
+        state.ds_current = std::numeric_limits<double>::quiet_NaN();
+        state.epoch = epoch;
+        state.instance_id = instance_id_;
     }
+    return state;
 }
 
 //------------------------------------------------------------------------------
@@ -293,7 +311,6 @@ void FftwCrysFFT::apply_multiplier(const double* q_in, double* q_out, const doub
     fftw_execute_r2r(plan_forward_, buffers.io.get(), buffers.temp.get());
 
     // Step 3: Apply multiplier (no internal threading)
-    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
     {
         buffers.temp.get()[i] *= multiplier[i];
@@ -303,7 +320,6 @@ void FftwCrysFFT::apply_multiplier(const double* q_in, double* q_out, const doub
     fftw_execute_r2r(plan_backward_, buffers.temp.get(), buffers.io.get());
 
     // Step 5: Apply normalization and copy result to output (no internal threading)
-    #pragma omp simd
     for (int i = 0; i < M_physical_; ++i)
     {
         q_out[i] = buffers.io.get()[i] * norm_factor_;

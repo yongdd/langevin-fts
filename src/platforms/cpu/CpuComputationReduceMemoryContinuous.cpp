@@ -79,7 +79,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         }
 
         const int M = this->cb->get_total_grid();  // Full grid size for workspace arrays
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         this->method = method;
         if(this->method == "pseudospectral")

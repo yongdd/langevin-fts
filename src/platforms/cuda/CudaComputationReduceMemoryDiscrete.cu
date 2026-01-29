@@ -60,7 +60,7 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             PropagatorComputation<T>::set_space_group(space_group);
         }
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // Use single stream to minimize memory usage
         this->n_streams = 1;
@@ -1203,7 +1203,7 @@ void CudaComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int 
     try
     {
         const int M = this->cb->get_total_grid();
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         const int STREAM = 0;
         const int k = this->checkpoint_interval;
 

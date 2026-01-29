@@ -121,7 +121,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_space_group", &ComputationBox<T>::get_space_group, py::return_value_policy::reference)
         .def("get_n_basis", &ComputationBox<T>::get_n_basis)
         .def("get_orbit_counts", &ComputationBox<T>::get_orbit_counts)
-        // Field operations: use get_n_basis() for size (n_irreducible if space group set, else total_grid)
+        // Field operations: use get_n_basis() for size (n_reduced if space group set, else total_grid)
         .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
         {
             const int N = obj.get_n_basis();
@@ -212,8 +212,8 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - set_space_group(sg): Set space group for reduced basis mode
  *
  * When space group is set:
- * - compute_propagators() accepts reduced basis w (size: n_irreducible)
- * - get_total_concentration() returns reduced basis phi (size: n_irreducible)
+ * - compute_propagators() accepts reduced basis w (size: n_reduced)
+ * - get_total_concentration() returns reduced basis phi (size: n_reduced)
  *
  * @tparam T Field type (double or std::complex<double>)
  * @param m Python module
@@ -307,7 +307,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, std::string monomer_type)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
                 py::array_t<T> phi(N);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(monomer_type, static_cast<T*>(buf_phi.ptr));
@@ -321,7 +321,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, int polymer, std::string monomer_type)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
                 py::array_t<T> phi = py::array_t<T>(N);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
@@ -335,7 +335,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration_gce", [](PropagatorComputation<T>& obj, double fugacity, int polymer, std::string monomer_type)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
                 py::array_t<T> phi = py::array_t<T>(N);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration_gce(fugacity, polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
@@ -349,7 +349,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_block_concentration", [](PropagatorComputation<T>& obj, int polymer)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
                 const int N_B = obj.get_n_blocks(polymer);
 
                 py::array_t<T> phi = py::array_t<T>({N_B,N});
@@ -367,7 +367,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_solvent_concentration", [](PropagatorComputation<T>& obj, int s)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
 
                 py::array_t<T> phi = py::array_t<T>({N});
                 py::buffer_info buf_phi = phi.request();
@@ -382,7 +382,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_chain_propagator", [](PropagatorComputation<T>& obj, int polymer, int v, int u, int n)
         {
             try{
-                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                const int N = obj.get_cb()->get_n_basis();  // n_reduced (with space group) or total_grid
                 py::array_t<T> q1 = py::array_t<T>(N);
                 py::buffer_info buf_q1 = q1.request();
                 obj.get_chain_propagator(static_cast<T*>(buf_q1.ptr), polymer, v, u, n);
@@ -669,7 +669,7 @@ PYBIND11_MODULE(_core, m)
         R"doc(Space group symmetry for reduced basis representation.
 
 Reduces computational cost by exploiting crystallographic symmetry.
-Fields can be represented using only irreducible mesh points.
+Fields can be represented using only reduced-basis points.
 
 Common space groups:
   - Im-3m (229, hall=529): BCC
@@ -679,7 +679,7 @@ Common space groups:
 
 Example:
     >>> sg = SpaceGroup([32, 32, 32], "Im-3m", 529)
-    >>> print(f"Reduction: {sg.get_total_grid() / sg.get_n_irreducible():.1f}x")
+    >>> print(f"Reduction: {sg.get_total_grid() / sg.get_n_reduced_basis():.1f}x")
 )doc")
         .def(py::init<std::vector<int>, int>(), py::arg("nx"), py::arg("hall_number"),
              "Create SpaceGroup from grid dimensions and Hall number.")
@@ -700,20 +700,24 @@ Example:
              "Grid dimensions [nx, ny, nz].")
         .def("get_total_grid", &SpaceGroup::get_total_grid,
              "Total number of grid points.")
-        .def("get_n_irreducible", &SpaceGroup::get_n_irreducible,
-             "Number of irreducible mesh points.")
+        .def("get_n_reduced_basis", &SpaceGroup::get_n_reduced_basis,
+             "Number of reduced-basis points.")
         .def("get_n_symmetry_ops", &SpaceGroup::get_n_symmetry_ops,
              "Number of symmetry operations.")
         .def("get_reduced_basis_indices", &SpaceGroup::get_reduced_basis_indices,
-             "Flat indices of irreducible points in full grid.")
+             "Flat indices of reduced-basis points in full grid.")
         .def("get_full_to_reduced_map", &SpaceGroup::get_full_to_reduced_map,
-             "Map from full grid index to irreducible index.")
+             "Map from full grid index to reduced-basis index.")
         .def("get_orbit_counts", &SpaceGroup::get_orbit_counts,
-             "Number of equivalent points for each irreducible point.")
+             "Number of equivalent points for each reduced-basis point.")
         .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,
              "Enable Pmmm physical basis (1/8 grid) mapping.")
         .def("using_pmmm_physical_basis", &SpaceGroup::using_pmmm_physical_basis,
              "Return True if Pmmm physical basis is enabled.")
+        .def("enable_m3_physical_basis", &SpaceGroup::enable_m3_physical_basis,
+             "Enable M3 physical basis (1/8 even-index grid) mapping.")
+        .def("using_m3_physical_basis", &SpaceGroup::using_m3_physical_basis,
+             "Return True if M3 physical basis is enabled.")
         .def("to_reduced_basis", [](SpaceGroup& obj, py::array_t<double> full_field)
         {
             py::buffer_info buf = full_field.request();
@@ -728,12 +732,12 @@ Example:
             if (total_size != n_fields * obj.get_total_grid())
                 throw_with_line_number("Field size must be multiple of total_grid");
 
-            py::array_t<double> reduced_field({n_fields, obj.get_n_irreducible()});
+            py::array_t<double> reduced_field({n_fields, obj.get_n_reduced_basis()});
             obj.to_reduced_basis(static_cast<double*>(buf.ptr),
                                  static_cast<double*>(reduced_field.request().ptr),
                                  n_fields);
             return reduced_field;
-        }, "Convert full grid field to reduced basis. Returns (n_fields, n_irreducible) array.")
+        }, "Convert full grid field to reduced basis. Returns (n_fields, n_reduced) array.")
         .def("from_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();
@@ -744,9 +748,9 @@ Example:
             for (int i = 0; i < buf.ndim; ++i)
                 total_size *= buf.shape[i];
 
-            int n_fields = total_size / obj.get_n_irreducible();
-            if (total_size != n_fields * obj.get_n_irreducible())
-                throw_with_line_number("Reduced field size must be multiple of n_irreducible");
+            int n_fields = total_size / obj.get_n_reduced_basis();
+            if (total_size != n_fields * obj.get_n_reduced_basis())
+                throw_with_line_number("Reduced field size must be multiple of n_reduced");
 
             py::array_t<double> full_field({n_fields, obj.get_total_grid()});
             obj.from_reduced_basis(static_cast<double*>(buf.ptr),

@@ -455,7 +455,7 @@ class SymmetricPolymerTheory:
             C++ Molecules object containing polymer specifications.
         w_aux : ndarray
             Auxiliary potential fields, shape (M, n_grid) where n_grid is
-            total_grid (without space group) or n_irreducible (with space group).
+            total_grid (without space group) or n_reduced (with space group).
         total_partitions : list of float
             Single-chain partition functions Q_p for each polymer type p.
         cb : ComputationBox

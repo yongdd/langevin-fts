@@ -88,7 +88,7 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
                 gpu_error_check(cudaMalloc((void**)&d_q_full_[i][1], sizeof(T)*M));
             }
             // Allocate and copy mapping arrays
-            const int N_reduced = space_group->get_n_irreducible();
+            const int N_reduced = space_group->get_n_reduced_basis();
             gpu_error_check(cudaMalloc((void**)&d_reduced_basis_indices_, sizeof(int)*N_reduced));
             gpu_error_check(cudaMemcpy(d_reduced_basis_indices_, space_group->get_reduced_basis_indices().data(),
                                        sizeof(int)*N_reduced, cudaMemcpyHostToDevice));
@@ -102,7 +102,7 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
             gpu_error_check(cudaMalloc((void**)&this->d_phi_full_buffer_, sizeof(T)*M));
         }
 
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
@@ -252,7 +252,7 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
                 space_group,
                 d_reduced_basis_indices_,
                 d_full_to_reduced_map_,
-                space_group->get_n_irreducible());
+                space_group->get_n_reduced_basis());
         }
     }
     catch(std::exception& exc)
@@ -339,7 +339,7 @@ void CudaComputationContinuous<T>::compute_propagators(
 
         const int M = this->cb->get_total_grid();
         const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
+        const int N = use_reduced_basis ? this->space_group_->get_n_reduced_basis() : M;
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -542,13 +542,7 @@ void CudaComputationContinuous<T>::compute_propagators(
                     #endif
                 }
 
-                gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][0]));
-                gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][1]));
-
-                // // Display job info
-                // #ifndef NDEBUG
-                // std::cout << job << " finished" << std::endl;
-                // #endif
+                // Per-job stream sync removed; group-level sync is sufficient for dependencies.
             }
             gpu_error_check(cudaDeviceSynchronize());
         }
@@ -612,7 +606,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = this->cb->get_total_grid();
         const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_grid = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
+        const int N_grid = use_reduced_basis ? this->space_group_->get_n_reduced_basis() : M;
 
         // Calculate segment concentrations
         for(const auto& d_block: this->d_phi_block)
@@ -709,7 +703,7 @@ void CudaComputationContinuous<T>::calculate_phi_one_block(
 
         const int M = this->cb->get_total_grid();
         const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_grid = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
+        const int N_grid = use_reduced_basis ? this->space_group_->get_n_reduced_basis() : M;
 
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
@@ -1008,7 +1002,7 @@ void CudaComputationContinuous<T>::get_chain_propagator(T *q_out, int polymer, i
     // This is made for debugging and testing.
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);

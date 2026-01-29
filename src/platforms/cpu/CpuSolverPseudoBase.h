@@ -133,10 +133,12 @@ protected:
     std::vector<double> crysfft_ky2_;
     std::vector<double> crysfft_kz2_;
     std::array<double, 3> crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
+    bool crysfft_identity_map_ = false;  ///< True when reduced basis matches physical grid
 
     bool use_crysfft() const { return crysfft_mode_ != CrysFFTMode::None; }
     bool use_crysfft_recursive() const { return crysfft_mode_ == CrysFFTMode::Recursive3m; }
     bool use_crysfft_pmmm() const { return crysfft_mode_ == CrysFFTMode::PmmmDct; }
+    bool use_crysfft_identity_map() const { return crysfft_identity_map_; }
 
     int get_crysfft_physical_size() const;
     void crysfft_set_cell_para(const std::array<double, 6>& cell_para);

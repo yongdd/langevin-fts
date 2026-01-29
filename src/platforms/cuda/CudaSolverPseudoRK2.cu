@@ -35,6 +35,7 @@
 #include "CudaPseudo.h"
 #include "CudaSolverPseudoRK2.h"
 #include "CudaCrysFFT.h"
+#include "CudaCrysFFTRecursive3m.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -59,7 +60,8 @@ CudaSolverPseudoRK2<T>::CudaSolverPseudoRK2(
         this->d_full_to_reduced_map_ = nullptr;
         this->n_basis_ = 0;
         this->use_crysfft_ = false;
-        this->use_crysfft_pmmm_physical_ = false;
+        this->crysfft_mode_ = CudaCrysFFTMode::None;
+        this->crysfft_identity_map_ = false;
         this->crysfft_physical_size_ = 0;
         this->crysfft_reduced_size_ = 0;
         this->d_crysfft_phys_to_reduced_ = nullptr;
@@ -336,7 +338,8 @@ template <typename T>
 void CudaSolverPseudoRK2<T>::cleanup_crysfft()
 {
     use_crysfft_ = false;
-    use_crysfft_pmmm_physical_ = false;
+    crysfft_mode_ = CudaCrysFFTMode::None;
+    crysfft_identity_map_ = false;
     crysfft_physical_size_ = 0;
     crysfft_reduced_size_ = 0;
 
@@ -403,57 +406,82 @@ void CudaSolverPseudoRK2<T>::set_space_group(
         {
             const auto nx = cb->get_nx();
             const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
-            if (even_grid && space_group_->has_mirror_planes_xyz())
+            if (even_grid)
             {
+                std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0};
+                const bool has_3m = space_group_->get_m3_translations(trans_part);
+                const bool has_pmmm = space_group_->has_mirror_planes_xyz();
+                const bool recursive_ok = ((nx[2] / 2) % 8) == 0;
+
                 const int Nx2 = nx[0] / 2;
                 const int Ny2 = nx[1] / 2;
                 const int Nz2 = nx[2] / 2;
                 const int M_phys = Nx2 * Ny2 * Nz2;
-                const int M_reduced = space_group_->get_n_irreducible();
+                const int M_reduced = space_group_->get_n_reduced_basis();
                 const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
 
                 std::vector<int> phys_to_reduced;
-                std::vector<int> reduced_to_phys(M_reduced, -1);
+                std::vector<int> reduced_to_phys;
 
-                auto build_mapping = [&]() -> bool {
+                auto build_mapping = [&](bool even_indices) -> bool {
                     phys_to_reduced.resize(M_phys);
+                    reduced_to_phys.assign(M_reduced, -1);
+                    std::vector<int> coverage(M_reduced, 0);
                     int idx = 0;
                     for (int ix = 0; ix < Nx2; ++ix)
                     {
-                        const int fx = ix;
+                        const int fx = even_indices ? (2 * ix) : ix;
                         for (int iy = 0; iy < Ny2; ++iy)
                         {
-                            const int fy = iy;
+                            const int fy = even_indices ? (2 * iy) : iy;
                             for (int iz = 0; iz < Nz2; ++iz)
                             {
-                                const int fz = iz;
+                                const int fz = even_indices ? (2 * iz) : iz;
                                 const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
                                 const int reduced_idx = full_to_reduced[full_idx];
                                 phys_to_reduced[idx] = reduced_idx;
                                 if (reduced_to_phys[reduced_idx] < 0)
                                     reduced_to_phys[reduced_idx] = idx;
+                                coverage[reduced_idx] += 1;
                                 ++idx;
                             }
                         }
                     }
                     for (int i = 0; i < M_reduced; ++i)
                     {
-                        if (reduced_to_phys[i] < 0)
+                        if (coverage[i] == 0)
                             return false;
                     }
                     return true;
                 };
 
-                if (space_group_->using_pmmm_physical_basis())
-                {
-                    if (M_reduced != M_phys)
-                    {
-                        throw_with_line_number("Pmmm physical basis size does not match physical grid size.");
-                    }
-
+                auto finalize_crysfft = [&](CudaCrysFFTMode mode) {
                     crysfft_physical_size_ = M_phys;
                     crysfft_reduced_size_ = M_reduced;
-                    use_crysfft_pmmm_physical_ = true;
+
+                    bool identity = (M_reduced == M_phys);
+                    if (identity)
+                    {
+                        for (int i = 0; i < M_phys; ++i)
+                        {
+                            if (phys_to_reduced[i] != i || reduced_to_phys[i] != i)
+                            {
+                                identity = false;
+                                break;
+                            }
+                        }
+                    }
+                    crysfft_identity_map_ = identity;
+
+                    if (!crysfft_identity_map_)
+                    {
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * M_phys));
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * M_reduced));
+                        gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, phys_to_reduced.data(),
+                                                   sizeof(int) * M_phys, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
+                                                   sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
+                    }
 
                     std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
                     auto lx = cb->get_lx();
@@ -461,35 +489,27 @@ void CudaSolverPseudoRK2<T>::set_space_group(
 
                     for (int i = 0; i < n_streams; i++)
                     {
-                        crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
+                        if (mode == CudaCrysFFTMode::Recursive3m)
+                            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, trans_part);
+                        else
+                            crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
                         gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
                         gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
                     }
+                    crysfft_mode_ = mode;
                     use_crysfft_ = true;
+                };
+
+                if (has_3m && recursive_ok)
+                {
+                    if (build_mapping(true))
+                        finalize_crysfft(CudaCrysFFTMode::Recursive3m);
                 }
-                else if (build_mapping())
+
+                if (!use_crysfft_ && has_pmmm)
                 {
-                    crysfft_physical_size_ = M_phys;
-                    crysfft_reduced_size_ = M_reduced;
-
-                    gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * M_phys));
-                    gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * M_reduced));
-                    gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, phys_to_reduced.data(),
-                                               sizeof(int) * M_phys, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
-                                               sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
-
-                    std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-                    auto lx = cb->get_lx();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
-
-                    for (int i = 0; i < n_streams; i++)
-                    {
-                        crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
-                    }
-                    use_crysfft_ = true;
+                    if (build_mapping(false))
+                        finalize_crysfft(CudaCrysFFTMode::PmmmDct);
                 }
             }
         }
@@ -649,16 +669,14 @@ void CudaSolverPseudoRK2<T>::advance_propagator(
                 double coeff_full = bond_length_sq * local_ds / 6.0;
 
                 const int M_phys = crysfft_physical_size_;
-                if (use_crysfft_pmmm_physical_)
+                if (crysfft_identity_map_)
                 {
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_crysfft_in_[STREAM], d_q_in, _d_exp_dw, 1.0, M_phys);
                     gpu_error_check(cudaPeekAtLastError());
 
-                    // CudaCrysFFT uses default stream; synchronize before executing
-                    cudaStreamSynchronize(streams[STREAM][0]);
                     crysfft_[STREAM]->set_contour_step(coeff_full);
-                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out, d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
@@ -680,10 +698,8 @@ void CudaSolverPseudoRK2<T>::advance_propagator(
                     d_crysfft_in_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
                 gpu_error_check(cudaPeekAtLastError());
 
-                // CudaCrysFFT uses default stream; synchronize before executing
-                cudaStreamSynchronize(streams[STREAM][0]);
                 crysfft_[STREAM]->set_contour_step(coeff_full);
-                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                 ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);

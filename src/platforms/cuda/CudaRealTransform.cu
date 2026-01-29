@@ -2728,6 +2728,26 @@ CudaRealTransform1D::~CudaRealTransform1D()
     }
 }
 
+void CudaRealTransform1D::set_stream(cudaStream_t stream)
+{
+    if (stream_ == stream)
+        return;
+    stream_ = stream;
+    if (initialized_)
+    {
+        if (cufftSetStream(plan_, stream_) != CUFFT_SUCCESS)
+        {
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform1D");
+        }
+    }
+}
+
+void CudaRealTransform1D::execute(double* d_data, cudaStream_t stream)
+{
+    set_stream(stream);
+    execute(d_data);
+}
+
 void CudaRealTransform1D::execute(double* d_data)
 {
     if (!initialized_) {
@@ -2743,34 +2763,34 @@ void CudaRealTransform1D::execute(double* d_data)
             int nT = pow2roundup(N / 2);
 
             // Copy input to work buffer and zero-pad
-            cudaMemcpy(d_work_, d_data, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice);
-            cudaMemset(d_work_ + N + 1, 0, sizeof(double));
+            cudaMemcpyAsync(d_work_, d_data, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_);
+            cudaMemsetAsync(d_work_ + N + 1, 0, sizeof(double), stream_);
 
             // PreOp modifies work buffer in place
-            kernel_dct1_preOp<<<1, nT, nT * sizeof(double)>>>(d_work_, d_x1_, N, nT);
+            kernel_dct1_preOp<<<1, nT, nT * sizeof(double), stream_>>>(d_work_, d_x1_, N, nT);
 
             // Z2D FFT (in-place: treat d_work_ as complex, output real)
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
 
             // PostOp
-            kernel_dct1_postOp<<<1, N / 2 + 1>>>(d_work_, d_x1_, N);
+            kernel_dct1_postOp<<<1, N / 2 + 1, 0, stream_>>>(d_work_, d_x1_, N);
 
             // Copy result back
-            cudaMemcpy(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice);
+            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DCT_2: {
-            kernel_dct2_preOp<<<1, nThread, sizeof(double) * nThread>>>(d_data, N_);
+            kernel_dct2_preOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(d_data, N_);
             cufftExecZ2D(plan_, (cufftDoubleComplex*)d_data, d_work_);
-            kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread>>>(d_work_, N_);
-            cudaMemcpy(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(d_work_, N_);
+            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DCT_3: {
-            kernel_dct3_preOp<<<1, nThread>>>(d_data, N_);
+            kernel_dct3_preOp<<<1, nThread, 0, stream_>>>(d_data, N_);
             cufftExecD2Z(plan_, d_data, (cufftDoubleComplex*)d_work_);
-            kernel_dct3_postOp<<<1, nThread, sizeof(double) * (nThread + 2)>>>(d_work_, N_);
-            cudaMemcpy(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            kernel_dct3_postOp<<<1, nThread, sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
+            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DCT_4: {
@@ -2779,9 +2799,9 @@ void CudaRealTransform1D::execute(double* d_data)
             int numBlocks = (N2 + blockSize - 1) / blockSize;
             cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
             cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
-            kernel_dct4_preOp<<<numBlocks, blockSize>>>(d_data, d_z_in, N_);
+            kernel_dct4_preOp<<<numBlocks, blockSize, 0, stream_>>>(d_data, d_z_in, N_);
             cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
-            kernel_dct4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize>>>(d_z_out, d_data, N_);
+            kernel_dct4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(d_z_out, d_data, N_);
             break;
         }
         case CUDA_DST_1: {
@@ -2791,46 +2811,46 @@ void CudaRealTransform1D::execute(double* d_data)
             int half = (M + 1) / 2;  // threads needed for loading
             int nT = std::max(half, M / 2 + 1);  // threads needed for both loading and computing
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0, 0]
-            cudaMemset(d_work_, 0, sizeof(double) * (M + 2));
-            cudaMemcpy(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemsetAsync(d_work_, 0, sizeof(double) * (M + 2), stream_);
+            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             // PreOp
-            kernel_dst1_preOp<<<1, nT, M * sizeof(double)>>>(d_work_, M);
+            kernel_dst1_preOp<<<1, nT, M * sizeof(double), stream_>>>(d_work_, M);
             // Z2D FFT of size M
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
             // PostOp
-            kernel_dst1_postOp<<<1, M / 2 + 1>>>(d_work_, M);
+            kernel_dst1_postOp<<<1, M / 2 + 1, 0, stream_>>>(d_work_, M);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpy(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DST_2: {
             // FCT/FST style (Makhoul 1980): input at buffer[1..N], output at buffer[1..N]
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0]
-            cudaMemset(d_work_, 0, sizeof(double) * (N_ + 2));
-            cudaMemcpy(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_);
+            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             // PreOp (reads from buffer[1..N]) - needs N/2+1 threads
-            kernel_dst2_preOp<<<1, N_ / 2 + 1, N_ * sizeof(double)>>>(d_work_, N_);
+            kernel_dst2_preOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(d_work_, N_);
             // Z2D FFT of size N
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
             // PostOp
-            kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double)>>>(d_work_, N_);
+            kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(d_work_, N_);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpy(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DST_3: {
             // FCT/FST style (Makhoul 1980): input at buffer[1..N] (buffer[0]=0), output at buffer[1..N]
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0]
-            cudaMemset(d_work_, 0, sizeof(double) * (N_ + 2));
-            cudaMemcpy(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_);
+            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             // PreOp (reads buffer[0..N])
-            kernel_dst3_preOp<<<1, N_ / 2 + 1>>>(d_work_, N_);
+            kernel_dst3_preOp<<<1, N_ / 2 + 1, 0, stream_>>>(d_work_, N_);
             // D2Z FFT of size N
             cufftExecD2Z(plan_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_));
             // PostOp
-            kernel_dst3_postOp<<<1, N_ / 2 + 1, (N_ + 2) * sizeof(double)>>>(d_work_, N_);
+            kernel_dst3_postOp<<<1, N_ / 2 + 1, (N_ + 2) * sizeof(double), stream_>>>(d_work_, N_);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpy(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice);
+            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DST_4: {
@@ -2839,9 +2859,9 @@ void CudaRealTransform1D::execute(double* d_data)
             int numBlocks = (N2 + blockSize - 1) / blockSize;
             cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
             cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
-            kernel_dst4_preOp<<<numBlocks, blockSize>>>(d_data, d_z_in, N_);
+            kernel_dst4_preOp<<<numBlocks, blockSize, 0, stream_>>>(d_data, d_z_in, N_);
             cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
-            kernel_dst4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize>>>(d_z_out, d_data, N_);
+            kernel_dst4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(d_z_out, d_data, N_);
             break;
         }
         default:
@@ -2878,6 +2898,7 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
     }
 
     init();
+    set_stream(stream_);
 }
 
 void CudaRealTransform2D::init()
@@ -3051,6 +3072,7 @@ void CudaRealTransform2D::init()
     }
 
     initialized_ = true;
+    set_stream(stream_);
 }
 
 CudaRealTransform2D::~CudaRealTransform2D()
@@ -3062,6 +3084,26 @@ CudaRealTransform2D::~CudaRealTransform2D()
         if (plan_y_) cufftDestroy(plan_y_);
         if (plan_x_) cufftDestroy(plan_x_);
     }
+}
+
+void CudaRealTransform2D::set_stream(cudaStream_t stream)
+{
+    if (stream_ == stream)
+        return;
+    stream_ = stream;
+    if (initialized_)
+    {
+        if (plan_x_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform2D (plan_x)");
+        if (plan_y_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform2D (plan_y)");
+    }
+}
+
+void CudaRealTransform2D::execute(double* d_data, cudaStream_t stream)
+{
+    set_stream(stream);
+    execute(d_data);
 }
 
 void CudaRealTransform2D::executeY_DCT1(double* d_data) {
@@ -3078,9 +3120,9 @@ void CudaRealTransform2D::executeY_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_2d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_data, d_complex, Nx_, Ny_);
+    kernel_dct2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dct2_2d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_);
+    kernel_dct2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeY_DCT3(double* d_data)
@@ -3091,14 +3133,14 @@ void CudaRealTransform2D::executeY_DCT3(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = (total_postOp + blockSize - 1) / blockSize;
 
-    cudaMemcpy(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
 
-    kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_temp_, Nx_, Ny_);
+    kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_y_, d_temp_, d_complex);
 
-    kernel_dct3_2d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_complex, d_temp_, Nx_, Ny_);
+    kernel_dct3_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeY_DCT4(double* d_data)
@@ -3107,9 +3149,9 @@ void CudaRealTransform2D::executeY_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_2d_preOp_y<<<Nx_, N2>>>(d_data, d_z_in, Nx_, Ny_);
+    kernel_dct4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_2d_postOp_y<<<Nx_, Ny_>>>(d_z_out, d_temp_, Nx_, Ny_);
+    kernel_dct4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeY_DST1(double* d_data) {
@@ -3127,9 +3169,9 @@ void CudaRealTransform2D::executeY_DST2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst2_2d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_data, d_complex, Nx_, Ny_);
+    kernel_dst2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dst2_2d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_);
+    kernel_dst2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeY_DST3(double* d_data)
@@ -3147,22 +3189,22 @@ void CudaRealTransform2D::executeY_DST3(double* d_data)
     // Step 1: Setup padded buffer
     int total_setup = Nx_ * stride;
     int numBlocks_setup = (total_setup + blockSize - 1) / blockSize;
-    kernel_dst3_2d_setup_padded_y<<<numBlocks_setup, blockSize>>>(d_data, d_work_, Nx_, Ny_);
+    kernel_dst3_2d_setup_padded_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_);
 
     // Step 2: PreOp on padded buffer (each block handles one row)
-    kernel_dst3_2d_preOp_y<<<Nx_, Ny_ / 2 + 1>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_preOp_y<<<Nx_, Ny_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_);
 
     // Step 3: D2Z FFT in-place on padded buffer
     cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_work_);
 
     // Step 4: PostOp in-place (each block handles one row, needs shared memory)
     size_t sharedSize = sizeof(double) * (Ny_ + 2);
-    kernel_dst3_2d_postOp_y<<<Nx_, Ny_ / 2 + 1, sharedSize>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_postOp_y<<<Nx_, Ny_ / 2 + 1, sharedSize, stream_>>>(d_work_, Nx_, Ny_);
 
     // Step 5: Copy results back to d_temp_
     int total_copy = Nx_ * Ny_;
     int numBlocks_copy = (total_copy + blockSize - 1) / blockSize;
-    kernel_dst3_2d_copy_back_y<<<numBlocks_copy, blockSize>>>(d_work_, d_temp_, Nx_, Ny_);
+    kernel_dst3_2d_copy_back_y<<<numBlocks_copy, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeY_DST4(double* d_data)
@@ -3171,9 +3213,9 @@ void CudaRealTransform2D::executeY_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_2d_preOp_y<<<Nx_, N2>>>(d_data, d_z_in, Nx_, Ny_);
+    kernel_dst4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_2d_postOp_y<<<Nx_, Ny_>>>(d_z_out, d_temp_, Nx_, Ny_);
+    kernel_dst4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DCT1(double* d_data) {
@@ -3190,9 +3232,9 @@ void CudaRealTransform2D::executeX_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_2d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_);
+    kernel_dct2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dct2_2d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_work_, d_data, Nx_, Ny_);
+    kernel_dct2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DCT3(double* d_data)
@@ -3205,13 +3247,13 @@ void CudaRealTransform2D::executeX_DCT3(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = (total_postOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_2d_preOp_x_transpose<<<numBlocks_transpose, blockSize>>>(d_temp_, d_work_, Nx_, Ny_);
-    kernel_dct3_2d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_work_, Nx_, Ny_);
+    kernel_dct3_2d_preOp_x_transpose<<<numBlocks_transpose, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_);
+    kernel_dct3_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_x_, d_work_, d_complex);
 
-    kernel_dct3_2d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_complex, d_data, Nx_, Ny_);
+    kernel_dct3_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DCT4(double* d_data)
@@ -3220,9 +3262,9 @@ void CudaRealTransform2D::executeX_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_2d_preOp_x<<<Ny_, N2>>>(d_temp_, d_z_in, Nx_, Ny_);
+    kernel_dct4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_2d_postOp_x<<<Ny_, Nx_>>>(d_z_out, d_data, Nx_, Ny_);
+    kernel_dct4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DST1(double* d_data) {
@@ -3240,9 +3282,9 @@ void CudaRealTransform2D::executeX_DST2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst2_2d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_);
+    kernel_dst2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dst2_2d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_work_, d_data, Nx_, Ny_);
+    kernel_dst2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DST3(double* d_data)
@@ -3260,22 +3302,22 @@ void CudaRealTransform2D::executeX_DST3(double* d_data)
     // Step 1: Setup padded buffer with transpose
     int total_setup = Ny_ * stride;
     int numBlocks_setup = (total_setup + blockSize - 1) / blockSize;
-    kernel_dst3_2d_setup_padded_x<<<numBlocks_setup, blockSize>>>(d_temp_, d_work_, Nx_, Ny_);
+    kernel_dst3_2d_setup_padded_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_);
 
     // Step 2: PreOp on padded buffer (each block handles one row)
-    kernel_dst3_2d_preOp_x<<<Ny_, Nx_ / 2 + 1>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_preOp_x<<<Ny_, Nx_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_);
 
     // Step 3: D2Z FFT in-place on padded buffer
     cufftExecD2Z(plan_x_, d_work_, (cufftDoubleComplex*)d_work_);
 
     // Step 4: PostOp in-place (each block handles one row, needs shared memory)
     size_t sharedSize = sizeof(double) * (Nx_ + 2);
-    kernel_dst3_2d_postOp_x<<<Ny_, Nx_ / 2 + 1, sharedSize>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_postOp_x<<<Ny_, Nx_ / 2 + 1, sharedSize, stream_>>>(d_work_, Nx_, Ny_);
 
     // Step 5: Copy results back to d_data with transpose
     int total_copy = Nx_ * Ny_;
     int numBlocks_copy = (total_copy + blockSize - 1) / blockSize;
-    kernel_dst3_2d_copy_back_x<<<numBlocks_copy, blockSize>>>(d_work_, d_data, Nx_, Ny_);
+    kernel_dst3_2d_copy_back_x<<<numBlocks_copy, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::executeX_DST4(double* d_data)
@@ -3284,9 +3326,9 @@ void CudaRealTransform2D::executeX_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_2d_preOp_x<<<Ny_, N2>>>(d_temp_, d_z_in, Nx_, Ny_);
+    kernel_dst4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_2d_postOp_x<<<Ny_, Nx_>>>(d_z_out, d_data, Nx_, Ny_);
+    kernel_dst4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_);
 }
 
 void CudaRealTransform2D::execute(double* d_data)
@@ -3301,10 +3343,10 @@ void CudaRealTransform2D::execute(double* d_data)
         int ext_total = 2 * Nx_ * 2 * Ny_;
         int out_total = (Nx_ + 1) * (Ny_ + 1);
 
-        kernel_dct1_2d_mirror_extend<<<(ext_total + blockSize - 1) / blockSize, blockSize>>>(
+        kernel_dct1_2d_mirror_extend<<<(ext_total + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
             d_data, d_work_, Nx_, Ny_);
         cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_x1_);
-        kernel_dct1_2d_extract<<<(out_total + blockSize - 1) / blockSize, blockSize>>>(
+        kernel_dct1_2d_extract<<<(out_total + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
             (cufftDoubleComplex*)d_x1_, d_data, Nx_, Ny_);
         return;
     }
@@ -3316,10 +3358,10 @@ void CudaRealTransform2D::execute(double* d_data)
         int ext_total = ext_Nx * ext_Ny;
         int out_total = Nx_ * Ny_;
 
-        kernel_dst1_2d_mirror_extend<<<(ext_total + blockSize - 1) / blockSize, blockSize>>>(
+        kernel_dst1_2d_mirror_extend<<<(ext_total + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
             d_data, d_work_, Nx_, Ny_);
         cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_x1_);
-        kernel_dst1_2d_extract<<<(out_total + blockSize - 1) / blockSize, blockSize>>>(
+        kernel_dst1_2d_extract<<<(out_total + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
             (cufftDoubleComplex*)d_x1_, d_data, Nx_, Ny_);
         return;
     }
@@ -3391,6 +3433,7 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
     }
 
     init();
+    set_stream(stream_);
 }
 
 void CudaRealTransform3D::init()
@@ -3638,6 +3681,28 @@ CudaRealTransform3D::~CudaRealTransform3D()
     }
 }
 
+void CudaRealTransform3D::set_stream(cudaStream_t stream)
+{
+    if (stream_ == stream)
+        return;
+    stream_ = stream;
+    if (initialized_)
+    {
+        if (plan_x_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_x)");
+        if (plan_y_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_y)");
+        if (plan_z_ && cufftSetStream(plan_z_, stream_) != CUFFT_SUCCESS)
+            throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_z)");
+    }
+}
+
+void CudaRealTransform3D::execute(double* d_data, cudaStream_t stream)
+{
+    set_stream(stream);
+    execute(d_data);
+}
+
 //------------------------------------------------------------------------------
 // 3D Z dimension transforms
 //------------------------------------------------------------------------------
@@ -3656,9 +3721,9 @@ void CudaRealTransform3D::executeZ_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize>>>(d_data, d_complex, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DCT3(double* d_data)
@@ -3668,14 +3733,14 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
     int numBlocks_postOp = (M_ + blockSize - 1) / blockSize;
 
-    cudaMemcpy(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
 
-    kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize>>>(d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_z_, d_temp_, d_complex);
 
-    kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DCT4(double* d_data)
@@ -3689,9 +3754,9 @@ void CudaRealTransform3D::executeZ_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_z<<<numBlocks_preOp, blockSize>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_z<<<numBlocks_postOp, blockSize>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DST1(double* d_data) {
@@ -3708,9 +3773,9 @@ void CudaRealTransform3D::executeZ_DST2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst2_3d_preOp_z<<<numBlocks_preOp, blockSize>>>(d_data, d_complex, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_z<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DST3(double* d_data)
@@ -3724,21 +3789,21 @@ void CudaRealTransform3D::executeZ_DST3(double* d_data)
     int numBlocks_copy = (M_ + blockSize - 1) / blockSize;
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Nz-1}, 0] for each XY point
-    kernel_dst3_3d_setup_z<<<numBlocks_setup, blockSize>>>(d_data, d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_setup_z<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per XY point, Nz/2+1 threads per block
-    kernel_dst3_3d_preOp_z<<<batch, Nz_ / 2 + 1>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_z<<<batch, Nz_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_z_, d_work_, d_complex);
 
     // PostOp - 1 block per XY point, with shared memory
-    kernel_dst3_3d_postOp_z<<<batch, Nz_ / 2 + 1, sizeof(double) * (Nz_ + 2)>>>(
+    kernel_dst3_3d_postOp_z<<<batch, Nz_ / 2 + 1, sizeof(double) * (Nz_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
 
     // Copy result back from padded buffer
-    kernel_dst3_3d_copy_z<<<numBlocks_copy, blockSize>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_copy_z<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DST4(double* d_data)
@@ -3752,9 +3817,9 @@ void CudaRealTransform3D::executeZ_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_z<<<numBlocks_preOp, blockSize>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_z<<<numBlocks_postOp, blockSize>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
 }
 
 //------------------------------------------------------------------------------
@@ -3775,9 +3840,9 @@ void CudaRealTransform3D::executeY_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_3d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DCT3(double* d_data)
@@ -3787,13 +3852,13 @@ void CudaRealTransform3D::executeY_DCT3(double* d_data)
     int total_preOp = Nx_ * Nz_ * (Ny_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_3d_preOp_y_transpose<<<numBlocks_M, blockSize>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
-    kernel_dct3_3d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_preOp_y_transpose<<<numBlocks_M, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_y_, d_work_, d_complex);
 
-    kernel_dct3_3d_postOp_y<<<numBlocks_M, blockSize>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_postOp_y<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DCT4(double* d_data)
@@ -3807,9 +3872,9 @@ void CudaRealTransform3D::executeY_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DST1(double* d_data) {
@@ -3826,9 +3891,9 @@ void CudaRealTransform3D::executeY_DST2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst2_3d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DST3(double* d_data)
@@ -3842,21 +3907,21 @@ void CudaRealTransform3D::executeY_DST3(double* d_data)
     int numBlocks_copy = (M_ + blockSize - 1) / blockSize;
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Ny-1}, 0] for each XZ point
-    kernel_dst3_3d_setup_y<<<numBlocks_setup, blockSize>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_setup_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per XZ point, Ny/2+1 threads per block
-    kernel_dst3_3d_preOp_y<<<batch, Ny_ / 2 + 1>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_y<<<batch, Ny_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_y_, d_work_, d_complex);
 
     // PostOp - 1 block per XZ point, with shared memory
-    kernel_dst3_3d_postOp_y<<<batch, Ny_ / 2 + 1, sizeof(double) * (Ny_ + 2)>>>(
+    kernel_dst3_3d_postOp_y<<<batch, Ny_ / 2 + 1, sizeof(double) * (Ny_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
 
     // Copy result back from padded buffer
-    kernel_dst3_3d_copy_y<<<numBlocks_copy, blockSize>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_copy_y<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DST4(double* d_data)
@@ -3870,9 +3935,9 @@ void CudaRealTransform3D::executeY_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_y<<<numBlocks_preOp, blockSize>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_y<<<numBlocks_postOp, blockSize>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
 }
 
 //------------------------------------------------------------------------------
@@ -3893,9 +3958,9 @@ void CudaRealTransform3D::executeX_DCT2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_3d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DCT3(double* d_data)
@@ -3905,13 +3970,13 @@ void CudaRealTransform3D::executeX_DCT3(double* d_data)
     int total_preOp = Ny_ * Nz_ * (Nx_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_3d_preOp_x_transpose<<<numBlocks_M, blockSize>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
-    kernel_dct3_3d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_preOp_x_transpose<<<numBlocks_M, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_x_, d_work_, d_complex);
 
-    kernel_dct3_3d_postOp_x<<<numBlocks_M, blockSize>>>(d_complex, d_data, Nx_, Ny_, Nz_);
+    kernel_dct3_3d_postOp_x<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DCT4(double* d_data)
@@ -3925,9 +3990,9 @@ void CudaRealTransform3D::executeX_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DST1(double* d_data) {
@@ -3944,9 +4009,9 @@ void CudaRealTransform3D::executeX_DST2(double* d_data)
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst2_3d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DST3(double* d_data)
@@ -3960,21 +4025,21 @@ void CudaRealTransform3D::executeX_DST3(double* d_data)
     int numBlocks_copy = (M_ + blockSize - 1) / blockSize;
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Nx-1}, 0] for each YZ point
-    kernel_dst3_3d_setup_x<<<numBlocks_setup, blockSize>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_setup_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per YZ point, Nx/2+1 threads per block
-    kernel_dst3_3d_preOp_x<<<batch, Nx_ / 2 + 1>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_x<<<batch, Nx_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_x_, d_work_, d_complex);
 
     // PostOp - 1 block per YZ point, with shared memory
-    kernel_dst3_3d_postOp_x<<<batch, Nx_ / 2 + 1, sizeof(double) * (Nx_ + 2)>>>(
+    kernel_dst3_3d_postOp_x<<<batch, Nx_ / 2 + 1, sizeof(double) * (Nx_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
 
     // Copy result back from padded buffer
-    kernel_dst3_3d_copy_x<<<numBlocks_copy, blockSize>>>((double*)d_complex, d_data, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_copy_x<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DST4(double* d_data)
@@ -3988,9 +4053,9 @@ void CudaRealTransform3D::executeX_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_x<<<numBlocks_preOp, blockSize>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_x<<<numBlocks_postOp, blockSize>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::execute(double* d_data)
@@ -4009,9 +4074,9 @@ void CudaRealTransform3D::execute(double* d_data)
 
         cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_);
 
-        kernel_dct1_3d_mirror_extend<<<blocks_ext, threads>>>(d_data, d_work_, Nx_, Ny_, Nz_);
+        kernel_dct1_3d_mirror_extend<<<blocks_ext, threads, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
         cufftExecD2Z(plan_x_, d_work_, d_freq);
-        kernel_dct1_3d_extract<<<blocks_out, threads>>>(d_freq, d_data, Nx_, Ny_, Nz_);
+        kernel_dct1_3d_extract<<<blocks_out, threads, 0, stream_>>>(d_freq, d_data, Nx_, Ny_, Nz_);
         return;
     }
 
@@ -4023,9 +4088,9 @@ void CudaRealTransform3D::execute(double* d_data)
 
         cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_);
 
-        kernel_dst1_3d_odd_extend<<<blocks_ext, threads>>>(d_data, d_work_, Nx_, Ny_, Nz_);
+        kernel_dst1_3d_odd_extend<<<blocks_ext, threads, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
         cufftExecD2Z(plan_x_, d_work_, d_freq);
-        kernel_dst1_3d_extract<<<blocks_out, threads>>>(d_freq, d_data, Nx_, Ny_, Nz_);
+        kernel_dst1_3d_extract<<<blocks_out, threads, 0, stream_>>>(d_freq, d_data, Nx_, Ny_, Nz_);
         return;
     }
 

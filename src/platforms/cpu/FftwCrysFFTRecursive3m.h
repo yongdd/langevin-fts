@@ -23,10 +23,11 @@
 #define FFTW_CRYS_FFT_RECURSIVE_3M_H_
 
 #include <array>
+#include <atomic>
+#include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
-#include <vector>
-#include <mutex>
 #include <fftw3.h>
 
 class FftwCrysFFTRecursive3m
@@ -82,24 +83,30 @@ private:
     std::array<std::unique_ptr<double, AlignedDeleter>, 8> r_re_;
     std::array<std::unique_ptr<double, AlignedDeleter>, 8> r_im_;
 
-    std::map<double, KCache> k_cache_;
-    const KCache* k_current_ = nullptr;
-    double coeff_current_ = 0.0;
-
-    mutable std::map<double, KCache> exp_kx2_cache_;
-    mutable std::map<double, KCache> exp_ky2_cache_;
-    mutable std::map<double, KCache> exp_kz2_cache_;
-    mutable std::unique_ptr<KCache> kx2_cache_;
-    mutable std::unique_ptr<KCache> ky2_cache_;
-    mutable std::unique_ptr<KCache> kz2_cache_;
-    mutable std::mutex cache_mutex_;
+    struct ThreadState {
+        std::map<double, KCache> k_cache;
+        const KCache* k_current = nullptr;
+        double coeff_current = std::numeric_limits<double>::quiet_NaN();
+        std::map<double, KCache> exp_kx2_cache;
+        std::map<double, KCache> exp_ky2_cache;
+        std::map<double, KCache> exp_kz2_cache;
+        std::unique_ptr<KCache> kx2_cache;
+        std::unique_ptr<KCache> ky2_cache;
+        std::unique_ptr<KCache> kz2_cache;
+        uint64_t epoch = 0;
+        uint64_t instance_id = 0;
+    };
+    inline static std::atomic<uint64_t> next_instance_id_{1};
+    uint64_t instance_id_{0};
+    mutable std::atomic<uint64_t> cache_epoch_{1};
 
     fftw_plan plan_forward_ = nullptr;
     fftw_plan plan_backward_ = nullptr;
 
     void init_fft_plans();
     void generate_twiddle_factors();
-    void generate_k_cache(double coeff);
+    KCache generate_k_cache(double coeff) const;
+    ThreadState& get_thread_state() const;
     KCache generate_k_cache_from_multiplier(MultiplierType type, double coeff) const;
     const KCache& get_multiplier_cache(MultiplierType type, double coeff) const;
     void apply_with_cache(const KCache& cache, const double* q_in, double* q_out) const;

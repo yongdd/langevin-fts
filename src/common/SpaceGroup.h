@@ -29,23 +29,20 @@ private:
 
     std::vector<int> nx_;                      ///< Grid dimensions [Nx, Ny, Nz]
     int total_grid_;                           ///< Total grid points (Nx * Ny * Nz)
-    int n_irreducible_;                        ///< Number of irreducible mesh points
+    int n_irreducible_;                        ///< Number of reduced-basis points
     int n_symmetry_ops_;                       ///< Number of symmetry operations
 
     // Symmetry operations from spglib
     std::vector<std::array<std::array<int, 3>, 3>> rotations_;    ///< Rotation matrices (n_ops x 3 x 3)
     std::vector<std::array<double, 3>> translations_;              ///< Translation vectors (n_ops x 3)
 
-    std::vector<int> reduced_basis_indices_;   ///< Flat indices of irreducible points (size: n_irreducible)
+    std::vector<int> reduced_basis_indices_;   ///< Flat indices of reduced-basis points (size: n_irreducible)
     std::vector<int> full_to_reduced_map_;     ///< Map from full grid to irreducible index (size: total_grid)
     std::vector<int> orbit_counts_;            ///< Number of points in each orbit (size: n_irreducible)
 
-    // Pmmm physical basis (1/8 grid) data
+    // Physical basis flags
     bool use_pmmm_physical_basis_{false};
-    int n_irreducible_pmmm_{0};
-    std::vector<int> reduced_basis_indices_pmmm_;
-    std::vector<int> full_to_reduced_map_pmmm_;
-    std::vector<int> orbit_counts_pmmm_;
+    bool use_m3_physical_basis_{false};
 
     /**
      * @brief Initialize space group from Hall number.
@@ -113,10 +110,10 @@ public:
     /**
      * @brief Convert full field to reduced basis.
      *
-     * Extracts field values at irreducible mesh points.
+     * Extracts field values at reduced basis points.
      *
      * @param full_field Input field on full grid (size: n_fields * total_grid)
-     * @param reduced_field Output field on reduced basis (size: n_fields * n_irreducible)
+     * @param reduced_field Output field on reduced basis (size: n_fields * n_reduced)
      * @param n_fields Number of field components
      */
     void to_reduced_basis(const double* full_field, double* reduced_field, int n_fields) const;
@@ -124,9 +121,9 @@ public:
     /**
      * @brief Convert reduced basis field to full grid.
      *
-     * Broadcasts irreducible values to all equivalent grid points.
+     * Broadcasts reduced-basis values to all equivalent grid points.
      *
-     * @param reduced_field Input field on reduced basis (size: n_fields * n_irreducible)
+     * @param reduced_field Input field on reduced basis (size: n_fields * n_reduced)
      * @param full_field Output field on full grid (size: n_fields * total_grid)
      * @param n_fields Number of field components
      */
@@ -158,23 +155,11 @@ public:
     const std::string& get_crystal_system() const { return crystal_system_; }
     const std::vector<int>& get_nx() const { return nx_; }
     int get_total_grid() const { return total_grid_; }
-    int get_n_irreducible() const
-    {
-        return use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
-    }
+    int get_n_reduced_basis() const { return n_irreducible_; }
     int get_n_symmetry_ops() const { return n_symmetry_ops_; }
-    const std::vector<int>& get_reduced_basis_indices() const
-    {
-        return use_pmmm_physical_basis_ ? reduced_basis_indices_pmmm_ : reduced_basis_indices_;
-    }
-    const std::vector<int>& get_full_to_reduced_map() const
-    {
-        return use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
-    }
-    const std::vector<int>& get_orbit_counts() const
-    {
-        return use_pmmm_physical_basis_ ? orbit_counts_pmmm_ : orbit_counts_;
-    }
+    const std::vector<int>& get_reduced_basis_indices() const { return reduced_basis_indices_; }
+    const std::vector<int>& get_full_to_reduced_map() const { return full_to_reduced_map_; }
+    const std::vector<int>& get_orbit_counts() const { return orbit_counts_; }
 
     /**
      * @brief Check for mirror planes perpendicular to x, y, and z axes.
@@ -212,6 +197,16 @@ public:
      */
     void enable_pmmm_physical_basis();
     bool using_pmmm_physical_basis() const { return use_pmmm_physical_basis_; }
+
+    /**
+     * @brief Enable 3m physical basis (1/8 even-index grid) mapping.
+     *
+     * Replaces the irreducible basis with the 3m physical basis
+     * (even indices, size Nx/2 * Ny/2 * Nz/2). Requires 3D even grid
+     * and valid 3m translations.
+     */
+    void enable_m3_physical_basis();
+    bool using_m3_physical_basis() const { return use_m3_physical_basis_; }
 };
 
 #endif // SPACE_GROUP_H_

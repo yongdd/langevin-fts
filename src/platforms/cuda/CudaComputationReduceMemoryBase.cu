@@ -126,7 +126,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(std::string mon
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         for(int i=0; i<N; i++)
             phi[i] = 0.0;
@@ -163,7 +163,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(int p, std::str
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -195,7 +195,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration_gce(double fuga
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -229,7 +229,7 @@ void CudaComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -278,7 +278,7 @@ void CudaComputationReduceMemoryBase<T>::get_solvent_concentration(int s, T *phi
 {
     try
     {
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
+        const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         const int S = this->molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)

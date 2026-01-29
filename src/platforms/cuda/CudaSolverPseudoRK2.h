@@ -43,10 +43,11 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaFFT.h"
+#include "CudaCrysFFT.h"
 #include "FFT.h"
 #include "SpaceGroup.h"
 
-class CudaCrysFFT;
+class CudaCrysFFTBase;
 
 /**
  * @class CudaSolverPseudoRK2
@@ -126,15 +127,16 @@ private:
     CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
     /// @}
 
-    /// @name Crystallographic FFT (Pmmm DCT) support
+    /// @name Crystallographic FFT support
     /// @{
     bool use_crysfft_;                               ///< True when CrysFFT path is enabled
-    bool use_crysfft_pmmm_physical_;                 ///< True when reduced basis stores Pmmm physical grid
+    CudaCrysFFTMode crysfft_mode_;
+    bool crysfft_identity_map_;                      ///< True when reduced basis matches physical grid
     int crysfft_physical_size_;                      ///< Physical grid size (Nx/2 * Ny/2 * Nz/2)
     int crysfft_reduced_size_;                       ///< Reduced basis size
     int* d_crysfft_phys_to_reduced_;                 ///< Device map: physical index -> reduced index
     int* d_crysfft_reduced_to_phys_;                 ///< Device map: reduced index -> physical index
-    CudaCrysFFT* crysfft_[MAX_STREAMS];              ///< Per-stream CrysFFT objects
+    CudaCrysFFTBase* crysfft_[MAX_STREAMS];          ///< Per-stream CrysFFT objects
     double* d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
     double* d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
     /// @}
