@@ -363,6 +363,11 @@ class SCFT:
             - number : int, optional
                 Hall number for space group.
 
+        - space_group_basis : str, optional
+            Basis used when space_group is set:
+            - 'irreducible' (default): full space-group irreducible basis
+            - 'pmmm-physical': 1/8 physical grid for Pmmm mirror symmetry
+
         - scale_stress : float, optional
             Scaling factor for stress in box relaxation (default: 1.0).
         - aggregate_propagator_computation : bool, optional
@@ -727,11 +732,19 @@ class SCFT:
         numerical_method = params.get("numerical_method", "rqm4")
 
         # Create space group object early (before PropagatorSolver) if specified
+        space_group_basis = params.get("space_group_basis", "irreducible")
         if "space_group" in params:
             if "number" in params["space_group"]:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
+            if space_group_basis == "pmmm-physical":
+                self.sg.enable_pmmm_physical_basis()
+            elif space_group_basis not in ("irreducible", None):
+                raise ValueError(
+                    f"Unknown space_group_basis: {space_group_basis}. "
+                    "Use 'irreducible' or 'pmmm-physical'."
+                )
         else:
             self.sg = None
 

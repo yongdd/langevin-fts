@@ -710,6 +710,10 @@ Example:
              "Map from full grid index to irreducible index.")
         .def("get_orbit_counts", &SpaceGroup::get_orbit_counts,
              "Number of equivalent points for each irreducible point.")
+        .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,
+             "Enable Pmmm physical basis (1/8 grid) mapping.")
+        .def("using_pmmm_physical_basis", &SpaceGroup::using_pmmm_physical_basis,
+             "Return True if Pmmm physical basis is enabled.")
         .def("to_reduced_basis", [](SpaceGroup& obj, py::array_t<double> full_field)
         {
             py::buffer_info buf = full_field.request();

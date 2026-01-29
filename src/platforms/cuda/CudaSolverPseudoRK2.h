@@ -46,6 +46,8 @@
 #include "FFT.h"
 #include "SpaceGroup.h"
 
+class CudaCrysFFT;
+
 /**
  * @class CudaSolverPseudoRK2
  * @brief GPU pseudo-spectral solver for continuous Gaussian chains using RK2.
@@ -123,6 +125,21 @@ private:
     CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
     CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
     /// @}
+
+    /// @name Crystallographic FFT (Pmmm DCT) support
+    /// @{
+    bool use_crysfft_;                               ///< True when CrysFFT path is enabled
+    bool use_crysfft_pmmm_physical_;                 ///< True when reduced basis stores Pmmm physical grid
+    int crysfft_physical_size_;                      ///< Physical grid size (Nx/2 * Ny/2 * Nz/2)
+    int crysfft_reduced_size_;                       ///< Reduced basis size
+    int* d_crysfft_phys_to_reduced_;                 ///< Device map: physical index -> reduced index
+    int* d_crysfft_reduced_to_phys_;                 ///< Device map: reduced index -> physical index
+    CudaCrysFFT* crysfft_[MAX_STREAMS];              ///< Per-stream CrysFFT objects
+    double* d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
+    double* d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
+    /// @}
+
+    void cleanup_crysfft();
 
 public:
     /**

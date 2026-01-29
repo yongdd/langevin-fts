@@ -408,36 +408,46 @@ void SpaceGroup::find_irreducible_mesh()
 
 void SpaceGroup::to_reduced_basis(const double* full_field, double* reduced_field, int n_fields) const
 {
+    const auto& reduced_indices = use_pmmm_physical_basis_ ? reduced_basis_indices_pmmm_ : reduced_basis_indices_;
+    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+
     for (int f = 0; f < n_fields; ++f)
     {
         const double* src = full_field + f * total_grid_;
-        double* dst = reduced_field + f * n_irreducible_;
+        double* dst = reduced_field + f * n_reduced;
 
-        for (int i = 0; i < n_irreducible_; ++i)
+        for (int i = 0; i < n_reduced; ++i)
         {
-            dst[i] = src[reduced_basis_indices_[i]];
+            dst[i] = src[reduced_indices[i]];
         }
     }
 }
 
 void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_field, int n_fields) const
 {
+    const auto& full_to_reduced = use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
+    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+
     for (int f = 0; f < n_fields; ++f)
     {
-        const double* src = reduced_field + f * n_irreducible_;
+        const double* src = reduced_field + f * n_reduced;
         double* dst = full_field + f * total_grid_;
 
         for (int i = 0; i < total_grid_; ++i)
         {
-            dst[i] = src[full_to_reduced_map_[i]];
+            dst[i] = src[full_to_reduced[i]];
         }
     }
 }
 
 void SpaceGroup::symmetrize(double* field, int n_fields) const
 {
+    const auto& full_to_reduced = use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
+    const auto& orbit_counts = use_pmmm_physical_basis_ ? orbit_counts_pmmm_ : orbit_counts_;
+    const int n_reduced = use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+
     // Temporary buffer for orbit sums
-    std::vector<double> orbit_sums(n_irreducible_);
+    std::vector<double> orbit_sums(n_reduced);
 
     for (int f = 0; f < n_fields; ++f)
     {
@@ -449,14 +459,14 @@ void SpaceGroup::symmetrize(double* field, int n_fields) const
         // Accumulate values by orbit
         for (int i = 0; i < total_grid_; ++i)
         {
-            orbit_sums[full_to_reduced_map_[i]] += data[i];
+            orbit_sums[full_to_reduced[i]] += data[i];
         }
 
         // Compute averages and broadcast back
         for (int i = 0; i < total_grid_; ++i)
         {
-            int orbit_idx = full_to_reduced_map_[i];
-            data[i] = orbit_sums[orbit_idx] / orbit_counts_[orbit_idx];
+            int orbit_idx = full_to_reduced[i];
+            data[i] = orbit_sums[orbit_idx] / orbit_counts[orbit_idx];
         }
     }
 }
@@ -583,4 +593,64 @@ bool SpaceGroup::get_m3_translations(std::array<double, 9>& g, double tol) const
     }
 
     return found_x && found_y && found_z;
+}
+
+void SpaceGroup::enable_pmmm_physical_basis()
+{
+    if (use_pmmm_physical_basis_)
+        return;
+
+    if (nx_.size() != 3)
+        throw_with_line_number("Pmmm physical basis requires 3D grid.");
+
+    const int Nx = nx_[0];
+    const int Ny = nx_[1];
+    const int Nz = nx_[2];
+
+    if ((Nx % 2) != 0 || (Ny % 2) != 0 || (Nz % 2) != 0)
+        throw_with_line_number("Pmmm physical basis requires even grid dimensions.");
+
+    if (!has_mirror_planes_xyz())
+        throw_with_line_number("Space group does not contain mirror planes along x, y, z (Pmmm).");
+
+    const int Nx2 = Nx / 2;
+    const int Ny2 = Ny / 2;
+    const int Nz2 = Nz / 2;
+
+    n_irreducible_pmmm_ = Nx2 * Ny2 * Nz2;
+    reduced_basis_indices_pmmm_.resize(n_irreducible_pmmm_);
+    full_to_reduced_map_pmmm_.resize(total_grid_);
+    orbit_counts_pmmm_.assign(n_irreducible_pmmm_, 0);
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        for (int iy = 0; iy < Ny2; ++iy)
+        {
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                const int full_idx = (ix * Ny + iy) * Nz + iz;
+                reduced_basis_indices_pmmm_[idx++] = full_idx;
+            }
+        }
+    }
+
+    for (int ix = 0; ix < Nx; ++ix)
+    {
+        const int ix2 = (ix < Nx2) ? ix : (Nx - 1 - ix);
+        for (int iy = 0; iy < Ny; ++iy)
+        {
+            const int iy2 = (iy < Ny2) ? iy : (Ny - 1 - iy);
+            for (int iz = 0; iz < Nz; ++iz)
+            {
+                const int iz2 = (iz < Nz2) ? iz : (Nz - 1 - iz);
+                const int full_idx = (ix * Ny + iy) * Nz + iz;
+                const int reduced_idx = (ix2 * Ny2 + iy2) * Nz2 + iz2;
+                full_to_reduced_map_pmmm_[full_idx] = reduced_idx;
+                orbit_counts_pmmm_[reduced_idx] += 1;
+            }
+        }
+    }
+
+    use_pmmm_physical_basis_ = true;
 }

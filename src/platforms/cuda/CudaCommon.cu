@@ -703,6 +703,17 @@ __global__ void ker_reduce_to_basis(
     }
 }
 
+__global__ void ker_multi_map(
+    double* dst, const double* reduced_multiplier, const int* phys_to_reduced_map, const int n_phys)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n_phys)
+    {
+        dst[i] *= reduced_multiplier[phys_to_reduced_map[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_multi_gather(
     double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_irreducible)
 {

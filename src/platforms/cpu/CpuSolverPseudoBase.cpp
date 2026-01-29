@@ -287,6 +287,11 @@ void CpuSolverPseudoBase<T>::fill_crysfft_from_reduced(const double* reduced_in,
         throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
     const int M_phys = get_crysfft_physical_size();
+    if (space_group_ != nullptr && space_group_->using_pmmm_physical_basis() && use_crysfft_pmmm())
+    {
+        std::memcpy(phys_out, reduced_in, sizeof(double) * M_phys);
+        return;
+    }
     for (int i = 0; i < M_phys; ++i)
     {
         phys_out[i] = reduced_in[crysfft_reduced_indices_[i]];
@@ -299,10 +304,16 @@ void CpuSolverPseudoBase<T>::reduce_crysfft_to_reduced(const double* phys_in, do
     if (!use_crysfft())
         throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 
+    const int M_phys = get_crysfft_physical_size();
+    if (space_group_ != nullptr && space_group_->using_pmmm_physical_basis() && use_crysfft_pmmm())
+    {
+        std::memcpy(reduced_out, phys_in, sizeof(double) * M_phys);
+        return;
+    }
+
     const int M_reduced = space_group_->get_n_irreducible();
     std::fill(reduced_out, reduced_out + M_reduced, 0.0);
 
-    const int M_phys = get_crysfft_physical_size();
     for (int i = 0; i < M_phys; ++i)
     {
         reduced_out[crysfft_reduced_indices_[i]] = phys_in[i];

@@ -100,6 +100,12 @@ class PropagatorSolver:
         Mask array defining accessible (1) and impenetrable (0) regions.
         After each propagation step, the propagator is multiplied by the mask.
         Useful for simulating polymers around nanoparticles or in confined geometries.
+    space_group : SpaceGroup, optional
+        Space group symmetry for reduced basis representation.
+    space_group_basis : str, optional
+        Basis used when space_group is set:
+        - "irreducible": default full space-group irreducible basis
+        - "pmmm-physical": 1/8 physical grid for Pmmm mirror symmetry (faster, less reduction)
 
     Attributes
     ----------
@@ -169,7 +175,8 @@ class PropagatorSolver:
         platform: str = "auto",
         reduce_memory: bool = False,
         mask: Optional[NDArray[np.floating]] = None,
-        space_group: Optional[Any] = None
+        space_group: Optional[Any] = None,
+        space_group_basis: str = "irreducible"
     ) -> None:
         """Initialize the propagator solver."""
 
@@ -276,6 +283,18 @@ class PropagatorSolver:
         self._computation_box = None
         self._propagator_optimizer = None
         self._fields_set = False
+        if space_group is not None:
+            cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
+            if space_group_basis == "pmmm-physical":
+                if hasattr(cpp_sg, "enable_pmmm_physical_basis"):
+                    cpp_sg.enable_pmmm_physical_basis()
+                else:
+                    raise RuntimeError("SpaceGroup does not support Pmmm physical basis.")
+            elif space_group_basis not in ("irreducible", None):
+                raise ValueError(
+                    f"Unknown space_group_basis: {space_group_basis}. "
+                    "Use 'irreducible' or 'pmmm-physical'."
+                )
         self._space_group = space_group
 
     def add_polymer(
