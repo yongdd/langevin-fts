@@ -10,10 +10,76 @@
 #include <stdexcept>
 #include <cstdio>
 #include <algorithm>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+//==============================================================================
+// DCT lookup table helpers (optional sin/cos precompute)
+//==============================================================================
+
+static void allocate_dct2_lut(int N, double** d_sin, double** d_cos)
+{
+    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+        return;
+
+    std::vector<double> h_sin(N, 0.0);
+    std::vector<double> h_cos(N, 0.0);
+    for (int i = 0; i < N; ++i)
+    {
+        double angle = i * M_PI / (2.0 * static_cast<double>(N));
+        h_sin[i] = std::sin(angle);
+        h_cos[i] = std::cos(angle);
+    }
+
+    cudaMalloc(d_sin, sizeof(double) * N);
+    cudaMalloc(d_cos, sizeof(double) * N);
+    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+}
+
+static void allocate_dct3_lut(int N, double** d_sin, double** d_cos)
+{
+    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+        return;
+
+    int half = N / 2;
+    std::vector<double> h_sin(half + 1, 0.0);
+    std::vector<double> h_cos(half + 1, 0.0);
+    for (int i = 1; i <= half; ++i)
+    {
+        double angle = i * M_PI / (2.0 * static_cast<double>(N));
+        h_sin[i] = std::sin(angle);
+        h_cos[i] = std::cos(angle);
+    }
+
+    cudaMalloc(d_sin, sizeof(double) * (half + 1));
+    cudaMalloc(d_cos, sizeof(double) * (half + 1));
+    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice);
+    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice);
+}
+
+static void allocate_dct4_lut(int N, double** d_sin, double** d_cos)
+{
+    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+        return;
+
+    std::vector<double> h_sin(N, 0.0);
+    std::vector<double> h_cos(N, 0.0);
+    for (int i = 0; i < N; ++i)
+    {
+        double angle = (2.0 * static_cast<double>(i) + 1.0) * M_PI / (4.0 * static_cast<double>(N));
+        h_sin[i] = std::sin(angle);
+        h_cos[i] = std::cos(angle);
+    }
+
+    cudaMalloc(d_sin, sizeof(double) * N);
+    cudaMalloc(d_cos, sizeof(double) * N);
+    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+}
 
 //==============================================================================
 // Helper functions
@@ -161,7 +227,9 @@ __global__ void kernel_dct2_preOp(double* data, int N)
     }
 }
 
-__global__ void kernel_dct2_postOp(double* data, int N)
+__global__ void kernel_dct2_postOp(double* data, int N,
+                                   const double* __restrict__ sin_lut,
+                                   const double* __restrict__ cos_lut)
 {
     extern __shared__ double sh_in[];
     int itx = threadIdx.x;
@@ -177,7 +245,12 @@ __global__ void kernel_dct2_postOp(double* data, int N)
             data[0] = sh_in[0] * 2;
         } else {
             double sina, cosa;
-            sincos(itx * M_PI / (2 * N), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[itx];
+                cosa = cos_lut[itx];
+            } else {
+                sincos(itx * M_PI / (2 * N), &sina, &cosa);
+            }
             double Ta = sh_in[itx] + sh_in[N - itx];
             double Tb = sh_in[itx] - sh_in[N - itx];
 
@@ -187,13 +260,21 @@ __global__ void kernel_dct2_postOp(double* data, int N)
     }
 }
 
-__global__ void kernel_dct3_preOp(double* data, int N)
+__global__ void kernel_dct3_preOp(double* data, int N,
+                                  const double* __restrict__ sin_lut,
+                                  const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
 
     if (itx < N / 2) {
         double sina, cosa;
-        sincos((itx + 1) * M_PI / (2 * N), &sina, &cosa);
+        int k = itx + 1;
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[k];
+            cosa = cos_lut[k];
+        } else {
+            sincos(k * M_PI / (2 * N), &sina, &cosa);
+        }
         double Ta = data[itx + 1] + data[N - itx - 1];
         double Tb = data[itx + 1] - data[N - itx - 1];
 
@@ -228,16 +309,23 @@ __global__ void kernel_dct3_postOp(double* data, int N)
 __global__ void kernel_dct4_preOp(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int N)
+    int N,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * N;
 
     if (n < N2) {
         if (n < N) {
-            double angle = -M_PI * (2 * n + 1) / (4.0 * N);
-            out[n].x = in[n] * cos(angle);
-            out[n].y = in[n] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[n].x = in[n] * cos_lut[n];
+                out[n].y = -in[n] * sin_lut[n];
+            } else {
+                double angle = -M_PI * (2 * n + 1) / (4.0 * N);
+                out[n].x = in[n] * cos(angle);
+                out[n].y = in[n] * sin(angle);
+            }
         } else {
             out[n].x = 0.0;
             out[n].y = 0.0;
@@ -248,14 +336,23 @@ __global__ void kernel_dct4_preOp(
 __global__ void kernel_dct4_postOp(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int N)
+    int N,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k < N) {
-        double angle = -M_PI * k / (2.0 * N);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-        double re = in[k].x * cosa - in[k].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[k];
+            double sina = sin_lut[k];
+            re = in[k].x * cosa + in[k].y * sina;
+        } else {
+            double angle = -M_PI * k / (2.0 * N);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[k].x * cosa - in[k].y * sina;
+        }
         out[k] = 2.0 * re;
     }
 }
@@ -359,7 +456,9 @@ __global__ void kernel_dst2_preOp(double* pin, int N)
     }
 }
 
-__global__ void kernel_dst2_postOp(double* pin, int N)
+__global__ void kernel_dst2_postOp(double* pin, int N,
+                                   const double* __restrict__ sin_lut,
+                                   const double* __restrict__ cos_lut)
 {
     extern __shared__ double sh_in[];
     int itx = threadIdx.x;
@@ -374,7 +473,12 @@ __global__ void kernel_dst2_postOp(double* pin, int N)
     if (itx < N / 2 + 1) {
         if (itx != 0) {
             double sina, cosa;
-            sincos(itx * M_PI / (2.0 * N), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[itx];
+                cosa = cos_lut[itx];
+            } else {
+                sincos(itx * M_PI / (2.0 * N), &sina, &cosa);
+            }
             double Ta = sh_in[itx] + sh_in[N - itx];
             double Tb = sh_in[itx] - sh_in[N - itx];
             pin[itx] = (Ta * sina + Tb * cosa);
@@ -388,13 +492,20 @@ __global__ void kernel_dst2_postOp(double* pin, int N)
 
 // DST-3: Uses D2Z FFT (FST algorithm)
 // For FFTW N points: input at buffer[0..N-1], output at buffer[1..N]
-__global__ void kernel_dst3_preOp(double* pin, int N)
+__global__ void kernel_dst3_preOp(double* pin, int N,
+                                  const double* __restrict__ sin_lut,
+                                  const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
 
     if (itx < N / 2 + 1) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * N), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * N), &sina, &cosa);
+        }
         double Ta = pin[itx] + pin[N - itx];
         double Tb = pin[itx] - pin[N - itx];
         __syncthreads();
@@ -438,16 +549,23 @@ __global__ void kernel_dst3_postOp(double* pin, int N)
 __global__ void kernel_dst4_preOp(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int N)
+    int N,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * N;
 
     if (n < N2) {
         if (n < N) {
-            double angle = -M_PI * (2 * n + 1) / (4.0 * N);
-            out[n].x = in[n] * cos(angle);
-            out[n].y = in[n] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[n].x = in[n] * cos_lut[n];
+                out[n].y = -in[n] * sin_lut[n];
+            } else {
+                double angle = -M_PI * (2 * n + 1) / (4.0 * N);
+                out[n].x = in[n] * cos(angle);
+                out[n].y = in[n] * sin(angle);
+            }
         } else {
             out[n].x = 0.0;
             out[n].y = 0.0;
@@ -458,14 +576,21 @@ __global__ void kernel_dst4_preOp(
 __global__ void kernel_dst4_postOp(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int N)
+    int N,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k < N) {
-        double angle = -M_PI * k / (2.0 * N);
-        double sina = sin(angle);
-        double cosa = cos(angle);
-        double im = in[k].x * sina + in[k].y * cosa;
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -in[k].x * sin_lut[k] + in[k].y * cos_lut[k];
+        } else {
+            double angle = -M_PI * k / (2.0 * N);
+            double sina = sin(angle);
+            double cosa = cos(angle);
+            im = in[k].x * sina + in[k].y * cosa;
+        }
         out[k] = -2.0 * im;
     }
 }
@@ -549,7 +674,9 @@ __global__ void kernel_dct2_2d_preOp_y(
 __global__ void kernel_dct2_2d_postOp_y(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -562,7 +689,12 @@ __global__ void kernel_dct2_2d_postOp_y(
             out[idx] = in[ix * Ny] * 2.0;
         } else {
             double sina, cosa;
-            sincos(iy * M_PI / (2.0 * Ny), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[iy];
+                cosa = cos_lut[iy];
+            } else {
+                sincos(iy * M_PI / (2.0 * Ny), &sina, &cosa);
+            }
             double Ta = in[ix * Ny + iy] + in[ix * Ny + (Ny - iy)];
             double Tb = in[ix * Ny + iy] - in[ix * Ny + (Ny - iy)];
             out[idx] = Ta * cosa + Tb * sina;
@@ -602,7 +734,9 @@ __global__ void kernel_dct2_2d_preOp_x(
 __global__ void kernel_dct2_2d_postOp_x(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -615,7 +749,12 @@ __global__ void kernel_dct2_2d_postOp_x(
             out[idx] = in[iy * Nx] * 2.0;
         } else {
             double sina, cosa;
-            sincos(ix * M_PI / (2.0 * Nx), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[ix];
+                cosa = cos_lut[ix];
+            } else {
+                sincos(ix * M_PI / (2.0 * Nx), &sina, &cosa);
+            }
             double Ta = in[iy * Nx + ix] + in[iy * Nx + (Nx - ix)];
             double Tb = in[iy * Nx + ix] - in[iy * Nx + (Nx - ix)];
             out[idx] = Ta * cosa + Tb * sina;
@@ -626,7 +765,9 @@ __global__ void kernel_dct2_2d_postOp_x(
 // DCT-3 2D kernels
 __global__ void kernel_dct3_2d_preOp_y(
     double* __restrict__ data,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * (Ny / 2);
@@ -640,7 +781,12 @@ __global__ void kernel_dct3_2d_preOp_y(
         int iy2 = Ny - iy - 1;
 
         double sina, cosa;
-        sincos(iy1 * M_PI / (2.0 * Ny), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[iy1];
+            cosa = cos_lut[iy1];
+        } else {
+            sincos(iy1 * M_PI / (2.0 * Ny), &sina, &cosa);
+        }
         double Ta = data[base + iy1] + data[base + iy2];
         double Tb = data[base + iy1] - data[base + iy2];
 
@@ -694,9 +840,45 @@ __global__ void kernel_dct3_2d_preOp_x_transpose(
     }
 }
 
+__global__ void kernel_dct3_2d_preOp_x_strided(
+    double* __restrict__ data,
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Ny * (Nx / 2);
+
+    if (idx < total) {
+        int ix = idx % (Nx / 2);
+        int iy = idx / (Nx / 2);
+
+        int ix1 = ix + 1;
+        int ix2 = Nx - ix - 1;
+
+        int idx1 = ix1 * Ny + iy;
+        int idx2 = ix2 * Ny + iy;
+
+        double sina, cosa;
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[ix1];
+            cosa = cos_lut[ix1];
+        } else {
+            sincos(ix1 * M_PI / (2.0 * Nx), &sina, &cosa);
+        }
+        double Ta = data[idx1] + data[idx2];
+        double Tb = data[idx1] - data[idx2];
+
+        data[idx1] = Ta * sina + Tb * cosa;
+        data[idx2] = Ta * cosa - Tb * sina;
+    }
+}
+
 __global__ void kernel_dct3_2d_preOp_x(
     double* __restrict__ data,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Ny * (Nx / 2);
@@ -710,7 +892,12 @@ __global__ void kernel_dct3_2d_preOp_x(
         int ix2 = Nx - ix - 1;
 
         double sina, cosa;
-        sincos(ix1 * M_PI / (2.0 * Nx), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[ix1];
+            cosa = cos_lut[ix1];
+        } else {
+            sincos(ix1 * M_PI / (2.0 * Nx), &sina, &cosa);
+        }
         double Ta = data[base + ix1] + data[base + ix2];
         double Tb = data[base + ix1] - data[base + ix2];
 
@@ -753,7 +940,9 @@ __global__ void kernel_dct3_2d_postOp_x(
 __global__ void kernel_dct4_2d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * 2 * Ny;
@@ -764,9 +953,14 @@ __global__ void kernel_dct4_2d_preOp_y(
 
         if (iy < Ny) {
             int in_idx = ix * Ny + iy;
-            double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[iy];
+                out[idx].y = -in[in_idx] * sin_lut[iy];
+            } else {
+                double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -777,7 +971,9 @@ __global__ void kernel_dct4_2d_preOp_y(
 __global__ void kernel_dct4_2d_postOp_y(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -787,11 +983,17 @@ __global__ void kernel_dct4_2d_postOp_y(
         int ix = idx / Ny;
 
         int in_idx = ix * 2 * Ny + iy;
-        double angle = -M_PI * iy / (2.0 * Ny);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-
-        double re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[iy];
+            double sina = sin_lut[iy];
+            re = in[in_idx].x * cosa + in[in_idx].y * sina;
+        } else {
+            double angle = -M_PI * iy / (2.0 * Ny);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        }
         out[idx] = 2.0 * re;
     }
 }
@@ -799,7 +1001,9 @@ __global__ void kernel_dct4_2d_postOp_y(
 __global__ void kernel_dct4_2d_preOp_x(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Ny * 2 * Nx;
@@ -810,9 +1014,14 @@ __global__ void kernel_dct4_2d_preOp_x(
 
         if (ix < Nx) {
             int in_idx = ix * Ny + iy;
-            double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[ix];
+                out[idx].y = -in[in_idx] * sin_lut[ix];
+            } else {
+                double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -823,7 +1032,9 @@ __global__ void kernel_dct4_2d_preOp_x(
 __global__ void kernel_dct4_2d_postOp_x(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -833,11 +1044,17 @@ __global__ void kernel_dct4_2d_postOp_x(
         int ix = idx / Ny;
 
         int in_idx = iy * 2 * Nx + ix;
-        double angle = -M_PI * ix / (2.0 * Nx);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-
-        double re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[ix];
+            double sina = sin_lut[ix];
+            re = in[in_idx].x * cosa + in[in_idx].y * sina;
+        } else {
+            double angle = -M_PI * ix / (2.0 * Nx);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        }
         out[idx] = 2.0 * re;
     }
 }
@@ -941,7 +1158,9 @@ __global__ void kernel_dst2_2d_preOp_y(
 __global__ void kernel_dst2_2d_postOp_y(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -960,7 +1179,12 @@ __global__ void kernel_dst2_2d_postOp_y(
         } else if (k <= Ny / 2) {
             // First half: apply twiddle formula
             double sina, cosa;
-            sincos(k * M_PI / (2.0 * Ny), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k];
+                cosa = cos_lut[k];
+            } else {
+                sincos(k * M_PI / (2.0 * Ny), &sina, &cosa);
+            }
             double Ta = in[ix * Ny + k] + in[ix * Ny + Ny - k];
             double Tb = in[ix * Ny + k] - in[ix * Ny + Ny - k];
             out[idx] = (Ta * sina + Tb * cosa);
@@ -968,7 +1192,12 @@ __global__ void kernel_dst2_2d_postOp_y(
             // Second half: use symmetric formula
             int k_mirror = Ny - k;
             double sina, cosa;
-            sincos(k_mirror * M_PI / (2.0 * Ny), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k_mirror];
+                cosa = cos_lut[k_mirror];
+            } else {
+                sincos(k_mirror * M_PI / (2.0 * Ny), &sina, &cosa);
+            }
             double Ta = in[ix * Ny + k_mirror] + in[ix * Ny + k];
             double Tb = in[ix * Ny + k_mirror] - in[ix * Ny + k];
             out[idx] = (Ta * cosa - Tb * sina);
@@ -1008,7 +1237,9 @@ __global__ void kernel_dst2_2d_preOp_x(
 __global__ void kernel_dst2_2d_postOp_x(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny;
@@ -1027,7 +1258,12 @@ __global__ void kernel_dst2_2d_postOp_x(
         } else if (k <= Nx / 2) {
             // First half: apply twiddle formula
             double sina, cosa;
-            sincos(k * M_PI / (2.0 * Nx), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k];
+                cosa = cos_lut[k];
+            } else {
+                sincos(k * M_PI / (2.0 * Nx), &sina, &cosa);
+            }
             double Ta = in[iy * Nx + k] + in[iy * Nx + Nx - k];
             double Tb = in[iy * Nx + k] - in[iy * Nx + Nx - k];
             out[idx] = (Ta * sina + Tb * cosa);
@@ -1035,7 +1271,12 @@ __global__ void kernel_dst2_2d_postOp_x(
             // Second half: use symmetric formula
             int k_mirror = Nx - k;
             double sina, cosa;
-            sincos(k_mirror * M_PI / (2.0 * Nx), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k_mirror];
+                cosa = cos_lut[k_mirror];
+            } else {
+                sincos(k_mirror * M_PI / (2.0 * Nx), &sina, &cosa);
+            }
             double Ta = in[iy * Nx + k_mirror] + in[iy * Nx + k];
             double Tb = in[iy * Nx + k_mirror] - in[iy * Nx + k];
             out[idx] = (Ta * cosa - Tb * sina);
@@ -1077,7 +1318,9 @@ __global__ void kernel_dst3_2d_setup_padded_y(
 // Each block handles one row
 __global__ void kernel_dst3_2d_preOp_y(
     double* __restrict__ data,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
     int ix = blockIdx.x;
@@ -1086,7 +1329,12 @@ __global__ void kernel_dst3_2d_preOp_y(
     // Pair pin[itx] with pin[Ny-itx] for itx = 0..Ny/2
     if (itx <= Ny / 2) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * Ny), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * Ny), &sina, &cosa);
+        }
 
         double Ta = pin[itx] + pin[Ny - itx];
         double Tb = pin[itx] - pin[Ny - itx];
@@ -1183,7 +1431,9 @@ __global__ void kernel_dst3_2d_setup_padded_x(
 // Each block handles one row
 __global__ void kernel_dst3_2d_preOp_x(
     double* __restrict__ data,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
     int iy = blockIdx.x;
@@ -1192,7 +1442,12 @@ __global__ void kernel_dst3_2d_preOp_x(
     // Pair pin[itx] with pin[Nx-itx] for itx = 0..Nx/2
     if (itx <= Nx / 2) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * Nx), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * Nx), &sina, &cosa);
+        }
 
         double Ta = pin[itx] + pin[Nx - itx];
         double Tb = pin[itx] - pin[Nx - itx];
@@ -1264,7 +1519,9 @@ __global__ void kernel_dst3_2d_copy_back_x(
 __global__ void kernel_dst4_2d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int ix = blockIdx.x;
     int iy = threadIdx.x;
@@ -1273,9 +1530,14 @@ __global__ void kernel_dst4_2d_preOp_y(
     if (ix < Nx && iy < N2) {
         int out_idx = ix * N2 + iy;
         if (iy < Ny) {
-            double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
-            out[out_idx].x = in[ix * Ny + iy] * cos(angle);
-            out[out_idx].y = in[ix * Ny + iy] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[out_idx].x = in[ix * Ny + iy] * cos_lut[iy];
+                out[out_idx].y = -in[ix * Ny + iy] * sin_lut[iy];
+            } else {
+                double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
+                out[out_idx].x = in[ix * Ny + iy] * cos(angle);
+                out[out_idx].y = in[ix * Ny + iy] * sin(angle);
+            }
         } else {
             out[out_idx].x = 0.0;
             out[out_idx].y = 0.0;
@@ -1286,16 +1548,23 @@ __global__ void kernel_dst4_2d_preOp_y(
 __global__ void kernel_dst4_2d_postOp_y(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int ix = blockIdx.x;
     int iy = threadIdx.x;
     int N2 = 2 * Ny;
 
     if (ix < Nx && iy < Ny) {
-        double angle = -M_PI * iy / (2.0 * Ny);
         cufftDoubleComplex z = in[ix * N2 + iy];
-        double im = z.x * sin(angle) + z.y * cos(angle);
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -z.x * sin_lut[iy] + z.y * cos_lut[iy];
+        } else {
+            double angle = -M_PI * iy / (2.0 * Ny);
+            im = z.x * sin(angle) + z.y * cos(angle);
+        }
         out[ix * Ny + iy] = -2.0 * im;
     }
 }
@@ -1303,7 +1572,9 @@ __global__ void kernel_dst4_2d_postOp_y(
 __global__ void kernel_dst4_2d_preOp_x(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int iy = blockIdx.x;
     int ix = threadIdx.x;
@@ -1312,9 +1583,14 @@ __global__ void kernel_dst4_2d_preOp_x(
     if (iy < Ny && ix < N2) {
         int out_idx = iy * N2 + ix;
         if (ix < Nx) {
-            double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
-            out[out_idx].x = in[ix * Ny + iy] * cos(angle);
-            out[out_idx].y = in[ix * Ny + iy] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[out_idx].x = in[ix * Ny + iy] * cos_lut[ix];
+                out[out_idx].y = -in[ix * Ny + iy] * sin_lut[ix];
+            } else {
+                double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
+                out[out_idx].x = in[ix * Ny + iy] * cos(angle);
+                out[out_idx].y = in[ix * Ny + iy] * sin(angle);
+            }
         } else {
             out[out_idx].x = 0.0;
             out[out_idx].y = 0.0;
@@ -1325,16 +1601,23 @@ __global__ void kernel_dst4_2d_preOp_x(
 __global__ void kernel_dst4_2d_postOp_x(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny)
+    int Nx, int Ny,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int iy = blockIdx.x;
     int ix = threadIdx.x;
     int N2 = 2 * Nx;
 
     if (iy < Ny && ix < Nx) {
-        double angle = -M_PI * ix / (2.0 * Nx);
         cufftDoubleComplex z = in[iy * N2 + ix];
-        double im = z.x * sin(angle) + z.y * cos(angle);
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -z.x * sin_lut[ix] + z.y * cos_lut[ix];
+        } else {
+            double angle = -M_PI * ix / (2.0 * Nx);
+            im = z.x * sin(angle) + z.y * cos(angle);
+        }
         out[ix * Ny + iy] = -2.0 * im;
     }
 }
@@ -1534,6 +1817,35 @@ __global__ void kernel_dct2_3d_postOp_z(
     }
 }
 
+__global__ void kernel_dct2_3d_postOp_z_lut(
+    const double* __restrict__ in,
+    double* __restrict__ out,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Ny * Nz;
+
+    if (idx < total) {
+        int iz = idx % Nz;
+        int iy = (idx / Nz) % Ny;
+        int ix = idx / (Nz * Ny);
+
+        int in_base = (ix * Ny + iy) * Nz;
+
+        if (iz == 0) {
+            out[idx] = in[in_base] * 2.0;
+        } else {
+            double sina = sin_lut[iz];
+            double cosa = cos_lut[iz];
+            double Ta = in[in_base + iz] + in[in_base + (Nz - iz)];
+            double Tb = in[in_base + iz] - in[in_base + (Nz - iz)];
+            out[idx] = Ta * cosa + Tb * sina;
+        }
+    }
+}
+
 __global__ void kernel_dct2_3d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
@@ -1587,6 +1899,35 @@ __global__ void kernel_dct2_3d_postOp_y(
         } else {
             double sina, cosa;
             sincos(iy * M_PI / (2.0 * Ny), &sina, &cosa);
+            double Ta = in[in_base + iy] + in[in_base + (Ny - iy)];
+            double Tb = in[in_base + iy] - in[in_base + (Ny - iy)];
+            out[idx] = Ta * cosa + Tb * sina;
+        }
+    }
+}
+
+__global__ void kernel_dct2_3d_postOp_y_lut(
+    const double* __restrict__ in,
+    double* __restrict__ out,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Ny * Nz;
+
+    if (idx < total) {
+        int iz = idx % Nz;
+        int iy = (idx / Nz) % Ny;
+        int ix = idx / (Nz * Ny);
+
+        int in_base = (ix * Nz + iz) * Ny;
+
+        if (iy == 0) {
+            out[idx] = in[in_base] * 2.0;
+        } else {
+            double sina = sin_lut[iy];
+            double cosa = cos_lut[iy];
             double Ta = in[in_base + iy] + in[in_base + (Ny - iy)];
             double Tb = in[in_base + iy] - in[in_base + (Ny - iy)];
             out[idx] = Ta * cosa + Tb * sina;
@@ -1654,6 +1995,35 @@ __global__ void kernel_dct2_3d_postOp_x(
     }
 }
 
+__global__ void kernel_dct2_3d_postOp_x_lut(
+    const double* __restrict__ in,
+    double* __restrict__ out,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Ny * Nz;
+
+    if (idx < total) {
+        int iz = idx % Nz;
+        int iy = (idx / Nz) % Ny;
+        int ix = idx / (Nz * Ny);
+
+        int in_base = (iy * Nz + iz) * Nx;
+
+        if (ix == 0) {
+            out[idx] = in[in_base] * 2.0;
+        } else {
+            double sina = sin_lut[ix];
+            double cosa = cos_lut[ix];
+            double Ta = in[in_base + ix] + in[in_base + (Nx - ix)];
+            double Tb = in[in_base + ix] - in[in_base + (Nx - ix)];
+            out[idx] = Ta * cosa + Tb * sina;
+        }
+    }
+}
+
 //------------------------------------------------------------------------------
 // 3D DCT-3 Kernels
 //------------------------------------------------------------------------------
@@ -1676,6 +2046,34 @@ __global__ void kernel_dct3_3d_preOp_z(
 
         double sina, cosa;
         sincos(iz1 * M_PI / (2.0 * Nz), &sina, &cosa);
+        double Ta = data[base + iz1] + data[base + iz2];
+        double Tb = data[base + iz1] - data[base + iz2];
+
+        data[base + iz1] = Ta * sina + Tb * cosa;
+        data[base + iz2] = Ta * cosa - Tb * sina;
+    }
+}
+
+__global__ void kernel_dct3_3d_preOp_z_lut(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Ny * (Nz / 2);
+
+    if (idx < total) {
+        int iz = idx % (Nz / 2);
+        int iy = (idx / (Nz / 2)) % Ny;
+        int ix = idx / ((Nz / 2) * Ny);
+
+        int base = (ix * Ny + iy) * Nz;
+        int iz1 = iz + 1;
+        int iz2 = Nz - iz - 1;
+
+        double sina = sin_lut[iz1];
+        double cosa = cos_lut[iz1];
         double Ta = data[base + iz1] + data[base + iz2];
         double Tb = data[base + iz1] - data[base + iz2];
 
@@ -1759,6 +2157,92 @@ __global__ void kernel_dct3_3d_preOp_y(
     }
 }
 
+__global__ void kernel_dct3_3d_preOp_y_lut(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Nz * (Ny / 2);
+
+    if (idx < total) {
+        int iy = idx % (Ny / 2);
+        int iz = (idx / (Ny / 2)) % Nz;
+        int ix = idx / ((Ny / 2) * Nz);
+
+        int base = (ix * Nz + iz) * Ny;
+        int iy1 = iy + 1;
+        int iy2 = Ny - iy - 1;
+
+        double sina = sin_lut[iy1];
+        double cosa = cos_lut[iy1];
+        double Ta = data[base + iy1] + data[base + iy2];
+        double Tb = data[base + iy1] - data[base + iy2];
+
+        data[base + iy1] = Ta * sina + Tb * cosa;
+        data[base + iy2] = Ta * cosa - Tb * sina;
+    }
+}
+
+__global__ void kernel_dct3_3d_preOp_y_strided(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Nz * (Ny / 2);
+
+    if (idx < total) {
+        int iy = idx % (Ny / 2);
+        int iz = (idx / (Ny / 2)) % Nz;
+        int ix = idx / ((Ny / 2) * Nz);
+
+        int iy1 = iy + 1;
+        int iy2 = Ny - iy - 1;
+
+        int idx1 = (ix * Ny + iy1) * Nz + iz;
+        int idx2 = (ix * Ny + iy2) * Nz + iz;
+
+        double sina, cosa;
+        sincos(iy1 * M_PI / (2.0 * Ny), &sina, &cosa);
+        double Ta = data[idx1] + data[idx2];
+        double Tb = data[idx1] - data[idx2];
+
+        data[idx1] = Ta * sina + Tb * cosa;
+        data[idx2] = Ta * cosa - Tb * sina;
+    }
+}
+
+__global__ void kernel_dct3_3d_preOp_y_strided_lut(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Nx * Nz * (Ny / 2);
+
+    if (idx < total) {
+        int iy = idx % (Ny / 2);
+        int iz = (idx / (Ny / 2)) % Nz;
+        int ix = idx / ((Ny / 2) * Nz);
+
+        int iy1 = iy + 1;
+        int iy2 = Ny - iy - 1;
+
+        int idx1 = (ix * Ny + iy1) * Nz + iz;
+        int idx2 = (ix * Ny + iy2) * Nz + iz;
+
+        double sina = sin_lut[iy1];
+        double cosa = cos_lut[iy1];
+        double Ta = data[idx1] + data[idx2];
+        double Tb = data[idx1] - data[idx2];
+
+        data[idx1] = Ta * sina + Tb * cosa;
+        data[idx2] = Ta * cosa - Tb * sina;
+    }
+}
+
 __global__ void kernel_dct3_3d_postOp_y(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
@@ -1834,6 +2318,92 @@ __global__ void kernel_dct3_3d_preOp_x(
     }
 }
 
+__global__ void kernel_dct3_3d_preOp_x_lut(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Ny * Nz * (Nx / 2);
+
+    if (idx < total) {
+        int ix = idx % (Nx / 2);
+        int iz = (idx / (Nx / 2)) % Nz;
+        int iy = idx / ((Nx / 2) * Nz);
+
+        int base = (iy * Nz + iz) * Nx;
+        int ix1 = ix + 1;
+        int ix2 = Nx - ix - 1;
+
+        double sina = sin_lut[ix1];
+        double cosa = cos_lut[ix1];
+        double Ta = data[base + ix1] + data[base + ix2];
+        double Tb = data[base + ix1] - data[base + ix2];
+
+        data[base + ix1] = Ta * sina + Tb * cosa;
+        data[base + ix2] = Ta * cosa - Tb * sina;
+    }
+}
+
+__global__ void kernel_dct3_3d_preOp_x_strided(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Ny * Nz * (Nx / 2);
+
+    if (idx < total) {
+        int ix = idx % (Nx / 2);
+        int iz = (idx / (Nx / 2)) % Nz;
+        int iy = idx / ((Nx / 2) * Nz);
+
+        int ix1 = ix + 1;
+        int ix2 = Nx - ix - 1;
+
+        int idx1 = (ix1 * Ny + iy) * Nz + iz;
+        int idx2 = (ix2 * Ny + iy) * Nz + iz;
+
+        double sina, cosa;
+        sincos(ix1 * M_PI / (2.0 * Nx), &sina, &cosa);
+        double Ta = data[idx1] + data[idx2];
+        double Tb = data[idx1] - data[idx2];
+
+        data[idx1] = Ta * sina + Tb * cosa;
+        data[idx2] = Ta * cosa - Tb * sina;
+    }
+}
+
+__global__ void kernel_dct3_3d_preOp_x_strided_lut(
+    double* __restrict__ data,
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = Ny * Nz * (Nx / 2);
+
+    if (idx < total) {
+        int ix = idx % (Nx / 2);
+        int iz = (idx / (Nx / 2)) % Nz;
+        int iy = idx / ((Nx / 2) * Nz);
+
+        int ix1 = ix + 1;
+        int ix2 = Nx - ix - 1;
+
+        int idx1 = (ix1 * Ny + iy) * Nz + iz;
+        int idx2 = (ix2 * Ny + iy) * Nz + iz;
+
+        double sina = sin_lut[ix1];
+        double cosa = cos_lut[ix1];
+        double Ta = data[idx1] + data[idx2];
+        double Tb = data[idx1] - data[idx2];
+
+        data[idx1] = Ta * sina + Tb * cosa;
+        data[idx2] = Ta * cosa - Tb * sina;
+    }
+}
+
 __global__ void kernel_dct3_3d_postOp_x(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
@@ -1873,7 +2443,9 @@ __global__ void kernel_dct3_3d_postOp_x(
 __global__ void kernel_dct4_3d_preOp_z(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Nz;
@@ -1886,9 +2458,14 @@ __global__ void kernel_dct4_3d_preOp_z(
 
         if (iz < Nz) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * iz + 1) / (4.0 * Nz);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[iz];
+                out[idx].y = -in[in_idx] * sin_lut[iz];
+            } else {
+                double angle = -M_PI * (2 * iz + 1) / (4.0 * Nz);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -1899,7 +2476,9 @@ __global__ void kernel_dct4_3d_preOp_z(
 __global__ void kernel_dct4_3d_postOp_z(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -1911,11 +2490,17 @@ __global__ void kernel_dct4_3d_postOp_z(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (ix * Ny + iy) * N2 + iz;
-        double angle = -M_PI * iz / (2.0 * Nz);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-
-        double re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[iz];
+            double sina = sin_lut[iz];
+            re = in[in_idx].x * cosa + in[in_idx].y * sina;
+        } else {
+            double angle = -M_PI * iz / (2.0 * Nz);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        }
         out[idx] = 2.0 * re;
     }
 }
@@ -1923,7 +2508,9 @@ __global__ void kernel_dct4_3d_postOp_z(
 __global__ void kernel_dct4_3d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Ny;
@@ -1936,9 +2523,14 @@ __global__ void kernel_dct4_3d_preOp_y(
 
         if (iy < Ny) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[iy];
+                out[idx].y = -in[in_idx] * sin_lut[iy];
+            } else {
+                double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -1949,7 +2541,9 @@ __global__ void kernel_dct4_3d_preOp_y(
 __global__ void kernel_dct4_3d_postOp_y(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -1961,11 +2555,17 @@ __global__ void kernel_dct4_3d_postOp_y(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (ix * Nz + iz) * N2 + iy;
-        double angle = -M_PI * iy / (2.0 * Ny);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-
-        double re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[iy];
+            double sina = sin_lut[iy];
+            re = in[in_idx].x * cosa + in[in_idx].y * sina;
+        } else {
+            double angle = -M_PI * iy / (2.0 * Ny);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        }
         out[idx] = 2.0 * re;
     }
 }
@@ -1973,7 +2573,9 @@ __global__ void kernel_dct4_3d_postOp_y(
 __global__ void kernel_dct4_3d_preOp_x(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Nx;
@@ -1986,9 +2588,14 @@ __global__ void kernel_dct4_3d_preOp_x(
 
         if (ix < Nx) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[ix];
+                out[idx].y = -in[in_idx] * sin_lut[ix];
+            } else {
+                double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -1999,7 +2606,9 @@ __global__ void kernel_dct4_3d_preOp_x(
 __global__ void kernel_dct4_3d_postOp_x(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2011,11 +2620,17 @@ __global__ void kernel_dct4_3d_postOp_x(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (iy * Nz + iz) * N2 + ix;
-        double angle = -M_PI * ix / (2.0 * Nx);
-        double cosa = cos(angle);
-        double sina = sin(angle);
-
-        double re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        double re;
+        if (sin_lut && cos_lut) {
+            double cosa = cos_lut[ix];
+            double sina = sin_lut[ix];
+            re = in[in_idx].x * cosa + in[in_idx].y * sina;
+        } else {
+            double angle = -M_PI * ix / (2.0 * Nx);
+            double cosa = cos(angle);
+            double sina = sin(angle);
+            re = in[in_idx].x * cosa - in[in_idx].y * sina;
+        }
         out[idx] = 2.0 * re;
     }
 }
@@ -2059,7 +2674,9 @@ __global__ void kernel_dst2_3d_preOp_z(
 __global__ void kernel_dst2_3d_postOp_z(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2073,14 +2690,24 @@ __global__ void kernel_dst2_3d_postOp_z(
             out[idx] = 2.0 * in[ixy * Nz];
         } else if (k <= Nz / 2) {
             double sina, cosa;
-            sincos(k * M_PI / (2.0 * Nz), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k];
+                cosa = cos_lut[k];
+            } else {
+                sincos(k * M_PI / (2.0 * Nz), &sina, &cosa);
+            }
             double Ta = in[ixy * Nz + k] + in[ixy * Nz + Nz - k];
             double Tb = in[ixy * Nz + k] - in[ixy * Nz + Nz - k];
             out[idx] = (Ta * sina + Tb * cosa);
         } else {
             int k_mirror = Nz - k;
             double sina, cosa;
-            sincos(k_mirror * M_PI / (2.0 * Nz), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k_mirror];
+                cosa = cos_lut[k_mirror];
+            } else {
+                sincos(k_mirror * M_PI / (2.0 * Nz), &sina, &cosa);
+            }
             double Ta = in[ixy * Nz + k_mirror] + in[ixy * Nz + k];
             double Tb = in[ixy * Nz + k_mirror] - in[ixy * Nz + k];
             out[idx] = (Ta * cosa - Tb * sina);
@@ -2123,7 +2750,9 @@ __global__ void kernel_dst2_3d_preOp_y(
 __global__ void kernel_dst2_3d_postOp_y(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2139,14 +2768,24 @@ __global__ void kernel_dst2_3d_postOp_y(
             out[idx] = 2.0 * in[ixz * Ny];
         } else if (k <= Ny / 2) {
             double sina, cosa;
-            sincos(k * M_PI / (2.0 * Ny), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k];
+                cosa = cos_lut[k];
+            } else {
+                sincos(k * M_PI / (2.0 * Ny), &sina, &cosa);
+            }
             double Ta = in[ixz * Ny + k] + in[ixz * Ny + Ny - k];
             double Tb = in[ixz * Ny + k] - in[ixz * Ny + Ny - k];
             out[idx] = (Ta * sina + Tb * cosa);
         } else {
             int k_mirror = Ny - k;
             double sina, cosa;
-            sincos(k_mirror * M_PI / (2.0 * Ny), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k_mirror];
+                cosa = cos_lut[k_mirror];
+            } else {
+                sincos(k_mirror * M_PI / (2.0 * Ny), &sina, &cosa);
+            }
             double Ta = in[ixz * Ny + k_mirror] + in[ixz * Ny + k];
             double Tb = in[ixz * Ny + k_mirror] - in[ixz * Ny + k];
             out[idx] = (Ta * cosa - Tb * sina);
@@ -2189,7 +2828,9 @@ __global__ void kernel_dst2_3d_preOp_x(
 __global__ void kernel_dst2_3d_postOp_x(
     const double* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2205,14 +2846,24 @@ __global__ void kernel_dst2_3d_postOp_x(
             out[idx] = 2.0 * in[iyz * Nx];
         } else if (k <= Nx / 2) {
             double sina, cosa;
-            sincos(k * M_PI / (2.0 * Nx), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k];
+                cosa = cos_lut[k];
+            } else {
+                sincos(k * M_PI / (2.0 * Nx), &sina, &cosa);
+            }
             double Ta = in[iyz * Nx + k] + in[iyz * Nx + Nx - k];
             double Tb = in[iyz * Nx + k] - in[iyz * Nx + Nx - k];
             out[idx] = (Ta * sina + Tb * cosa);
         } else {
             int k_mirror = Nx - k;
             double sina, cosa;
-            sincos(k_mirror * M_PI / (2.0 * Nx), &sina, &cosa);
+            if (sin_lut && cos_lut) {
+                sina = sin_lut[k_mirror];
+                cosa = cos_lut[k_mirror];
+            } else {
+                sincos(k_mirror * M_PI / (2.0 * Nx), &sina, &cosa);
+            }
             double Ta = in[iyz * Nx + k_mirror] + in[iyz * Nx + k];
             double Tb = in[iyz * Nx + k_mirror] - in[iyz * Nx + k];
             out[idx] = (Ta * cosa - Tb * sina);
@@ -2249,7 +2900,9 @@ __global__ void kernel_dst3_3d_setup_z(
 // PreOp twiddle factor for Z-direction - each XY point processes independently
 __global__ void kernel_dst3_3d_preOp_z(
     double* __restrict__ data,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
     int ixy = blockIdx.x;
@@ -2257,7 +2910,12 @@ __global__ void kernel_dst3_3d_preOp_z(
 
     if (itx <= Nz / 2) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * Nz), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * Nz), &sina, &cosa);
+        }
         double Ta = pin[itx] + pin[Nz - itx];
         double Tb = pin[itx] - pin[Nz - itx];
         pin[itx] = Ta * cosa + Tb * sina;
@@ -2345,7 +3003,9 @@ __global__ void kernel_dst3_3d_setup_y(
 // PreOp twiddle factor for Y-direction
 __global__ void kernel_dst3_3d_preOp_y(
     double* __restrict__ data,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
     int ixz = blockIdx.x;
@@ -2353,7 +3013,12 @@ __global__ void kernel_dst3_3d_preOp_y(
 
     if (itx <= Ny / 2) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * Ny), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * Ny), &sina, &cosa);
+        }
         double Ta = pin[itx] + pin[Ny - itx];
         double Tb = pin[itx] - pin[Ny - itx];
         pin[itx] = Ta * cosa + Tb * sina;
@@ -2440,7 +3105,9 @@ __global__ void kernel_dst3_3d_setup_x(
 // PreOp twiddle factor for X-direction
 __global__ void kernel_dst3_3d_preOp_x(
     double* __restrict__ data,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int itx = threadIdx.x;
     int iyz = blockIdx.x;
@@ -2448,7 +3115,12 @@ __global__ void kernel_dst3_3d_preOp_x(
 
     if (itx <= Nx / 2) {
         double sina, cosa;
-        sincos(itx * M_PI / (2.0 * Nx), &sina, &cosa);
+        if (sin_lut && cos_lut) {
+            sina = sin_lut[itx];
+            cosa = cos_lut[itx];
+        } else {
+            sincos(itx * M_PI / (2.0 * Nx), &sina, &cosa);
+        }
         double Ta = pin[itx] + pin[Nx - itx];
         double Tb = pin[itx] - pin[Nx - itx];
         pin[itx] = Ta * cosa + Tb * sina;
@@ -2515,7 +3187,9 @@ __global__ void kernel_dst3_3d_copy_x(
 __global__ void kernel_dst4_3d_preOp_z(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Nz;
@@ -2528,9 +3202,14 @@ __global__ void kernel_dst4_3d_preOp_z(
 
         if (iz < Nz) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * iz + 1) / (4.0 * Nz);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[iz];
+                out[idx].y = -in[in_idx] * sin_lut[iz];
+            } else {
+                double angle = -M_PI * (2 * iz + 1) / (4.0 * Nz);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -2541,7 +3220,9 @@ __global__ void kernel_dst4_3d_preOp_z(
 __global__ void kernel_dst4_3d_postOp_z(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2553,9 +3234,14 @@ __global__ void kernel_dst4_3d_postOp_z(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (ix * Ny + iy) * N2 + iz;
-        double angle = -M_PI * iz / (2.0 * Nz);
         cufftDoubleComplex z = in[in_idx];
-        double im = z.x * sin(angle) + z.y * cos(angle);
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -z.x * sin_lut[iz] + z.y * cos_lut[iz];
+        } else {
+            double angle = -M_PI * iz / (2.0 * Nz);
+            im = z.x * sin(angle) + z.y * cos(angle);
+        }
         out[idx] = -2.0 * im;
     }
 }
@@ -2563,7 +3249,9 @@ __global__ void kernel_dst4_3d_postOp_z(
 __global__ void kernel_dst4_3d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Ny;
@@ -2576,9 +3264,14 @@ __global__ void kernel_dst4_3d_preOp_y(
 
         if (iy < Ny) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[iy];
+                out[idx].y = -in[in_idx] * sin_lut[iy];
+            } else {
+                double angle = -M_PI * (2 * iy + 1) / (4.0 * Ny);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -2589,7 +3282,9 @@ __global__ void kernel_dst4_3d_preOp_y(
 __global__ void kernel_dst4_3d_postOp_y(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2601,9 +3296,14 @@ __global__ void kernel_dst4_3d_postOp_y(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (ix * Nz + iz) * N2 + iy;
-        double angle = -M_PI * iy / (2.0 * Ny);
         cufftDoubleComplex z = in[in_idx];
-        double im = z.x * sin(angle) + z.y * cos(angle);
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -z.x * sin_lut[iy] + z.y * cos_lut[iy];
+        } else {
+            double angle = -M_PI * iy / (2.0 * Ny);
+            im = z.x * sin(angle) + z.y * cos(angle);
+        }
         out[idx] = -2.0 * im;
     }
 }
@@ -2611,7 +3311,9 @@ __global__ void kernel_dst4_3d_postOp_y(
 __global__ void kernel_dst4_3d_preOp_x(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int N2 = 2 * Nx;
@@ -2624,9 +3326,14 @@ __global__ void kernel_dst4_3d_preOp_x(
 
         if (ix < Nx) {
             int in_idx = (ix * Ny + iy) * Nz + iz;
-            double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
-            out[idx].x = in[in_idx] * cos(angle);
-            out[idx].y = in[in_idx] * sin(angle);
+            if (sin_lut && cos_lut) {
+                out[idx].x = in[in_idx] * cos_lut[ix];
+                out[idx].y = -in[in_idx] * sin_lut[ix];
+            } else {
+                double angle = -M_PI * (2 * ix + 1) / (4.0 * Nx);
+                out[idx].x = in[in_idx] * cos(angle);
+                out[idx].y = in[in_idx] * sin(angle);
+            }
         } else {
             out[idx].x = 0.0;
             out[idx].y = 0.0;
@@ -2637,7 +3344,9 @@ __global__ void kernel_dst4_3d_preOp_x(
 __global__ void kernel_dst4_3d_postOp_x(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
-    int Nx, int Ny, int Nz)
+    int Nx, int Ny, int Nz,
+    const double* __restrict__ sin_lut,
+    const double* __restrict__ cos_lut)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int total = Nx * Ny * Nz;
@@ -2649,9 +3358,14 @@ __global__ void kernel_dst4_3d_postOp_x(
         int ix = idx / (Nz * Ny);
 
         int in_idx = (iy * Nz + iz) * N2 + ix;
-        double angle = -M_PI * ix / (2.0 * Nx);
         cufftDoubleComplex z = in[in_idx];
-        double im = z.x * sin(angle) + z.y * cos(angle);
+        double im;
+        if (sin_lut && cos_lut) {
+            im = -z.x * sin_lut[ix] + z.y * cos_lut[ix];
+        } else {
+            double angle = -M_PI * ix / (2.0 * Nx);
+            im = z.x * sin(angle) + z.y * cos(angle);
+        }
         out[idx] = -2.0 * im;
     }
 }
@@ -2716,6 +3430,14 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
         }
     }
 
+    if (type_ == CUDA_DCT_2 || type_ == CUDA_DST_2 || type_ == CUDA_DST_3 ||
+        type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
+        allocate_dct2_lut(N_, &dct2_sin_, &dct2_cos_);
+    if (type_ == CUDA_DCT_3)
+        allocate_dct3_lut(N_, &dct3_sin_, &dct3_cos_);
+    if (type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
+        allocate_dct4_lut(N_, &dct4_sin_, &dct4_cos_);
+
     initialized_ = true;
 }
 
@@ -2724,6 +3446,12 @@ CudaRealTransform1D::~CudaRealTransform1D()
     if (initialized_) {
         if (d_work_) cudaFree(d_work_);
         if (d_x1_) cudaFree(d_x1_);
+        if (dct2_sin_) cudaFree(dct2_sin_);
+        if (dct2_cos_) cudaFree(dct2_cos_);
+        if (dct3_sin_) cudaFree(dct3_sin_);
+        if (dct3_cos_) cudaFree(dct3_cos_);
+        if (dct4_sin_) cudaFree(dct4_sin_);
+        if (dct4_cos_) cudaFree(dct4_cos_);
         cufftDestroy(plan_);
     }
 }
@@ -2782,12 +3510,13 @@ void CudaRealTransform1D::execute(double* d_data)
         case CUDA_DCT_2: {
             kernel_dct2_preOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(d_data, N_);
             cufftExecZ2D(plan_, (cufftDoubleComplex*)d_data, d_work_);
-            kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(d_work_, N_);
+            kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(
+                d_work_, N_, dct2_sin_, dct2_cos_);
             cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
         }
         case CUDA_DCT_3: {
-            kernel_dct3_preOp<<<1, nThread, 0, stream_>>>(d_data, N_);
+            kernel_dct3_preOp<<<1, nThread, 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
             cufftExecD2Z(plan_, d_data, (cufftDoubleComplex*)d_work_);
             kernel_dct3_postOp<<<1, nThread, sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
             cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
@@ -2799,9 +3528,11 @@ void CudaRealTransform1D::execute(double* d_data)
             int numBlocks = (N2 + blockSize - 1) / blockSize;
             cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
             cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
-            kernel_dct4_preOp<<<numBlocks, blockSize, 0, stream_>>>(d_data, d_z_in, N_);
+            kernel_dct4_preOp<<<numBlocks, blockSize, 0, stream_>>>(
+                d_data, d_z_in, N_, dct4_sin_, dct4_cos_);
             cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
-            kernel_dct4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(d_z_out, d_data, N_);
+            kernel_dct4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
+                d_z_out, d_data, N_, dct2_sin_, dct2_cos_);
             break;
         }
         case CUDA_DST_1: {
@@ -2833,7 +3564,8 @@ void CudaRealTransform1D::execute(double* d_data)
             // Z2D FFT of size N
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
             // PostOp
-            kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(d_work_, N_);
+            kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(
+                d_work_, N_, dct2_sin_, dct2_cos_);
             // Output mapping: result[0..N-1] = buffer[1..N]
             cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             break;
@@ -2844,7 +3576,7 @@ void CudaRealTransform1D::execute(double* d_data)
             cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_);
             cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
             // PreOp (reads buffer[0..N])
-            kernel_dst3_preOp<<<1, N_ / 2 + 1, 0, stream_>>>(d_work_, N_);
+            kernel_dst3_preOp<<<1, N_ / 2 + 1, 0, stream_>>>(d_work_, N_, dct2_sin_, dct2_cos_);
             // D2Z FFT of size N
             cufftExecD2Z(plan_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_));
             // PostOp
@@ -2859,9 +3591,11 @@ void CudaRealTransform1D::execute(double* d_data)
             int numBlocks = (N2 + blockSize - 1) / blockSize;
             cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
             cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
-            kernel_dst4_preOp<<<numBlocks, blockSize, 0, stream_>>>(d_data, d_z_in, N_);
+            kernel_dst4_preOp<<<numBlocks, blockSize, 0, stream_>>>(
+                d_data, d_z_in, N_, dct4_sin_, dct4_cos_);
             cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
-            kernel_dst4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(d_z_out, d_data, N_);
+            kernel_dst4_postOp<<<(N_ + blockSize - 1) / blockSize, blockSize, 0, stream_>>>(
+                d_z_out, d_data, N_, dct2_sin_, dct2_cos_);
             break;
         }
         default:
@@ -3028,8 +3762,12 @@ void CudaRealTransform2D::init()
         int n[1] = {Nx_};
         int inembed[1] = {Nx_};
         int onembed[1] = {Nx_ / 2 + 1};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_,
-                          onembed, 1, Nx_ / 2 + 1, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
+        int istride = Ny_;
+        int idist = 1;
+        int ostride = 1;
+        int odist = Nx_ / 2 + 1;
+        if (cufftPlanMany(&plan_x_, 1, n, inembed, istride, idist,
+                          onembed, ostride, odist, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
         }
     } else if (type_x_ == CUDA_DST_2) {
@@ -3071,6 +3809,22 @@ void CudaRealTransform2D::init()
         }
     }
 
+    if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
+        type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
+        allocate_dct2_lut(Nx_, &dct2_sin_x_, &dct2_cos_x_);
+    if (type_x_ == CUDA_DCT_3)
+        allocate_dct3_lut(Nx_, &dct3_sin_x_, &dct3_cos_x_);
+    if (type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
+        allocate_dct4_lut(Nx_, &dct4_sin_x_, &dct4_cos_x_);
+
+    if (type_y_ == CUDA_DCT_2 || type_y_ == CUDA_DST_2 || type_y_ == CUDA_DST_3 ||
+        type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
+        allocate_dct2_lut(Ny_, &dct2_sin_y_, &dct2_cos_y_);
+    if (type_y_ == CUDA_DCT_3)
+        allocate_dct3_lut(Ny_, &dct3_sin_y_, &dct3_cos_y_);
+    if (type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
+        allocate_dct4_lut(Ny_, &dct4_sin_y_, &dct4_cos_y_);
+
     initialized_ = true;
     set_stream(stream_);
 }
@@ -3081,6 +3835,18 @@ CudaRealTransform2D::~CudaRealTransform2D()
         if (d_work_) cudaFree(d_work_);
         if (d_temp_) cudaFree(d_temp_);
         if (d_x1_) cudaFree(d_x1_);
+        if (dct2_sin_x_) cudaFree(dct2_sin_x_);
+        if (dct2_cos_x_) cudaFree(dct2_cos_x_);
+        if (dct2_sin_y_) cudaFree(dct2_sin_y_);
+        if (dct2_cos_y_) cudaFree(dct2_cos_y_);
+        if (dct3_sin_x_) cudaFree(dct3_sin_x_);
+        if (dct3_cos_x_) cudaFree(dct3_cos_x_);
+        if (dct3_sin_y_) cudaFree(dct3_sin_y_);
+        if (dct3_cos_y_) cudaFree(dct3_cos_y_);
+        if (dct4_sin_x_) cudaFree(dct4_sin_x_);
+        if (dct4_cos_x_) cudaFree(dct4_cos_x_);
+        if (dct4_sin_y_) cudaFree(dct4_sin_y_);
+        if (dct4_cos_y_) cudaFree(dct4_cos_y_);
         if (plan_y_) cufftDestroy(plan_y_);
         if (plan_x_) cufftDestroy(plan_x_);
     }
@@ -3122,7 +3888,8 @@ void CudaRealTransform2D::executeY_DCT2(double* d_data)
 
     kernel_dct2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dct2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
+    kernel_dct2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform2D::executeY_DCT3(double* d_data)
@@ -3135,7 +3902,8 @@ void CudaRealTransform2D::executeY_DCT3(double* d_data)
 
     cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
 
-    kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_);
+    kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, Nx_, Ny_, dct3_sin_y_, dct3_cos_y_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_y_, d_temp_, d_complex);
@@ -3149,9 +3917,11 @@ void CudaRealTransform2D::executeY_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_);
+    kernel_dct4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(
+        d_data, d_z_in, Nx_, Ny_, dct4_sin_y_, dct4_cos_y_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_);
+    kernel_dct4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform2D::executeY_DST1(double* d_data) {
@@ -3171,7 +3941,8 @@ void CudaRealTransform2D::executeY_DST2(double* d_data)
 
     kernel_dst2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dst2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
+    kernel_dst2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform2D::executeY_DST3(double* d_data)
@@ -3192,7 +3963,8 @@ void CudaRealTransform2D::executeY_DST3(double* d_data)
     kernel_dst3_2d_setup_padded_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_);
 
     // Step 2: PreOp on padded buffer (each block handles one row)
-    kernel_dst3_2d_preOp_y<<<Nx_, Ny_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_preOp_y<<<Nx_, Ny_ / 2 + 1, 0, stream_>>>(
+        d_work_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
 
     // Step 3: D2Z FFT in-place on padded buffer
     cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_work_);
@@ -3213,9 +3985,11 @@ void CudaRealTransform2D::executeY_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_);
+    kernel_dst4_2d_preOp_y<<<Nx_, N2, 0, stream_>>>(
+        d_data, d_z_in, Nx_, Ny_, dct4_sin_y_, dct4_cos_y_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_);
+    kernel_dst4_2d_postOp_y<<<Nx_, Ny_, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform2D::executeX_DCT1(double* d_data) {
@@ -3234,24 +4008,23 @@ void CudaRealTransform2D::executeX_DCT2(double* d_data)
 
     kernel_dct2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dct2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
+    kernel_dct2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform2D::executeX_DCT3(double* d_data)
 {
     int blockSize = 256;
-    int total_transpose = Nx_ * Ny_;
-    int numBlocks_transpose = (total_transpose + blockSize - 1) / blockSize;
     int total_preOp = Ny_ * (Nx_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = (total_postOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_2d_preOp_x_transpose<<<numBlocks_transpose, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_);
-    kernel_dct3_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_);
+    kernel_dct3_2d_preOp_x_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, Nx_, Ny_, dct3_sin_x_, dct3_cos_x_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_x_, d_work_, d_complex);
+    cufftExecD2Z(plan_x_, d_temp_, d_complex);
 
     kernel_dct3_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_);
 }
@@ -3262,9 +4035,11 @@ void CudaRealTransform2D::executeX_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_);
+    kernel_dct4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, dct4_sin_x_, dct4_cos_x_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_);
+    kernel_dct4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(
+        d_z_out, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform2D::executeX_DST1(double* d_data) {
@@ -3284,7 +4059,8 @@ void CudaRealTransform2D::executeX_DST2(double* d_data)
 
     kernel_dst2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dst2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
+    kernel_dst2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform2D::executeX_DST3(double* d_data)
@@ -3305,7 +4081,8 @@ void CudaRealTransform2D::executeX_DST3(double* d_data)
     kernel_dst3_2d_setup_padded_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_);
 
     // Step 2: PreOp on padded buffer (each block handles one row)
-    kernel_dst3_2d_preOp_x<<<Ny_, Nx_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_);
+    kernel_dst3_2d_preOp_x<<<Ny_, Nx_ / 2 + 1, 0, stream_>>>(
+        d_work_, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
 
     // Step 3: D2Z FFT in-place on padded buffer
     cufftExecD2Z(plan_x_, d_work_, (cufftDoubleComplex*)d_work_);
@@ -3326,9 +4103,11 @@ void CudaRealTransform2D::executeX_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_);
+    kernel_dst4_2d_preOp_x<<<Ny_, N2, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, dct4_sin_x_, dct4_cos_x_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_);
+    kernel_dst4_2d_postOp_x<<<Ny_, Nx_, 0, stream_>>>(
+        d_z_out, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform2D::execute(double* d_data)
@@ -3584,8 +4363,12 @@ void CudaRealTransform3D::init()
         int n[1] = {Ny_};
         int inembed[1] = {Ny_};
         int onembed[1] = {Ny_ / 2 + 1};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_,
-                          onembed, 1, Ny_ / 2 + 1, CUFFT_D2Z, batch_y) != CUFFT_SUCCESS) {
+        int istride = Nz_;
+        int idist = 1;
+        int ostride = 1;
+        int odist = Ny_ / 2 + 1;
+        if (cufftPlanMany(&plan_y_, 1, n, inembed, istride, idist,
+                          onembed, ostride, odist, CUFFT_D2Z, batch_y) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z plan for Y");
         }
     } else if (type_y_ == CUDA_DST_2) {
@@ -3634,8 +4417,12 @@ void CudaRealTransform3D::init()
         int n[1] = {Nx_};
         int inembed[1] = {Nx_};
         int onembed[1] = {Nx_ / 2 + 1};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_,
-                          onembed, 1, Nx_ / 2 + 1, CUFFT_D2Z, batch_x) != CUFFT_SUCCESS) {
+        int istride = Ny_ * Nz_;
+        int idist = 1;
+        int ostride = 1;
+        int odist = Nx_ / 2 + 1;
+        if (cufftPlanMany(&plan_x_, 1, n, inembed, istride, idist,
+                          onembed, ostride, odist, CUFFT_D2Z, batch_x) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
         }
     } else if (type_x_ == CUDA_DST_2) {
@@ -3666,6 +4453,28 @@ void CudaRealTransform3D::init()
         }
     }
 
+    if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
+        type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
+        allocate_dct2_lut(Nx_, &dct2_sin_x_, &dct2_cos_x_);
+    if (type_x_ == CUDA_DCT_3)
+        allocate_dct3_lut(Nx_, &dct3_sin_x_, &dct3_cos_x_);
+    if (type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
+        allocate_dct4_lut(Nx_, &dct4_sin_x_, &dct4_cos_x_);
+    if (type_y_ == CUDA_DCT_2 || type_y_ == CUDA_DST_2 || type_y_ == CUDA_DST_3 ||
+        type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
+        allocate_dct2_lut(Ny_, &dct2_sin_y_, &dct2_cos_y_);
+    if (type_y_ == CUDA_DCT_3)
+        allocate_dct3_lut(Ny_, &dct3_sin_y_, &dct3_cos_y_);
+    if (type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
+        allocate_dct4_lut(Ny_, &dct4_sin_y_, &dct4_cos_y_);
+    if (type_z_ == CUDA_DCT_2 || type_z_ == CUDA_DST_2 || type_z_ == CUDA_DST_3 ||
+        type_z_ == CUDA_DCT_4 || type_z_ == CUDA_DST_4)
+        allocate_dct2_lut(Nz_, &dct2_sin_z_, &dct2_cos_z_);
+    if (type_z_ == CUDA_DCT_3)
+        allocate_dct3_lut(Nz_, &dct3_sin_z_, &dct3_cos_z_);
+    if (type_z_ == CUDA_DCT_4 || type_z_ == CUDA_DST_4)
+        allocate_dct4_lut(Nz_, &dct4_sin_z_, &dct4_cos_z_);
+
     initialized_ = true;
 }
 
@@ -3675,6 +4484,24 @@ CudaRealTransform3D::~CudaRealTransform3D()
         if (d_work_) cudaFree(d_work_);
         if (d_temp_) cudaFree(d_temp_);
         if (d_x1_) cudaFree(d_x1_);
+        if (dct2_sin_x_) cudaFree(dct2_sin_x_);
+        if (dct2_cos_x_) cudaFree(dct2_cos_x_);
+        if (dct2_sin_y_) cudaFree(dct2_sin_y_);
+        if (dct2_cos_y_) cudaFree(dct2_cos_y_);
+        if (dct2_sin_z_) cudaFree(dct2_sin_z_);
+        if (dct2_cos_z_) cudaFree(dct2_cos_z_);
+        if (dct3_sin_x_) cudaFree(dct3_sin_x_);
+        if (dct3_cos_x_) cudaFree(dct3_cos_x_);
+        if (dct3_sin_y_) cudaFree(dct3_sin_y_);
+        if (dct3_cos_y_) cudaFree(dct3_cos_y_);
+        if (dct3_sin_z_) cudaFree(dct3_sin_z_);
+        if (dct3_cos_z_) cudaFree(dct3_cos_z_);
+        if (dct4_sin_x_) cudaFree(dct4_sin_x_);
+        if (dct4_cos_x_) cudaFree(dct4_cos_x_);
+        if (dct4_sin_y_) cudaFree(dct4_sin_y_);
+        if (dct4_cos_y_) cudaFree(dct4_cos_y_);
+        if (dct4_sin_z_) cudaFree(dct4_sin_z_);
+        if (dct4_cos_z_) cudaFree(dct4_cos_z_);
         if (plan_z_) cufftDestroy(plan_z_);
         if (plan_y_) cufftDestroy(plan_y_);
         if (plan_x_) cufftDestroy(plan_x_);
@@ -3723,7 +4550,11 @@ void CudaRealTransform3D::executeZ_DCT2(double* d_data)
 
     kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    if (dct2_sin_z_ && dct2_cos_z_)
+        kernel_dct2_3d_postOp_z_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+            d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
+    else
+        kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeZ_DCT3(double* d_data)
@@ -3735,7 +4566,11 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
 
     cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
 
-    kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    if (dct3_sin_z_ && dct3_cos_z_)
+        kernel_dct3_3d_preOp_z_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+            d_temp_, Nx_, Ny_, Nz_, dct3_sin_z_, dct3_cos_z_);
+    else
+        kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
     cufftExecD2Z(plan_z_, d_temp_, d_complex);
@@ -3754,9 +4589,11 @@ void CudaRealTransform3D::executeZ_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_data, d_z_in, Nx_, Ny_, Nz_, dct4_sin_z_, dct4_cos_z_);
     cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
 }
 
 void CudaRealTransform3D::executeZ_DST1(double* d_data) {
@@ -3775,7 +4612,8 @@ void CudaRealTransform3D::executeZ_DST2(double* d_data)
 
     kernel_dst2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
 }
 
 void CudaRealTransform3D::executeZ_DST3(double* d_data)
@@ -3792,7 +4630,8 @@ void CudaRealTransform3D::executeZ_DST3(double* d_data)
     kernel_dst3_3d_setup_z<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per XY point, Nz/2+1 threads per block
-    kernel_dst3_3d_preOp_z<<<batch, Nz_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_z<<<batch, Nz_ / 2 + 1, 0, stream_>>>(
+        d_work_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
@@ -3817,9 +4656,11 @@ void CudaRealTransform3D::executeZ_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_data, d_z_in, Nx_, Ny_, Nz_, dct4_sin_z_, dct4_cos_z_);
     cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
 }
 
 //------------------------------------------------------------------------------
@@ -3842,7 +4683,11 @@ void CudaRealTransform3D::executeY_DCT2(double* d_data)
 
     kernel_dct2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    if (dct2_sin_y_ && dct2_cos_y_)
+        kernel_dct2_3d_postOp_y_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+            d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
+    else
+        kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeY_DCT3(double* d_data)
@@ -3852,11 +4697,14 @@ void CudaRealTransform3D::executeY_DCT3(double* d_data)
     int total_preOp = Nx_ * Nz_ * (Ny_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_3d_preOp_y_transpose<<<numBlocks_M, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
-    kernel_dct3_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    if (dct3_sin_y_ && dct3_cos_y_)
+        kernel_dct3_3d_preOp_y_strided_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+            d_temp_, Nx_, Ny_, Nz_, dct3_sin_y_, dct3_cos_y_);
+    else
+        kernel_dct3_3d_preOp_y_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_y_, d_work_, d_complex);
+    cufftExecD2Z(plan_y_, d_temp_, d_complex);
 
     kernel_dct3_3d_postOp_y<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
 }
@@ -3872,9 +4720,11 @@ void CudaRealTransform3D::executeY_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_y_, dct4_cos_y_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform3D::executeY_DST1(double* d_data) {
@@ -3893,7 +4743,8 @@ void CudaRealTransform3D::executeY_DST2(double* d_data)
 
     kernel_dst2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_y_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
 }
 
 void CudaRealTransform3D::executeY_DST3(double* d_data)
@@ -3910,7 +4761,8 @@ void CudaRealTransform3D::executeY_DST3(double* d_data)
     kernel_dst3_3d_setup_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per XZ point, Ny/2+1 threads per block
-    kernel_dst3_3d_preOp_y<<<batch, Ny_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_y<<<batch, Ny_ / 2 + 1, 0, stream_>>>(
+        d_work_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
@@ -3935,9 +4787,11 @@ void CudaRealTransform3D::executeY_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_y_, dct4_cos_y_);
     cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_temp_, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
 }
 
 //------------------------------------------------------------------------------
@@ -3960,7 +4814,11 @@ void CudaRealTransform3D::executeX_DCT2(double* d_data)
 
     kernel_dct2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+    if (dct2_sin_x_ && dct2_cos_x_)
+        kernel_dct2_3d_postOp_x_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+            d_work_, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
+    else
+        kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
 }
 
 void CudaRealTransform3D::executeX_DCT3(double* d_data)
@@ -3970,11 +4828,14 @@ void CudaRealTransform3D::executeX_DCT3(double* d_data)
     int total_preOp = Ny_ * Nz_ * (Nx_ / 2);
     int numBlocks_preOp = (total_preOp + blockSize - 1) / blockSize;
 
-    kernel_dct3_3d_preOp_x_transpose<<<numBlocks_M, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
-    kernel_dct3_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    if (dct3_sin_x_ && dct3_cos_x_)
+        kernel_dct3_3d_preOp_x_strided_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+            d_temp_, Nx_, Ny_, Nz_, dct3_sin_x_, dct3_cos_x_);
+    else
+        kernel_dct3_3d_preOp_x_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_x_, d_work_, d_complex);
+    cufftExecD2Z(plan_x_, d_temp_, d_complex);
 
     kernel_dct3_3d_postOp_x<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_, Nz_);
 }
@@ -3990,9 +4851,11 @@ void CudaRealTransform3D::executeX_DCT4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_x_, dct4_cos_x_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dct4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
+    kernel_dct4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform3D::executeX_DST1(double* d_data) {
@@ -4011,7 +4874,8 @@ void CudaRealTransform3D::executeX_DST2(double* d_data)
 
     kernel_dst2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_x_, d_complex, d_work_);
-    kernel_dst2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+    kernel_dst2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_work_, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform3D::executeX_DST3(double* d_data)
@@ -4028,7 +4892,8 @@ void CudaRealTransform3D::executeX_DST3(double* d_data)
     kernel_dst3_3d_setup_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
 
     // PreOp twiddle factors - 1 block per YZ point, Nx/2+1 threads per block
-    kernel_dst3_3d_preOp_x<<<batch, Nx_ / 2 + 1, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    kernel_dst3_3d_preOp_x<<<batch, Nx_ / 2 + 1, 0, stream_>>>(
+        d_work_, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
 
     // D2Z FFT
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
@@ -4053,9 +4918,11 @@ void CudaRealTransform3D::executeX_DST4(double* d_data)
     cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
     cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dst4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_z_in, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_x_, dct4_cos_x_);
     cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
-    kernel_dst4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_z_out, d_data, Nx_, Ny_, Nz_);
+    kernel_dst4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
+        d_z_out, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
 }
 
 void CudaRealTransform3D::execute(double* d_data)
