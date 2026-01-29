@@ -36,10 +36,16 @@
 #include <iostream>
 #include <cmath>
 #include <numbers>
+#include <array>
 #include <thrust/reduce.h>
 
 #include "CudaPseudo.h"
 #include "CudaSolverPseudoRQM4.h"
+#include "CudaCrysFFT.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "SpaceGroup.h"
 
 template <typename T>
@@ -145,10 +151,19 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         d_reduced_basis_indices_ = nullptr;
         d_full_to_reduced_map_ = nullptr;
         n_basis_ = 0;
+        use_crysfft_ = false;
+        use_crysfft_pmmm_physical_ = false;
+        crysfft_physical_size_ = 0;
+        crysfft_reduced_size_ = 0;
+        d_crysfft_phys_to_reduced_ = nullptr;
+        d_crysfft_reduced_to_phys_ = nullptr;
         for(int i=0; i<MAX_STREAMS; i++)
         {
             d_q_full_in_[i] = nullptr;
             d_q_full_out_[i] = nullptr;
+            crysfft_[i] = nullptr;
+            d_crysfft_in_[i] = nullptr;
+            d_crysfft_out_[i] = nullptr;
         }
 
         if (is_periodic_)
@@ -274,6 +289,8 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
 template <typename T>
 CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
 {
+    cleanup_crysfft();
+
     delete pseudo;
 
     // Clean up FFT resources
@@ -340,6 +357,45 @@ CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
         if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
     }
 }
+
+template <typename T>
+void CudaSolverPseudoRQM4<T>::cleanup_crysfft()
+{
+    use_crysfft_ = false;
+    use_crysfft_pmmm_physical_ = false;
+    crysfft_physical_size_ = 0;
+    crysfft_reduced_size_ = 0;
+
+    if (d_crysfft_phys_to_reduced_ != nullptr)
+    {
+        cudaFree(d_crysfft_phys_to_reduced_);
+        d_crysfft_phys_to_reduced_ = nullptr;
+    }
+    if (d_crysfft_reduced_to_phys_ != nullptr)
+    {
+        cudaFree(d_crysfft_reduced_to_phys_);
+        d_crysfft_reduced_to_phys_ = nullptr;
+    }
+
+    for (int i = 0; i < MAX_STREAMS; i++)
+    {
+        if (crysfft_[i] != nullptr)
+        {
+            delete crysfft_[i];
+            crysfft_[i] = nullptr;
+        }
+        if (d_crysfft_in_[i] != nullptr)
+        {
+            cudaFree(d_crysfft_in_[i]);
+            d_crysfft_in_[i] = nullptr;
+        }
+        if (d_crysfft_out_[i] != nullptr)
+        {
+            cudaFree(d_crysfft_out_[i]);
+            d_crysfft_out_[i] = nullptr;
+        }
+    }
+}
 template <typename T>
 void CudaSolverPseudoRQM4<T>::set_space_group(
     SpaceGroup* sg,
@@ -351,6 +407,8 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
     d_reduced_basis_indices_ = d_reduced_basis_indices;
     d_full_to_reduced_map_ = d_full_to_reduced_map;
     n_basis_ = n_basis;
+
+    cleanup_crysfft();
 
     if (sg != nullptr)
     {
@@ -380,6 +438,104 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
             }
         }
     }
+
+    if constexpr (std::is_same_v<T, double>)
+    {
+        if (space_group_ != nullptr && dim_ == 3 && is_periodic_ && cb->is_orthogonal())
+        {
+            const auto nx = cb->get_nx();
+            const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
+            if (even_grid && space_group_->has_mirror_planes_xyz())
+            {
+                const int Nx2 = nx[0] / 2;
+                const int Ny2 = nx[1] / 2;
+                const int Nz2 = nx[2] / 2;
+                const int M_phys = Nx2 * Ny2 * Nz2;
+                const int M_reduced = space_group_->get_n_irreducible();
+                const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
+
+                std::vector<int> phys_to_reduced;
+                std::vector<int> reduced_to_phys(M_reduced, -1);
+
+                auto build_mapping = [&]() -> bool {
+                    phys_to_reduced.resize(M_phys);
+                    int idx = 0;
+                    for (int ix = 0; ix < Nx2; ++ix)
+                    {
+                        const int fx = ix;
+                        for (int iy = 0; iy < Ny2; ++iy)
+                        {
+                            const int fy = iy;
+                            for (int iz = 0; iz < Nz2; ++iz)
+                            {
+                                const int fz = iz;
+                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
+                                const int reduced_idx = full_to_reduced[full_idx];
+                                phys_to_reduced[idx] = reduced_idx;
+                                if (reduced_to_phys[reduced_idx] < 0)
+                                    reduced_to_phys[reduced_idx] = idx;
+                                ++idx;
+                            }
+                        }
+                    }
+                    for (int i = 0; i < M_reduced; ++i)
+                    {
+                        if (reduced_to_phys[i] < 0)
+                            return false;
+                    }
+                    return true;
+                };
+
+                if (space_group_->using_pmmm_physical_basis())
+                {
+                    if (M_reduced != M_phys)
+                    {
+                        throw_with_line_number("Pmmm physical basis size does not match physical grid size.");
+                    }
+
+                    crysfft_physical_size_ = M_phys;
+                    crysfft_reduced_size_ = M_reduced;
+                    use_crysfft_pmmm_physical_ = true;
+
+                    std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+                    auto lx = cb->get_lx();
+                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+
+                    for (int i = 0; i < n_streams; i++)
+                    {
+                        crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
+                    }
+                    use_crysfft_ = true;
+                }
+                else if (build_mapping())
+                {
+                    crysfft_physical_size_ = M_phys;
+                    crysfft_reduced_size_ = M_reduced;
+
+                    gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * M_phys));
+                    gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * M_reduced));
+                    gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, phys_to_reduced.data(),
+                                               sizeof(int) * M_phys, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
+                                               sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
+
+                    std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+                    auto lx = cb->get_lx();
+                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+
+                    for (int i = 0; i < n_streams; i++)
+                    {
+                        crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
+                        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
+                    }
+                    use_crysfft_ = true;
+                }
+            }
+        }
+    }
 }
 template <typename T>
 void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
@@ -394,6 +550,17 @@ void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
             this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
+
+        if (use_crysfft_)
+        {
+            auto lx = cb->get_lx();
+            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+            for (int i = 0; i < n_streams; ++i)
+            {
+                if (crysfft_[i] != nullptr)
+                    crysfft_[i]->set_cell_para(cell_para);
+            }
+        }
     }
     catch(std::exception& exc)
     {
@@ -409,6 +576,8 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
 
         const int M = cb->get_total_grid();
         const bool use_reduced_basis = (space_group_ != nullptr);
+        const bool use_crysfft = (use_crysfft_ && space_group_ != nullptr);
+        const int M_use = use_crysfft ? n_basis_ : M;
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -437,7 +606,7 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-                if (use_reduced_basis && device == "gpu")
+                if (use_reduced_basis && device == "gpu" && !use_crysfft)
                 {
                     if constexpr (std::is_same_v<T, double>)
                     {
@@ -456,7 +625,7 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
                 {
                     const T* w_full = w;
                     std::vector<T> w_full_host;
-                    if (use_reduced_basis)
+                    if (use_reduced_basis && !use_crysfft)
                     {
                         if constexpr (std::is_same_v<T, double>)
                         {
@@ -473,20 +642,20 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
                     // Copy field configurations from host to device
                     gpu_error_check(cudaMemcpyAsync(
                         this->d_exp_dw[ds_idx][monomer_type], w_full,
-                        sizeof(T)*M, cudaMemcpyInputToDevice));
+                        sizeof(T)*M_use, cudaMemcpyInputToDevice));
                     gpu_error_check(cudaMemcpyAsync(
                         this->d_exp_dw_half[ds_idx][monomer_type], w_full,
-                        sizeof(T)*M, cudaMemcpyInputToDevice));
+                        sizeof(T)*M_use, cudaMemcpyInputToDevice));
                 }
 
                 // Compute d_exp_dw = exp(-w * local_ds * 0.5)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
                     (this->d_exp_dw[ds_idx][monomer_type],
-                     this->d_exp_dw[ds_idx][monomer_type], 1.0, -0.50*local_ds, M);
+                     this->d_exp_dw[ds_idx][monomer_type], 1.0, -0.50*local_ds, M_use);
                 // Compute d_exp_dw_half = exp(-w * local_ds * 0.25)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
                     (this->d_exp_dw_half[ds_idx][monomer_type],
-                     this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
+                     this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M_use);
             }
         }
         gpu_error_check(cudaPeekAtLastError());
@@ -516,6 +685,139 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[ds_index][monomer_type];
         const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type, ds_index);
         const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, ds_index);
+
+        const bool use_crysfft = (use_crysfft_ && space_group_ != nullptr);
+        if (use_crysfft)
+        {
+            if constexpr (!std::is_same_v<T, double>)
+            {
+                throw_with_line_number("CrysFFT path is only supported for real fields.");
+            }
+            else
+            {
+                const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+                double local_ds = mapping.get_ds_from_index(ds_index);
+                auto bond_lengths = this->molecules->get_bond_lengths();
+                double bond_length_sq = bond_lengths[monomer_type] * bond_lengths[monomer_type];
+                double coeff_full = bond_length_sq * local_ds / 6.0;
+                double coeff_half = bond_length_sq * local_ds / 12.0;
+
+                const int M_phys = crysfft_physical_size_;
+                double* d_full_step = reinterpret_cast<double*>(d_q_step_1_one[STREAM]);
+                double* d_half_step = reinterpret_cast<double*>(d_q_step_2_one[STREAM]);
+
+                if (use_crysfft_pmmm_physical_)
+                {
+                    // ===== Step 1: Full step =====
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_crysfft_in_[STREAM], d_q_in, _d_exp_dw, 1.0, M_phys);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    cudaStreamSynchronize(streams[STREAM][0]);
+                    crysfft_[STREAM]->set_contour_step(coeff_full);
+                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_full_step, d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    // ===== Step 2: Two half steps =====
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_crysfft_in_[STREAM], d_q_in, _d_exp_dw_half, 1.0, M_phys);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    cudaStreamSynchronize(streams[STREAM][0]);
+                    crysfft_[STREAM]->set_contour_step(coeff_half);
+                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_crysfft_out_[STREAM], d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    cudaStreamSynchronize(streams[STREAM][0]);
+                    crysfft_[STREAM]->diffusion(d_crysfft_out_[STREAM], d_crysfft_in_[STREAM]);
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_half_step, d_crysfft_in_[STREAM], _d_exp_dw_half, 1.0, M_phys);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    // ===== Richardson extrapolation on reduced basis =====
+                    ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_q_out, 4.0/3.0, d_half_step, -1.0/3.0, d_full_step, n_basis_);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    if (d_q_mask != nullptr)
+                    {
+                        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                            d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
+                        gpu_error_check(cudaPeekAtLastError());
+                    }
+                    return;
+                }
+
+                // ===== Step 1: Full step =====
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                cudaStreamSynchronize(streams[STREAM][0]);
+                crysfft_[STREAM]->set_contour_step(coeff_full);
+                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+
+                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_full_step, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
+                gpu_error_check(cudaPeekAtLastError());
+
+                // ===== Step 2: Two half steps =====
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], _d_exp_dw_half, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                cudaStreamSynchronize(streams[STREAM][0]);
+                crysfft_[STREAM]->set_contour_step(coeff_half);
+                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM]);
+
+                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                cudaStreamSynchronize(streams[STREAM][0]);
+                crysfft_[STREAM]->diffusion(d_crysfft_out_[STREAM], d_crysfft_in_[STREAM]);
+
+                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_crysfft_in_[STREAM], _d_exp_dw_half, d_crysfft_phys_to_reduced_, M_phys);
+                gpu_error_check(cudaPeekAtLastError());
+
+                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_half_step, d_crysfft_in_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
+                gpu_error_check(cudaPeekAtLastError());
+
+                // ===== Richardson extrapolation on reduced basis =====
+                ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_out, 4.0/3.0, d_half_step, -1.0/3.0, d_full_step, n_basis_);
+                gpu_error_check(cudaPeekAtLastError());
+
+                if (d_q_mask != nullptr)
+                {
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+                return;
+            }
+        }
 
         // Determine input/output pointers based on space group
         CuDeviceData<T> *fft_in = d_q_in;

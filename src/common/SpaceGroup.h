@@ -40,6 +40,13 @@ private:
     std::vector<int> full_to_reduced_map_;     ///< Map from full grid to irreducible index (size: total_grid)
     std::vector<int> orbit_counts_;            ///< Number of points in each orbit (size: n_irreducible)
 
+    // Pmmm physical basis (1/8 grid) data
+    bool use_pmmm_physical_basis_{false};
+    int n_irreducible_pmmm_{0};
+    std::vector<int> reduced_basis_indices_pmmm_;
+    std::vector<int> full_to_reduced_map_pmmm_;
+    std::vector<int> orbit_counts_pmmm_;
+
     /**
      * @brief Initialize space group from Hall number.
      */
@@ -151,11 +158,23 @@ public:
     const std::string& get_crystal_system() const { return crystal_system_; }
     const std::vector<int>& get_nx() const { return nx_; }
     int get_total_grid() const { return total_grid_; }
-    int get_n_irreducible() const { return n_irreducible_; }
+    int get_n_irreducible() const
+    {
+        return use_pmmm_physical_basis_ ? n_irreducible_pmmm_ : n_irreducible_;
+    }
     int get_n_symmetry_ops() const { return n_symmetry_ops_; }
-    const std::vector<int>& get_reduced_basis_indices() const { return reduced_basis_indices_; }
-    const std::vector<int>& get_full_to_reduced_map() const { return full_to_reduced_map_; }
-    const std::vector<int>& get_orbit_counts() const { return orbit_counts_; }
+    const std::vector<int>& get_reduced_basis_indices() const
+    {
+        return use_pmmm_physical_basis_ ? reduced_basis_indices_pmmm_ : reduced_basis_indices_;
+    }
+    const std::vector<int>& get_full_to_reduced_map() const
+    {
+        return use_pmmm_physical_basis_ ? full_to_reduced_map_pmmm_ : full_to_reduced_map_;
+    }
+    const std::vector<int>& get_orbit_counts() const
+    {
+        return use_pmmm_physical_basis_ ? orbit_counts_pmmm_ : orbit_counts_;
+    }
 
     /**
      * @brief Check for mirror planes perpendicular to x, y, and z axes.
@@ -183,6 +202,16 @@ public:
      * @return True if all three symmetry planes are found.
      */
     bool get_m3_translations(std::array<double, 9>& g, double tol = 1e-10) const;
+
+    /**
+     * @brief Enable Pmmm physical basis (1/8 grid) mapping.
+     *
+     * Replaces the irreducible basis with the Pmmm physical basis
+     * (first octant, size Nx/2 * Ny/2 * Nz/2). Requires 3D even grid
+     * and mirror planes along x, y, z.
+     */
+    void enable_pmmm_physical_basis();
+    bool using_pmmm_physical_basis() const { return use_pmmm_physical_basis_; }
 };
 
 #endif // SPACE_GROUP_H_

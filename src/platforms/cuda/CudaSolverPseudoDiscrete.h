@@ -46,6 +46,7 @@
 #include "CudaFFT.h"
 
 class SpaceGroup;  // Forward declaration
+class CudaCrysFFT;  // Forward declaration
 
 /**
  * @class CudaSolverPseudoDiscrete
@@ -122,6 +123,21 @@ private:
     CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
     CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
     /// @}
+
+    /// @name Crystallographic FFT (Pmmm DCT) support
+    /// @{
+    bool use_crysfft_;
+    bool use_crysfft_pmmm_physical_;
+    int crysfft_physical_size_;
+    int crysfft_reduced_size_;
+    int* d_crysfft_phys_to_reduced_;
+    int* d_crysfft_reduced_to_phys_;
+    CudaCrysFFT* crysfft_[MAX_STREAMS];
+    double* d_crysfft_in_[MAX_STREAMS];
+    double* d_crysfft_out_[MAX_STREAMS];
+    /// @}
+
+    void cleanup_crysfft();
 
 public:
     /**
