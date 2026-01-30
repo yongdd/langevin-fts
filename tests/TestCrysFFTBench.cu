@@ -1,8 +1,8 @@
 /**
- * @file TestCrysFFTCudaBench.cu
+ * @file TestCrysFFTBench.cu
  * @brief CUDA FFT-only benchmark for CrysFFT (Pmmm/3m) vs full FFT.
  *
- * Usage: ./TestCrysFFTCudaBench [Nx Ny Nz] [iters] [warmup]
+ * Usage: ./TestCrysFFTBench [Nx Ny Nz] [iters] [warmup] [--cpu] [--hex]
  * Defaults: Nx=Ny=Nz=64, iters=100, warmup=10
  */
 
@@ -240,13 +240,33 @@ int main(int argc, char** argv)
     int Nx = 64, Ny = 64, Nz = 64;
     int iters = 100;
     int warmup = 10;
-    if (argc >= 4) {
-        Nx = std::atoi(argv[1]);
-        Ny = std::atoi(argv[2]);
-        Nz = std::atoi(argv[3]);
+    bool bench_cpu = false;
+    bool bench_hex = false;
+
+    std::vector<int> args;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--cpu") == 0)
+        {
+            bench_cpu = true;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--hex") == 0)
+        {
+            bench_hex = true;
+            continue;
+        }
+        args.push_back(std::atoi(argv[i]));
     }
-    if (argc >= 5) iters = std::atoi(argv[4]);
-    if (argc >= 6) warmup = std::atoi(argv[5]);
+
+    if (args.size() >= 3)
+    {
+        Nx = args[0];
+        Ny = args[1];
+        Nz = args[2];
+    }
+    if (args.size() >= 4) iters = args[3];
+    if (args.size() >= 5) warmup = args[4];
 
     if (Nx <= 0 || Ny <= 0 || Nz <= 0 || (Nx % 2) || (Ny % 2) || (Nz % 2))
     {
@@ -363,8 +383,9 @@ int main(int argc, char** argv)
     std::printf("Speedup (Pmmm/off): %.3fx\n", ms_off / ms_pmmm);
     std::printf("Speedup (3m/off): %.3fx\n", ms_off / ms_3m);
 
-    // === Optional CPU bench (enable with FTS_BENCH_CPU=1) ===
-    const bool bench_cpu = (std::getenv("FTS_BENCH_CPU") != nullptr);
+    // === Optional CPU bench (enable with --cpu or FTS_BENCH_CPU=1) ===
+    if (std::getenv("FTS_BENCH_CPU") != nullptr)
+        bench_cpu = true;
     if (bench_cpu)
     {
         std::printf("\n=== CPU FFT-only benchmark ===\n");
@@ -463,11 +484,12 @@ int main(int argc, char** argv)
         std::printf("Speedup (3m/off): %.3fx\n", cpu_ms_off / cpu_ms_3m);
     }
 
-    // === Optional Hex bench (enable with FTS_BENCH_HEX=1) ===
-    const bool bench_hex = (std::getenv("FTS_BENCH_HEX") != nullptr);
+    // === Optional Hex bench (enable with --hex or FTS_BENCH_HEX=1) ===
+    if (std::getenv("FTS_BENCH_HEX") != nullptr)
+        bench_hex = true;
     if (bench_hex)
     {
-        std::printf("\n=== Hexagonal (P6/mmm) FFT-only benchmark ===\n");
+        std::printf("\n=== HexZ (P6/mmm) FFT-only benchmark ===\n");
         const double gamma_hex = 2.0 * M_PI / 3.0;
         const std::array<double, 6> cell_hex = {Lx, Ly, Lz, M_PI/2, M_PI/2, gamma_hex};
         const int M_hex_phys = Nx * Ny * (Nz / 2);
@@ -475,7 +497,7 @@ int main(int argc, char** argv)
         std::vector<double> h_hex_phys(M_hex_phys, 0.0);
         fill_hex_physical_field(h_hex_phys, h_full, Nx, Ny, Nz);
 
-        // Hex CrysFFT (CudaCrysFFTHex)
+        // HexZ CrysFFT (CudaCrysFFTHex)
         CudaCrysFFTHex crys_hex({Nx, Ny, Nz}, cell_hex);
         crys_hex.set_contour_step(coeff);
 
@@ -538,13 +560,13 @@ int main(int argc, char** argv)
         cudaFree(d_hex_freq);
         cudaFree(d_boltz);
 
-        std::printf("Hex DCTz+FFTxy: %.4f ms/iter\n", ms_hex);
-        std::printf("Hex Full FFT: %.4f ms/iter\n", ms_hex_off);
-        std::printf("Speedup (Hex/off): %.3fx\n", ms_hex_off / ms_hex);
+        std::printf("HexZ DCTz+FFTxy: %.4f ms/iter\n", ms_hex);
+        std::printf("HexZ Full FFT: %.4f ms/iter\n", ms_hex_off);
+        std::printf("Speedup (HexZ/off): %.3fx\n", ms_hex_off / ms_hex);
 
         if (bench_cpu)
         {
-            std::printf("\n=== CPU Hex FFT-only benchmark ===\n");
+            std::printf("\n=== CPU HexZ FFT-only benchmark ===\n");
 
             std::vector<double> cpu_hex_in = h_hex_phys;
             std::vector<double> cpu_hex_out(M_hex_phys, 0.0);
@@ -597,9 +619,9 @@ int main(int argc, char** argv)
             fftw_destroy_plan(plan_hex_bwd_cpu);
             fftw_free(freq_hex);
 
-            std::printf("Hex DCTz+FFTxy: %.4f ms/iter\n", cpu_ms_hex);
-            std::printf("Hex Full FFT: %.4f ms/iter\n", cpu_ms_hex_off);
-            std::printf("Speedup (Hex/off): %.3fx\n", cpu_ms_hex_off / cpu_ms_hex);
+            std::printf("HexZ DCTz+FFTxy: %.4f ms/iter\n", cpu_ms_hex);
+            std::printf("HexZ Full FFT: %.4f ms/iter\n", cpu_ms_hex_off);
+            std::printf("Speedup (HexZ/off): %.3fx\n", cpu_ms_hex_off / cpu_ms_hex);
         }
     }
 

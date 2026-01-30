@@ -2168,6 +2168,9 @@ __global__ void kernel_dct3_3d_preOp_z_from_zmajor(
         double Ta = a + b;
         double Tb = a - b;
 
+        if (iz == 0)
+            out_xyz[base] = in_zmajor[ix * Ny + iy];
+
         out_xyz[base + iz1] = Ta * sina + Tb * cosa;
         out_xyz[base + iz2] = Ta * cosa - Tb * sina;
     }
@@ -2199,6 +2202,9 @@ __global__ void kernel_dct3_3d_preOp_z_from_zmajor_lut(
         double cosa = cos_lut[iz1];
         double Ta = a + b;
         double Tb = a - b;
+
+        if (iz == 0)
+            out_xyz[base] = in_zmajor[ix * Ny + iy];
 
         out_xyz[base + iz1] = Ta * sina + Tb * cosa;
         out_xyz[base + iz2] = Ta * cosa - Tb * sina;
@@ -3853,9 +3859,6 @@ void CudaRealTransform2D::init()
                           onembed, 1, stride / 2, CUFFT_D2Z, Nx_) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z plan for Y (DST-3)");
         }
-        // Reallocate work buffer for padded layout
-        cudaFree(d_work_);
-        cudaMalloc(&d_work_, sizeof(double) * Nx_ * stride);
     } else {
         // Fallback
         int n[1] = {fftSize_y};
@@ -3911,14 +3914,6 @@ void CudaRealTransform2D::init()
         if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, stride,
                           onembed, 1, stride / 2, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z plan for X (DST-3)");
-        }
-        // Ensure work buffer is large enough for X direction padded layout
-        // d_work_ may have been allocated for Y direction, ensure it's big enough for X too
-        size_t y_size = (size_t)Nx_ * (Ny_ + 2);
-        size_t x_size = (size_t)Ny_ * (Nx_ + 2);
-        if (x_size > y_size) {
-            cudaFree(d_work_);
-            cudaMalloc(&d_work_, sizeof(double) * x_size);
         }
     } else {
         // Fallback

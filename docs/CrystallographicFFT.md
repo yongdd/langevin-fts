@@ -6,7 +6,7 @@ This document describes the crystallographic FFT (CrysFFT) paths used to acceler
 
 - **Pmmm DCT**: DCT-II/III on the 1/8 physical grid (mirror symmetry).
 - **3m recursive (2x2x2)**: recursive crystallographic FFT using symmetry translations (Qiang and Li, 2020).
-- **Hex z-mirror**: DCT-z + FFT-xy on the z-mirror physical grid for hexagonal cells.
+- **HexZ (z-mirror)**: DCT-z + FFT-xy on the z-mirror physical grid for hexagonal cells.
 
 **Status:** Implemented on CPU (FFTW) and CUDA.
 
@@ -32,9 +32,13 @@ Terminology:
 - **Logical grid**: full simulation grid, size `Nx x Ny x Nz`.
 - **Physical grid**: CrysFFT working grid.
   - Pmmm / 3m: `(Nx/2) x (Ny/2) x (Nz/2)` (mirror-reduced).
-  - Hex z-mirror: `Nx x Ny x (Nz/2)` (z-mirror only).
+  - HexZ (z-mirror): `Nx x Ny x (Nz/2)` (z-mirror only).
 - **Irreducible grid**: smallest symmetry-unique grid (one point per symmetry orbit).
 - **Reduced basis**: storage basis used by `SpaceGroup` (irreducible, Pmmm physical, M3 physical, or z-mirror physical).
+
+Naming note:
+- External libraries and literature often refer to symmetry-reduced FFTs in terms of **ASU maps** or **FFT maps** rather than naming specific transform variants.
+  This codebase uses the internal name **HexZ (z-mirror CrysFFT)** for the hexagonal z-mirror path to keep logs and documentation unambiguous.
 
 CrysFFT is used only for diffusion steps in pseudo-spectral solvers. All real-space operations (e.g., multiplication by `exp(-w ds/2)`) remain unchanged.
 
@@ -65,7 +69,7 @@ Key features:
 
 Both CPU and CUDA implementations are provided (`FftwCrysFFTRecursive3m` and `CudaCrysFFTRecursive3m`).
 
-### 2.3 Hex z-mirror (DCT-z + FFT-xy)
+### 2.3 HexZ (z-mirror) (DCT-z + FFT-xy)
 
 For hexagonal space groups with a pure z-mirror (translation `t_z = 0`), the diffusion step uses:
 
@@ -93,13 +97,13 @@ CrysFFT is enabled automatically when all of the following are true:
 Selection order (auto):
 1. **3m recursive** if the space group provides 3m translations *and* `Nz/2 % 8 == 0`.
 2. **Pmmm DCT** if the space group has mirror planes in x/y/z.
-3. **Hex z-mirror** if the space group has a z-mirror with `t_z = 0` and the cell is hexagonal (`γ = 120°`).
+3. **HexZ (z-mirror)** if the space group has a z-mirror with `t_z = 0` and the cell is hexagonal (`γ = 120°`).
 4. Otherwise, fall back to standard FFT.
 
 If a physical basis is forced in `SpaceGroup`, the selector respects it:
 - **Pmmm physical basis forced** → Pmmm DCT (if mirror planes exist).
 - **M3 physical basis forced** → 3m recursive (if translations and alignment are valid).
-- **Z-mirror physical basis forced** → Hex z-mirror (only if `t_z = 0` and hexagonal cell); otherwise CrysFFT is disabled.
+- **Z-mirror physical basis forced** → HexZ (z-mirror) (only if `t_z = 0` and hexagonal cell); otherwise CrysFFT is disabled.
 
 CrysFFT is used in pseudo-spectral solvers for continuous (RQM4/RK2) and discrete chains (full and half-bond steps), and in the stress computation path when applicable.
 
@@ -185,12 +189,12 @@ falls back to the irreducible basis if neither is available.
 - 3D only.
 - Periodic boundary conditions only.
 - Orthogonal boxes required for Pmmm / 3m.
-- Hex z-mirror supports hexagonal cells (`γ = 120°`) with `t_z = 0`.
+- HexZ (z-mirror) supports hexagonal cells (`γ = 120°`) with `t_z = 0`.
 - Even `Nz` required for z-mirror; even `Nx, Ny, Nz` required for Pmmm / 3m.
 - Real-valued fields only.
 - **3m recursive** requires 3m translations and `Nz/2 % 8 == 0`.
 - **Pmmm DCT** requires mirror planes in x, y, z.
-- **Hex z-mirror** currently supports only `t_z = 0` (pure mirror), not the glide case.
+- **HexZ (z-mirror)** currently supports only `t_z = 0` (pure mirror), not the glide case.
 - Non‑orthogonal boxes other than hex (`γ=120°`) disable CrysFFT.
 
 ---
@@ -227,16 +231,16 @@ Benchmark setup (FFT-only diffusion step):
 - `nx = [64, 64, 64]`, `lx = [4.0, 4.0, 4.0]`
 - `coeff = 0.01` (diffusion coefficient; corresponds to `b^2 ds / 6`)
 - 200 iterations, 20 warm-up iterations
-- GPU: NVIDIA A10 (CUDA), `CUDA_VISIBLE_DEVICES=2`
+- GPU: NVIDIA A10 (CUDA)
 - “off” uses full grid (no space group), “m3” and “pmmm” use the physical grids.
-- Executable: `build/tests/TestCrysFFTCudaBench`
+- Executable: `build/tests/TestCrysFFTBench`
 
 Results (ms/iter):
 
 | Platform | off | m3-physical | pmmm-physical |
 | --- | ---: | ---: | ---: |
-| CUDA (A10) | 0.1750 | 0.0561 (3.12×) | 0.0893 (1.96×) |
-| CPU (FFTW) | 1.9953 | 0.4101 (4.86×) | 0.5789 (3.45×) |
+| CUDA (A10) | 0.1771 | 0.0562 (3.15×) | 0.0903 (1.96×) |
+| CPU (FFTW) | 2.0369 | 0.4160 (4.90×) | 0.5975 (3.41×) |
 
 Notes:
 - Speedups are computed relative to “off” on the same platform.
@@ -248,18 +252,18 @@ Benchmark setup (FFT-only diffusion step):
 - `nx = [64, 64, 64]`, `lx = [4.0, 4.0, 4.0]`, `γ = 120°`
 - `coeff = 0.01`
 - 200 iterations, 20 warm-up iterations
-- GPU: NVIDIA A10 (CUDA), `CUDA_VISIBLE_DEVICES=2`
-- Hex uses z-mirror physical grid (`Nx x Ny x Nz/2`); “off” uses full FFT.
+- GPU: NVIDIA A10 (CUDA)
+- HexZ uses z-mirror physical grid (`Nx x Ny x Nz/2`); “off” uses full FFT.
 
 Results (ms/iter):
 
-| Platform | off | hex (DCT-z + FFT-xy) |
+| Platform | off | HexZ (DCT-z + FFT-xy) |
 | --- | ---: | ---: |
-| CUDA (A10) | 0.1291 | 0.1153 (1.12×) |
-| CPU (FFTW) | 1.9517 | 1.9265 (1.01×) |
+| CUDA (A10) | 0.1312 | 0.1192 (1.10×) |
+| CPU (FFTW) | 2.0010 | 1.3822 (1.45×) |
 
 Notes:
-- Hex speedups are relative to “off” on the same platform.
+- HexZ speedups are relative to “off” on the same platform.
 - On this grid, hex is not faster on CUDA; benefits may appear on larger grids.
 
 ### 8.3 Phase support (example grids)
@@ -269,7 +273,7 @@ in `examples/scft/phases/*.py` (same set as `tests/TestSpaceGroupPhases.py`).
 Availability depends on the space group *and* grid constraints (3D, even `nx`,
 orthogonal box, periodic BCs, and for 3m also the translation constraints).
 
-| Phase | Space group | M3 recursive | Pmmm DCT | Hex z-mirror |
+| Phase | Space group | M3 recursive | Pmmm DCT | HexZ (z-mirror) |
 | --- | --- | :---: | :---: | :---: |
 | BCC | Im-3m (529) | ✓ | ✓ |
 | FCC | Fm-3m (523) | ✓ | ✓ |
@@ -283,7 +287,7 @@ orthogonal box, periodic BCs, and for 3m also the translation constraints).
 | SP | Pm-3m (517) | ✓ | ✓ |
 | Sigma | P4_2/mnm (419) | ✓ | ✗ |
 | Fddd | Fddd (336) | ✓ | ✗ |
-| HCP | P6_3/mmc (488) | ✗ | ✗ | ✗ (glide mirror) |
+| HCP | P6_3/mmc (488) | ✗ | ✗ | ✓ |
 | PL | P6/mmm (485) | ✗ | ✗ | ✓ |
 
 Notes:
@@ -291,7 +295,8 @@ Notes:
 - “✗” means CrysFFT is unavailable for that phase/grid; the solver uses the
   irreducible basis with standard FFT.
 - **SG (I4_132)**: no mirror planes and no 3m translations → neither Pmmm nor M3 applies.
-- **HCP/PL (hexagonal cells)**: non‑orthogonal boxes (γ=120°) → CrysFFT disabled.
+- **HexZ (z-mirror) (P6/mmm, P6_3/mmc)**: requires even `Nz`; for glide mirror (t<sub>z</sub>=1/2),
+  `Nz` must be divisible by 4.
 
 ---
 
