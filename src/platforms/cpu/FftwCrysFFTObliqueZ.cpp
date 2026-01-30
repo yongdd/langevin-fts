@@ -1,6 +1,6 @@
 /**
- * @file FftwCrysFFTHex.cpp
- * @brief CPU implementation of crystallographic FFT for hexagonal z-mirror symmetry.
+ * @file FftwCrysFFTObliqueZ.cpp
+ * @brief CPU implementation of crystallographic FFT for z-mirror symmetry (oblique in-plane angles).
  */
 
 #include <chrono>
@@ -10,7 +10,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "FftwCrysFFTHex.h"
+#include "FftwCrysFFTObliqueZ.h"
 #include "Exception.h"
 
 #ifndef M_PI
@@ -20,7 +20,7 @@
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::array<double, 6> FftwCrysFFTHex::compute_recip_metric(const std::array<double, 6>& cell_para)
+std::array<double, 6> FftwCrysFFTObliqueZ::compute_recip_metric(const std::array<double, 6>& cell_para)
 {
     const double a = cell_para[0];
     const double b = cell_para[1];
@@ -82,7 +82,7 @@ std::array<double, 6> FftwCrysFFTHex::compute_recip_metric(const std::array<doub
 //------------------------------------------------------------------------------
 // Constructor / Destructor
 //------------------------------------------------------------------------------
-FftwCrysFFTHex::FftwCrysFFTHex(
+FftwCrysFFTObliqueZ::FftwCrysFFTObliqueZ(
     std::array<int, 3> nx_logical,
     std::array<double, 6> cell_para,
     std::array<double, 9> /*trans_part*/)
@@ -94,10 +94,10 @@ FftwCrysFFTHex::FftwCrysFFTHex(
     for (int d = 0; d < 3; ++d)
     {
         if (nx_logical_[d] <= 0)
-            throw_with_line_number("FftwCrysFFTHex requires positive grid dimensions.");
+            throw_with_line_number("FftwCrysFFTObliqueZ requires positive grid dimensions.");
     }
     if (nx_logical_[2] % 2 != 0)
-        throw_with_line_number("FftwCrysFFTHex requires even Nz.");
+        throw_with_line_number("FftwCrysFFTObliqueZ requires even Nz.");
 
     nx_physical_ = {nx_logical_[0], nx_logical_[1], nx_logical_[2] / 2};
     M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
@@ -108,7 +108,7 @@ FftwCrysFFTHex::FftwCrysFFTHex(
     initFFTPlans();
 }
 
-FftwCrysFFTHex::~FftwCrysFFTHex()
+FftwCrysFFTObliqueZ::~FftwCrysFFTObliqueZ()
 {
     freeBoltzmann();
 
@@ -129,7 +129,7 @@ FftwCrysFFTHex::~FftwCrysFFTHex()
 //------------------------------------------------------------------------------
 // FFTW plan initialization
 //------------------------------------------------------------------------------
-void FftwCrysFFTHex::initFFTPlans()
+void FftwCrysFFTObliqueZ::initFFTPlans()
 {
     unsigned plan_flags = FFTW_MEASURE;
     if (std::getenv("FTS_FFTW_EXHAUSTIVE"))
@@ -150,7 +150,7 @@ void FftwCrysFFTHex::initFFTPlans()
     complex_buffer_ = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_));
 
     if (!io_buffer_ || !temp_buffer_ || !complex_buffer_)
-        throw_with_line_number("Failed to allocate FFTW buffers for FftwCrysFFTHex.");
+        throw_with_line_number("Failed to allocate FFTW buffers for FftwCrysFFTObliqueZ.");
 
     // DCT-II/III along Z for each (x,y) column
     int n_z[1] = {nx_physical_[2]};
@@ -204,13 +204,13 @@ void FftwCrysFFTHex::initFFTPlans()
         initFFTPlansZ(plan_flags);
 
     if (!plan_dct_forward_z_ || !plan_dct_backward_z_ || !plan_fft_forward_xy_ || !plan_fft_backward_xy_)
-        throw_with_line_number("Failed to create FFTW plans for FftwCrysFFTHex.");
+        throw_with_line_number("Failed to create FFTW plans for FftwCrysFFTObliqueZ.");
 
     if (wisdom_file && wisdom_file[0] != '\0')
         fftw_export_wisdom_to_filename(wisdom_file);
 }
 
-void FftwCrysFFTHex::initFFTPlansZ(unsigned plan_flags)
+void FftwCrysFFTObliqueZ::initFFTPlansZ(unsigned plan_flags)
 {
     const int Nz = nx_logical_[2];
     const int howmany = nx_logical_[0] * nx_logical_[1];
@@ -219,7 +219,7 @@ void FftwCrysFFTHex::initFFTPlansZ(unsigned plan_flags)
     fft_z_real_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_logical_));
     fft_z_complex_ = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_z_));
     if (!fft_z_real_ || !fft_z_complex_)
-        throw_with_line_number("Failed to allocate FFTW buffers for Hex FFT-DCT.");
+        throw_with_line_number("Failed to allocate FFTW buffers for ObliqueZ FFT-DCT.");
 
     int n_z[1] = {Nz};
     int inembed_z[1] = {n_z[0]};
@@ -254,10 +254,10 @@ void FftwCrysFFTHex::initFFTPlansZ(unsigned plan_flags)
 
     calibrate_fft_dct_scale();
     if (!plan_fft_z_forward_ || !plan_fft_z_backward_)
-        throw_with_line_number("Failed to create FFTW plans for Hex FFT-DCT.");
+        throw_with_line_number("Failed to create FFTW plans for ObliqueZ FFT-DCT.");
 }
 
-void FftwCrysFFTHex::calibrate_fft_dct_scale()
+void FftwCrysFFTObliqueZ::calibrate_fft_dct_scale()
 {
     const int N = nx_physical_[2];
     std::vector<double> x(N), tmp(N), fftw_dct(N);
@@ -343,16 +343,16 @@ void FftwCrysFFTHex::calibrate_fft_dct_scale()
 //------------------------------------------------------------------------------
 // Boltzmann factor cache
 //------------------------------------------------------------------------------
-void FftwCrysFFTHex::freeBoltzmann()
+void FftwCrysFFTObliqueZ::freeBoltzmann()
 {
     cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
-FftwCrysFFTHex::ThreadState& FftwCrysFFTHex::get_thread_state() const
+FftwCrysFFTObliqueZ::ThreadState& FftwCrysFFTObliqueZ::get_thread_state() const
 {
     struct ThreadLocalStates
     {
-        std::unordered_map<const FftwCrysFFTHex*, ThreadState> states;
+        std::unordered_map<const FftwCrysFFTObliqueZ*, ThreadState> states;
     };
     thread_local ThreadLocalStates tls;
 
@@ -369,7 +369,7 @@ FftwCrysFFTHex::ThreadState& FftwCrysFFTHex::get_thread_state() const
     return state;
 }
 
-double* FftwCrysFFTHex::generateBoltzmann(double ds) const
+double* FftwCrysFFTObliqueZ::generateBoltzmann(double ds) const
 {
     double* boltz = new double[M_complex_];
 
@@ -407,7 +407,7 @@ double* FftwCrysFFTHex::generateBoltzmann(double ds) const
 //------------------------------------------------------------------------------
 // Public API
 //------------------------------------------------------------------------------
-void FftwCrysFFTHex::set_cell_para(const std::array<double, 6>& cell_para)
+void FftwCrysFFTObliqueZ::set_cell_para(const std::array<double, 6>& cell_para)
 {
     if (cell_para == cell_para_)
         return;
@@ -416,7 +416,7 @@ void FftwCrysFFTHex::set_cell_para(const std::array<double, 6>& cell_para)
     freeBoltzmann();
 }
 
-void FftwCrysFFTHex::set_contour_step(double ds)
+void FftwCrysFFTObliqueZ::set_contour_step(double ds)
 {
     ThreadState& state = get_thread_state();
     if (state.boltz_current != nullptr && state.ds_current == ds)
@@ -433,11 +433,11 @@ void FftwCrysFFTHex::set_contour_step(double ds)
     state.boltz_current = it->second.get();
 }
 
-void FftwCrysFFTHex::diffusion(double* q_in, double* q_out)
+void FftwCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
 {
     ThreadState& state = get_thread_state();
     if (!state.boltz_current)
-        throw_with_line_number("FftwCrysFFTHex::set_contour_step must be called before diffusion().");
+        throw_with_line_number("FftwCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
     const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_CPU_DETAIL") != nullptr);
     static std::atomic<bool> prof_once{false};
@@ -464,7 +464,7 @@ void FftwCrysFFTHex::diffusion(double* q_in, double* q_out)
         buffers.real_tmp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
         buffers.complex.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_)));
         if (!buffers.real_in || !buffers.real_tmp || !buffers.complex)
-            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTHex.");
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTObliqueZ.");
         buffers.size_real = M_physical_;
         buffers.size_complex = M_complex_;
     }
@@ -473,7 +473,7 @@ void FftwCrysFFTHex::diffusion(double* q_in, double* q_out)
         buffers.z_real.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_logical_)));
         buffers.z_complex.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_z_)));
         if (!buffers.z_real || !buffers.z_complex)
-            throw_with_line_number("Failed to allocate thread-local FFTW Z-FFT buffers for FftwCrysFFTHex.");
+            throw_with_line_number("Failed to allocate thread-local FFTW Z-FFT buffers for FftwCrysFFTObliqueZ.");
         buffers.size_z_real = M_logical_;
         buffers.size_z_complex = M_complex_z_;
     }
@@ -591,7 +591,7 @@ void FftwCrysFFTHex::diffusion(double* q_in, double* q_out)
         auto ms = [](auto a, auto b) {
             return std::chrono::duration<double, std::milli>(b - a).count();
         };
-        std::printf("[CrysFFT-HexZ CPU] copy(ms)=%.4f dct2(ms)=%.4f r2c(ms)=%.4f "
+        std::printf("[CrysFFT-ObliqueZ CPU] copy(ms)=%.4f dct2(ms)=%.4f r2c(ms)=%.4f "
                     "boltz(ms)=%.4f c2r(ms)=%.4f dct3(ms)=%.4f store(ms)=%.4f total(ms)=%.4f\n",
                     ms(t0, t1), ms(t1, t2), ms(t2, t3), ms(t3, t5),
                     ms(t5, t6), ms(t6, t7), ms(t7, t8), ms(t0, t8));
@@ -616,7 +616,7 @@ void FftwCrysFFTHex::diffusion(double* q_in, double* q_out)
         q_out[i] = buffers.real_in.get()[i] * norm_factor_;
 }
 
-void FftwCrysFFTHex::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
+void FftwCrysFFTObliqueZ::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
 {
     struct RealDeleter { void operator()(double* ptr) const { if (ptr) fftw_free(ptr); } };
     struct ComplexDeleter { void operator()(fftw_complex* ptr) const { if (ptr) fftw_free(ptr); } };
@@ -639,7 +639,7 @@ void FftwCrysFFTHex::apply_multiplier(const double* q_in, double* q_out, const d
         buffers.real_tmp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
         buffers.complex.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_)));
         if (!buffers.real_in || !buffers.real_tmp || !buffers.complex)
-            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTHex.");
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTObliqueZ.");
         buffers.size_real = M_physical_;
         buffers.size_complex = M_complex_;
     }
@@ -648,7 +648,7 @@ void FftwCrysFFTHex::apply_multiplier(const double* q_in, double* q_out, const d
         buffers.z_real.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_logical_)));
         buffers.z_complex.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_z_)));
         if (!buffers.z_real || !buffers.z_complex)
-            throw_with_line_number("Failed to allocate thread-local FFTW Z-FFT buffers for FftwCrysFFTHex.");
+            throw_with_line_number("Failed to allocate thread-local FFTW Z-FFT buffers for FftwCrysFFTObliqueZ.");
         buffers.size_z_real = M_logical_;
         buffers.size_z_complex = M_complex_z_;
     }

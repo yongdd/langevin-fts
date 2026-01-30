@@ -126,7 +126,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         crysfft_mode_ = CrysFFTMode::None;
         crysfft_pmmm_.reset();
         crysfft_recursive_.reset();
-        crysfft_hex_.reset();
+        crysfft_oblique_.reset();
         crysfft_full_indices_.clear();
         crysfft_reduced_indices_.clear();
         crysfft_kx2_.clear();
@@ -152,8 +152,14 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
             {
                 const auto nx = cb->get_nx();
                 std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-                const auto selection = select_crysfft_mode(space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal());
-                if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_hex_z)
+                const auto angles = cb->get_angles();
+                const bool z_axis_orthogonal =
+                    (angles.size() >= 3 &&
+                     std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
+                     std::abs(angles[1] - M_PI / 2.0) < 1e-10);
+                const auto selection = select_crysfft_mode(
+                    space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
+                if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_oblique_z)
                 {
                     auto lx = cb->get_lx();
                     auto angles = cb->get_angles();
@@ -375,34 +381,32 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                         }
                     }
 
-                    const bool want_hex =
-                        (selection.mode == CrysFFTChoice::HexZ) ||
-                        (selection.mode == CrysFFTChoice::None && selection.can_hex_z);
+                    const bool want_hex = (selection.mode == CrysFFTChoice::ObliqueZ);
                     if (crysfft_mode_ == CrysFFTMode::None && want_hex)
                     {
                         if (use_m3_basis || use_pmmm_basis)
-                            throw_with_line_number("HexZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+                            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
 
                         const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                                          : selection.hex_z_shift;
-                        if (use_hex_basis && z_shift != selection.hex_z_shift)
+                                                          : selection.oblique_z_shift;
+                        if (use_hex_basis && z_shift != selection.oblique_z_shift)
                             throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
 
-                        crysfft_hex_ = std::make_unique<FftwCrysFFTHex>(nx_logical, cell_para);
+                        crysfft_oblique_ = std::make_unique<FftwCrysFFTObliqueZ>(nx_logical, cell_para);
                         if (use_hex_basis)
                         {
                             if (!check_identity_hex(z_shift))
-                                throw_with_line_number("Z-mirror physical basis does not match HexZ CrysFFT grid ordering.");
+                                throw_with_line_number("Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering.");
                             crysfft_identity_map_ = true;
-                            crysfft_mode_ = CrysFFTMode::HexZ;
+                            crysfft_mode_ = CrysFFTMode::ObliqueZ;
                         }
                         else if (build_mapping_hex(z_shift))
                         {
-                            crysfft_mode_ = CrysFFTMode::HexZ;
+                            crysfft_mode_ = CrysFFTMode::ObliqueZ;
                         }
                         else
                         {
-                            crysfft_hex_.reset();
+                            crysfft_oblique_.reset();
                             crysfft_full_indices_.clear();
                             crysfft_reduced_indices_.clear();
                             crysfft_identity_map_ = false;
@@ -508,8 +512,8 @@ int CpuSolverPseudoBase<T>::get_crysfft_physical_size() const
         return crysfft_recursive_->get_M_physical();
     if (use_crysfft_pmmm() && crysfft_pmmm_)
         return crysfft_pmmm_->get_M_physical();
-    if (use_crysfft_hex() && crysfft_hex_)
-        return crysfft_hex_->get_M_physical();
+    if (use_crysfft_oblique() && crysfft_oblique_)
+        return crysfft_oblique_->get_M_physical();
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 }
 
@@ -520,8 +524,8 @@ void CpuSolverPseudoBase<T>::crysfft_set_cell_para(const std::array<double, 6>& 
         crysfft_recursive_->set_cell_para(cell_para);
     if (use_crysfft_pmmm() && crysfft_pmmm_)
         crysfft_pmmm_->set_cell_para(cell_para);
-    if (use_crysfft_hex() && crysfft_hex_)
-        crysfft_hex_->set_cell_para(cell_para);
+    if (use_crysfft_oblique() && crysfft_oblique_)
+        crysfft_oblique_->set_cell_para(cell_para);
 }
 
 template <typename T>
@@ -537,9 +541,9 @@ void CpuSolverPseudoBase<T>::crysfft_set_contour_step(double coeff)
         crysfft_pmmm_->set_contour_step(coeff);
         return;
     }
-    if (use_crysfft_hex() && crysfft_hex_)
+    if (use_crysfft_oblique() && crysfft_oblique_)
     {
-        crysfft_hex_->set_contour_step(coeff);
+        crysfft_oblique_->set_contour_step(coeff);
         return;
     }
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
@@ -558,9 +562,9 @@ void CpuSolverPseudoBase<T>::crysfft_diffusion(double* q_in, double* q_out) cons
         crysfft_pmmm_->diffusion(q_in, q_out);
         return;
     }
-    if (use_crysfft_hex() && crysfft_hex_)
+    if (use_crysfft_oblique() && crysfft_oblique_)
     {
-        crysfft_hex_->diffusion(q_in, q_out);
+        crysfft_oblique_->diffusion(q_in, q_out);
         return;
     }
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");

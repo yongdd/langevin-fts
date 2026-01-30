@@ -120,7 +120,7 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
         src/platforms/cpu/FftwFFT.cpp
         src/platforms/cpu/FftwCrysFFTPmmm.cpp
         src/platforms/cpu/FftwCrysFFTRecursive3m.cpp
-        src/platforms/cpu/FftwCrysFFTHex.cpp
+        src/platforms/cpu/FftwCrysFFTObliqueZ.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoBase.cpp
@@ -179,7 +179,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaFFT.cu
         src/platforms/cuda/CudaCrysFFT.cu
         src/platforms/cuda/CudaCrysFFTRecursive3m.cu
-        src/platforms/cuda/CudaCrysFFTHex.cu
+        src/platforms/cuda/CudaCrysFFTObliqueZ.cu
         src/platforms/cuda/CudaRealTransform.cu
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoRK2.cu

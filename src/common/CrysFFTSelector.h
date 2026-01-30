@@ -10,7 +10,7 @@ enum class CrysFFTChoice
     None,
     Recursive3m,
     PmmmDct,
-    HexZ
+    ObliqueZ
 };
 
 struct CrysFFTSelection
@@ -18,9 +18,9 @@ struct CrysFFTSelection
     CrysFFTChoice mode = CrysFFTChoice::None;
     bool can_pmmm = false;
     std::array<double, 9> m3_translations = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-    bool can_hex_z = false;
-    int hex_z_shift = 0;
-    double hex_z_translation = 0.0;
+    bool can_oblique_z = false;
+    int oblique_z_shift = 0;
+    double oblique_z_translation = 0.0;
 };
 
 inline CrysFFTSelection select_crysfft_mode(
@@ -28,7 +28,8 @@ inline CrysFFTSelection select_crysfft_mode(
     const std::array<int, 3>& nx,
     int dim,
     bool is_periodic,
-    bool is_orthogonal)
+    bool is_orthogonal,
+    bool z_axis_orthogonal)
 {
     CrysFFTSelection selection;
 
@@ -45,14 +46,12 @@ inline CrysFFTSelection select_crysfft_mode(
 
     selection.can_pmmm = has_pmmm;
 
-    // Hexagonal z-mirror (P6/mmm, P6_3/mmc): allow even for non-orthogonal cells
-    if (even_z)
+    // Z-mirror (ObliqueZ): allow even for non-orthogonal cells when z-axis is orthogonal
+    if (even_z && z_axis_orthogonal)
     {
         double tz = 0.0;
         const bool has_z_mirror = sg->get_z_mirror_translation(tz);
-        const int sg_num = sg->get_spacegroup_number();
-        const bool is_hex_target = (sg_num == 191 || sg_num == 194);
-        if (has_z_mirror && is_hex_target)
+        if (has_z_mirror)
         {
             double t = tz;
             const double tol = 1e-8;
@@ -60,17 +59,17 @@ inline CrysFFTSelection select_crysfft_mode(
                 t = 0.0;
             if (std::fabs(t) < tol)
             {
-                selection.can_hex_z = true;
-                selection.hex_z_translation = t;
-                selection.hex_z_shift = 0;
+                selection.can_oblique_z = true;
+                selection.oblique_z_translation = t;
+                selection.oblique_z_shift = 0;
             }
             else if (std::fabs(t - 0.5) < tol)
             {
                 if ((nx[2] % 4) == 0)
                 {
-                    selection.can_hex_z = true;
-                    selection.hex_z_translation = t;
-                    selection.hex_z_shift = nx[2] / 4;
+                    selection.can_oblique_z = true;
+                    selection.oblique_z_translation = t;
+                    selection.oblique_z_shift = nx[2] / 4;
                 }
             }
         }
@@ -78,8 +77,8 @@ inline CrysFFTSelection select_crysfft_mode(
 
     if (sg->using_z_mirror_physical_basis())
     {
-        if (selection.can_hex_z)
-            selection.mode = CrysFFTChoice::HexZ;
+        if (selection.can_oblique_z)
+            selection.mode = CrysFFTChoice::ObliqueZ;
         return selection;
     }
 
@@ -103,8 +102,6 @@ inline CrysFFTSelection select_crysfft_mode(
     if (!is_orthogonal)
     {
         selection.can_pmmm = false;
-        if (selection.can_hex_z)
-            selection.mode = CrysFFTChoice::HexZ;
         return selection;
     }
 
@@ -121,8 +118,8 @@ inline CrysFFTSelection select_crysfft_mode(
     if (has_pmmm)
         selection.mode = CrysFFTChoice::PmmmDct;
 
-    if (selection.mode == CrysFFTChoice::None && selection.can_hex_z)
-        selection.mode = CrysFFTChoice::HexZ;
+    if (selection.mode == CrysFFTChoice::None && selection.can_oblique_z)
+        selection.mode = CrysFFTChoice::ObliqueZ;
 
     return selection;
 }

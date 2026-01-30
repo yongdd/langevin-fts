@@ -774,7 +774,8 @@ class PropagatorSolver:
             Integral of the field over the box volume.
         """
         self._initialize_solver()
-        return self._computation_box.integral(field)
+        field_use = self._maybe_to_reduced(field)
+        return self._computation_box.integral(field_use)
 
     def mean(self, field: NDArray[np.floating]) -> float:
         """
@@ -791,7 +792,8 @@ class PropagatorSolver:
             Spatial average of the field (integral / volume).
         """
         self._initialize_solver()
-        return self._computation_box.mean(field)
+        field_use = self._maybe_to_reduced(field)
+        return self._computation_box.mean(field_use)
 
     def inner_product(
         self,
@@ -814,7 +816,9 @@ class PropagatorSolver:
             Inner product of the two fields.
         """
         self._initialize_solver()
-        return self._computation_box.inner_product(field1, field2)
+        field1_use = self._maybe_to_reduced(field1)
+        field2_use = self._maybe_to_reduced(field2)
+        return self._computation_box.inner_product(field1_use, field2_use)
 
     def multi_inner_product(
         self,
@@ -840,7 +844,9 @@ class PropagatorSolver:
             Sum of inner products.
         """
         self._initialize_solver()
-        return self._computation_box.multi_inner_product(n_fields, fields1, fields2)
+        fields1_use = self._maybe_to_reduced_multi(n_fields, fields1)
+        fields2_use = self._maybe_to_reduced_multi(n_fields, fields2)
+        return self._computation_box.multi_inner_product(n_fields, fields1_use, fields2_use)
 
     def zero_mean(self, field: NDArray[np.floating]) -> None:
         """
@@ -852,7 +858,45 @@ class PropagatorSolver:
             Field to modify.
         """
         self._initialize_solver()
-        self._computation_box.zero_mean(field)
+        if self._space_group is None:
+            self._computation_box.zero_mean(field)
+            return
+
+        n_reduced = self._space_group.get_n_reduced_basis()
+        n_irreducible = self._space_group.get_n_reduced_basis_full()
+        if n_reduced != n_irreducible and field.size == n_irreducible:
+            # Compute mean in reduced basis, apply shift in irreducible basis.
+            field_reduced = self._space_group.irreducible_to_reduced(field)
+            mean_val = self._computation_box.mean(field_reduced)
+            field -= mean_val
+        else:
+            self._computation_box.zero_mean(field)
+
+    def _maybe_to_reduced(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
+        """Convert irreducible-basis field to reduced basis when physical basis is active."""
+        if self._space_group is None:
+            return field
+        n_reduced = self._space_group.get_n_reduced_basis()
+        n_irreducible = self._space_group.get_n_reduced_basis_full()
+        if n_reduced != n_irreducible and field.size == n_irreducible:
+            return self._space_group.irreducible_to_reduced(field)
+        return field
+
+    def _maybe_to_reduced_multi(
+        self,
+        n_fields: int,
+        fields: NDArray[np.floating]
+    ) -> NDArray[np.floating]:
+        """Convert multiple irreducible-basis fields to reduced basis if needed."""
+        if self._space_group is None:
+            return fields
+        n_reduced = self._space_group.get_n_reduced_basis()
+        n_irreducible = self._space_group.get_n_reduced_basis_full()
+        if n_reduced != n_irreducible and fields.size == n_fields * n_irreducible:
+            reshaped = fields.reshape((n_fields, n_irreducible))
+            reduced = self._space_group.irreducible_to_reduced(reshaped)
+            return reduced.reshape((n_fields * n_reduced,))
+        return fields
 
     def set_lx(self, lx: List[float]) -> None:
         """

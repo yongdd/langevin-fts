@@ -1,6 +1,6 @@
 /**
- * @file TestCrysFFTHexGlide.cu
- * @brief Validate HexZ CrysFFT (glide mirror t_z=1/2) against full FFT.
+ * @file TestCrysFFTObliqueZGlide.cu
+ * @brief Validate ObliqueZ CrysFFT (glide mirror t_z=1/2) against full FFT.
  */
 
 #include <cmath>
@@ -11,8 +11,8 @@
 #include <cufft.h>
 
 #include "CudaCommon.h"
-#include "CudaCrysFFTHex.h"
-#include "FftwCrysFFTHex.h"
+#include "CudaCrysFFTObliqueZ.h"
+#include "FftwCrysFFTObliqueZ.h"
 #include "SpaceGroup.h"
 
 #ifndef M_PI
@@ -82,7 +82,7 @@ static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& c
     return metric;
 }
 
-static void expand_hex_z(const double* phys, double* logical,
+static void expand_oblique_z(const double* phys, double* logical,
     int Nx, int Ny, int Nz, int z_shift)
 {
     const int Nz2 = Nz / 2;
@@ -105,7 +105,7 @@ static void expand_hex_z(const double* phys, double* logical,
     }
 }
 
-static void diffusion_standard_fft_hex(double* q_in, double* q_out,
+static void diffusion_standard_fft_oblique(double* q_in, double* q_out,
     int Nx, int Ny, int Nz, const std::array<double, 6>& cell_para, double ds)
 {
     const int M = Nx * Ny * Nz;
@@ -166,7 +166,7 @@ static void diffusion_standard_fft_hex(double* q_in, double* q_out,
 // CUDA kernel
 //==============================================================================
 
-__global__ void ker_apply_boltzmann_hex(
+__global__ void ker_apply_boltzmann_oblique(
     cufftDoubleComplex* freq,
     int Nx, int Ny, int Nz_half,
     double ds, double norm,
@@ -198,7 +198,7 @@ __global__ void ker_apply_boltzmann_hex(
 // Test functions
 //==============================================================================
 
-static bool test_cpu_hex_glide(int Nx, int Ny, int Nz, double ds)
+static bool test_cpu_oblique_glide(int Nx, int Ny, int Nz, double ds)
 {
     const double Lx = 4.0, Ly = 4.0, Lz = 4.0;
     const std::array<double, 6> cell_hex = {Lx, Ly, Lz, M_PI / 2, M_PI / 2, 2.0 * M_PI / 3.0};
@@ -239,13 +239,13 @@ static bool test_cpu_hex_glide(int Nx, int Ny, int Nz, double ds)
         }
     }
 
-    expand_hex_z(q_phys.data(), q_logical.data(), Nx, Ny, Nz, z_shift);
+    expand_oblique_z(q_phys.data(), q_logical.data(), Nx, Ny, Nz, z_shift);
 
-    FftwCrysFFTHex crys({Nx, Ny, Nz}, cell_hex);
+    FftwCrysFFTObliqueZ crys({Nx, Ny, Nz}, cell_hex);
     crys.set_contour_step(ds);
     crys.diffusion(q_phys.data(), q_phys_out.data());
 
-    diffusion_standard_fft_hex(q_logical.data(), q_logical_out.data(), Nx, Ny, Nz, cell_hex, ds);
+    diffusion_standard_fft_oblique(q_logical.data(), q_logical_out.data(), Nx, Ny, Nz, cell_hex, ds);
 
     double max_rel = 0.0;
     for (int ix = 0; ix < Nx; ++ix)
@@ -272,7 +272,7 @@ static bool test_cpu_hex_glide(int Nx, int Ny, int Nz, double ds)
     return ok;
 }
 
-static bool test_cuda_hex_glide(int Nx, int Ny, int Nz, double ds)
+static bool test_cuda_oblique_glide(int Nx, int Ny, int Nz, double ds)
 {
     const double Lx = 4.0, Ly = 4.0, Lz = 4.0;
     const std::array<double, 6> cell_hex = {Lx, Ly, Lz, M_PI / 2, M_PI / 2, 2.0 * M_PI / 3.0};
@@ -311,10 +311,10 @@ static bool test_cuda_hex_glide(int Nx, int Ny, int Nz, double ds)
             }
         }
     }
-    expand_hex_z(h_phys.data(), h_logical.data(), Nx, Ny, Nz, z_shift);
+    expand_oblique_z(h_phys.data(), h_logical.data(), Nx, Ny, Nz, z_shift);
 
-    // HexZ CrysFFT (CUDA)
-    CudaCrysFFTHex crys({Nx, Ny, Nz}, cell_hex);
+    // ObliqueZ CrysFFT (CUDA)
+    CudaCrysFFTObliqueZ crys({Nx, Ny, Nz}, cell_hex);
     crys.set_contour_step(ds);
 
     double *d_in{}, *d_out{};
@@ -354,7 +354,7 @@ static bool test_cuda_hex_glide(int Nx, int Ny, int Nz, double ds)
     const double norm = 1.0 / M_logical;
     const int Nz_half = Nz / 2 + 1;
     const int M_freq = Nx * Ny * Nz_half;
-    ker_apply_boltzmann_hex<<<(M_freq + 255) / 256, 256>>>(
+    ker_apply_boltzmann_oblique<<<(M_freq + 255) / 256, 256>>>(
         d_freq, Nx, Ny, Nz_half, ds, norm, G11, G12, G13, G22, G23, G33);
 
     cufftExecZ2D(bwd, d_freq, d_full);
@@ -394,15 +394,15 @@ static bool test_cuda_hex_glide(int Nx, int Ny, int Nz, double ds)
 
 int main()
 {
-    std::printf("=== CrysFFT HexZ Glide Test (P6_3/mmc) ===\n\n");
+    std::printf("=== CrysFFT ObliqueZ Glide Test (P6_3/mmc) ===\n\n");
 
     const int Nx = 24, Ny = 24, Nz = 24;
     const double ds = 0.01;
 
     std::printf("Grid: %dx%dx%d\n", Nx, Ny, Nz);
     bool ok = true;
-    ok &= test_cpu_hex_glide(Nx, Ny, Nz, ds);
-    ok &= test_cuda_hex_glide(Nx, Ny, Nz, ds);
+    ok &= test_cpu_oblique_glide(Nx, Ny, Nz, ds);
+    ok &= test_cuda_oblique_glide(Nx, Ny, Nz, ds);
 
     std::printf(ok ? "\nAll passed!\n" : "\nFAILED!\n");
     return ok ? 0 : 1;

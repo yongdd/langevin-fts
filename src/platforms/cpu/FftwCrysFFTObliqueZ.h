@@ -1,9 +1,9 @@
 /**
- * @file FftwCrysFFTHex.h
- * @brief CPU Crystallographic FFT for hexagonal z-mirror symmetry.
+ * @file FftwCrysFFTObliqueZ.h
+ * @brief CPU Crystallographic FFT for z-mirror symmetry (oblique in-plane angles).
  *
- * Implements a minimal CrysFFT for hexagonal space groups with a z-mirror
- * operation (P6/mmm, P6_3/mmc). The transform uses:
+ * Implements a minimal CrysFFT for space groups with a z-mirror
+ * operation (t_z = 0 or 1/2) and alpha=beta=90° (gamma arbitrary). The transform uses:
  *   - DCT-II/III along z (half-grid)
  *   - Complex FFT along x and y (full grid)
  *
@@ -14,8 +14,8 @@
  * metric tensor from the cell parameters, supporting non-orthogonal cells.
  */
 
-#ifndef FFTW_CRYS_FFT_HEX_H_
-#define FFTW_CRYS_FFT_HEX_H_
+#ifndef FFTW_CRYS_FFT_OBLIQUEZ_H_
+#define FFTW_CRYS_FFT_OBLIQUEZ_H_
 
 #include <array>
 #include <atomic>
@@ -26,7 +26,7 @@
 #include <vector>
 #include <fftw3.h>
 
-class FftwCrysFFTHex
+class FftwCrysFFTObliqueZ
 {
 private:
     std::array<int, 3> nx_logical_;
@@ -83,12 +83,12 @@ private:
     ThreadState& get_thread_state() const;
 
 public:
-    FftwCrysFFTHex(
+    FftwCrysFFTObliqueZ(
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para,
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
 
-    ~FftwCrysFFTHex();
+    ~FftwCrysFFTObliqueZ();
 
     void set_cell_para(const std::array<double, 6>& cell_para);
     void set_contour_step(double ds);
@@ -102,4 +102,4 @@ public:
     int get_M_physical() const { return M_physical_; }
 };
 
-#endif  // FFTW_CRYS_FFT_HEX_H_
+#endif  // FFTW_CRYS_FFT_OBLIQUEZ_H_

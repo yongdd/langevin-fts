@@ -45,7 +45,7 @@ SET(BASIC_TESTS
     TestCudaCubReduceSum
     TestCudaCubReduceSumClass
     TestCrysFFT
-    TestCrysFFTHexGlide
+    TestCrysFFTObliqueZGlide
 
     # Propagator solvers
     TestCrankNicolson1D

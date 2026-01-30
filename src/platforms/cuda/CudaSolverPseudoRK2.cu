@@ -36,7 +36,7 @@
 #include "CudaSolverPseudoRK2.h"
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
-#include "CudaCrysFFTHex.h"
+#include "CudaCrysFFTObliqueZ.h"
 #include "CrysFFTSelector.h"
 
 #ifndef M_PI
@@ -408,8 +408,14 @@ void CudaSolverPseudoRK2<T>::set_space_group(
         {
             const auto nx = cb->get_nx();
             std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-            const auto selection = select_crysfft_mode(space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal());
-            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_hex_z)
+            const auto angles = cb->get_angles();
+            const bool z_axis_orthogonal =
+                (angles.size() >= 3 &&
+                 std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
+                 std::abs(angles[1] - M_PI / 2.0) < 1e-10);
+            const auto selection = select_crysfft_mode(
+                space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
+            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_oblique_z)
             {
                 const int Nx2 = nx[0] / 2;
                 const int Ny2 = nx[1] / 2;
@@ -577,8 +583,8 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                     {
                         if (mode == CudaCrysFFTMode::Recursive3m)
                             crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, selection.m3_translations);
-                        else if (mode == CudaCrysFFTMode::HexZ)
-                            crysfft_[i] = new CudaCrysFFTHex(nx_logical, cell_para);
+                        else if (mode == CudaCrysFFTMode::ObliqueZ)
+                            crysfft_[i] = new CudaCrysFFTObliqueZ(nx_logical, cell_para);
                         else
                             crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
                         gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
@@ -604,27 +610,27 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                     }
                 }
 
-                if (!use_crysfft_ && selection.mode == CrysFFTChoice::HexZ)
+                if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
                 {
                     if (use_m3_basis || use_pmmm_basis)
-                        throw_with_line_number("HexZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-                    if (!selection.can_hex_z)
-                        throw_with_line_number("HexZ CrysFFT selected but z-mirror symmetry is unavailable.");
+                        throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+                    if (!selection.can_oblique_z)
+                        throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
 
                     const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                                      : selection.hex_z_shift;
-                    if (use_hex_basis && z_shift != selection.hex_z_shift)
+                                                      : selection.oblique_z_shift;
+                    if (use_hex_basis && z_shift != selection.oblique_z_shift)
                         throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
 
                     if (use_hex_basis)
                     {
                         if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match HexZ CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
+                            throw_with_line_number("Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering.");
+                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, true);
                     }
                     else if (build_mapping_hex(z_shift))
                     {
-                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, false);
+                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, false);
                     }
                 }
 
@@ -644,20 +650,6 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                     }
                 }
 
-                if (!use_crysfft_ && selection.mode == CrysFFTChoice::None && selection.can_hex_z)
-                {
-                    if (use_hex_basis)
-                    {
-                        const int z_shift = space_group_->get_z_mirror_shift();
-                        if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match HexZ CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
-                    }
-                    else if (build_mapping_hex(selection.hex_z_shift))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, false);
-                    }
-                }
             }
         }
     }
