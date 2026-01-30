@@ -412,26 +412,35 @@ void SpaceGroup::find_irreducible_mesh()
             // This is a new irreducible point
             reduced_basis_indices_.push_back(flat_idx);
 
-            // Apply all symmetry operations to find orbit
+            // Apply all symmetry operations to find orbit (cell-centered grid)
+            const double x = (static_cast<double>(ix) + 0.5) / static_cast<double>(Nx);
+            const double y = (static_cast<double>(iy) + 0.5) / static_cast<double>(Ny);
+            const double z = (static_cast<double>(iz) + 0.5) / static_cast<double>(Nz);
+            const double eps = 1e-8;
+
             for (int op = 0; op < n_symmetry_ops_; ++op)
             {
-                // Apply rotation: R * point
-                int rx = rotations_[op][0][0] * ix + rotations_[op][0][1] * iy + rotations_[op][0][2] * iz;
-                int ry = rotations_[op][1][0] * ix + rotations_[op][1][1] * iy + rotations_[op][1][2] * iz;
-                int rz = rotations_[op][2][0] * ix + rotations_[op][2][1] * iy + rotations_[op][2][2] * iz;
+                // Apply rotation + translation in fractional coordinates
+                double rx = rotations_[op][0][0] * x + rotations_[op][0][1] * y + rotations_[op][0][2] * z + translations_[op][0];
+                double ry = rotations_[op][1][0] * x + rotations_[op][1][1] * y + rotations_[op][1][2] * z + translations_[op][1];
+                double rz = rotations_[op][2][0] * x + rotations_[op][2][1] * y + rotations_[op][2][2] * z + translations_[op][2];
 
-                // Add translation (scaled by grid size and rounded)
-                int tx = static_cast<int>(std::round(translations_[op][0] * Nx));
-                int ty = static_cast<int>(std::round(translations_[op][1] * Ny));
-                int tz = static_cast<int>(std::round(translations_[op][2] * Nz));
+                // Wrap to [0,1)
+                rx -= std::floor(rx);
+                ry -= std::floor(ry);
+                rz -= std::floor(rz);
 
-                // Apply periodic boundary conditions
-                int ox = ((rx + tx) % Nx + Nx) % Nx;
-                int oy = ((ry + ty) % Ny + Ny) % Ny;
-                int oz = ((rz + tz) % Nz + Nz) % Nz;
+                // Map back to cell-centered indices
+                int ox = static_cast<int>(std::floor(rx * Nx + eps));
+                int oy = static_cast<int>(std::floor(ry * Ny + eps));
+                int oz = static_cast<int>(std::floor(rz * Nz + eps));
+
+                if (ox >= Nx) ox -= Nx;
+                if (oy >= Ny) oy -= Ny;
+                if (oz >= Nz) oz -= Nz;
 
                 // Convert to flat index
-                int orbit_flat = ox * Ny * Nz + oy * Nz + oz;
+                const int orbit_flat = ox * Ny * Nz + oy * Nz + oz;
 
                 // Mark this orbit point
                 full_to_reduced_map_[orbit_flat] = count;

@@ -1,6 +1,6 @@
 /**
- * @file CudaCrysFFTHex.cu
- * @brief CUDA implementation of hexagonal CrysFFT (DCT-z + FFT-xy).
+ * @file CudaCrysFFTObliqueZ.cu
+ * @brief CUDA implementation of z-mirror CrysFFT (DCT-z + FFT-xy).
  */
 
 #include <atomic>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <mutex>
 
-#include "CudaCrysFFTHex.h"
+#include "CudaCrysFFTObliqueZ.h"
 #include "CudaRealTransform.h"
 #include "CudaCommon.h"
 #include "Exception.h"
@@ -28,7 +28,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::array<double, 6> CudaCrysFFTHex::compute_recip_metric(const std::array<double, 6>& cell_para)
+std::array<double, 6> CudaCrysFFTObliqueZ::compute_recip_metric(const std::array<double, 6>& cell_para)
 {
     const double a = cell_para[0];
     const double b = cell_para[1];
@@ -88,7 +88,7 @@ std::array<double, 6> CudaCrysFFTHex::compute_recip_metric(const std::array<doub
 //------------------------------------------------------------------------------
 // Constructor / Destructor
 //------------------------------------------------------------------------------
-CudaCrysFFTHex::CudaCrysFFTHex(
+CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(
     std::array<int, 3> nx_logical,
     std::array<double, 6> cell_para,
     std::array<double, 9> /*trans_part*/)
@@ -99,10 +99,10 @@ CudaCrysFFTHex::CudaCrysFFTHex(
     for (int d = 0; d < 3; ++d)
     {
         if (nx_logical_[d] <= 0)
-            throw_with_line_number("CudaCrysFFTHex requires positive grid dimensions.");
+            throw_with_line_number("CudaCrysFFTObliqueZ requires positive grid dimensions.");
     }
     if (nx_logical_[2] % 2 != 0)
-        throw_with_line_number("CudaCrysFFTHex requires even Nz.");
+        throw_with_line_number("CudaCrysFFTObliqueZ requires even Nz.");
 
     nx_physical_ = {nx_logical_[0], nx_logical_[1], nx_logical_[2] / 2};
     M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
@@ -121,7 +121,7 @@ CudaCrysFFTHex::CudaCrysFFTHex(
     init_fft_xy();
 }
 
-CudaCrysFFTHex::~CudaCrysFFTHex()
+CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
 {
     freeBoltzmann();
     free_fft_xy();
@@ -142,7 +142,7 @@ CudaCrysFFTHex::~CudaCrysFFTHex()
 //------------------------------------------------------------------------------
 // FFT plans
 //------------------------------------------------------------------------------
-void CudaCrysFFTHex::init_fft_xy()
+void CudaCrysFFTObliqueZ::init_fft_xy()
 {
     long long int n_ll[2] = {nx_logical_[0], nx_logical_[1]};
     long long int inembed_ll[2] = {n_ll[0], n_ll[1]};
@@ -155,11 +155,11 @@ void CudaCrysFFTHex::init_fft_xy()
     size_t work_size = 0;
 
     if (cufftCreate(&plan_xy_fwd_) != CUFFT_SUCCESS)
-        throw_with_line_number("CudaCrysFFTHex failed to create cuFFT plan handle for XY.");
+        throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan handle for XY.");
     if (cufftCreate(&plan_xy_bwd_) != CUFFT_SUCCESS)
     {
         cufftDestroy(plan_xy_fwd_);
-        throw_with_line_number("CudaCrysFFTHex failed to create cuFFT inverse plan handle for XY.");
+        throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan handle for XY.");
     }
 
     cufftResult rf = cufftXtMakePlanMany(plan_xy_fwd_, 2, n_ll,
@@ -170,7 +170,7 @@ void CudaCrysFFTHex::init_fft_xy()
     {
         cufftDestroy(plan_xy_fwd_);
         cufftDestroy(plan_xy_bwd_);
-        throw_with_line_number("CudaCrysFFTHex failed to create cuFFT plan for XY.");
+        throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan for XY.");
     }
 
     cufftResult rb = cufftXtMakePlanMany(plan_xy_bwd_, 2, n_ll,
@@ -181,7 +181,7 @@ void CudaCrysFFTHex::init_fft_xy()
     {
         cufftDestroy(plan_xy_fwd_);
         cufftDestroy(plan_xy_bwd_);
-        throw_with_line_number("CudaCrysFFTHex failed to create cuFFT inverse plan for XY.");
+        throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan for XY.");
     }
 
     plan_xy_initialized_ = true;
@@ -190,7 +190,7 @@ void CudaCrysFFTHex::init_fft_xy()
 
 }
 
-void CudaCrysFFTHex::free_fft_xy()
+void CudaCrysFFTObliqueZ::free_fft_xy()
 {
     if (plan_xy_initialized_)
     {
@@ -203,7 +203,7 @@ void CudaCrysFFTHex::free_fft_xy()
 //------------------------------------------------------------------------------
 // Boltzmann cache
 //------------------------------------------------------------------------------
-void CudaCrysFFTHex::freeBoltzmann()
+void CudaCrysFFTObliqueZ::freeBoltzmann()
 {
     for (auto& kv : d_boltzmann_)
         cudaFree(kv.second);
@@ -212,7 +212,7 @@ void CudaCrysFFTHex::freeBoltzmann()
     ds_current_ = 0.0;
 }
 
-void CudaCrysFFTHex::generateBoltzmann(double ds)
+void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
 {
     double* h_boltz = new double[M_complex_xy_];
 
@@ -252,7 +252,7 @@ void CudaCrysFFTHex::generateBoltzmann(double ds)
 //------------------------------------------------------------------------------
 // Public API
 //------------------------------------------------------------------------------
-void CudaCrysFFTHex::set_cell_para(const std::array<double, 6>& cell_para)
+void CudaCrysFFTObliqueZ::set_cell_para(const std::array<double, 6>& cell_para)
 {
     if (cell_para == cell_para_)
         return;
@@ -261,7 +261,7 @@ void CudaCrysFFTHex::set_cell_para(const std::array<double, 6>& cell_para)
     freeBoltzmann();
 }
 
-void CudaCrysFFTHex::set_contour_step(double ds)
+void CudaCrysFFTObliqueZ::set_contour_step(double ds)
 {
     if (ds == ds_current_ && d_boltzmann_.count(ds) > 0)
     {
@@ -276,7 +276,7 @@ void CudaCrysFFTHex::set_contour_step(double ds)
     ds_current_ = ds;
 }
 
-void CudaCrysFFTHex::set_stream(cudaStream_t stream)
+void CudaCrysFFTObliqueZ::set_stream(cudaStream_t stream)
 {
     stream_ = stream;
     if (dct_forward_z_) dct_forward_z_->set_stream(stream_);
@@ -288,16 +288,16 @@ void CudaCrysFFTHex::set_stream(cudaStream_t stream)
     }
 }
 
-void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out)
+void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out)
 {
     diffusion(d_q_in, d_q_out, stream_);
 }
 
-void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
+void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
 {
     set_stream(stream);
     if (d_boltz_current_ == nullptr)
-        throw_with_line_number("CudaCrysFFTHex::set_contour_step must be called before diffusion().");
+        throw_with_line_number("CudaCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
     const int threads = 256;
     const int blocks = (M_complex_xy_ + threads - 1) / threads;
@@ -332,7 +332,7 @@ void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out, cudaStream_t str
 
         // FFT along x,y (batched over z)
         if (cufftExecD2Z(plan_xy_fwd_, d_real_xy_, d_complex_) != CUFFT_SUCCESS)
-            throw_with_line_number("CudaCrysFFTHex cufftExecD2Z forward failed.");
+            throw_with_line_number("CudaCrysFFTObliqueZ cufftExecD2Z forward failed.");
         cudaEventRecord(e3, stream_);
 
         // Apply Boltzmann in spectral space (includes normalization)
@@ -340,7 +340,7 @@ void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out, cudaStream_t str
         cudaEventRecord(e4, stream_);
 
         if (cufftExecZ2D(plan_xy_bwd_, d_complex_, d_real_xy_) != CUFFT_SUCCESS)
-            throw_with_line_number("CudaCrysFFTHex cufftExecZ2D inverse failed.");
+            throw_with_line_number("CudaCrysFFTObliqueZ cufftExecZ2D inverse failed.");
         cudaEventRecord(e5, stream_);
 
         // DCT-III along z from z-major (normalization already applied in boltzmann)
@@ -358,7 +358,7 @@ void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out, cudaStream_t str
         cudaEventElapsedTime(&ms_dct3, e5, e6);
         cudaEventElapsedTime(&ms_total, e0, e6);
 
-        std::printf("[CrysFFT-HexZ] copy(ms)=%.4f dct2(ms)=%.4f fft(ms)=%.4f boltz(ms)=%.4f ifft(ms)=%.4f dct3(ms)=%.4f total(ms)=%.4f\n",
+        std::printf("[CrysFFT-ObliqueZ] copy(ms)=%.4f dct2(ms)=%.4f fft(ms)=%.4f boltz(ms)=%.4f ifft(ms)=%.4f dct3(ms)=%.4f total(ms)=%.4f\n",
                     ms_copy, ms_dct2, ms_fft, ms_boltz, ms_ifft, ms_dct3, ms_total);
 
         cudaEventDestroy(e0);
@@ -382,13 +382,13 @@ void CudaCrysFFTHex::diffusion(double* d_q_in, double* d_q_out, cudaStream_t str
 
     // FFT along x,y (batched over z)
     if (cufftExecD2Z(plan_xy_fwd_, d_real_xy_, d_complex_) != CUFFT_SUCCESS)
-        throw_with_line_number("CudaCrysFFTHex cufftExecD2Z forward failed.");
+        throw_with_line_number("CudaCrysFFTObliqueZ cufftExecD2Z forward failed.");
 
     // Apply Boltzmann in spectral space (includes normalization)
     ker_multi_complex_real<<<blocks, threads, 0, stream_>>>(d_complex_, d_boltz_current_, 1.0, M_complex_xy_);
 
     if (cufftExecZ2D(plan_xy_bwd_, d_complex_, d_real_xy_) != CUFFT_SUCCESS)
-        throw_with_line_number("CudaCrysFFTHex cufftExecZ2D inverse failed.");
+        throw_with_line_number("CudaCrysFFTObliqueZ cufftExecZ2D inverse failed.");
 
     // DCT-III along z from z-major (normalization already applied in boltzmann)
     dct_backward_z_->execute_z_dct3_from_zmajor(d_real_xy_, d_work, stream_);

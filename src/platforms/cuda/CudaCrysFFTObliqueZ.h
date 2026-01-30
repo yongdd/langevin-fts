@@ -1,10 +1,10 @@
 /**
- * @file CudaCrysFFTHex.h
- * @brief CUDA CrysFFT for hexagonal z-mirror symmetry (DCT-z + FFT-xy).
+ * @file CudaCrysFFTObliqueZ.h
+ * @brief CUDA CrysFFT for z-mirror symmetry (DCT-z + FFT-xy, gamma arbitrary).
  */
 
-#ifndef CUDA_CRYS_FFT_HEX_H_
-#define CUDA_CRYS_FFT_HEX_H_
+#ifndef CUDA_CRYS_FFT_OBLIQUEZ_H_
+#define CUDA_CRYS_FFT_OBLIQUEZ_H_
 
 #include <array>
 #include <map>
@@ -15,7 +15,7 @@
 
 class CudaRealTransform3D;
 
-class CudaCrysFFTHex : public CudaCrysFFTBase
+class CudaCrysFFTObliqueZ : public CudaCrysFFTBase
 {
 private:
     std::array<int, 3> nx_logical_;
@@ -51,12 +51,12 @@ private:
     void freeBoltzmann();
 
 public:
-    CudaCrysFFTHex(
+    CudaCrysFFTObliqueZ(
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para,
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
 
-    ~CudaCrysFFTHex() override;
+    ~CudaCrysFFTObliqueZ() override;
 
     void set_cell_para(const std::array<double, 6>& cell_para) override;
     void set_contour_step(double ds) override;
@@ -67,4 +67,4 @@ public:
     int get_M_physical() const { return M_physical_; }
 };
 
-#endif  // CUDA_CRYS_FFT_HEX_H_
+#endif  // CUDA_CRYS_FFT_OBLIQUEZ_H_

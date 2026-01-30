@@ -715,6 +715,29 @@ class SCFT:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
+            # Auto-enable physical basis when possible (m3 → pmmm → z-mirror).
+            angles = params.get("angles", [90.0, 90.0, 90.0])
+            try:
+                alpha, beta, gamma = angles
+            except Exception:
+                alpha, beta, gamma = 90.0, 90.0, 90.0
+            tol = 1e-8
+            is_orthogonal = (abs(alpha - 90.0) < tol and abs(beta - 90.0) < tol and abs(gamma - 90.0) < tol)
+            z_axis_orthogonal = (abs(alpha - 90.0) < tol and abs(beta - 90.0) < tol)
+
+            if is_orthogonal:
+                try:
+                    self.sg.enable_m3_physical_basis()
+                except Exception:
+                    try:
+                        self.sg.enable_pmmm_physical_basis()
+                    except Exception:
+                        pass
+            elif z_axis_orthogonal:
+                try:
+                    self.sg.enable_z_mirror_physical_basis()
+                except Exception:
+                    pass
         else:
             self.sg = None
 
@@ -1312,19 +1335,25 @@ class SCFT:
             m_dic["space_group_symbol"] = self.sg.get_spacegroup_symbol()
             m_dic["space_group_hall_number"] = self.sg.get_hall_number()
 
+        def _field_to_full(field: np.ndarray) -> np.ndarray:
+            """Convert irreducible/reduced basis field to full grid if space group is set."""
+            if self.sg is None:
+                return field
+
+            n_reduced = self.sg.get_n_reduced_basis()
+            n_irreducible = self.sg.get_n_reduced_basis_full()
+            field_use = field
+            if n_reduced != n_irreducible and field.size == n_irreducible:
+                field_use = self.sg.irreducible_to_reduced(field)
+            return self.sg.from_reduced_basis(field_use)
+
         # Add w fields to the dictionary (expand to full grid if space group is set)
         for i, name in enumerate(self.monomer_types):
-            if self.sg is not None:
-                m_dic["w_" + name] = self.sg.from_reduced_basis(self.w[i])
-            else:
-                m_dic["w_" + name] = self.w[i]
+            m_dic["w_" + name] = _field_to_full(self.w[i])
 
         # Add concentrations to the dictionary (expand to full grid if space group is set)
         for name in self.monomer_types:
-            if self.sg is not None:
-                m_dic["phi_" + name] = self.sg.from_reduced_basis(self.phi[name])
-            else:
-                m_dic["phi_" + name] = self.phi[name]
+            m_dic["phi_" + name] = _field_to_full(self.phi[name])
 
         # Convert numpy arrays to lists
         for data in m_dic:
@@ -1613,7 +1642,17 @@ class SCFT:
 
             # Calculate the total energy
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-            energy_total = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, self.cb, include_const_term=False)
+            if self.sg is not None and self.sg.get_n_reduced_basis_full() != self.sg.get_n_reduced_basis():
+                w_aux_energy = self.sg.irreducible_to_reduced(w_aux)
+            else:
+                w_aux_energy = w_aux
+            energy_total = self.mpt.compute_hamiltonian(
+                self.prop_solver._molecules,
+                w_aux_energy,
+                total_partitions,
+                self.cb,
+                include_const_term=False
+            )
 
             # Calculate difference between current total density and target density
             phi_total = sum(phi[m] for m in self.monomer_types)

@@ -193,15 +193,27 @@ def test_scft_with_space_group():
     }
     calc.run(initial_fields=w_init)
 
-    # Verify internal storage is reduced basis
-    assert calc.w.shape == (2, n_grid), f"w should be (2, {n_grid})"
-    assert len(calc.phi["A"]) == n_grid, f"phi['A'] should have size {n_grid}"
+    # Verify internal storage is irreducible basis when physical basis is active
+    if calc.sg is not None:
+        n_irreducible = calc.sg.get_n_reduced_basis_full()
+    else:
+        n_irreducible = n_grid
+
+    assert calc.w.shape == (2, n_irreducible), f"w should be (2, {n_irreducible})"
+    assert len(calc.phi["A"]) == n_irreducible, f"phi['A'] should have size {n_irreducible}"
     print(f"  Internal w.shape = {calc.w.shape}")
     print(f"  Internal phi['A'] size = {len(calc.phi['A'])}")
 
-    # Verify material conservation
+    # Verify material conservation (convert to reduced basis if needed)
     orbit_counts = np.array(calc.sg.get_orbit_counts())
-    weighted_mean = np.sum((calc.phi["A"] + calc.phi["B"]) * orbit_counts) / np.sum(orbit_counts)
+    if calc.sg.get_n_reduced_basis_full() != calc.sg.get_n_reduced_basis():
+        phi_A = calc.sg.irreducible_to_reduced(calc.phi["A"])
+        phi_B = calc.sg.irreducible_to_reduced(calc.phi["B"])
+    else:
+        phi_A = calc.phi["A"]
+        phi_B = calc.phi["B"]
+
+    weighted_mean = np.sum((phi_A + phi_B) * orbit_counts) / np.sum(orbit_counts)
     assert abs(weighted_mean - 1.0) < 0.01, f"Material not conserved: {weighted_mean}"
     print(f"  Material conservation: {weighted_mean:.6f}")
 

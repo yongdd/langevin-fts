@@ -6,7 +6,8 @@ This document describes the crystallographic FFT (CrysFFT) paths used to acceler
 
 - **Pmmm DCT**: DCT-II/III on the 1/8 physical grid (mirror symmetry).
 - **3m recursive (2x2x2)**: recursive crystallographic FFT using symmetry translations (Qiang and Li, 2020).
-- **HexZ (z-mirror)**: DCT-z + FFT-xy on the z-mirror physical grid for hexagonal cells.
+- **ObliqueZ (z-mirror)**: DCT-z + FFT-xy on the z-mirror physical grid. This path supports
+  **oblique in-plane angles** (α=β=90°, γ arbitrary).
 
 **Status:** Implemented on CPU (FFTW) and CUDA.
 
@@ -32,13 +33,13 @@ Terminology:
 - **Logical grid**: full simulation grid, size `Nx x Ny x Nz`.
 - **Physical grid**: CrysFFT working grid.
   - Pmmm / 3m: `(Nx/2) x (Ny/2) x (Nz/2)` (mirror-reduced).
-  - HexZ (z-mirror): `Nx x Ny x (Nz/2)` (z-mirror only).
+  - ObliqueZ (z-mirror): `Nx x Ny x (Nz/2)` (z-mirror only).
 - **Irreducible grid**: smallest symmetry-unique grid (one point per symmetry orbit).
 - **Reduced basis**: storage basis used by `SpaceGroup` (irreducible, Pmmm physical, M3 physical, or z-mirror physical).
 
 Naming note:
 - External libraries and literature often refer to symmetry-reduced FFTs in terms of **ASU maps** or **FFT maps** rather than naming specific transform variants.
-  This codebase uses the internal name **HexZ (z-mirror CrysFFT)** for the hexagonal z-mirror path to keep logs and documentation unambiguous.
+  This document uses **ObliqueZ** for the z‑mirror path (α=β=90°, γ arbitrary).
 
 CrysFFT is used only for diffusion steps in pseudo-spectral solvers. All real-space operations (e.g., multiplication by `exp(-w ds/2)`) remain unchanged.
 
@@ -69,16 +70,18 @@ Key features:
 
 Both CPU and CUDA implementations are provided (`FftwCrysFFTRecursive3m` and `CudaCrysFFTRecursive3m`).
 
-### 2.3 HexZ (z-mirror) (DCT-z + FFT-xy)
+### 2.3 ObliqueZ (z-mirror) (DCT-z + FFT-xy)
 
-For hexagonal space groups with a z-mirror (translation `t_z = 0` or `t_z = 1/2`), the diffusion step uses:
+For space groups with a z-mirror (translation `t_z = 0` or `t_z = 1/2`) and
+α=β=90° (γ arbitrary), the diffusion step uses:
 
 ```
 q_out = DCT-III_z[ exp(-k^2 * coeff) * FFT_xy[ DCT-II_z[q_in] ] ]
 ```
 
 - The physical grid is `Nx x Ny x (Nz/2)` (mirror in z only).
-- The in-plane FFT uses the **hexagonal reciprocal metric** (`γ = 120°`).
+- The in-plane FFT uses the reciprocal metric computed from the full lattice angles
+  (γ can be any value; hexagonal is a special case with `γ = 120°`).
 - Glide mirror (`t_z = 1/2`) uses a shifted z-slab; this requires `Nz % 4 == 0`.
 
 ---
@@ -90,20 +93,23 @@ CrysFFT is enabled automatically when all of the following are true:
 - `space_group` is set.
 - Dimension is 3D.
 - Boundary conditions are periodic.
-- The computation box is orthogonal.
+- For **Pmmm/3m**: the computation box is orthogonal.
+- For **ObliqueZ**: α=β=90° (γ arbitrary) is sufficient.
 - `Nx`, `Ny`, `Nz` are even.
 - Fields are real-valued (double precision).
 
 Selection order (auto):
 1. **3m recursive** if the space group provides 3m translations *and* `Nz/2 % 8 == 0`.
 2. **Pmmm DCT** if the space group has mirror planes in x/y/z.
-3. **HexZ (z-mirror)** if the space group has a z-mirror with `t_z = 0` or `t_z = 1/2` and the cell is hexagonal (`γ = 120°`).
+3. **ObliqueZ (z-mirror)** if the space group has a z-mirror with `t_z = 0` or `t_z = 1/2`
+   and **α=β=90°** (γ arbitrary).
 4. Otherwise, fall back to standard FFT.
 
 If a physical basis is forced in `SpaceGroup`, the selector respects it:
 - **Pmmm physical basis forced** → Pmmm DCT (if mirror planes exist).
 - **M3 physical basis forced** → 3m recursive (if translations and alignment are valid).
-- **Z-mirror physical basis forced** → HexZ (z-mirror) (requires hexagonal cell; if `t_z = 1/2`, also requires `Nz % 4 == 0`).
+- **Z-mirror physical basis forced** → ObliqueZ (z-mirror) (requires α=β=90°; if `t_z = 1/2`,
+  also requires `Nz % 4 == 0`).
 
 CrysFFT is used in pseudo-spectral solvers for continuous (RQM4/RK2) and discrete chains (full and half-bond steps), and in the stress computation path when applicable.
 
@@ -139,11 +145,11 @@ particular CrysFFT algorithm.
 The solver automatically selects the fastest compatible physical basis when
 space-group symmetry is enabled.
 
-### 4.4 Z-mirror physical basis (hex)
+### 4.4 Z-mirror physical basis (ObliqueZ)
 
 - Stores the physical grid for z-mirror symmetry: `Nx x Ny x (Nz/2)`.
 - Mapping becomes identity (no gather/scatter) when z-mirror is enabled.
-- For `t_z = 1/2`, the basis uses a shifted z-slab (requires `Nz % 4 == 0`); HexZ remains available.
+- For `t_z = 1/2`, the basis uses a shifted z-slab (requires `Nz % 4 == 0`); ObliqueZ remains available.
 
 **Optimizer note:** the field optimizer always uses the **irreducible** grid.
 When a physical basis is active, the solver maps reduced ↔ irreducible
@@ -188,13 +194,13 @@ falls back to the irreducible basis if neither is available.
 - 3D only.
 - Periodic boundary conditions only.
 - Orthogonal boxes required for Pmmm / 3m.
-- HexZ (z-mirror) supports hexagonal cells (`γ = 120°`) with `t_z = 0` or `t_z = 1/2`.
+- ObliqueZ (z-mirror) supports α=β=90° with `t_z = 0` or `t_z = 1/2` (γ arbitrary).
 - Even `Nz` required for z-mirror; even `Nx, Ny, Nz` required for Pmmm / 3m.
 - Real-valued fields only.
 - **3m recursive** requires 3m translations and `Nz/2 % 8 == 0`.
 - **Pmmm DCT** requires mirror planes in x, y, z.
-- **HexZ (z-mirror)** supports `t_z = 0`; for the glide case (`t_z = 1/2`), `Nz` must be divisible by 4.
-- Non‑orthogonal boxes other than hex (`γ=120°`) disable CrysFFT.
+- **ObliqueZ (z-mirror)** supports `t_z = 0`; for the glide case (`t_z = 1/2`), `Nz` must be divisible by 4.
+- Non‑orthogonal boxes are supported only for the z‑mirror path when α=β=90°.
 
 ---
 
@@ -204,7 +210,7 @@ falls back to the irreducible basis if neither is available.
 
 - `FftwCrysFFTPmmm`: Pmmm DCT-II/III using FFTW REDFT10/REDFT01.
 - `FftwCrysFFTRecursive3m`: recursive 3m algorithm with twiddle-factor caches.
-- `FftwCrysFFTHex`: DCT-z + FFT-xy using the hexagonal reciprocal metric.
+- `FftwCrysFFTObliqueZ`: DCT-z + FFT-xy using the full reciprocal metric (γ arbitrary).
 - FFTW multithreading is disabled; concurrency is handled at the solver level (OpenMP over propagators).
 - Thread-local buffers are used to avoid race conditions.
 
@@ -212,7 +218,7 @@ falls back to the irreducible basis if neither is available.
 
 - `CudaCrysFFT`: Pmmm DCT-II/III via `CudaRealTransform` (cuFFT-based).
 - `CudaCrysFFTRecursive3m`: recursive 3m algorithm implemented on GPU, with stream-aware diffusion.
-- `CudaCrysFFTHex`: DCT-z + FFT-xy using cuFFT and hexagonal reciprocal metric.
+- `CudaCrysFFTObliqueZ`: DCT-z + FFT-xy using cuFFT and the full reciprocal metric (γ arbitrary).
 - The CUDA DCT path uses `CudaRealTransform` (see `docs/CudaRealTransform.md`).
 
 ---
@@ -232,38 +238,39 @@ Benchmark setup (FFT-only diffusion step):
 - 200 iterations, 20 warm-up iterations
 - GPU: NVIDIA A10 (CUDA)
 - “off” uses full grid (no space group), “m3” and “pmmm” use the physical grids.
-- Executable: `build/tests/TestCrysFFTBench`
+- Executable: `build/tests/TestCrysFFTBench` (use `--obliquez` for ObliqueZ; `--hex` is deprecated)
+  - Example: `./build/tests/TestCrysFFTBench 64 64 64 200 20 --obliquez`
 
 Results (ms/iter):
 
 | Platform | off | m3-physical | pmmm-physical |
 | --- | ---: | ---: | ---: |
-| CUDA (A10) | 0.1771 | 0.0562 (3.15×) | 0.0903 (1.96×) |
-| CPU (FFTW) | 2.0369 | 0.4160 (4.90×) | 0.5975 (3.41×) |
+| CUDA (A10) | 0.1773 | 0.0564 (3.14×) | 0.0907 (1.96×) |
+| CPU (FFTW) | 2.0901 | 0.4115 (5.08×) | 0.5792 (3.61×) |
 
 Notes:
 - Speedups are computed relative to “off” on the same platform.
 - The Pmmm result is forced even when 3m is available to enable direct comparison.
 
-### 8.2 64<sup>3</sup> FFT-only benchmark (Hexagonal, P6/mmm)
+### 8.2 64<sup>3</sup> FFT-only benchmark (Hexagonal example, P6/mmm)
 
 Benchmark setup (FFT-only diffusion step):
 - `nx = [64, 64, 64]`, `lx = [4.0, 4.0, 4.0]`, `γ = 120°`
 - `coeff = 0.01`
 - 200 iterations, 20 warm-up iterations
 - GPU: NVIDIA A10 (CUDA)
-- HexZ uses z-mirror physical grid (`Nx x Ny x Nz/2`); “off” uses full FFT.
+- ObliqueZ uses z-mirror physical grid (`Nx x Ny x Nz/2`); “off” uses full FFT.
 
 Results (ms/iter):
 
-| Platform | off | HexZ (DCT-z + FFT-xy) |
+| Platform | off | ObliqueZ (DCT-z + FFT-xy) |
 | --- | ---: | ---: |
-| CUDA (A10) | 0.1312 | 0.1192 (1.10×) |
-| CPU (FFTW) | 2.0010 | 1.3822 (1.45×) |
+| CUDA (A10) | 0.1316 | 0.1196 (1.10×) |
+| CPU (FFTW) | 2.0033 | 1.3995 (1.43×) |
 
 Notes:
-- HexZ speedups are relative to “off” on the same platform.
-- On this grid, hex is not faster on CUDA; benefits may appear on larger grids.
+- ObliqueZ speedups are relative to “off” on the same platform.
+- On this grid, ObliqueZ is only marginally faster on CUDA; benefits may appear on larger grids.
 
 ### 8.3 Phase support (example grids)
 
@@ -272,7 +279,7 @@ in `examples/scft/phases/*.py` (same set as `tests/TestSpaceGroupPhases.py`).
 Availability depends on the space group *and* grid constraints (3D, even `nx`,
 orthogonal box, periodic BCs, and for 3m also the translation constraints).
 
-| Phase | Space group | M3 recursive | Pmmm DCT | HexZ (z-mirror) |
+| Phase | Space group | M3 recursive | Pmmm DCT | ObliqueZ (z-mirror) |
 | --- | --- | :---: | :---: | :---: |
 | BCC | Im-3m (529) | ✓ | ✓ |
 | FCC | Fm-3m (523) | ✓ | ✓ |
@@ -294,7 +301,7 @@ Notes:
 - “✗” means CrysFFT is unavailable for that phase/grid; the solver uses the
   irreducible basis with standard FFT.
 - **SG (I4_132)**: no mirror planes and no 3m translations → neither Pmmm nor M3 applies.
-- **HexZ (z-mirror) (P6/mmm, P6_3/mmc)**: requires even `Nz`; for glide mirror (t<sub>z</sub>=1/2),
+- **ObliqueZ (z-mirror) (P6/mmm, P6_3/mmc)**: requires even `Nz`; for glide mirror (t<sub>z</sub>=1/2),
   `Nz` must be divisible by 4.
 
 ---

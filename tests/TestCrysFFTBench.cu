@@ -2,7 +2,7 @@
  * @file TestCrysFFTBench.cu
  * @brief CUDA FFT-only benchmark for CrysFFT (Pmmm/3m) vs full FFT.
  *
- * Usage: ./TestCrysFFTBench [Nx Ny Nz] [iters] [warmup] [--cpu] [--hex]
+ * Usage: ./TestCrysFFTBench [Nx Ny Nz] [iters] [warmup] [--cpu] [--obliquez]
  * Defaults: Nx=Ny=Nz=64, iters=100, warmup=10
  */
 
@@ -20,9 +20,9 @@
 
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"
-#include "CudaCrysFFTHex.h"
+#include "CudaCrysFFTObliqueZ.h"
 #include "CudaCrysFFTRecursive3m.h"
-#include "FftwCrysFFTHex.h"
+#include "FftwCrysFFTObliqueZ.h"
 #include "FftwCrysFFTPmmm.h"
 #include "FftwCrysFFTRecursive3m.h"
 #include "SpaceGroup.h"
@@ -241,7 +241,7 @@ int main(int argc, char** argv)
     int iters = 100;
     int warmup = 10;
     bool bench_cpu = false;
-    bool bench_hex = false;
+    bool bench_oblique = false;
 
     std::vector<int> args;
     for (int i = 1; i < argc; ++i)
@@ -251,9 +251,15 @@ int main(int argc, char** argv)
             bench_cpu = true;
             continue;
         }
+        if (std::strcmp(argv[i], "--obliquez") == 0 || std::strcmp(argv[i], "--oblique-z") == 0)
+        {
+            bench_oblique = true;
+            continue;
+        }
         if (std::strcmp(argv[i], "--hex") == 0)
         {
-            bench_hex = true;
+            bench_oblique = true;
+            std::fprintf(stderr, "Warning: --hex is deprecated; use --obliquez instead.\n");
             continue;
         }
         args.push_back(std::atoi(argv[i]));
@@ -484,12 +490,17 @@ int main(int argc, char** argv)
         std::printf("Speedup (3m/off): %.3fx\n", cpu_ms_off / cpu_ms_3m);
     }
 
-    // === Optional Hex bench (enable with --hex or FTS_BENCH_HEX=1) ===
+    // === Optional ObliqueZ bench (enable with --obliquez or FTS_BENCH_OBLIQUEZ=1) ===
+    if (std::getenv("FTS_BENCH_OBLIQUEZ") != nullptr)
+        bench_oblique = true;
     if (std::getenv("FTS_BENCH_HEX") != nullptr)
-        bench_hex = true;
-    if (bench_hex)
     {
-        std::printf("\n=== HexZ (P6/mmm) FFT-only benchmark ===\n");
+        bench_oblique = true;
+        std::fprintf(stderr, "Warning: FTS_BENCH_HEX is deprecated; use FTS_BENCH_OBLIQUEZ.\n");
+    }
+    if (bench_oblique)
+    {
+        std::printf("\n=== ObliqueZ (P6/mmm) FFT-only benchmark ===\n");
         const double gamma_hex = 2.0 * M_PI / 3.0;
         const std::array<double, 6> cell_hex = {Lx, Ly, Lz, M_PI/2, M_PI/2, gamma_hex};
         const int M_hex_phys = Nx * Ny * (Nz / 2);
@@ -497,8 +508,8 @@ int main(int argc, char** argv)
         std::vector<double> h_hex_phys(M_hex_phys, 0.0);
         fill_hex_physical_field(h_hex_phys, h_full, Nx, Ny, Nz);
 
-        // HexZ CrysFFT (CudaCrysFFTHex)
-        CudaCrysFFTHex crys_hex({Nx, Ny, Nz}, cell_hex);
+        // ObliqueZ CrysFFT (CudaCrysFFTObliqueZ)
+        CudaCrysFFTObliqueZ crys_hex({Nx, Ny, Nz}, cell_hex);
         crys_hex.set_contour_step(coeff);
 
         double *d_hex_in{}, *d_hex_out{};
@@ -560,17 +571,17 @@ int main(int argc, char** argv)
         cudaFree(d_hex_freq);
         cudaFree(d_boltz);
 
-        std::printf("HexZ DCTz+FFTxy: %.4f ms/iter\n", ms_hex);
-        std::printf("HexZ Full FFT: %.4f ms/iter\n", ms_hex_off);
-        std::printf("Speedup (HexZ/off): %.3fx\n", ms_hex_off / ms_hex);
+        std::printf("ObliqueZ DCTz+FFTxy: %.4f ms/iter\n", ms_hex);
+        std::printf("ObliqueZ Full FFT: %.4f ms/iter\n", ms_hex_off);
+        std::printf("Speedup (ObliqueZ/off): %.3fx\n", ms_hex_off / ms_hex);
 
         if (bench_cpu)
         {
-            std::printf("\n=== CPU HexZ FFT-only benchmark ===\n");
+            std::printf("\n=== CPU ObliqueZ FFT-only benchmark ===\n");
 
             std::vector<double> cpu_hex_in = h_hex_phys;
             std::vector<double> cpu_hex_out(M_hex_phys, 0.0);
-            FftwCrysFFTHex crys_cpu_hex({Nx, Ny, Nz}, cell_hex);
+            FftwCrysFFTObliqueZ crys_cpu_hex({Nx, Ny, Nz}, cell_hex);
             crys_cpu_hex.set_contour_step(coeff);
 
             for (int i = 0; i < warmup; ++i)
@@ -619,9 +630,9 @@ int main(int argc, char** argv)
             fftw_destroy_plan(plan_hex_bwd_cpu);
             fftw_free(freq_hex);
 
-            std::printf("HexZ DCTz+FFTxy: %.4f ms/iter\n", cpu_ms_hex);
-            std::printf("HexZ Full FFT: %.4f ms/iter\n", cpu_ms_hex_off);
-            std::printf("Speedup (HexZ/off): %.3fx\n", cpu_ms_hex_off / cpu_ms_hex);
+            std::printf("ObliqueZ DCTz+FFTxy: %.4f ms/iter\n", cpu_ms_hex);
+            std::printf("ObliqueZ Full FFT: %.4f ms/iter\n", cpu_ms_hex_off);
+            std::printf("Speedup (ObliqueZ/off): %.3fx\n", cpu_ms_hex_off / cpu_ms_hex);
         }
     }
 

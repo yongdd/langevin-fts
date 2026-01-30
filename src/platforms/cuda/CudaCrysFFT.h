@@ -34,7 +34,7 @@ enum class CudaCrysFFTMode
     None,
     Recursive3m,
     PmmmDct,
-    HexZ
+    ObliqueZ
 };
 
 /**

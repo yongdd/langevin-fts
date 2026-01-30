@@ -1629,7 +1629,6 @@ __global__ void kernel_dst4_2d_postOp_x(
 // 3D DCT Kernels
 // Data layout: [Nx][Ny][Nz] with linear index = (ix * Ny + iy) * Nz + iz
 //==============================================================================
-
 //------------------------------------------------------------------------------
 // 3D DCT-1 Kernels (using mirror extension for 3D FFT)
 //------------------------------------------------------------------------------
@@ -4680,7 +4679,8 @@ void CudaRealTransform3D::execute_z_dct2_to_zmajor(double* d_data, double* d_out
 
     cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
 
-    kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
+    kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
+        d_data, d_complex, Nx_, Ny_, Nz_);
     cufftExecZ2D(plan_z_, d_complex, d_work_);
     if (dct2_sin_z_ && dct2_cos_z_)
         kernel_dct2_3d_postOp_z_lut_zmajor<<<numBlocks_postOp, blockSize, 0, stream_>>>(
