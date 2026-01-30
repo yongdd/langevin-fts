@@ -390,6 +390,26 @@ public:
     void execute(double* d_data, cudaStream_t stream);
 
     /**
+     * @brief Execute Z-only DCT-2 (in-place).
+     *
+     * Runs the Z-dimension DCT-2 and copies the result back to d_data.
+     */
+    void execute_z_dct2(double* d_data);
+    void execute_z_dct2(double* d_data, cudaStream_t stream);
+    void execute_z_dct2_to_zmajor(double* d_data, double* d_out_zmajor);
+    void execute_z_dct2_to_zmajor(double* d_data, double* d_out_zmajor, cudaStream_t stream);
+
+    /**
+     * @brief Execute Z-only DCT-3 (in-place).
+     *
+     * Runs the Z-dimension DCT-3 and copies the result back to d_data.
+     */
+    void execute_z_dct3(double* d_data);
+    void execute_z_dct3(double* d_data, cudaStream_t stream);
+    void execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz);
+    void execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz, cudaStream_t stream);
+
+    /**
      * @brief Set CUDA stream for execution.
      */
     void set_stream(cudaStream_t stream);

@@ -43,6 +43,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
+#include "CudaCrysFFTHex.h"
 #include "CrysFFTSelector.h"
 
 #ifndef M_PI
@@ -445,27 +446,29 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
 
     if constexpr (std::is_same_v<T, double>)
     {
-        if (space_group_ != nullptr && dim_ == 3 && is_periodic_ && cb->is_orthogonal())
+        if (space_group_ != nullptr && dim_ == 3 && is_periodic_)
         {
             const auto nx = cb->get_nx();
             std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
             const auto selection = select_crysfft_mode(space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal());
-            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm)
+            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_hex_z)
             {
                 const int Nx2 = nx[0] / 2;
                 const int Ny2 = nx[1] / 2;
                 const int Nz2 = nx[2] / 2;
-                const int M_phys = Nx2 * Ny2 * Nz2;
+                const int M_phys_pmmm = Nx2 * Ny2 * Nz2;
+                const int M_phys_hex = nx[0] * nx[1] * Nz2;
                 const int M_reduced = space_group_->get_n_reduced_basis();
                 const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
                 const bool use_m3_basis = space_group_->using_m3_physical_basis();
                 const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
+                const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
 
                 std::vector<int> phys_to_reduced;
                 std::vector<int> reduced_to_phys;
 
                 auto check_identity = [&](bool even_indices) -> bool {
-                    if (M_reduced != M_phys)
+                    if (M_reduced != M_phys_pmmm)
                         return false;
                     int idx = 0;
                     for (int ix = 0; ix < Nx2; ++ix)
@@ -489,7 +492,7 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                 };
 
                 auto build_mapping = [&](bool even_indices) -> bool {
-                    phys_to_reduced.resize(M_phys);
+                    phys_to_reduced.resize(M_phys_pmmm);
                     reduced_to_phys.assign(M_reduced, -1);
                     std::vector<int> coverage(M_reduced, 0);
                     int idx = 0;
@@ -520,7 +523,63 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                     return true;
                 };
 
-                auto finalize_crysfft = [&](CudaCrysFFTMode mode, bool identity_forced) {
+                auto check_identity_hex = [&](int z_shift) -> bool {
+                    if (M_reduced != M_phys_hex)
+                        return false;
+                    int idx = 0;
+                    for (int ix = 0; ix < nx[0]; ++ix)
+                    {
+                        for (int iy = 0; iy < nx[1]; ++iy)
+                        {
+                            for (int iz = 0; iz < Nz2; ++iz)
+                            {
+                                int iz_full = iz + z_shift;
+                                if (iz_full >= nx[2])
+                                    iz_full -= nx[2];
+                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
+                                const int reduced_idx = full_to_reduced[full_idx];
+                                if (reduced_idx != idx)
+                                    return false;
+                                ++idx;
+                            }
+                        }
+                    }
+                    return true;
+                };
+
+                auto build_mapping_hex = [&](int z_shift) -> bool {
+                    phys_to_reduced.resize(M_phys_hex);
+                    reduced_to_phys.assign(M_reduced, -1);
+                    std::vector<int> coverage(M_reduced, 0);
+                    int idx = 0;
+                    for (int ix = 0; ix < nx[0]; ++ix)
+                    {
+                        for (int iy = 0; iy < nx[1]; ++iy)
+                        {
+                            for (int iz = 0; iz < Nz2; ++iz)
+                            {
+                                int iz_full = iz + z_shift;
+                                if (iz_full >= nx[2])
+                                    iz_full -= nx[2];
+                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
+                                const int reduced_idx = full_to_reduced[full_idx];
+                                phys_to_reduced[idx] = reduced_idx;
+                                if (reduced_to_phys[reduced_idx] < 0)
+                                    reduced_to_phys[reduced_idx] = idx;
+                                coverage[reduced_idx] += 1;
+                                ++idx;
+                            }
+                        }
+                    }
+                    for (int i = 0; i < M_reduced; ++i)
+                    {
+                        if (coverage[i] == 0)
+                            return false;
+                    }
+                    return true;
+                };
+
+                auto finalize_crysfft = [&](CudaCrysFFTMode mode, int M_phys, bool identity_forced) {
                     crysfft_physical_size_ = M_phys;
                     crysfft_reduced_size_ = M_reduced;
 
@@ -553,12 +612,15 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                     }
 
                     auto lx = cb->get_lx();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+                    auto angles = cb->get_angles();
+                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
 
                     for (int i = 0; i < n_streams; i++)
                     {
                         if (mode == CudaCrysFFTMode::Recursive3m)
                             crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, selection.m3_translations);
+                        else if (mode == CudaCrysFFTMode::HexZ)
+                            crysfft_[i] = new CudaCrysFFTHex(nx_logical, cell_para);
                         else
                             crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
 
@@ -577,11 +639,36 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                     {
                         if (!check_identity(true))
                             throw_with_line_number("M3 physical basis does not match recursive 3m CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, true);
+                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, true);
                     }
                     else if (build_mapping(true))
                     {
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, false);
+                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, false);
+                    }
+                }
+
+                if (!use_crysfft_ && selection.mode == CrysFFTChoice::HexZ)
+                {
+                    if (use_m3_basis || use_pmmm_basis)
+                        throw_with_line_number("Hex CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+
+                    if (!selection.can_hex_z)
+                        throw_with_line_number("Hex CrysFFT selected but z-mirror symmetry is unavailable.");
+
+                    const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
+                                                      : selection.hex_z_shift;
+                    if (use_hex_basis && z_shift != selection.hex_z_shift)
+                        throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
+
+                    if (use_hex_basis)
+                    {
+                        if (!check_identity_hex(z_shift))
+                            throw_with_line_number("Z-mirror physical basis does not match Hex CrysFFT grid ordering.");
+                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
+                    }
+                    else if (build_mapping_hex(z_shift))
+                    {
+                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, false);
                     }
                 }
 
@@ -593,11 +680,26 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                     {
                         if (!check_identity(false))
                             throw_with_line_number("Pmmm physical basis does not match Pmmm CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, true);
+                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, true);
                     }
                     else if (build_mapping(false))
                     {
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, false);
+                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, false);
+                    }
+                }
+
+                if (!use_crysfft_ && selection.mode == CrysFFTChoice::None && selection.can_hex_z)
+                {
+                    if (use_hex_basis)
+                    {
+                        const int z_shift = space_group_->get_z_mirror_shift();
+                        if (!check_identity_hex(z_shift))
+                            throw_with_line_number("Z-mirror physical basis does not match Hex CrysFFT grid ordering.");
+                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
+                    }
+                    else if (build_mapping_hex(selection.hex_z_shift))
+                    {
+                        finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, false);
                     }
                 }
             }
@@ -621,7 +723,8 @@ void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
         if (use_crysfft_)
         {
             auto lx = cb->get_lx();
-            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+            auto angles = cb->get_angles();
+            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
             for (int i = 0; i < n_streams; ++i)
             {
                 if (crysfft_[i] != nullptr)

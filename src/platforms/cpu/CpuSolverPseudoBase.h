@@ -46,8 +46,9 @@
 #include "Pseudo.h"
 #include "FFTFactory.h"
 #include "SpaceGroup.h"
-#include "FftwCrysFFT.h"
+#include "FftwCrysFFTPmmm.h"
 #include "FftwCrysFFTRecursive3m.h"
+#include "FftwCrysFFTHex.h"
 
 /**
  * @class CpuSolverPseudoBase
@@ -119,11 +120,13 @@ protected:
     {
         None,
         PmmmDct,
-        Recursive3m
+        Recursive3m,
+        HexZ
     };
 
-    std::unique_ptr<FftwCrysFFT> crysfft_pmmm_;
+    std::unique_ptr<FftwCrysFFTPmmm> crysfft_pmmm_;
     std::unique_ptr<FftwCrysFFTRecursive3m> crysfft_recursive_;
+    std::unique_ptr<FftwCrysFFTHex> crysfft_hex_;
     CrysFFTMode crysfft_mode_ = CrysFFTMode::None;
     std::map<int, double> ds_values_;
 
@@ -138,6 +141,7 @@ protected:
     bool use_crysfft() const { return crysfft_mode_ != CrysFFTMode::None; }
     bool use_crysfft_recursive() const { return crysfft_mode_ == CrysFFTMode::Recursive3m; }
     bool use_crysfft_pmmm() const { return crysfft_mode_ == CrysFFTMode::PmmmDct; }
+    bool use_crysfft_hex() const { return crysfft_mode_ == CrysFFTMode::HexZ; }
     bool use_crysfft_identity_map() const { return crysfft_identity_map_; }
 
     int get_crysfft_physical_size() const;

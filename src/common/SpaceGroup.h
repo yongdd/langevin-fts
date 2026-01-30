@@ -50,6 +50,9 @@ private:
     // Physical basis flags
     bool use_pmmm_physical_basis_{false};
     bool use_m3_physical_basis_{false};
+    bool use_z_mirror_physical_basis_{false};
+    int z_mirror_shift_{0};
+    double z_mirror_translation_{0.0};
 
     /**
      * @brief Initialize space group from Hall number.
@@ -211,6 +214,21 @@ public:
     bool get_m3_translations(std::array<double, 9>& g, double tol = 1e-10) const;
 
     /**
+     * @brief Get translation along z for mirror plane (x,y,-z) symmetry.
+     *
+     * Searches symmetry operations for reflection:
+     *   (x,y,z) -> (x,y,-z) + t
+     * Returns the z-translation t_z in [0,1).
+     *
+     * Only pure z-mirrors with integer x/y translations are accepted.
+     *
+     * @param t_z Output translation along z in [0,1).
+     * @param tol Tolerance for translation matching.
+     * @return True if a valid mirror is found.
+     */
+    bool get_z_mirror_translation(double& t_z, double tol = 1e-10) const;
+
+    /**
      * @brief Enable Pmmm physical basis (1/8 grid) mapping.
      *
      * Replaces the irreducible basis with the Pmmm physical basis
@@ -229,6 +247,19 @@ public:
      */
     void enable_m3_physical_basis();
     bool using_m3_physical_basis() const { return use_m3_physical_basis_; }
+
+    /**
+     * @brief Enable z-mirror physical basis (half grid along z).
+     *
+     * Uses a mirror plane perpendicular to z (optionally with a 1/2 translation),
+     * enabling a half-grid physical basis along z. Requires 3D even Nz.
+     *
+     * For t_z = 1/2, Nz must be divisible by 4 to align the half-cell shift.
+     */
+    void enable_z_mirror_physical_basis();
+    bool using_z_mirror_physical_basis() const { return use_z_mirror_physical_basis_; }
+    int get_z_mirror_shift() const { return z_mirror_shift_; }
+    double get_z_mirror_translation() const { return z_mirror_translation_; }
 
 };
 

@@ -720,6 +720,10 @@ Example:
              "Enable M3 physical basis (1/8 even-index grid) mapping.")
         .def("using_m3_physical_basis", &SpaceGroup::using_m3_physical_basis,
              "Return True if M3 physical basis is enabled.")
+        .def("enable_z_mirror_physical_basis", &SpaceGroup::enable_z_mirror_physical_basis,
+             "Enable z-mirror physical basis (half grid along z).")
+        .def("using_z_mirror_physical_basis", &SpaceGroup::using_z_mirror_physical_basis,
+             "Return True if z-mirror physical basis is enabled.")
         .def("to_reduced_basis", [](SpaceGroup& obj, py::array_t<double> full_field)
         {
             py::buffer_info buf = full_field.request();
