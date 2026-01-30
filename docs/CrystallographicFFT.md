@@ -71,7 +71,7 @@ Both CPU and CUDA implementations are provided (`FftwCrysFFTRecursive3m` and `Cu
 
 ### 2.3 HexZ (z-mirror) (DCT-z + FFT-xy)
 
-For hexagonal space groups with a pure z-mirror (translation `t_z = 0`), the diffusion step uses:
+For hexagonal space groups with a z-mirror (translation `t_z = 0` or `t_z = 1/2`), the diffusion step uses:
 
 ```
 q_out = DCT-III_z[ exp(-k^2 * coeff) * FFT_xy[ DCT-II_z[q_in] ] ]
@@ -79,7 +79,7 @@ q_out = DCT-III_z[ exp(-k^2 * coeff) * FFT_xy[ DCT-II_z[q_in] ] ]
 
 - The physical grid is `Nx x Ny x (Nz/2)` (mirror in z only).
 - The in-plane FFT uses the **hexagonal reciprocal metric** (`γ = 120°`).
-- Only the pure mirror case (`t_z = 0`) is supported; the glide case (`t_z = 1/2`) is not yet implemented.
+- Glide mirror (`t_z = 1/2`) uses a shifted z-slab; this requires `Nz % 4 == 0`.
 
 ---
 
@@ -97,13 +97,13 @@ CrysFFT is enabled automatically when all of the following are true:
 Selection order (auto):
 1. **3m recursive** if the space group provides 3m translations *and* `Nz/2 % 8 == 0`.
 2. **Pmmm DCT** if the space group has mirror planes in x/y/z.
-3. **HexZ (z-mirror)** if the space group has a z-mirror with `t_z = 0` and the cell is hexagonal (`γ = 120°`).
+3. **HexZ (z-mirror)** if the space group has a z-mirror with `t_z = 0` or `t_z = 1/2` and the cell is hexagonal (`γ = 120°`).
 4. Otherwise, fall back to standard FFT.
 
 If a physical basis is forced in `SpaceGroup`, the selector respects it:
 - **Pmmm physical basis forced** → Pmmm DCT (if mirror planes exist).
 - **M3 physical basis forced** → 3m recursive (if translations and alignment are valid).
-- **Z-mirror physical basis forced** → HexZ (z-mirror) (only if `t_z = 0` and hexagonal cell); otherwise CrysFFT is disabled.
+- **Z-mirror physical basis forced** → HexZ (z-mirror) (requires hexagonal cell; if `t_z = 1/2`, also requires `Nz % 4 == 0`).
 
 CrysFFT is used in pseudo-spectral solvers for continuous (RQM4/RK2) and discrete chains (full and half-bond steps), and in the stress computation path when applicable.
 
@@ -143,8 +143,7 @@ space-group symmetry is enabled.
 
 - Stores the physical grid for z-mirror symmetry: `Nx x Ny x (Nz/2)`.
 - Mapping becomes identity (no gather/scatter) when z-mirror is enabled.
-- For `t_z = 1/2`, the basis uses a shifted z-slab (requires `Nz % 4 == 0`), but
-  CrysFFT is not available until the glide-mirror variant is implemented.
+- For `t_z = 1/2`, the basis uses a shifted z-slab (requires `Nz % 4 == 0`); HexZ remains available.
 
 **Optimizer note:** the field optimizer always uses the **irreducible** grid.
 When a physical basis is active, the solver maps reduced ↔ irreducible
@@ -189,12 +188,12 @@ falls back to the irreducible basis if neither is available.
 - 3D only.
 - Periodic boundary conditions only.
 - Orthogonal boxes required for Pmmm / 3m.
-- HexZ (z-mirror) supports hexagonal cells (`γ = 120°`) with `t_z = 0`.
+- HexZ (z-mirror) supports hexagonal cells (`γ = 120°`) with `t_z = 0` or `t_z = 1/2`.
 - Even `Nz` required for z-mirror; even `Nx, Ny, Nz` required for Pmmm / 3m.
 - Real-valued fields only.
 - **3m recursive** requires 3m translations and `Nz/2 % 8 == 0`.
 - **Pmmm DCT** requires mirror planes in x, y, z.
-- **HexZ (z-mirror)** currently supports only `t_z = 0` (pure mirror), not the glide case.
+- **HexZ (z-mirror)** supports `t_z = 0`; for the glide case (`t_z = 1/2`), `Nz` must be divisible by 4.
 - Non‑orthogonal boxes other than hex (`γ=120°`) disable CrysFFT.
 
 ---
