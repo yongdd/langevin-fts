@@ -126,6 +126,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         crysfft_mode_ = CrysFFTMode::None;
         crysfft_pmmm_.reset();
         crysfft_recursive_.reset();
+        crysfft_hex_.reset();
         crysfft_full_indices_.clear();
         crysfft_reduced_indices_.clear();
         crysfft_kx2_.clear();
@@ -152,15 +153,17 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                 const auto nx = cb->get_nx();
                 std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
                 const auto selection = select_crysfft_mode(space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal());
-                if (selection.mode != CrysFFTChoice::None || selection.can_pmmm)
+                if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_hex_z)
                 {
                     auto lx = cb->get_lx();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2};
+                    auto angles = cb->get_angles();
+                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
 
                     const int M_reduced = space_group_->get_n_reduced_basis();
                     const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
                     const bool use_m3_basis = space_group_->using_m3_physical_basis();
                     const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
+                    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
 
                     auto check_identity = [&](bool even_indices) -> bool {
                         const int Nx2 = nx[0] / 2;
@@ -244,6 +247,84 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                         return true;
                     };
 
+                    auto check_identity_hex = [&](int z_shift) -> bool {
+                        const int Nz2 = nx[2] / 2;
+                        const int M_phys = nx[0] * nx[1] * Nz2;
+                        if (M_reduced != M_phys)
+                            return false;
+
+                        int idx = 0;
+                        for (int ix = 0; ix < nx[0]; ++ix)
+                        {
+                            for (int iy = 0; iy < nx[1]; ++iy)
+                            {
+                                for (int iz = 0; iz < Nz2; ++iz)
+                                {
+                                    int iz_full = iz + z_shift;
+                                    if (iz_full >= nx[2])
+                                        iz_full -= nx[2];
+                                    const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
+                                    const int reduced_idx = full_to_reduced[full_idx];
+                                    if (reduced_idx != idx)
+                                        return false;
+                                    ++idx;
+                                }
+                            }
+                        }
+                        return true;
+                    };
+
+                    auto build_mapping_hex = [&](int z_shift) -> bool {
+                        const int Nz2 = nx[2] / 2;
+                        const int M_phys = nx[0] * nx[1] * Nz2;
+
+                        crysfft_full_indices_.resize(M_phys);
+                        crysfft_reduced_indices_.resize(M_phys);
+                        crysfft_identity_map_ = false;
+
+                        std::vector<int> coverage(M_reduced, 0);
+                        int idx = 0;
+                        for (int ix = 0; ix < nx[0]; ++ix)
+                        {
+                            for (int iy = 0; iy < nx[1]; ++iy)
+                            {
+                                for (int iz = 0; iz < Nz2; ++iz)
+                                {
+                                    int iz_full = iz + z_shift;
+                                    if (iz_full >= nx[2])
+                                        iz_full -= nx[2];
+                                    const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
+                                    crysfft_full_indices_[idx] = full_idx;
+                                    const int reduced_idx = full_to_reduced[full_idx];
+                                    crysfft_reduced_indices_[idx] = reduced_idx;
+                                    coverage[reduced_idx] += 1;
+                                    ++idx;
+                                }
+                            }
+                        }
+
+                        for (int i = 0; i < M_reduced; ++i)
+                        {
+                            if (coverage[i] == 0)
+                                return false;
+                        }
+
+                        if (M_reduced == M_phys)
+                        {
+                            bool identity = true;
+                            for (int i = 0; i < M_phys; ++i)
+                            {
+                                if (crysfft_reduced_indices_[i] != i)
+                                {
+                                    identity = false;
+                                    break;
+                                }
+                            }
+                            crysfft_identity_map_ = identity;
+                        }
+                        return true;
+                    };
+
                     if (selection.mode == CrysFFTChoice::Recursive3m)
                     {
                         if (use_pmmm_basis)
@@ -273,7 +354,7 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                     {
                         if (use_m3_basis)
                             throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-                        crysfft_pmmm_ = std::make_unique<FftwCrysFFT>(nx_logical, cell_para);
+                        crysfft_pmmm_ = std::make_unique<FftwCrysFFTPmmm>(nx_logical, cell_para);
                         if (use_pmmm_basis)
                         {
                             if (!check_identity(false))
@@ -288,6 +369,40 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
                         else
                         {
                             crysfft_pmmm_.reset();
+                            crysfft_full_indices_.clear();
+                            crysfft_reduced_indices_.clear();
+                            crysfft_identity_map_ = false;
+                        }
+                    }
+
+                    const bool want_hex =
+                        (selection.mode == CrysFFTChoice::HexZ) ||
+                        (selection.mode == CrysFFTChoice::None && selection.can_hex_z);
+                    if (crysfft_mode_ == CrysFFTMode::None && want_hex)
+                    {
+                        if (use_m3_basis || use_pmmm_basis)
+                            throw_with_line_number("Hex CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+
+                        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
+                                                          : selection.hex_z_shift;
+                        if (use_hex_basis && z_shift != selection.hex_z_shift)
+                            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
+
+                        crysfft_hex_ = std::make_unique<FftwCrysFFTHex>(nx_logical, cell_para);
+                        if (use_hex_basis)
+                        {
+                            if (!check_identity_hex(z_shift))
+                                throw_with_line_number("Z-mirror physical basis does not match Hex CrysFFT grid ordering.");
+                            crysfft_identity_map_ = true;
+                            crysfft_mode_ = CrysFFTMode::HexZ;
+                        }
+                        else if (build_mapping_hex(z_shift))
+                        {
+                            crysfft_mode_ = CrysFFTMode::HexZ;
+                        }
+                        else
+                        {
+                            crysfft_hex_.reset();
                             crysfft_full_indices_.clear();
                             crysfft_reduced_indices_.clear();
                             crysfft_identity_map_ = false;
@@ -393,6 +508,8 @@ int CpuSolverPseudoBase<T>::get_crysfft_physical_size() const
         return crysfft_recursive_->get_M_physical();
     if (use_crysfft_pmmm() && crysfft_pmmm_)
         return crysfft_pmmm_->get_M_physical();
+    if (use_crysfft_hex() && crysfft_hex_)
+        return crysfft_hex_->get_M_physical();
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
 }
 
@@ -403,6 +520,8 @@ void CpuSolverPseudoBase<T>::crysfft_set_cell_para(const std::array<double, 6>& 
         crysfft_recursive_->set_cell_para(cell_para);
     if (use_crysfft_pmmm() && crysfft_pmmm_)
         crysfft_pmmm_->set_cell_para(cell_para);
+    if (use_crysfft_hex() && crysfft_hex_)
+        crysfft_hex_->set_cell_para(cell_para);
 }
 
 template <typename T>
@@ -416,6 +535,11 @@ void CpuSolverPseudoBase<T>::crysfft_set_contour_step(double coeff)
     if (use_crysfft_pmmm() && crysfft_pmmm_)
     {
         crysfft_pmmm_->set_contour_step(coeff);
+        return;
+    }
+    if (use_crysfft_hex() && crysfft_hex_)
+    {
+        crysfft_hex_->set_contour_step(coeff);
         return;
     }
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
@@ -432,6 +556,11 @@ void CpuSolverPseudoBase<T>::crysfft_diffusion(double* q_in, double* q_out) cons
     if (use_crysfft_pmmm() && crysfft_pmmm_)
     {
         crysfft_pmmm_->diffusion(q_in, q_out);
+        return;
+    }
+    if (use_crysfft_hex() && crysfft_hex_)
+    {
+        crysfft_hex_->diffusion(q_in, q_out);
         return;
     }
     throw_with_line_number("CrysFFT requested but CrysFFT is not initialized.");
@@ -521,7 +650,8 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
             if (use_crysfft())
             {
                 auto lx = cb->get_lx();
-                crysfft_set_cell_para({lx[0], lx[1], lx[2], M_PI/2, M_PI/2, M_PI/2});
+                auto angles = cb->get_angles();
+                crysfft_set_cell_para({lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]});
             }
             if (use_crysfft_pmmm())
             {

@@ -1,5 +1,5 @@
 /**
- * @file FftwCrysFFT.h
+ * @file FftwCrysFFTPmmm.h
  * @brief CPU Crystallographic FFT using DCT-II/III for Pmmm symmetry.
  *
  * For Pmmm symmetry (3 perpendicular mirrors), DCT-II/III provides exact
@@ -27,8 +27,8 @@
  * @see Fftw3mFFT for the faster 2x2y2z algorithm
  */
 
-#ifndef FFTW_CRYS_FFT_H_
-#define FFTW_CRYS_FFT_H_
+#ifndef FFTW_CRYS_FFT_PMMM_H_
+#define FFTW_CRYS_FFT_PMMM_H_
 
 #include <array>
 #include <atomic>
@@ -39,7 +39,7 @@
 #include <fftw3.h>
 
 /**
- * @class FftwCrysFFT
+ * @class FftwCrysFFTPmmm
  * @brief CPU crystallographic FFT using FFTW3 DCT-II/III.
  *
  * Uses DCT-II (forward) and DCT-III (backward) for Pmmm symmetry.
@@ -50,7 +50,7 @@
  * - Physical grid: (Nx/2) × (Ny/2) × (Nz/2)
  * - Boltzmann factors: one real array per ds value
  */
-class FftwCrysFFT
+class FftwCrysFFTPmmm
 {
 private:
     std::array<int, 3> nx_logical_;    ///< Logical grid dimensions (Nx, Ny, Nz)
@@ -106,14 +106,14 @@ private:
 
 public:
     /**
-     * @brief Construct FftwCrysFFT for given grid.
+     * @brief Construct FftwCrysFFTPmmm for given grid.
      *
      * @param nx_logical Logical grid dimensions (must be even)
      * @param cell_para  Cell parameters [Lx, Ly, Lz, alpha, beta, gamma]
      *                   Angles in radians. For cubic: all 90° = π/2.
      * @param trans_part (Ignored for DCT-II/III, kept for API compatibility)
      */
-    FftwCrysFFT(
+    FftwCrysFFTPmmm(
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para,
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
@@ -121,7 +121,7 @@ public:
     /**
      * @brief Destructor. Frees memory and FFTW plans.
      */
-    ~FftwCrysFFT();
+    ~FftwCrysFFTPmmm();
 
     /**
      * @brief Update cell parameters.
@@ -193,4 +193,4 @@ public:
     double* get_io_buffer() { return io_buffer_; }
 };
 
-#endif
+#endif  // FFTW_CRYS_FFT_PMMM_H_

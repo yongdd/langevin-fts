@@ -602,7 +602,7 @@ void SpaceGroup::symmetrize(const double* field_in, double* field_out, int n_fie
 
 void SpaceGroup::symmetrize_reduced_basis(double* reduced_field, int n_fields) const
 {
-    if (!use_pmmm_physical_basis_ && !use_m3_physical_basis_)
+    if (!use_pmmm_physical_basis_ && !use_m3_physical_basis_ && !use_z_mirror_physical_basis_)
         return;
     if (reduced_to_irreducible_map_.empty() || orbit_counts_full_.empty())
         return;
@@ -751,6 +751,61 @@ bool SpaceGroup::get_m3_translations(std::array<double, 9>& g, double tol) const
     }
 
     return found_x && found_y && found_z;
+}
+
+bool SpaceGroup::get_z_mirror_translation(double& t_z, double tol) const
+{
+    auto is_zero_mod1 = [tol](double v) {
+        double r = std::fabs(v - std::round(v));
+        return r < tol;
+    };
+    auto wrap01 = [](double v) {
+        v -= std::floor(v);
+        if (v < 0.0)
+            v += 1.0;
+        return v;
+    };
+    auto wrap_half = [](double v) {
+        v -= std::floor(v + 0.5);
+        return v;
+    };
+
+    bool found = false;
+    double best_norm = std::numeric_limits<double>::infinity();
+    double best_tz = 0.0;
+
+    for (size_t i = 0; i < rotations_.size(); ++i)
+    {
+        const auto& R = rotations_[i];
+        const auto& t = translations_[i];
+
+        const bool off_diag_zero =
+            R[0][1] == 0 && R[0][2] == 0 &&
+            R[1][0] == 0 && R[1][2] == 0 &&
+            R[2][0] == 0 && R[2][1] == 0;
+
+        if (!off_diag_zero)
+            continue;
+        if (!(R[0][0] == 1 && R[1][1] == 1 && R[2][2] == -1))
+            continue;
+
+        if (!is_zero_mod1(t[0]) || !is_zero_mod1(t[1]))
+            continue;
+
+        const double tz = wrap01(t[2]);
+        const double nz = wrap_half(tz);
+        const double norm = nz * nz;
+        if (!found || norm + tol < best_norm)
+        {
+            best_norm = norm;
+            best_tz = tz;
+            found = true;
+        }
+    }
+
+    if (found)
+        t_z = best_tz;
+    return found;
 }
 
 void SpaceGroup::enable_pmmm_physical_basis()
@@ -978,5 +1033,114 @@ void SpaceGroup::enable_m3_physical_basis()
 
     use_m3_physical_basis_ = true;
     use_pmmm_physical_basis_ = false;
+    use_z_mirror_physical_basis_ = false;
     std::cout << "M3 physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
+}
+
+void SpaceGroup::enable_z_mirror_physical_basis()
+{
+    if (use_z_mirror_physical_basis_)
+        return;
+
+    if (nx_.size() != 3)
+        throw_with_line_number("Z-mirror physical basis requires 3D grid.");
+
+    const int Nx = nx_[0];
+    const int Ny = nx_[1];
+    const int Nz = nx_[2];
+
+    if ((Nz % 2) != 0)
+        throw_with_line_number("Z-mirror physical basis requires even Nz.");
+
+    double t_z = 0.0;
+    if (!get_z_mirror_translation(t_z))
+        throw_with_line_number("Space group does not contain (x,y,-z)+t mirror for z-physical basis.");
+
+    // Accept only t_z = 0 or 1/2 (within tolerance)
+    const double tol = 1e-8;
+    double t = t_z;
+    if (std::fabs(t - 1.0) < tol)
+        t = 0.0;
+
+    int shift = 0;
+    if (std::fabs(t) < tol)
+    {
+        shift = 0;
+    }
+    else if (std::fabs(t - 0.5) < tol)
+    {
+        if ((Nz % 4) != 0)
+            throw_with_line_number("Z-mirror physical basis with t_z=1/2 requires Nz divisible by 4.");
+        shift = Nz / 4;
+    }
+    else
+    {
+        throw_with_line_number("Unsupported z-mirror translation (only 0 or 1/2 are supported).");
+    }
+
+    const int Nz2 = Nz / 2;
+    n_irreducible_ = Nx * Ny * Nz2;
+    reduced_basis_indices_.resize(n_irreducible_);
+    full_to_reduced_map_.resize(total_grid_);
+    orbit_counts_.assign(n_irreducible_, 0);
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx; ++ix)
+    {
+        for (int iy = 0; iy < Ny; ++iy)
+        {
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                int iz_full = iz + shift;
+                if (iz_full >= Nz)
+                    iz_full -= Nz;
+                const int full_idx = (ix * Ny + iy) * Nz + iz_full;
+                reduced_basis_indices_[idx++] = full_idx;
+            }
+        }
+    }
+
+    for (int ix = 0; ix < Nx; ++ix)
+    {
+        for (int iy = 0; iy < Ny; ++iy)
+        {
+            for (int iz = 0; iz < Nz; ++iz)
+            {
+                int iz_shift = iz - shift;
+                while (iz_shift < 0)
+                    iz_shift += Nz;
+                while (iz_shift >= Nz)
+                    iz_shift -= Nz;
+
+                int iz2 = (iz_shift < Nz2) ? iz_shift : (Nz - 1 - iz_shift);
+                const int full_idx = (ix * Ny + iy) * Nz + iz;
+                const int reduced_idx = (ix * Ny + iy) * Nz2 + iz2;
+                full_to_reduced_map_[full_idx] = reduced_idx;
+                orbit_counts_[reduced_idx] += 1;
+            }
+        }
+    }
+
+    if (!full_to_reduced_map_full_.empty())
+    {
+        reduced_to_irreducible_map_.resize(n_irreducible_);
+        for (int i = 0; i < n_irreducible_; ++i)
+        {
+            const int full_idx = reduced_basis_indices_[i];
+            reduced_to_irreducible_map_[i] = full_to_reduced_map_full_[full_idx];
+        }
+    }
+    else
+    {
+        reduced_to_irreducible_map_.clear();
+    }
+
+    z_mirror_shift_ = shift;
+    z_mirror_translation_ = t_z;
+    use_z_mirror_physical_basis_ = true;
+    use_pmmm_physical_basis_ = false;
+    use_m3_physical_basis_ = false;
+
+    std::cout << "Z-mirror physical basis enabled (shift=" << z_mirror_shift_
+              << "). Reduced basis size: " << n_irreducible_ << std::endl;
 }

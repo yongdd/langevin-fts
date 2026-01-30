@@ -1,5 +1,5 @@
 /**
- * @file FftwCrysFFT.cpp
+ * @file FftwCrysFFTPmmm.cpp
  * @brief CPU implementation of crystallographic FFT using DCT-II/III.
  *
  * DCT-II (forward) and DCT-III (backward) for Pmmm symmetry.
@@ -13,7 +13,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "FftwCrysFFT.h"
+#include "FftwCrysFFTPmmm.h"
 #include "Exception.h"
 
 #ifndef M_PI
@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Constructor
 //------------------------------------------------------------------------------
-FftwCrysFFT::FftwCrysFFT(
+FftwCrysFFTPmmm::FftwCrysFFTPmmm(
     std::array<int, 3> nx_logical,
     std::array<double, 6> cell_para,
     std::array<double, 9> /* trans_part - ignored for DCT-II/III */)
@@ -40,12 +40,12 @@ FftwCrysFFT::FftwCrysFFT(
     {
         if (nx_logical_[d] % 2 != 0)
         {
-            throw_with_line_number("FftwCrysFFT requires even grid dimensions. "
+            throw_with_line_number("FftwCrysFFTPmmm requires even grid dimensions. "
                 "Dimension " + std::to_string(d) + " has size " + std::to_string(nx_logical_[d]));
         }
         if (nx_logical_[d] <= 0)
         {
-            throw_with_line_number("FftwCrysFFT requires positive grid dimensions.");
+            throw_with_line_number("FftwCrysFFTPmmm requires positive grid dimensions.");
         }
     }
 
@@ -72,7 +72,7 @@ FftwCrysFFT::FftwCrysFFT(
 //------------------------------------------------------------------------------
 // Destructor
 //------------------------------------------------------------------------------
-FftwCrysFFT::~FftwCrysFFT()
+FftwCrysFFTPmmm::~FftwCrysFFTPmmm()
 {
     // Free Boltzmann factors
     freeBoltzmann();
@@ -89,7 +89,7 @@ FftwCrysFFT::~FftwCrysFFT()
 //------------------------------------------------------------------------------
 // Initialize FFTW DCT-II/III plans
 //------------------------------------------------------------------------------
-void FftwCrysFFT::initFFTPlans()
+void FftwCrysFFTPmmm::initFFTPlans()
 {
     // Allocate work buffers
     io_buffer_ = (double*)fftw_malloc(sizeof(double) * M_physical_);
@@ -122,7 +122,7 @@ void FftwCrysFFT::initFFTPlans()
 //------------------------------------------------------------------------------
 // Free Boltzmann factors
 //------------------------------------------------------------------------------
-void FftwCrysFFT::freeBoltzmann()
+void FftwCrysFFTPmmm::freeBoltzmann()
 {
     cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
@@ -130,7 +130,7 @@ void FftwCrysFFT::freeBoltzmann()
 //------------------------------------------------------------------------------
 // Set cell parameters
 //------------------------------------------------------------------------------
-void FftwCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
+void FftwCrysFFTPmmm::set_cell_para(const std::array<double, 6>& cell_para)
 {
     // Only check Lx, Ly, Lz (first 3 parameters)
     if (cell_para[0] == cell_para_[0] &&
@@ -149,7 +149,7 @@ void FftwCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
 //------------------------------------------------------------------------------
 // Set contour step and prepare Boltzmann factors
 //------------------------------------------------------------------------------
-void FftwCrysFFT::set_contour_step(double ds)
+void FftwCrysFFTPmmm::set_contour_step(double ds)
 {
     ThreadState& state = get_thread_state();
     if (state.boltz_current != nullptr && state.ds_current == ds)
@@ -169,7 +169,7 @@ void FftwCrysFFT::set_contour_step(double ds)
 //------------------------------------------------------------------------------
 // Generate Boltzmann factors for a specific ds value
 //------------------------------------------------------------------------------
-double* FftwCrysFFT::generateBoltzmann(double ds) const
+double* FftwCrysFFTPmmm::generateBoltzmann(double ds) const
 {
     double* boltz = new double[M_physical_];
 
@@ -210,12 +210,12 @@ double* FftwCrysFFT::generateBoltzmann(double ds) const
 //------------------------------------------------------------------------------
 // Apply diffusion operator
 //------------------------------------------------------------------------------
-void FftwCrysFFT::diffusion(double* q_in, double* q_out)
+void FftwCrysFFTPmmm::diffusion(double* q_in, double* q_out)
 {
     ThreadState& state = get_thread_state();
     if (!state.boltz_current)
     {
-        throw_with_line_number("FftwCrysFFT::set_contour_step must be called before diffusion().");
+        throw_with_line_number("FftwCrysFFTPmmm::set_contour_step must be called before diffusion().");
     }
 
     struct AlignedDeleter {
@@ -234,7 +234,7 @@ void FftwCrysFFT::diffusion(double* q_in, double* q_out)
         buffers.temp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
         if (!buffers.io || !buffers.temp)
         {
-            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFT.");
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTPmmm.");
         }
         buffers.size = M_physical_;
     }
@@ -257,11 +257,11 @@ void FftwCrysFFT::diffusion(double* q_in, double* q_out)
         q_out[i] = buffers.io.get()[i] * norm_factor_;
 }
 
-FftwCrysFFT::ThreadState& FftwCrysFFT::get_thread_state() const
+FftwCrysFFTPmmm::ThreadState& FftwCrysFFTPmmm::get_thread_state() const
 {
     struct ThreadLocalStates
     {
-        std::unordered_map<const FftwCrysFFT*, ThreadState> states;
+        std::unordered_map<const FftwCrysFFTPmmm*, ThreadState> states;
     };
     thread_local ThreadLocalStates tls;
 
@@ -281,7 +281,7 @@ FftwCrysFFT::ThreadState& FftwCrysFFT::get_thread_state() const
 //------------------------------------------------------------------------------
 // Apply custom multiplier in Fourier space
 //------------------------------------------------------------------------------
-void FftwCrysFFT::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
+void FftwCrysFFTPmmm::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
 {
     struct AlignedDeleter {
         void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
@@ -299,7 +299,7 @@ void FftwCrysFFT::apply_multiplier(const double* q_in, double* q_out, const doub
         buffers.temp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
         if (!buffers.io || !buffers.temp)
         {
-            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFT.");
+            throw_with_line_number("Failed to allocate thread-local FFTW buffers for FftwCrysFFTPmmm.");
         }
         buffers.size = M_physical_;
     }

@@ -11,7 +11,7 @@
 
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"
-#include "FftwCrysFFT.h"
+#include "FftwCrysFFTPmmm.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -142,7 +142,7 @@ bool test_cpu(int Nx, int Ny, int Nz, double ds)
     }
     expand_pmmm(q_phys.data(), q_logical.data(), Nx, Ny, Nz);
 
-    FftwCrysFFT crys({Nx, Ny, Nz}, {Lx, Ly, Lz, M_PI/2, M_PI/2, M_PI/2});
+    FftwCrysFFTPmmm crys({Nx, Ny, Nz}, {Lx, Ly, Lz, M_PI/2, M_PI/2, M_PI/2});
     crys.set_contour_step(ds);
     crys.diffusion(q_phys.data(), q_phys_out.data());
 
