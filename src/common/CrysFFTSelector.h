@@ -66,8 +66,12 @@ inline CrysFFTSelection select_crysfft_mode(
             }
             else if (std::fabs(t - 0.5) < tol)
             {
-                // Glide mirror (t_z = 1/2) requires a dedicated transform; disable for now.
-                selection.can_hex_z = false;
+                if ((nx[2] % 4) == 0)
+                {
+                    selection.can_hex_z = true;
+                    selection.hex_z_translation = t;
+                    selection.hex_z_shift = nx[2] / 4;
+                }
             }
         }
     }

@@ -197,7 +197,9 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
         src/platforms/cuda/CudaFactory.cu
     )
-    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+
+    # CUDA 13.x drops support for sm_60/61; default to A10 (sm_86) unless user overrides.
+    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES "86")
 
     IF (OPENMP_FOUND)
         TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>: -Xcompiler=-fopenmp>)

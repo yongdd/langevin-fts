@@ -179,10 +179,17 @@ void CudaFactory<T>::display_info()
     std::cout<< "Max size of a grid size    (x,y,z): \t(";
     std::cout<< prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", " << prop.maxGridSize[2] << ")\n";
 
-    if(prop.deviceOverlap)
+#if defined(CUDART_VERSION) && (CUDART_VERSION >= 13000)
+    if (prop.asyncEngineCount > 0)
         std::cout<< "Device overlap: \t\t\tYes" << std::endl;
     else
         std::cout<< "Device overlap: \t\t\tNo" << std::endl;
+#else
+    if (prop.deviceOverlap)
+        std::cout<< "Device overlap: \t\t\tYes" << std::endl;
+    else
+        std::cout<< "Device overlap: \t\t\tNo" << std::endl;
+#endif
 
     if (N_THREADS > prop.maxThreadsPerBlock)
         throw_with_line_number("'threads_per_block' cannot be greater than 'Maximum threads per block'");

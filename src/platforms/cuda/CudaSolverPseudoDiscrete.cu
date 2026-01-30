@@ -598,9 +598,9 @@ void CudaSolverPseudoDiscrete<T>::set_space_group(
                 if (!use_crysfft_ && selection.mode == CrysFFTChoice::HexZ)
                 {
                     if (use_m3_basis || use_pmmm_basis)
-                        throw_with_line_number("Hex CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+                        throw_with_line_number("HexZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
                     if (!selection.can_hex_z)
-                        throw_with_line_number("Hex CrysFFT selected but z-mirror symmetry is unavailable.");
+                        throw_with_line_number("HexZ CrysFFT selected but z-mirror symmetry is unavailable.");
 
                     const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
                                                       : selection.hex_z_shift;
@@ -610,7 +610,7 @@ void CudaSolverPseudoDiscrete<T>::set_space_group(
                     if (use_hex_basis)
                     {
                         if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match Hex CrysFFT grid ordering.");
+                            throw_with_line_number("Z-mirror physical basis does not match HexZ CrysFFT grid ordering.");
                         finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
                     }
                     else if (build_mapping_hex(z_shift))
@@ -641,7 +641,7 @@ void CudaSolverPseudoDiscrete<T>::set_space_group(
                     {
                         const int z_shift = space_group_->get_z_mirror_shift();
                         if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match Hex CrysFFT grid ordering.");
+                            throw_with_line_number("Z-mirror physical basis does not match HexZ CrysFFT grid ordering.");
                         finalize_crysfft(CudaCrysFFTMode::HexZ, M_phys_hex, true);
                     }
                     else if (build_mapping_hex(selection.hex_z_shift))

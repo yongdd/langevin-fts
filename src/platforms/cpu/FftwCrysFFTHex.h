@@ -23,6 +23,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <vector>
 #include <fftw3.h>
 
 class FftwCrysFFTHex
@@ -32,6 +33,7 @@ private:
     std::array<int, 3> nx_physical_;
     int M_logical_{0};
     int M_physical_{0};
+    int M_complex_{0};
 
     std::array<double, 6> cell_para_;
     std::array<double, 6> recip_metric_;
@@ -55,16 +57,28 @@ private:
     fftw_plan plan_dct_backward_z_{nullptr};
     fftw_plan plan_fft_forward_xy_{nullptr};
     fftw_plan plan_fft_backward_xy_{nullptr};
+    fftw_plan plan_fft_z_forward_{nullptr};
+    fftw_plan plan_fft_z_backward_{nullptr};
 
     double* io_buffer_{nullptr};
     double* temp_buffer_{nullptr};
     fftw_complex* complex_buffer_{nullptr};
+    double* fft_z_real_{nullptr};
+    fftw_complex* fft_z_complex_{nullptr};
 
     double norm_factor_{1.0};
+    bool use_fft_dct_{false};
+    int M_complex_z_{0};
+    double fft_dct_scale_fwd_{1.0};
+    double fft_dct_scale_bwd_{1.0};
+    std::vector<double> dct_fft_cos_;
+    std::vector<double> dct_fft_sin_;
 
     static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
     double* generateBoltzmann(double ds) const;
     void initFFTPlans();
+    void initFFTPlansZ(unsigned plan_flags);
+    void calibrate_fft_dct_scale();
     void freeBoltzmann();
     ThreadState& get_thread_state() const;
 
