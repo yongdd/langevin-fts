@@ -20,7 +20,9 @@ Changes to `src/python/*.py` take effect after `make install` from build directo
 ### Running Tests
 ```bash
 cd build
-make test           # Run all tests
+make install        # Required for Python tests
+ctest -L basic      # Basic installation verification
+ctest              # Run all tests
 ctest -V            # Verbose output
 ctest -R Pseudo     # Run tests matching "Pseudo"
 ```

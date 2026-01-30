@@ -47,27 +47,34 @@ conda activate polymerfts
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
-ctest -L basic  # Basic installation verification (~40 seconds)
 make install
+ctest -L basic  # Basic installation verification (~40 seconds)
 ```
 
-### Option 3: pip Install (Requires FFTW3)
+### Option 3: pip Install
 
-If you have FFTW3 installed:
+Default build (uses CMake defaults: CUDA ON, FFTW OFF):
 ```bash
 pip install .
 ```
+
+CPU-only build (requires FFTW3):
+```bash
+# scikit-build-core honors CMAKE_ARGS
+CMAKE_ARGS="-DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CUDA=OFF" pip install .
+```
+If you do not have a working CUDA toolkit, you must use the CPU-only build above.
 
 ## Dependencies
 
 ### Required
 * **C++ Compiler**: Any compiler supporting C++20 standard
-* **FFTW3**: For CPU computations (install via conda-forge)
 * **Python 3.11+**: With NumPy, SciPy, matplotlib, networkx, pyyaml
 * **CMake 3.17+**: Build system
 * **pybind11**: Python-C++ binding
 
 ### Optional
+* **FFTW3**: CPU backend (default OFF) — enable with `-DPOLYMERFTS_USE_FFTW=ON`
 * **CUDA Toolkit 11.8+**: For GPU computation (https://developer.nvidia.com/cuda-toolkit)
   * Set `CUDA_ARCHITECTURES` in `CMakeLists.txt` for your GPU: https://developer.nvidia.com/cuda-gpus
 
@@ -97,11 +104,11 @@ cd langevin-fts && mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 
-# Run basic tests (installation verification)
-ctest -L basic
-
 # Install to conda environment
 make install
+
+# Run basic tests (installation verification)
+ctest -L basic
 ```
 
 ## CMake Options
@@ -137,9 +144,23 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CU
 
 **Error**: `Unsupported gpu architecture 'compute_89'`
 
+**Cause**:
+`CMakeLists.txt` sets:
+`CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90"`.
+Newer CUDA toolkits may not support some of these (e.g., CUDA 13.x drops sm_60/61),
+and you may also see `compute_89/90` errors if those are not supported by your toolkit.
+
 **Solution**:
-* Remove `;89;90` from `CUDA_ARCHITECTURES` in `CMakeLists.txt`, or
+* Remove unsupported compute capabilities (e.g., 89/90 or 60/61) from `CUDA_ARCHITECTURES`, or
+* Set `CMAKE_CUDA_ARCHITECTURES` explicitly for your GPU, or
 * Update CUDA Toolkit to a newer version
+
+Examples:
+```bash
+# Configure with an explicit architecture
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
+```
+Or edit `CMakeLists.txt` to set `CUDA_ARCHITECTURES` to a supported value.
 
 ### Segmentation Fault
 
@@ -194,6 +215,8 @@ Two test modes are available:
 | **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
 | **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
+**Note**: Run `make install` before `ctest` so Python tests can import the installed module.
+
 **Basic tests** verify core functionality:
 - FFT operations (CPU and CUDA)
 - Propagator computation (continuous and discrete chains)
@@ -217,6 +240,7 @@ conda activate polymerfts
 
 # Basic test (recommended for users)
 cd build
+make install
 ctest -L basic
 
 # Full test (for development)
