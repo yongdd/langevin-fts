@@ -155,7 +155,7 @@ scft.run()
 ### Direct Usage
 
 ```python
-from polymerfts.space_group import SpaceGroup
+from polymerfts import SpaceGroup
 import numpy as np
 
 # Create space group object
@@ -307,7 +307,8 @@ Note: The reduction factor (10.7x) is less than the number of symmetry operation
 
 ## References
 
-- `space_group.py`: SpaceGroup implementation
-- `scft.py`: Integration with SCFT simulations
+- `src/common/SpaceGroup.h` / `src/common/SpaceGroup.cpp`: SpaceGroup implementation
+- `src/pybind11/polymerfts_core.cpp`: Python bindings
+- `src/python/scft.py`: Integration with SCFT simulations
 - International Tables for Crystallography, Vol. A (2016)
 - spglib documentation: https://spglib.github.io/spglib/

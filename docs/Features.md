@@ -61,8 +61,9 @@ For detailed performance benchmarks and method comparisons, see [NumericalMethod
 ### Platforms and Performance
 - **CPU**: FFTW backend with OpenMP parallelization
 - **GPU**: NVIDIA CUDA backend with multi-stream execution
+- **CrysFFT support**: Crystallographic FFT acceleration on CPU and CUDA for compatible space-group symmetries
 - **Parallel propagator computation**:
-  - CPU: Up to 8 cores
+  - CPU: `OMP_NUM_THREADS` threads (default 4 if unset)
   - GPU: Up to 4 CUDA streams
 - **Memory saving option**: Checkpoint-based propagator storage for large systems (CPU and CUDA)
 - **Common interfaces**: Same API regardless of chain model, dimension, or platform
