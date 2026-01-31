@@ -18,7 +18,7 @@ Many polymer phases (BCC, gyroid, HCP, etc.) have crystallographic symmetry. By 
 When CrysFFT is available (periodic 3D, orthogonal box, even grid), the solver
 automatically switches to a **physical grid** (1/8 size) to avoid
 gather/scatter mapping during diffusion steps. See
-[CrystallographicFFT.md](CrystallographicFFT.md).
+[FFTImplementation.md](../internals/FFTImplementation.md).
 
 ## Common Space Groups for Polymer Phases
 
@@ -242,7 +242,7 @@ Hexagonal crystal systems (P6_3/mmc, etc.) require special attention:
 - Lattice: a = b, c independent
 - Angles: α = β = 90°, γ = 120°
 - Grid: nx = ny (first two dimensions must be equal)
-- All dimensions must be divisible by 6
+- All dimensions must be divisible by 6 (for P6_3/mmc)
 
 **Example:**
 ```python

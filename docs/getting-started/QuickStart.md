@@ -75,8 +75,8 @@ params = {
 | Method | Description | Best For |
 |--------|-------------|----------|
 | `rqm4` | 4th-order Richardson extrapolation (default) | Standard SCFT/FTS |
-| `rk2` | 2nd-order Rasmussen-Kalosakas | Fast prototyping |
-| `cn-adi2` | 2nd-order Crank-Nicolson ADI | Non-periodic boundaries |
+| `rk2` | 2nd-order Rasmussen-Kalosakas | Faster, lower accuracy |
+| `cn-adi2` | 2nd-order Crank-Nicolson ADI | Brush with grafted delta-function |
 
 See [NumericalMethods.md](../theory/NumericalMethods.md) for detailed benchmarks.
 
@@ -94,11 +94,16 @@ This stores only checkpoints and recomputes intermediate values, reducing memory
 
 ### Multi-threading Settings
 
+Set these **before** importing polymerfts:
+
 ```python
 import os
-# Before importing polymerfts
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # Single CPU core
-os.environ["OMP_NUM_THREADS"] = "4"         # 4 threads
+
+# Option 1: Disable OpenMP (single-threaded)
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"
+
+# Option 2: Use multiple threads
+os.environ["OMP_NUM_THREADS"] = "4"
 ```
 
 ### GPU Selection
@@ -109,13 +114,6 @@ nvidia-smi
 
 # Select specific GPU
 export CUDA_VISIBLE_DEVICES=0
-```
-
-### Stack Size (Prevents Segfaults)
-
-```bash
-ulimit -s unlimited
-export OMP_STACKSIZE=1G
 ```
 
 ## Troubleshooting Convergence
@@ -134,7 +132,7 @@ If SCFT doesn't converge, reduce the mixing parameters:
 ## Next Steps
 
 - **Tutorials**: Start with notebooks in `tutorials/` (see `tutorials/README.md` for order)
-- **Examples**: Explore `examples/scft/` and `examples/fts/` for various polymer systems
+- **Examples**: Explore `examples/scft/`, `examples/lfts/`, and `examples/clfts/` for various polymer systems
 - **Parameters**: See [Parameters.md](../reference/Parameters.md) for complete parameter reference
 - **Theory**: Read [NumericalMethods.md](../theory/NumericalMethods.md) for algorithm details
 
@@ -147,5 +145,5 @@ Results should match [PSCF](https://github.com/dmorse/pscfpp) within machine pre
 
 ### Cross-Platform Consistency
 Results should be identical (~10⁻¹³) regardless of:
-- Platform (CUDA or FFTW)
+- Platform (`cuda` or `cpu-fftw`)
 - Memory mode (standard or reduce_memory)

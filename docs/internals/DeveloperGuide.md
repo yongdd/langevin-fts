@@ -1,4 +1,4 @@
-# Architecture and Development Guide
+# Developer Documentation
 
 > **Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
@@ -21,7 +21,7 @@ This document describes the class hierarchies, design patterns, and development 
 
 ## 1. Overview
 
-The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU with FFTW, GPU with CUDA) through a unified interface. All major computational classes are templates parameterized on:
+The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU, GPU) through a unified interface. All major computational classes are templates parameterized on:
 
 - `T` = `double` or `std::complex<double>` for real or complex field theories
 - `DIM` = 1, 2, or 3 for spatial dimension (FFT classes only)
@@ -73,7 +73,7 @@ AbstractFactory<T>                    [Abstract Base]
 // Create factory for specific platform
 auto factory = PlatformSelector::create_factory("cuda", reduce_memory);
 
-// Or use automatic selection (CUDA for 2D/3D, FFTW for 1D)
+// Or use automatic selection (GPU for 2D/3D, CPU for 1D)
 auto factory = PlatformSelector::create_factory("auto", reduce_memory);
 ```
 
@@ -145,7 +145,7 @@ PropagatorComputation<T>                      [Abstract Base]
         ├── CpuComputationBase<T>             [CPU Common Logic]
         │   │
         │   ├── CpuComputationContinuous<T>   [Continuous Chains]
-        │   │   └── 4th-order Richardson extrapolation
+        │   │   └── RQM4, RK2, or CN-ADI2 (selectable)
         │   │
         │   └── CpuComputationDiscrete<T>     [Discrete Chains]
         │       └── Boltzmann weight + bond convolution
@@ -162,7 +162,7 @@ PropagatorComputation<T>                      [Abstract Base]
 
 | Model | Propagator Equation | Solver Method |
 |-------|---------------------|---------------|
-| Continuous | $\partial q/\partial s = (b^2/6)\nabla^2 q - wq$ | Richardson extrapolation |
+| Continuous | $\partial q/\partial s = (b^2/6)\nabla^2 q - wq$ | RQM4, RK2, or CN-ADI2 |
 | Discrete | Recursive integral (Chapman-Kolmogorov) | Pseudo-spectral (bond convolution) |
 
 ### 3.3 Solver Hierarchy
@@ -364,14 +364,7 @@ Changes to `src/python/*.py` take effect after `make install` from build directo
 
 #### Running Tests
 
-```bash
-cd build
-make install        # Required for Python tests
-ctest -L basic      # Basic installation verification
-ctest              # Run all tests
-ctest -V            # Verbose output
-ctest -R Pseudo     # Run tests matching "Pseudo"
-```
+See [Installation.md](../getting-started/Installation.md#testing) for test commands.
 
 ---
 
@@ -424,10 +417,7 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 
 ### Segmentation Faults
 
-```bash
-ulimit -s unlimited
-export OMP_STACKSIZE=1G
-```
+See [Installation.md](../getting-started/Installation.md#segmentation-fault) for stack size settings.
 
 ### CUDA Debugging
 
@@ -437,7 +427,7 @@ export OMP_STACKSIZE=1G
 
 ### Platform Consistency Issues
 
-If CUDA and FFTW give different results:
+If GPU and CPU give different results:
 1. Check floating-point operation order
 2. Verify FFT normalization
 3. Check memory alignment
@@ -446,7 +436,7 @@ If CUDA and FFTW give different results:
 
 1. Run same test on both `cuda` and `cpu-fftw` platforms - results should match to ~10⁻¹³
 2. Check partition function consistency: `solver.check_total_partition()` should pass
-3. Verify material conservation: `np.mean(sum(phi_species))` ≈ 1.0
+3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within machine precision (~10⁻¹⁵)
 
 ---
 
@@ -467,15 +457,14 @@ If CUDA and FFTW give different results:
 
 ### What to Avoid
 
-- Updating C++/CUDA code directly (contact maintainers instead)
-- Exclusive code from your lab without permission
-- GPL-licensed code
+- GPL-licensed code (due to licensing conflicts)
 
 ### Submitting Contributions
 
-If you want to add new features to the C++ code but find it difficult to modify, send sample code written in any programming language to the maintainers.
+- Open a pull request on GitHub
+- For C++/CUDA changes you find difficult to implement, open an issue with sample code in any language
 
-**Note**: This library is updated without considering compatibility with previous versions. Contributed code will be managed to work with updated versions.
+**Note**: This library may be updated without backward compatibility. Contributed code will be maintained to work with new versions.
 
 ---
 

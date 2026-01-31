@@ -34,7 +34,6 @@ This document provides comprehensive documentation of the numerical methods avai
 |----------|-------------------|
 | Standard SCFT/FTS (periodic BC) | **RQM4** (default) |
 | Fast iterations, prototyping | **RK2** |
-| Non-periodic boundaries | **CN-ADI2** |
 
 ### Runtime Selection
 
@@ -174,7 +173,7 @@ For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:
 For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation.
 
 **Units and Conventions:**
-- **Unit length**: $R_0 = aN^{1/2}$, where $a$ is the statistical segment length and $N$ is the polymerization index
+- **Unit length**: $R_0 = bN^{1/2}$, where $b$ is the statistical segment length and $N$ is the polymerization index
 - **Contour step size**: $\Delta s = 1/N$
 - A polymer chain has **N segments** (monomers) connected by **N-1 bonds**
 
@@ -391,7 +390,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 |----------|-------------------|--------|
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest 4th-order, recommended default |
 | Fast iterations, prototyping | **RK2** | Fastest overall, lower accuracy |
-| Non-periodic boundaries | **CN-ADI2** | Supports absorbing/reflecting BC |
+| Brush with grafted delta-function | **CN-ADI2** | Handles sharp initial conditions smoothly |
 | Stress calculations | **RQM4** or **RK2** | Real-space stress not implemented |
 | Comparison with finite difference | **CN-ADI2** | Same discretization approach |
 
@@ -444,7 +443,7 @@ Cross-term $g_{13}^*$ is non-zero.
 **Constraints:**
 - $L_a$, $L_b$, $L_c$ all independent (3 lengths)
 - $\beta$ is a free parameter (1 angle)
-- Off-diagonal stress $\sigma_{xz}$ drives $\beta$ optimization
+- Off-diagonal stress $\sigma_{ac}$ drives $\beta$ optimization
 
 ### 8.4 Triclinic
 
