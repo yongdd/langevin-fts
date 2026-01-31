@@ -111,6 +111,11 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 - Set `CUDA_ARCHITECTURES` in CMakeLists.txt:102 based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
+- **Development builds**: Enable both MKL and FFTW backends for full test coverage:
+  ```bash
+  cmake ../ -DCMAKE_BUILD_TYPE=Release -DBUILD_CPU_MKL_LIB=ON -DBUILD_CPU_FFTW_LIB=ON
+  ```
+  Note: User default is both OFF. During development, always build with both ON to run all tests.
 
 ### Environment Setup
 

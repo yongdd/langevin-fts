@@ -81,6 +81,8 @@ SET(BASIC_TESTS
 
     # Space Group
     TestSpaceGroupReducedBasis
+    TestMklRealTransform
+    TestMklFftwAccuracyAllTypes
 )
 
 # Helper function to set test labels
@@ -108,6 +110,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
         CONTINUE()
     ELSEIF((${TEST_NAME} MATCHES "Fftw") AND NOT BUILD_CPU_FFTW_LIB)
         CONTINUE()
+    ELSEIF((${TEST_NAME} MATCHES "Mkl") AND NOT BUILD_CPU_MKL_LIB)
+        CONTINUE()
     ENDIF()
 
     ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
@@ -132,6 +136,25 @@ FOREACH(FILE_NAME ${FILE_LIST})
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
     ENDIF()
     SET_TEST_LABELS(${TEST_NAME})
+ENDFOREACH()
+
+# Benchmark executables (not added to ctest)
+FILE(GLOB BENCHMARK_LIST "Benchmark*.cpp")
+FOREACH(FILE_NAME ${BENCHMARK_LIST})
+    GET_FILENAME_COMPONENT(BENCH_NAME ${FILE_NAME} NAME_WE)
+
+    ADD_EXECUTABLE(${BENCH_NAME} ${FILE_NAME})
+    TARGET_LINK_LIBRARIES(${BENCH_NAME} PRIVATE
+        factory
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
+        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
+        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
+        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
+        common
+        )
 ENDFOREACH()
 
 IF(CUDAToolkit_FOUND)
