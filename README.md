@@ -24,13 +24,15 @@ conda activate polymerfts
 git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts && mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
-make -j8 && ctest -L basic && make install
+make -j8 && make install && ctest -L basic
 ```
 
 ### Other Options
 
 - **Docker**: Pre-built images available for CPU and GPU
-- **pip**: `pip install .` (requires FFTW3)
+- **pip**: `pip install .`
+
+> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance. See [docs/Installation.md](docs/Installation.md) for details.
 
 For detailed instructions, troubleshooting, and dependencies, see [docs/Installation.md](docs/Installation.md).
 
@@ -66,7 +68,6 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 
 **Note**: `rqm4` is the default. See [benchmarks](docs/NumericalMethodsPerformance.md) for details.
 
-> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance. See [Installation.md](docs/Installation.md) for details.
 
 ## Citation
 

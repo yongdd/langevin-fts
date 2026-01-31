@@ -58,12 +58,6 @@ Default build (uses CMake defaults: CUDA ON, FFTW OFF):
 pip install .
 ```
 
-CPU-only build (requires FFTW3):
-```bash
-# scikit-build-core honors CMAKE_ARGS
-CMAKE_ARGS="-DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CUDA=OFF" pip install .
-```
-If you do not have a working CUDA toolkit, you must use the CPU-only build above.
 
 ## Dependencies
 
