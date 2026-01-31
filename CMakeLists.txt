@@ -174,6 +174,7 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
     INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
     ADD_LIBRARY(cpu-mkl
         src/platforms/cpu/MklFFT.cpp
+        src/platforms/cpu/MklRealTransform.cpp
         src/platforms/cpu/MklCrysFFTPmmm.cpp
         src/platforms/cpu/MklCrysFFTRecursive3m.cpp
         src/platforms/cpu/MklCrysFFTObliqueZ.cpp
