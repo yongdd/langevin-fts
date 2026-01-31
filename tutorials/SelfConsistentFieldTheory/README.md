@@ -2,6 +2,8 @@
 
 Find equilibrium polymer morphologies by solving saddle-point equations.
 
+For detailed theory documentation, see [SelfConsistentFieldTheory.md](../../docs/theory/SelfConsistentFieldTheory.md).
+
 ## Environment Setup
 
 ```python

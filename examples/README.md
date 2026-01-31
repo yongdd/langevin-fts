@@ -50,7 +50,7 @@ Reference implementations for various morphologies (in `scft/phases/`):
 
 **5. L-FTS (Langevin Field-Theoretic Simulation)**
 
-L-FTS includes thermal fluctuations via Langevin dynamics. Start after mastering SCFT.
+L-FTS includes compositional fluctuations via Langevin dynamics. Start after mastering SCFT.
 
 | Example | Description | Complexity |
 |---------|-------------|------------|

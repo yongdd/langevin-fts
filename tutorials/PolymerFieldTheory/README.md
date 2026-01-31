@@ -2,6 +2,8 @@
 
 Understand the mathematical framework behind SCFT and L-FTS.
 
+For detailed theory documentation, see [PolymerFieldTheory.md](../../docs/theory/PolymerFieldTheory.md).
+
 ## Environment Setup
 
 ```python
