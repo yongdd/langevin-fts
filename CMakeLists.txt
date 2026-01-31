@@ -18,6 +18,7 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Build options
 OPTION(POLYMERFTS_USE_FFTW "Enable FFTW3 backend" OFF)  # GPL license
+OPTION(POLYMERFTS_USE_MKL "Enable Intel MKL backend" OFF)
 OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
 OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
@@ -162,6 +163,42 @@ ELSE()
     SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
 
+# Intel MKL
+IF(POLYMERFTS_USE_MKL)
+    FIND_PACKAGE(MKL QUIET)
+ENDIF()
+
+IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
+    SET(BUILD_CPU_MKL_LIB TRUE)
+    ADD_DEFINITIONS(-DUSE_CPU_MKL)
+    INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
+    ADD_LIBRARY(cpu-mkl
+        src/platforms/cpu/MklFFT.cpp
+        src/platforms/cpu/MklCrysFFTPmmm.cpp
+        src/platforms/cpu/MklCrysFFTRecursive3m.cpp
+        src/platforms/cpu/MklCrysFFTObliqueZ.cpp
+        src/platforms/cpu/CpuArray.cpp
+        src/platforms/cpu/CpuComputationBox.cpp
+        src/platforms/cpu/CpuSolverPseudoBase.cpp
+        src/platforms/cpu/CpuSolverPseudoRQM4.cpp
+        src/platforms/cpu/CpuSolverPseudoRK2.cpp
+        src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
+        src/platforms/cpu/CpuSolverCNADI.cpp
+        src/platforms/cpu/CpuComputationBase.cpp
+        src/platforms/cpu/CpuComputationContinuous.cpp
+        src/platforms/cpu/CpuComputationDiscrete.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
+        src/platforms/cpu/CpuAndersonMixing.cpp
+        src/platforms/cpu/MklFactory.cpp
+    )
+    TARGET_COMPILE_DEFINITIONS(cpu-mkl PRIVATE USE_CPU_MKL)
+    TARGET_LINK_LIBRARIES(cpu-mkl ${MKL_LIBRARIES})
+ELSE()
+    SET(BUILD_CPU_MKL_LIB FALSE)
+ENDIF()
+
 # NVIDIA CUDA
 IF(POLYMERFTS_USE_CUDA)
     FIND_PACKAGE(CUDAToolkit QUIET)
@@ -207,8 +244,9 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
 ENDIF()
 
 IF( (NOT BUILD_CPU_FFTW_LIB) AND
+    (NOT BUILD_CPU_MKL_LIB) AND
     (NOT CUDAToolkit_FOUND) )
-    MESSAGE( FATAL_ERROR "Could not find any FFT library (FFTW or CUDA), CMake will exit." )
+    MESSAGE( FATAL_ERROR "Could not find any FFT library (FFTW, MKL, or CUDA), CMake will exit." )
 ENDIF()
 
 #  Factory
@@ -247,6 +285,7 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
     $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
     $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
     common
 )
 

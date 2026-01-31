@@ -33,12 +33,14 @@
  * @enum FFTBackend
  * @brief Available FFT backend implementations.
  *
- * Currently only FFTW is supported for CPU. FFTW provides O(N log N)
- * algorithms for all transform types (FFT, DCT, DST).
+ * Two backends are available for CPU:
+ * - FFTW: FFTW3 library with O(N log N) for all transform types (GPL license)
+ * - MKL: Intel MKL with O(N log N) for FFT, O(N^2) for DCT/DST (proprietary)
  */
 enum class FFTBackend
 {
-    FFTW   ///< FFTW3 library (O(N log N) for all transform types)
+    FFTW,  ///< FFTW3 library (O(N log N) for all transform types)
+    MKL    ///< Intel MKL (O(N log N) for FFT, O(N^2) for DCT/DST)
 };
 
 /**

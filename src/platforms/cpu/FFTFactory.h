@@ -3,17 +3,19 @@
  * @brief Factory functions for creating FFT objects.
  *
  * This header provides template factory functions that create FFT objects
- * using the FFTW backend. FFTW supports all boundary conditions including
+ * using the FFTW or MKL backend. Both support all boundary conditions including
  * periodic (FFT), reflecting (DCT), and absorbing (DST).
  *
  * **Usage:**
  *
  * @code
  * FFT<double>* fft = createFFT<double, 3>(nx, bc, FFTBackend::FFTW);
+ * FFT<double>* fft_mkl = createFFT<double, 3>(nx, bc, FFTBackend::MKL);
  * @endcode
  *
  * @see FFT for the abstract interface
  * @see FftwFFT for FFTW implementation
+ * @see MklFFT for MKL implementation
  */
 
 #ifndef FFT_FACTORY_H_
@@ -27,22 +29,24 @@
 #include "FftwFFT.h"
 #endif
 
+#ifdef USE_CPU_MKL
+#include "MklFFT.h"
+#endif
+
 /**
  * @brief Create an FFT object with the specified backend.
  *
  * Factory function that instantiates the appropriate FFT implementation.
- * Currently only FFTW backend is supported, which provides O(N log N)
- * algorithms for all boundary conditions:
- * - Periodic: FFT (DFT)
- * - Reflecting: DCT (Discrete Cosine Transform)
- * - Absorbing: DST (Discrete Sine Transform)
+ * Two backends are available:
+ * - FFTW: O(N log N) for all boundary conditions (GPL license)
+ * - MKL: O(N log N) for all boundary conditions (proprietary, via Intel oneAPI)
  *
  * @tparam T   Numeric type (double or std::complex<double>)
  * @tparam DIM Dimensionality (1, 2, or 3)
  *
  * @param nx      Grid dimensions
  * @param bc      Boundary conditions per dimension
- * @param backend FFT backend to use (only FFTW is supported)
+ * @param backend FFT backend to use (FFTW or MKL)
  *
  * @return Pointer to newly created FFT object (caller owns memory)
  *
@@ -51,16 +55,21 @@
 template <typename T, int DIM>
 FFT<T>* createFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc, FFTBackend backend)
 {
-    (void)backend;  // Currently only FFTW is supported
+#ifdef USE_CPU_MKL
+    if (backend == FFTBackend::MKL)
+        return new MklFFT<T, DIM>(nx, bc);
+#endif
 
 #ifdef USE_CPU_FFTW
-    return new FftwFFT<T, DIM>(nx, bc);
-#else
+    if (backend == FFTBackend::FFTW)
+        return new FftwFFT<T, DIM>(nx, bc);
+#endif
+
     (void)nx;
     (void)bc;
-    throw_with_line_number("FFTW backend is required. "
-        "Compile with POLYMERFTS_USE_FFTW=ON to enable FFT support.");
-#endif
+    (void)backend;
+    throw_with_line_number("Requested FFT backend is not available. "
+        "Compile with POLYMERFTS_USE_FFTW=ON or POLYMERFTS_USE_MKL=ON.");
 }
 
 /**

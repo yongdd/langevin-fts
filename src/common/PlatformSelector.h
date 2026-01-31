@@ -13,13 +13,18 @@
  *   - Uses OpenMP for parallelization
  *   - Available when compiled with FFTW support
  *
+ * - **cpu-mkl**: Intel MKL-based CPU implementation
+ *   - Uses OpenMP for parallelization
+ *   - Available when compiled with MKL support
+ *
  * - **cuda**: NVIDIA CUDA GPU implementation
  *   - Uses cuFFT for FFT operations
  *   - Requires CUDA-capable GPU
  *   - Available when compiled with CUDA support
  *
  * @see AbstractFactory for the factory interface
- * @see FftwFactory for CPU implementation details
+ * @see FftwFactory for FFTW CPU implementation details
+ * @see MklFactory for MKL CPU implementation details
  * @see CudaFactory for GPU implementation details
  *
  * @example

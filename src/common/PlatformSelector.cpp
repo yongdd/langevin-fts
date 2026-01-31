@@ -4,11 +4,12 @@
  *
  * Implements the abstract factory pattern for selecting computational
  * platforms at runtime. Available platforms are determined by compile-time
- * preprocessor macros (USE_CPU_FFTW, USE_CUDA).
+ * preprocessor macros (USE_CPU_FFTW, USE_CPU_MKL, USE_CUDA).
  *
  * **Supported Platforms:**
  *
  * - cpu-fftw: FFTW-based CPU implementation (if USE_CPU_FFTW defined)
+ * - cpu-mkl: Intel MKL-based CPU implementation (if USE_CPU_MKL defined)
  * - cuda: NVIDIA CUDA GPU implementation (if USE_CUDA defined)
  *
  * **Factory Creation:**
@@ -18,7 +19,8 @@
  * computational objects (ComputationBox, Pseudo, AndersonMixing, etc.).
  *
  * @see AbstractFactory for factory interface
- * @see FftwFactory for CPU implementation
+ * @see FftwFactory for FFTW CPU implementation
+ * @see MklFactory for MKL CPU implementation
  * @see CudaFactory for GPU implementation
  */
 
@@ -29,6 +31,9 @@
 
 #ifdef USE_CPU_FFTW
 #include "FftwFactory.h"
+#endif
+#ifdef USE_CPU_MKL
+#include "MklFactory.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaFactory.h"
@@ -42,7 +47,7 @@
  * Queries compile-time configuration to determine which platforms
  * are available for use.
  *
- * @return Vector of platform names (e.g., {"cpu-fftw", "cuda"})
+ * @return Vector of platform names (e.g., {"cpu-fftw", "cpu-mkl", "cuda"})
  * @throws Exception if no platforms are available
  */
 std::vector<std::string> PlatformSelector::avail_platforms()
@@ -50,6 +55,9 @@ std::vector<std::string> PlatformSelector::avail_platforms()
     std::vector<std::string> names;
 #ifdef USE_CPU_FFTW
     names.push_back("cpu-fftw");
+#endif
+#ifdef USE_CPU_MKL
+    names.push_back("cpu-mkl");
 #endif
 #ifdef USE_CUDA
     names.push_back("cuda");
@@ -65,7 +73,7 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  * Instantiates a platform-specific factory for simulations with
  * real-valued fields (standard SCFT/L-FTS with periodic boundaries).
  *
- * @param platform       Platform name ("cpu-fftw" or "cuda")
+ * @param platform       Platform name ("cpu-fftw", "cpu-mkl", or "cuda")
  * @param reduce_memory  Enable checkpointing mode (reduces memory, increases compute)
  *
  * @return Pointer to platform-specific AbstractFactory<double>
@@ -77,6 +85,10 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
 #ifdef USE_CPU_FFTW
     if (platform == "cpu-fftw")
         return new FftwFactory<double>(reduce_memory);
+#endif
+#ifdef USE_CPU_MKL
+    if (platform == "cpu-mkl")
+        return new MklFactory<double>(reduce_memory);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
@@ -93,7 +105,7 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
  * complex-valued fields (required for non-periodic boundaries or
  * certain field transformations).
  *
- * @param platform       Platform name ("cpu-fftw" or "cuda")
+ * @param platform       Platform name ("cpu-fftw", "cpu-mkl", or "cuda")
  * @param reduce_memory  Enable checkpointing mode (reduces memory, increases compute)
  *
  * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
@@ -105,6 +117,10 @@ AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
 #ifdef USE_CPU_FFTW
     if (platform == "cpu-fftw")
         return new FftwFactory<std::complex<double>>(reduce_memory);
+#endif
+#ifdef USE_CPU_MKL
+    if (platform == "cpu-mkl")
+        return new MklFactory<std::complex<double>>(reduce_memory);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")

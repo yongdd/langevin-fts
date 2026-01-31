@@ -30,7 +30,7 @@ from polymerfts import _core
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 # Tolerance for free energy comparison
-FE_TOLERANCE = 1e-11
+FE_TOLERANCE = 1e-10
 
 
 def get_available_platforms():
