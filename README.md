@@ -1,4 +1,4 @@
-# Polymer Field Theory Simulations with Python
+# Polymer Field Theory Simulations with Python (PolymerFTS)
 
 A high-performance library for polymer field theory simulations: Self-Consistent Field Theory (SCFT), Langevin Field-Theoretic Simulation (L-FTS), and Complex Langevin FTS (CL-FTS). Core routines are implemented in C++/CUDA and exposed through Python interfaces.
 
@@ -6,35 +6,30 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 
 ## Features
 
+- SCFT, L-FTS, and CL-FTS (beta) simulations
 - Arbitrary acyclic branched polymers and their mixtures
 - Continuous and discrete chain models
-- Pseudo-spectral and real-space solvers (RQM4, RK2, CN-ADI2)
-- Periodic, reflecting, and absorbing boundary conditions
 - CPU (FFTW) and GPU (NVIDIA CUDA) platforms
 
-For details, see [docs/Features.md](docs/Features.md).
+For details, see [Features.md](docs/getting-started/Features.md).
 
 ## Installation
 
 ### Quick Start (Conda)
 
 ```bash
+git clone https://github.com/yongdd/langevin-fts.git
+cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j8 && make install && ctest -L basic
 ```
 
-> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance.
+> **FFTW License**: To enable the CPU backend, add `-DPOLYMERFTS_USE_FFTW=ON`. FFTW is GPL-licensed, so distributing binaries with FFTW requires GPL compliance.
 
-### Other Options
-
-- **Docker**: Pre-built images available for CPU and GPU
-- **pip**: `pip install .`
-
-For detailed instructions, troubleshooting, and dependencies, see [docs/Installation.md](docs/Installation.md).
+For detailed instructions, troubleshooting, and dependencies, see [Installation.md](docs/getting-started/Installation.md).
 
 ## Getting Started
 
@@ -50,12 +45,10 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 
 | Document | Description |
 |----------|-------------|
-| [Installation.md](docs/Installation.md) | Installation guide and troubleshooting |
-| [UserGuide.md](docs/UserGuide.md) | User guide and parameter reference |
-| [DeveloperGuide.md](docs/DeveloperGuide.md) | Developer guide and contributing |
-| [Features.md](docs/Features.md) | Complete feature list |
-| [NumericalMethodsPerformance.md](docs/NumericalMethodsPerformance.md) | Benchmark comparisons |
-| [References.md](docs/References.md) | Publication references |
+| [Getting Started](docs/getting-started/) | Installation, quick start, and features |
+| [Theory](docs/theory/) | Numerical methods, stress tensor, space groups |
+| [Internals](docs/internals/) | Architecture, FFT implementation, propagator system |
+| [Reference](docs/reference/) | Parameter reference, bibliography |
 | `tutorials/` | Jupyter notebooks explaining theory and usage |
 
 ## Numerical Methods
@@ -66,8 +59,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | `rk2` | Pseudo-spectral | 2nd-order Rasmussen-Kalosakas |
 | `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
 
-**Note**: `rqm4` is the default. See [benchmarks](docs/NumericalMethodsPerformance.md) for details.
-
+**Note**: `rqm4` is the default. See [benchmarks](docs/theory/NumericalMethods.md) for details.
 
 ## Citation
 
@@ -77,8 +69,8 @@ If you use this software, please cite:
 
 ## Contributing
 
-Contributions are welcome. See [DeveloperGuide.md](docs/DeveloperGuide.md) for guidelines.
+Contributions are welcome. See [DeveloperGuide.md](docs/internals/DeveloperGuide.md) for development guidelines.
 
 ## References
 
-See [References.md](docs/References.md) for the complete list of publications.
+See [Bibliography.md](docs/reference/Bibliography.md) for the complete list of publications.
