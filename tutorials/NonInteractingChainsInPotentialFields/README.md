@@ -2,6 +2,8 @@
 
 Learn how to compute chain propagators and concentrations without self-consistent field theory.
 
+> **See also:** [docs/theory/ChainPropagators.md](../../docs/theory/ChainPropagators.md) for the consolidated theory documentation.
+
 ## Environment Setup
 
 ```python

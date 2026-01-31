@@ -67,7 +67,7 @@ def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
 
     **Physical Interpretation:**
 
-    - Larger N̄: Reduces thermal fluctuations (mean-field limit as N̄→∞)
+    - Larger N̄: Reduces compositional fluctuations (mean-field limit as N̄→∞)
     - Larger Δt: Larger noise for faster equilibration (but less accurate)
     - Larger M or V: Reduces noise per grid point (larger system)
 
@@ -88,7 +88,7 @@ class LFTS:
     """Langevin Field-Theoretic Simulation solver for polymer systems.
 
     This class implements L-FTS calculations for polymer melts and solutions,
-    simulating thermal fluctuations in the field-theoretic representation.
+    simulating compositional fluctuations in the field-theoretic representation.
     Unlike SCFT which finds the saddle point, L-FTS samples the full partition
     function including fluctuation effects via Langevin dynamics.
 
@@ -144,7 +144,7 @@ class LFTS:
             Smaller values → more accurate but slower.
         - langevin_nbar : float
             Average polymerization index N̄. Typical values: 1-100.
-            Controls thermal fluctuation strength (larger → weaker fluctuations).
+            Controls compositional fluctuation strength (larger → weaker fluctuations).
 
         **Field Compression Parameters:**
 
@@ -253,7 +253,7 @@ class LFTS:
     .. math::
         H = \\sum_i \\lambda_i w_i^2 + \\text{(other terms)}
 
-    This yields auxiliary fields, some real-valued (thermally fluctuating) and
+    This yields auxiliary fields, some real-valued (fluctuating) and
     some imaginary-valued (compressed to saddle point).
 
     **Langevin Update Scheme:**
@@ -844,7 +844,7 @@ class LFTS:
     def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
         """Run Langevin Field-Theoretic Simulation (L-FTS).
 
-        Performs Langevin dynamics to sample thermal fluctuations in the
+        Performs Langevin dynamics to sample compositional fluctuations in the
         field-theoretic representation of the polymer system. At each Langevin
         step:
 

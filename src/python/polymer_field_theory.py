@@ -16,9 +16,9 @@ class SymmetricPolymerTheory:
     This enables efficient simulation of multi-monomer polymer systems in both
     SCFT and L-FTS calculations.
 
-    The transformation separates auxiliary fields into real-valued (thermally
-    fluctuating in L-FTS) and imaginary-valued (compressed to saddle point)
-    components based on eigenvalue signs.
+    The transformation separates auxiliary fields into real-valued (fluctuating
+    in L-FTS) and imaginary-valued (compressed to saddle point) components
+    based on eigenvalue signs.
 
     Parameters
     ----------
@@ -85,7 +85,7 @@ class SymmetricPolymerTheory:
 
     **Field Classification:**
 
-    - **Real auxiliary fields** (λ < 0): Thermally fluctuate in L-FTS
+    - **Real auxiliary fields** (λ < 0): Fluctuate in L-FTS
     - **Imaginary auxiliary fields** (λ > 0): Compressed to saddle point
     - **Pressure field** (incompressible): Enforces Σφ_i = 1
 
