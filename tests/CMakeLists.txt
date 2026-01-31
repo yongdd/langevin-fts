@@ -119,6 +119,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
         $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
         $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
+        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
         common
         )
 
@@ -144,6 +145,7 @@ IF(CUDAToolkit_FOUND)
             factory cuda CUDA::cufft CUDA::cusparse CUDA::cusolver
             $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
             $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
             common)
 
         SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)

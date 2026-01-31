@@ -46,9 +46,18 @@
 #include "Pseudo.h"
 #include "FFTFactory.h"
 #include "SpaceGroup.h"
+
+#ifdef USE_CPU_FFTW
 #include "FftwCrysFFTPmmm.h"
 #include "FftwCrysFFTRecursive3m.h"
 #include "FftwCrysFFTObliqueZ.h"
+#endif
+
+#ifdef USE_CPU_MKL
+#include "MklCrysFFTPmmm.h"
+#include "MklCrysFFTRecursive3m.h"
+#include "MklCrysFFTObliqueZ.h"
+#endif
 
 /**
  * @class CpuSolverPseudoBase
@@ -124,9 +133,16 @@ protected:
         ObliqueZ
     };
 
-    std::unique_ptr<FftwCrysFFTPmmm> crysfft_pmmm_;
-    std::unique_ptr<FftwCrysFFTRecursive3m> crysfft_recursive_;
-    std::unique_ptr<FftwCrysFFTObliqueZ> crysfft_oblique_;
+#ifdef USE_CPU_FFTW
+    std::unique_ptr<FftwCrysFFTPmmm> crysfft_pmmm_fftw_;
+    std::unique_ptr<FftwCrysFFTRecursive3m> crysfft_recursive_fftw_;
+    std::unique_ptr<FftwCrysFFTObliqueZ> crysfft_oblique_fftw_;
+#endif
+#ifdef USE_CPU_MKL
+    std::unique_ptr<MklCrysFFTPmmm> crysfft_pmmm_mkl_;
+    std::unique_ptr<MklCrysFFTRecursive3m> crysfft_recursive_mkl_;
+    std::unique_ptr<MklCrysFFTObliqueZ> crysfft_oblique_mkl_;
+#endif
     CrysFFTMode crysfft_mode_ = CrysFFTMode::None;
     std::map<int, double> ds_values_;
 
