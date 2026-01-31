@@ -20,7 +20,7 @@ This document describes the FFT implementations used in the polymer field theory
 
 ## 1. Overview
 
-The library provides GPU-accelerated spectral transforms for solving the modified diffusion equation:
+The library provides spectral transforms for solving the modified diffusion equation:
 
 | Transform | Boundary Condition | Physical Meaning |
 |-----------|-------------------|------------------|
@@ -235,14 +235,14 @@ CrysFFT is enabled automatically when:
 |-------|-----------|-----------------|
 | Irreducible | Minimal (one per orbit) | Gather/scatter required |
 | Pmmm physical | (Nx/2)(Ny/2)(Nz/2) | Identity (none) |
-| M3 physical | (Nx/2)(Ny/2)(Nz/2) | Identity (none) |
+| 3m physical | (Nx/2)(Ny/2)(Nz/2) | Identity (none) |
 | Z-mirror physical | Nx * Ny * (Nz/2) | Identity (none) |
 
 The solver automatically selects the fastest compatible physical basis.
 
 ### 6.5 Phase Support Table
 
-| Phase | Space group | M3 recursive | Pmmm DCT | ObliqueZ |
+| Phase | Space group | 3m recursive | Pmmm DCT | ObliqueZ |
 |-------|-------------|:------------:|:--------:|:--------:|
 | BCC | Im-3m (529) | ✓ | ✓ | |
 | FCC | Fm-3m (523) | ✓ | ✓ | |
@@ -258,7 +258,7 @@ The solver automatically selects the fastest compatible physical basis.
 
 ## 7. Implementation Notes
 
-### 7.1 CPU (FFTW)
+### 7.1 CPU
 
 - `FftwFFT<T, DIM>`: Standard FFT using FFTW3
 - `FftwCrysFFTPmmm`: Pmmm DCT using FFTW REDFT10/REDFT01
@@ -329,32 +329,25 @@ transform.execute(d_data);
 
 ### 8.1 DCT/DST Numerical Accuracy
 
-All implementations achieve machine precision when compared to FFTW:
-
-| Transform | Max Relative Error (1D) | Max Relative Error (3D) |
-|-----------|------------------------|------------------------|
-| DST-1 | < 3×10⁻¹⁶ | < 3×10⁻¹⁶ |
-| DST-2 | < 4×10⁻¹⁶ | < 3×10⁻¹⁶ |
-| DST-3 | < 2×10⁻¹⁶ | < 4×10⁻¹⁶ |
-| DST-4 | < 3×10⁻¹⁶ | < 4×10⁻¹⁶ |
+All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative error) when compared to FFTW.
 
 ### 8.2 CrysFFT Benchmark (64³, Im-3m BCC)
 
-**Setup**: nx=[64,64,64], coeff=0.01, 200 iterations, NVIDIA A10
+**Setup**: nx=[64,64,64], coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
 
-| Platform | Standard FFT | M3 physical | Pmmm physical |
+| Platform | Standard FFT | 3m physical | Pmmm physical |
 |----------|-------------|-------------|---------------|
 | CUDA | 0.177 ms | 0.056 ms (3.1x) | 0.091 ms (2.0x) |
-| CPU (FFTW) | 2.09 ms | 0.41 ms (5.1x) | 0.58 ms (3.6x) |
+| CPU | 2.09 ms | 0.41 ms (5.1x) | 0.58 ms (3.6x) |
 
 ### 8.3 ObliqueZ Benchmark (64³, Hexagonal P6/mmm)
 
-**Setup**: nx=[64,64,64], γ=120°, coeff=0.01, 200 iterations
+**Setup**: nx=[64,64,64], γ=120°, coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
 
 | Platform | Standard FFT | ObliqueZ |
 |----------|-------------|----------|
 | CUDA | 0.132 ms | 0.120 ms (1.1x) |
-| CPU (FFTW) | 2.00 ms | 1.40 ms (1.4x) |
+| CPU | 2.00 ms | 1.40 ms (1.4x) |
 
 ---
 

@@ -66,7 +66,7 @@ The code format is used during propagator code generation and encodes the polyme
 
 **Structure:**
 ```
-[Dependencies]MonomerType + N
+[Dependencies]MonomerTypeN
 ```
 
 Where N is:
@@ -119,31 +119,31 @@ When identical propagator branches are detected, they are merged to reduce redun
 **Continuous chain aggregation:**
 ```
 Input propagators:
-  (D)B+0: n_segment_right=4
-  (E)B+0: n_segment_right=4
+  (D4)B+0: n_segment_right=4
+  (E4)B+0: n_segment_right=4
 
 After slicing (n_segment=0, length_index=0):
-  (D)B+0: n_segment_right=0
-  (E)B+0: n_segment_right=0
+  (D4)B+0: n_segment_right=0
+  (E4)B+0: n_segment_right=0
 
-Aggregated key: [(D)B0,(E)B0]B+0
-                    ^     ^
-                length_index=0 (for continuous chains)
+Aggregated key: [(D4)B0,(E4)B0]B+0
+                      ^      ^
+                  length_index=0 (for continuous chains)
 ```
 
 **Discrete chain aggregation:**
 ```
 Input propagators:
-  (D)B+0: n_segment_right=4
-  (E)B+0: n_segment_right=4
+  (D4)B+0: n_segment_right=4
+  (E4)B+0: n_segment_right=4
 
 After slicing (minimum_n_segment=1):
-  (D)B+0: n_segment_right=1
-  (E)B+0: n_segment_right=1
+  (D4)B+0: n_segment_right=1
+  (E4)B+0: n_segment_right=1
 
-Aggregated key: [(D)B1,(E)B1]B+0
-                    ^     ^
-                n_segment=1 (for discrete chains)
+Aggregated key: [(D4)B1,(E4)B1]B+0
+                      ^      ^
+                  n_segment=1 (for discrete chains)
 ```
 
 ---
@@ -168,7 +168,7 @@ where $n_i$ is the repetition count (from `:n` notation, default 1).
 
 ### Aggregated Computation (D with Square Brackets)
 
-For aggregated propagators (e.g., `[(A)B0,(C)D0]E+0`):
+For aggregated propagators (e.g., `[(A3)B0,(C3)D0]E+0`):
 
 $$q(\mathbf{r}, 0) = \sum_{i} n_i \cdot q_i(\mathbf{r}, N_i)$$
 
@@ -189,13 +189,13 @@ Propagators are grouped by their **dependency height**:
 | Height | Description | Example |
 |--------|-------------|---------|
 | 0 | No dependencies (free-end) | `A+0`, `B+0` |
-| 1 | Depends only on height-0 | `(A)C+0` |
-| 2 | Depends on height-1 | `(AC)D+0` |
+| 1 | Depends only on height-0 | `(A3)C+0` |
+| 2 | Depends on height-1 | `((A3)C4)D+0` |
 
 ```
-Height 0: A+0, B+0, C+0     (can all run in parallel)
-Height 1: (A)D+0, (B)E+0    (can run after their dependencies)
-Height 2: (DE)F+0           (runs after D and E complete)
+Height 0: A+0, B+0, C+0           (can all run in parallel)
+Height 1: (A3)D+0, (B3)E+0        (can run after their dependencies)
+Height 2: ((A3)D4(B3)E4)F+0       (runs after D and E complete)
 ```
 
 ### Step 2: Resolve Dependencies
@@ -330,7 +330,7 @@ B+0:
     n_segment=10, start=0, end=10
 C+0:
     n_segment=10, start=0, end=10
-(ABC)D+0:
+(A10B10C10)D+0:
     n_segment=5, start=10, end=15
 
 === Time Slices ===
@@ -339,7 +339,7 @@ Time 0-10:
     B+0: segments 0-10
     C+0: segments 0-10
 Time 10-15:
-    (ABC)D+0: segments 0-5
+    (A10B10C10)D+0: segments 0-5
 ```
 
 ---

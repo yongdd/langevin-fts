@@ -159,7 +159,7 @@ Two methods are available for non-periodic boundary conditions:
    - Uses DCT for reflecting BC, DST for absorbing BC
    - High accuracy for smooth solutions (spectral convergence)
    - Efficient for large grids
-   - CPU-FFTW only for non-periodic BC
+   - Available on both CPU (FFTW) and CUDA
 
 2. **Real-space (Crank-Nicolson)**
    - Uses finite differences with ADI splitting

@@ -45,9 +45,8 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 - CN-ADI2 (2nd-order) selectable at runtime
 - Supports only continuous chain model
 - Supports periodic, reflecting, and absorbing boundaries
-- See [RealSpaceMethod.md](RealSpaceMethod.md) for details
 
-For detailed performance benchmarks and method comparisons, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
+For detailed performance benchmarks and method comparisons, see [NumericalMethods.md](../theory/NumericalMethods.md).
 
 ### Simulation Box
 - **Dimensions**: 1D, 2D, and 3D
@@ -59,7 +58,7 @@ For detailed performance benchmarks and method comparisons, see [NumericalMethod
   - Automatically selects the fastest compatible physical basis to avoid mapping overhead
 
 ### Platforms and Performance
-- **CPU**: FFTW backend with OpenMP parallelization
+- **CPU**: OpenMP parallelization
 - **GPU**: NVIDIA CUDA backend with multi-stream execution
 - **CrysFFT support**: Crystallographic FFT acceleration on CPU and CUDA for compatible space-group symmetries
 - **Parallel propagator computation**:
@@ -92,7 +91,7 @@ High-level simulation modules built on top of the core library.
 - Structure function calculations
 - Smearing for finite-range interactions
 
-### Complex Langevin FTS (CL-FTS)
+### Complex Langevin FTS (CL-FTS) (beta)
 - Complex-valued auxiliary fields for handling the sign problem
 - Dynamical stabilization option
 - Smearing for finite-range interactions
@@ -110,7 +109,7 @@ High-level simulation modules built on top of the core library.
 | Absorbing BC | Yes (DST) | Yes |
 | Numerical methods | RQM4, RK2 | CN-ADI2 |
 | Stress calculation | Yes | No |
-| Recommended for | Large grids, periodic systems | Non-periodic boundaries |
+| Recommended for | Large grids, periodic systems | Brush with grafted delta-function |
 
 ---
 

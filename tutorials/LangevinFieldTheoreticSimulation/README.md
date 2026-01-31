@@ -6,8 +6,7 @@ Include compositional fluctuations beyond mean-field theory.
 
 ```python
 import os
-os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
-os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded FFTW
+os.environ["OMP_NUM_THREADS"] = "1"
 ```
 
 ## Tutorials
