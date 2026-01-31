@@ -27,12 +27,12 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8 && make install && ctest -L basic
 ```
 
+> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance.
+
 ### Other Options
 
 - **Docker**: Pre-built images available for CPU and GPU
 - **pip**: `pip install .`
-
-> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance. See [docs/Installation.md](docs/Installation.md) for details.
 
 For detailed instructions, troubleshooting, and dependencies, see [docs/Installation.md](docs/Installation.md).
 

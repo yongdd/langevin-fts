@@ -2,13 +2,89 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Note**: Mathematical equations use LaTeX syntax (`$...$` for inline, `$$...$$` for display). These render correctly on GitHub and in editors with LaTeX support.
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Critical Rules](#critical-rules)
+- [Requirements](#requirements)
+- [Build System](#build-system)
+- [Testing](#testing)
+- [Code Architecture](#code-architecture)
+- [Running Simulations](#running-simulations)
+- [Troubleshooting](#troubleshooting)
+- [Chain Models](#chain-models)
+- [Numerical Methods](#numerical-methods)
+- [Units and Conventions](#units-and-conventions)
+- [Development Notes](#development-notes)
+- [Documentation and Learning](#documentation-and-learning)
+- [Key References](#key-references)
+
 ## Project Overview
 
 This is a polymer field theory simulation library implementing Self-Consistent Field Theory (SCFT) and Langevin Field-Theoretic Simulations (L-FTS). The codebase consists of high-performance C++/CUDA computational kernels exposed through Python interfaces via pybind11, enabling efficient polymer physics simulations with Python's ecosystem.
 
+## Critical Rules
+
+> **These rules are mandatory and must be followed at all times.**
+
+### Never Commit Without Permission
+
+Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
+
+### Never Modify Test Parameters
+
+Test files in `tests/` contain carefully calibrated parameters. The following modifications are **strictly forbidden** unless the user explicitly requests them:
+
+- NEVER increase tolerance values (e.g., changing 1e-7 to 1e-6 to make a test pass)
+- NEVER decrease field strength or standard deviation values
+- NEVER change grid sizes, box dimensions, or polymer parameters
+- NEVER weaken any test conditions to make tests pass
+
+If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
+
+### Use SLURM for Long-Running Jobs
+
+For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
+
+```bash
+# Submit multiple jobs in parallel
+for param in 100 200 400 800; do
+    sbatch --job-name="test_$param" --wrap="python script.py --param $param"
+done
+```
+
+See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
+
+### Split Large Computations
+
+For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
+
+## Requirements
+
+### Software Dependencies
+
+| Dependency | Minimum Version | Notes |
+|------------|-----------------|-------|
+| CMake | 3.17+ | Build system |
+| C++ Compiler | C++20 support | GCC 10+, Clang 10+ |
+| Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
+| CUDA Toolkit | 11.8+ | For GPU support |
+| FFTW | 3.3+ | CPU FFT backend |
+| pybind11 | 2.13+ | Python bindings |
+
+### Conda Environment
+
+```bash
+# Create and activate the conda environment
+conda activate polymerfts
+```
+
 ## Build System
 
 ### Build Commands
+
 ```bash
 # Initial build (from repository root)
 mkdir build && cd build
@@ -29,6 +105,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 ```
 
 ### Important Build Notes
+
 - Requires C++20 standard (set in CMakeLists.txt)
 - CUDA Toolkit 11.8+ required for GPU support
 - Set `CUDA_ARCHITECTURES` in CMakeLists.txt:102 based on target GPU (default includes compute capabilities 60-90)
@@ -36,6 +113,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 
 ### Environment Setup
+
 ```bash
 # Activate conda environment (required before any work)
 conda activate polymerfts
@@ -46,7 +124,9 @@ export OMP_STACKSIZE=1G
 ```
 
 ### GPU Selection (Important!)
+
 **At the start of each session**, run `nvidia-smi` to check GPU utilization and select an idle GPU:
+
 ```bash
 # Check GPU status
 nvidia-smi
@@ -54,6 +134,7 @@ nvidia-smi
 # Set CUDA_VISIBLE_DEVICES to an idle GPU before running tests
 export CUDA_VISIBLE_DEVICES=0  # or 1, 2, etc. based on which GPU is idle
 ```
+
 This prevents conflicts with other users and ensures consistent test results.
 
 ## Testing
@@ -103,6 +184,7 @@ Benchmark scripts for numerical method comparison are in `tests/`:
 **Running benchmarks with SLURM job scheduler:**
 
 Use the provided SLURM template `slurm_run.sh`:
+
 ```bash
 #!/bin/bash
 #SBATCH --job-name=benchmark
@@ -121,6 +203,7 @@ python -u tests/benchmark_numerical_methods.py
 ```
 
 Submit the job:
+
 ```bash
 sbatch slurm_run.sh
 ```
@@ -149,6 +232,7 @@ When testing propagator solvers or numerical methods, always follow these requir
 4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
 
 Example test setup:
+
 ```python
 # Generate test fields with std ~ 5
 w = np.random.normal(0.0, 5.0, size=nx)
@@ -179,6 +263,7 @@ When adding new computational features, you must implement them for both platfor
 ### Core Components
 
 #### Propagator Computation (`src/common/PropagatorComputation.h`)
+
 The central computational engine. Computes chain propagators using dynamic programming to avoid redundant calculations for branched polymers. The optimization strategy is described in *J. Chem. Theory Comput.* **2025**, 21, 3676.
 
 Key concepts:
@@ -190,20 +275,24 @@ Key concepts:
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
+
 Manages simulation grid, FFT operations, and boundary conditions. Handles 1D/2D/3D simulations with periodic, reflecting, or absorbing boundary conditions. All numerical methods support all boundary condition types.
 
 #### Polymer and Molecules (`src/common/Polymer.h`, `src/common/Molecules.h`)
+
 Define polymer chain architectures:
 - Supports arbitrary acyclic branched polymers (star, comb, dendritic, bottle-brush, etc.)
 - Handles mixtures of block copolymers, homopolymers, and random copolymers
 - Stores chain topology as directed acyclic graph for propagator computation optimization
 
 #### Anderson Mixing (`src/common/AndersonMixing.h`)
+
 Iterative solver for SCFT equations. Accelerates convergence by mixing field history. Critical for SCFT convergence; parameters in examples show tuned values.
 
 ### Python Layer
 
 #### High-Level Simulation Classes
+
 - `src/python/scft.py`: SCFT simulation orchestrator
   - Handles field initialization, iteration loop, convergence checking
   - Supports Anderson Mixing and ADAM optimizers
@@ -222,6 +311,7 @@ Iterative solver for SCFT equations. Accelerates convergence by mixing field his
   - Hamiltonian coefficient calculations for arbitrary χN parameters
 
 #### Python-C++ Binding (`src/pybind11/polymerfts_core.cpp`)
+
 Exposes C++ classes to Python as the `_core` module. All C++ computational objects are accessible through this interface.
 
 ### CUDA Implementation Details
@@ -239,6 +329,7 @@ The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is
 ## Running Simulations
 
 ### SCFT Examples
+
 Located in `examples/scft/`:
 - `Lamella3D.py`: Lamellar phase of AB diblock
 - `Gyroid.py`: Gyroid phase with box relaxation
@@ -246,6 +337,7 @@ Located in `examples/scft/`:
 - `phases/`: **Space group symmetry examples** - BCC, FCC, Gyroid, Double Diamond, Sigma, A15, and other complex phases with space group constraints for reduced memory usage and faster field operations
 
 Run from repository root:
+
 ```bash
 cd examples/scft
 python Lamella3D.py
@@ -260,6 +352,7 @@ The `examples/scft/phases/` directory contains examples using space group symmet
 - **Speedup**: ~5-10% from smaller field operations (propagator computation still uses full grid FFT)
 
 Example usage in params:
+
 ```python
 "space_group": {
     "symbol": "Im-3m",   # Hermann-Mauguin symbol (BCC)
@@ -270,6 +363,7 @@ Example usage in params:
 See `examples/scft/phases/README.md` for available space groups and reduction factors.
 
 ### L-FTS Examples
+
 Located in `examples/fts/`:
 - `Lamella.py`: Langevin dynamics of lamellar phase
 - `Gyroid.py`: Fluctuating gyroid phase
@@ -284,17 +378,37 @@ Simulations are configured via Python dictionaries with keys:
 - `segment_lengths`: Relative statistical segment lengths
 - `chi_n`: Flory-Huggins interaction parameters × N_Ref
 - `distinct_polymers`: Polymer architectures and volume fractions
-- `platform`: "cuda" or "cpu-fftw" (auto-selected by default: cuda for 2D/3D, cpu-fftw for 1D)
+- `platform`: Platform selection (see below)
 - `numerical_method`: Algorithm for propagator computation
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
   - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
 
+#### Platform Auto-Selection
+
+The `platform` parameter controls which computational backend is used:
+- `"cuda"`: NVIDIA GPU with cuFFT (requires CUDA)
+- `"cpu-fftw"`: CPU with FFTW library
+
+**Auto-selection logic** (when `platform` is not specified):
+- **1D simulations**: Uses `cpu-fftw` (GPU overhead outweighs benefits for small problems)
+- **2D/3D simulations**: Uses `cuda` if available, otherwise falls back to `cpu-fftw`
+
+## Troubleshooting
+
 ### Common Issues and Solutions
 
-**Segmentation fault**: Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G`
+| Problem | Solution |
+|---------|----------|
+| **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
+| **GPU architecture errors** | Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES` |
+| **Memory issues** | Set `"reduce_memory": True` in parameters |
+| **Single CPU core usage** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports |
 
-**SCFT not converging**: Reduce mixing parameters:
+### SCFT Not Converging
+
+Reduce mixing parameters:
+
 ```python
 "optimizer": {
     "name": "am",
@@ -304,11 +418,30 @@ Simulations are configured via Python dictionaries with keys:
 }
 ```
 
-**GPU architecture errors**: Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
+### Debugging Test Failures
 
-**Memory issues**: Set `"reduce_memory": True` in parameters
+1. **Run with verbose output**: `ctest -V -R <test_name>`
+2. **Check for NaN/Inf**: Add `np.isnan(result).any()` checks
+3. **Verify partition function**: Call `solver.check_total_partition()` - should be ~1.0
+4. **Compare platforms**: Run same test on both `cuda` and `cpu-fftw` to isolate platform-specific issues
+5. **Check material conservation**: Verify `np.mean(sum(phi_species))` ≈ 1.0
 
-**Single CPU core usage**: Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports
+### Interpreting Error Messages
+
+| Error Message | Likely Cause | Solution |
+|---------------|--------------|----------|
+| `Partition function is negative` | Numerical instability, field too strong | Reduce `ds` or field amplitude |
+| `Forward and backward Q mismatch` | Material conservation violated | Check FFT implementation, boundary conditions |
+| `cuFFT error` | GPU memory issue or invalid transform | Check GPU memory with `nvidia-smi`, reduce grid size |
+| `FFTW plan failed` | Memory allocation failure | Reduce grid size or increase available RAM |
+
+### Where to Look When Things Go Wrong
+
+1. **Propagator issues**: `src/common/PropagatorComputation.h`, platform-specific solvers in `src/platforms/*/`
+2. **FFT problems**: `src/platforms/cpu/FftwFFT.cpp` or `src/platforms/cuda/CudaFFT.cu`
+3. **SCFT convergence**: `src/python/scft.py`, check Anderson mixing parameters
+4. **Memory errors**: Check `reduce_memory` option, verify GPU memory availability
+5. **Platform differences**: Compare CPU vs CUDA outputs - should match to ~10⁻¹³
 
 ## Chain Models
 
@@ -323,6 +456,7 @@ $$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathb
 where $q(\mathbf{r}, s)$ is the chain propagator, $b$ is the statistical segment length, and $w(\mathbf{r})$ is the potential field.
 
 **Pseudo-spectral solution** (operator splitting):
+
 $$q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]$$
 
 The term $e^{-b^2 |\mathbf{k}|^2 \Delta s/6}$ is the **diffusion propagator** in Fourier space.
@@ -336,12 +470,15 @@ $$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r
 where $g(\mathbf{r})$ is the **bond function** representing the probability distribution of bond vectors.
 
 **Bead-spring (Gaussian) bond function**:
+
 $$g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)$$
 
 **Fourier transform of bond function**:
+
 $$\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)$$
 
 With the convention $a^2 = b^2 \Delta s$ (where $\Delta s = 1/N$), this becomes:
+
 $$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)$$
 
 **Key distinction**: The formula $\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)$ appears in both models but has different physical meanings:
@@ -364,6 +501,7 @@ Pseudo-spectral methods use spectral transforms to solve the diffusion operator 
 All pseudo-spectral methods use **cell-centered grids** where grid points are at $x_i = (i + 0.5) \cdot dx$ for $i = 0, 1, ..., N-1$, with boundaries at cell faces (not grid points).
 
 #### RQM4 (4th-order Richardson Extrapolation)
+
 The default method combining operator splitting with Richardson extrapolation:
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
 2. Apply Strang splitting with half-steps
@@ -374,6 +512,7 @@ The default method combining operator splitting with Richardson extrapolation:
 **Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
 
 #### RK2 (2nd-order Rasmussen-Kalosakas)
+
 Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen-Kalosakas, not Runge-Kutta):
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
 2. Apply Strang splitting: $q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]$
@@ -393,6 +532,7 @@ Real-space methods use **cell-centered grids** (same as pseudo-spectral methods)
 - **Absorbing BC**: Antisymmetric ghost cell ($q_{-1} = -q_0$)
 
 #### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
+
 Alternating Direction Implicit method with Crank-Nicolson time stepping:
 1. Split 2D/3D problem into sequence of 1D problems
 2. Each direction solved implicitly with tridiagonal system
@@ -420,32 +560,10 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 ## Development Notes
 
-### Workflow Rules
-
-- **Never commit without permission**: Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
-
-- **NEVER modify test parameters without explicit permission**: Test files in `tests/` contain carefully calibrated parameters. The following modifications are strictly forbidden unless the user explicitly requests them:
-  - NEVER increase tolerance values (e.g., changing 1e-7 to 1e-6 to make a test pass)
-  - NEVER decrease field strength or standard deviation values
-  - NEVER change grid sizes, box dimensions, or polymer parameters
-  - NEVER weaken any test conditions to make tests pass
-
-  If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
-
-- **Use SLURM for long-running jobs**: For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
-  ```bash
-  # Submit multiple jobs in parallel
-  for param in 100 200 400 800; do
-      sbatch --job-name="test_$param" --wrap="python script.py --param $param"
-  done
-  ```
-  See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
-
-- **Split large computations into smaller jobs**: For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
-
 ### When Modifying C++ Code
 
 1. Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:
+
    ```bash
    cd build && make -j8 && make install
    ```
@@ -471,7 +589,8 @@ Derived classes implement chain-model-specific behavior:
 - `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
 
 **Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
-```
+
+```text
       FFT<T>              (abstract base - double* and complex* interfaces)
         ↑
    FftwFFT<T, DIM>         (CPU: FFTW for FFT, DCT, DST)
@@ -486,6 +605,7 @@ FFT functions are called from multiple OpenMP threads simultaneously (propagator
 1. **DO NOT multi-thread inside FFT**: Disable internal threading in FFTW and cuFFT. Parallelism happens at the propagator level, not inside FFT calls.
 
 2. **DO NOT share buffers between threads**: Internal work buffers MUST be `thread_local`. The class member `work_buffer_` and `complex_buffer_` can only be used for plan creation, not execution. Example pattern:
+
    ```cpp
    void forward(T* rdata, double* cdata) {
        thread_local std::vector<double> work_local;  // Thread-safe
