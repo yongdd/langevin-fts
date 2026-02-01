@@ -70,7 +70,7 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0, "B": 1.0},
     bc=["periodic"]*4,
     chain_model="continuous",
-    method="pseudospectral",
+    numerical_method="rqm4",
     platform="cpu-fftw",
     reduce_memory=False
 )

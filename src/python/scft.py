@@ -563,12 +563,12 @@ class SCFT:
         if len(self.monomer_types) != len(set(self.monomer_types)):
             raise ValidationError("There are duplicated monomer_types")
 
-        # Choose platform among [cuda, cpu-fftw, cpu-mkl]
+        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-fftw"
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:
@@ -1446,7 +1446,7 @@ class SCFT:
 
             \\sum_A \\phi_A(\\mathbf{r}) = 1
 
-        where χ_AB is the Flory-Huggins parameter, N_ref is the reference
+        where χ_AB is the Flory-Huggins parameter, N_Ref is the reference
         polymerization index, and ξ(r) is a Lagrange multiplier field enforcing
         incompressibility.
 

@@ -55,7 +55,7 @@ where:
 
 ### 2.2 Discrete Chain Model
 
-For discrete chains (freely-jointed chain model), the propagator satisfies the Chapman-Kolmogorov equation:
+For discrete chains (bead-spring model), the propagator satisfies the Chapman-Kolmogorov equation:
 
 $$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'$$
 
@@ -179,11 +179,12 @@ where:
 ```python
 # AB diblock (80% volume fraction)
 solver.add_polymer(volume_fraction=0.8,
-                   blocks=[["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+                   blocks=[{"type": "A", "length": 0.5},
+                           {"type": "B", "length": 0.5}])
 
 # A homopolymer (20% volume fraction)
 solver.add_polymer(volume_fraction=0.2,
-                   blocks=[["A", 0.5, 0, 1]])
+                   blocks=[{"type": "A", "length": 0.5}])
 ```
 
 ---
@@ -225,13 +226,14 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0, "B": 1.0},
     bc=["periodic"] * 4,
     chain_model="continuous",
-    method="pseudospectral",
+    numerical_method="rqm4",
 )
 
 # Add AB diblock copolymer
 solver.add_polymer(
     volume_fraction=1.0,
-    blocks=[["A", 0.7, 0, 1], ["B", 0.3, 1, 2]]
+    blocks=[{"type": "A", "length": 0.7},
+            {"type": "B", "length": 0.3}]
 )
 
 # Set potential fields

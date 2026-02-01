@@ -3,7 +3,7 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-import lfts
+from polymerfts import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
@@ -74,7 +74,7 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "optimizer":{
+    "compressor":{
         # "name":"am",                # Anderson Mixing
         # "name":"lr",                # Linear Response
         "name":"lram",              # Linear Response + Anderson Mixing

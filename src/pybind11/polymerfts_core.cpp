@@ -29,7 +29,7 @@
  * **Usage from Python:**
  *
  * @code{.py}
- * from langevinfts import _core
+ * from polymerfts import _core
  *
  * # Create platform factory
  * factory = _core.PlatformSelector.create_factory("cuda", reduce_memory=False)

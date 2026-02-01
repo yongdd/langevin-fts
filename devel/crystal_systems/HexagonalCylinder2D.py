@@ -38,7 +38,7 @@ f = 1.0/3.0     # A-fraction of major BCP chain, f (minority forms cylinders)
 L = 1.6     # a = b = L
 
 params = {
-    # "platform":"cuda",             # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cuda",             # choose platform among [cuda, cpu-fftw, cpu-mkl]
 
     "nx": [32, 32],                  # Simulation grid numbers
     "lx": [L, L],                    # Box size [a, b] - equal for hexagonal

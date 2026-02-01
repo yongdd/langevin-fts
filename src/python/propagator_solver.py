@@ -18,7 +18,7 @@ Example usage:
         bc=["reflecting", "reflecting"],
         chain_model="continuous",
         numerical_method="rqm4",  # optional, defaults to "rqm4"
-        platform="cpu-fftw"
+        platform="cpu-mkl"
     )
 
     # For discrete chain model, numerical_method is not needed
@@ -90,8 +90,12 @@ class PropagatorSolver:
         - "rk2": Pseudo-spectral with 2nd-order operator splitting
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
         Note: Discrete chain model has its own solver; this parameter is ignored.
-    platform : str
-        Computational platform: "cuda", "cpu-mkl", or "cpu-fftw".
+    platform : str, optional
+        Computational platform (default: "auto"):
+        - "auto": Auto-select (cpu-mkl for 1D, cuda for 2D/3D if available)
+        - "cuda": NVIDIA GPU with cuFFT
+        - "cpu-mkl": CPU with Intel MKL
+        - "cpu-fftw": CPU with FFTW
     reduce_memory : bool
         If True, store only propagator checkpoints instead of full histories,
         recomputing propagators as needed. Reduces memory usage but increases
@@ -231,7 +235,7 @@ class PropagatorSolver:
             if self.dim >= 2:
                 platform = "cuda"
             else:
-                platform = "cpu-fftw"
+                platform = "cpu-mkl"
         self.platform = platform
 
         # Check if non-periodic BC is used with CUDA pseudospectral

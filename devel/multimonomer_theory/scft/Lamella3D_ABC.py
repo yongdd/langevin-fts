@@ -16,7 +16,7 @@ a_ratio = 0.85
 b_ratio = (1-np.sqrt(a_ratio))**2
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-mkl]
     
     "nx":[32,32,32],          # Simulation grid numbers
     "lx":[4.36,4.36,4.3610864],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,

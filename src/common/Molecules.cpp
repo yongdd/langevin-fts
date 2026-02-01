@@ -9,7 +9,7 @@
  * **Chain Models:**
  *
  * - Continuous: Modified diffusion equation (Gaussian chain)
- * - Discrete: Integral equation (freely-jointed chain)
+ * - Discrete: Integral equation (bead-spring model)
  *
  * **Species Management:**
  *
@@ -54,7 +54,7 @@ Molecules::Molecules(
     // Check chain model
     if (model_lower != "continuous" && model_lower != "discrete")
     {
-        throw_with_line_number(model_name + " is an invalid chain model. This must be 'Continuous' or 'Discrete'.")
+        throw_with_line_number(model_name + " is an invalid chain model. This must be 'continuous' or 'discrete'.")
     }
 
     // Save variables

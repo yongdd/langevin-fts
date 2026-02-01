@@ -294,9 +294,9 @@ Molecules                                     [System Container]
     0 ----A---- 1 ----B---- 2 ----C---- 3
 
     blocks = [
-        ["A", 0.33, 0, 1],
-        ["B", 0.34, 1, 2],
-        ["C", 0.33, 2, 3]
+        {"type": "A", "length": 0.33},
+        {"type": "B", "length": 0.34},
+        {"type": "C", "length": 0.33}
     ]
 ```
 
@@ -310,9 +310,9 @@ Molecules                                     [System Container]
     2--B-- 0 --C-- 3
 
     blocks = [
-        ["A", 0.33, 0, 1],
-        ["B", 0.33, 0, 2],
-        ["C", 0.34, 0, 3]
+        {"type": "A", "length": 0.33, "v": 0, "u": 1},
+        {"type": "B", "length": 0.33, "v": 0, "u": 2},
+        {"type": "C", "length": 0.34, "v": 0, "u": 3}
     ]
 ```
 

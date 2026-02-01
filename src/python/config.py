@@ -253,7 +253,9 @@ def create_template_config(path: Union[str, Path], simulation_type: str = "scft"
 
             "recording": {
                 "dir": "data",
-                "period": 1000
+                "recording_period": 1000,
+                "sf_computing_period": 10,
+                "sf_recording_period": 100
             },
 
             "box_is_altering": False,
