@@ -12,12 +12,8 @@ env:
 
 jobs:
   build-cpu:
-    name: Build (CPU-FFTW, ${{ matrix.build_type }})
+    name: Build and Test (CPU-FFTW-MKL)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        build_type: [Release, Debug]
 
     steps:
     - name: Checkout repository
@@ -38,38 +34,39 @@ jobs:
           numpy scipy pandas matplotlib spglib \
           make git pip pyyaml \
           jupyter networkx pygments plotly nbformat \
-          fftw
+          fftw mkl mkl-devel mkl-include
 
-    - name: Debug FFTW installation
+    - name: Debug installation
       shell: bash -l {0}
       run: |
         echo "=== CONDA_PREFIX: $CONDA_PREFIX ==="
-        echo "=== FFTW files in conda environment ==="
-        ls -la $CONDA_PREFIX/lib/libfftw* 2>/dev/null | head -20 || echo "No libfftw files found"
-        echo "=== FFTW include files ==="
-        ls -la $CONDA_PREFIX/include/fftw*.h 2>/dev/null | head -10 || echo "No fftw headers found"
-        echo "=== CMake FFTW config ==="
-        find $CONDA_PREFIX -name "*FFTW*.cmake" -o -name "*fftw*.cmake" 2>/dev/null | head -10 || echo "No FFTW cmake files"
+        echo "=== FFTW files ==="
+        ls -la $CONDA_PREFIX/lib/libfftw* 2>/dev/null | head -10 || echo "No libfftw files"
+        echo "=== MKL files ==="
+        ls -la $CONDA_PREFIX/lib/libmkl* 2>/dev/null | head -10 || echo "No libmkl files"
+        echo "=== MKL include ==="
+        ls -la $CONDA_PREFIX/include/mkl*.h 2>/dev/null | head -5 || echo "No mkl headers"
 
     - name: Configure CMake
       shell: bash -l {0}
       run: |
         mkdir -p build
         cd build
-        # Set FFTW environment for conda-forge FFTW
         export FFTWROOT=$CONDA_PREFIX
+        export MKLROOT=$CONDA_PREFIX
         export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
-        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+        cmake .. -DCMAKE_BUILD_TYPE=Release \
           -DPOLYMERFTS_USE_FFTW=ON \
+          -DPOLYMERFTS_USE_MKL=ON \
+          -DPOLYMERFTS_USE_CUDA=OFF \
           -DFFTW_ROOT=$CONDA_PREFIX \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-          --debug-find 2>&1 | tee cmake_output.txt | tail -100
+          2>&1 | tail -50
 
     - name: Build
       shell: bash -l {0}
       run: |
         cd build
-        # Add conda FFTW library path for linking
         export LIBRARY_PATH=$CONDA_PREFIX/lib:$LIBRARY_PATH
         export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
         make -j$(nproc)
@@ -98,21 +95,6 @@ jobs:
         python tests/TestNumPyFFT2DComplex.py
         python tests/TestNumPyFFT3D.py
         python tests/TestNumPyFFT3DComplex.py
-
-  # CUDA build job - disabled by default as it requires self-hosted GPU runner
-  # Uncomment and configure when GPU runners are available
-  # build-cuda:
-  #   name: Build (CUDA)
-  #   runs-on: [self-hosted, gpu]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Build with CUDA
-  #       run: |
-  #         mkdir -p build && cd build
-  #         cmake .. -DCMAKE_BUILD_TYPE=Release
-  #         make -j$(nproc)
-  #         make install
-  #         ctest --output-on-failure
 
   lint:
     name: Code Quality Checks
