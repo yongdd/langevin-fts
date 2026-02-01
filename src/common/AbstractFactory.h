@@ -16,10 +16,12 @@
  *
  * **Supported Platforms:**
  *
+ * - **cpu-mkl**: Intel MKL-based CPU implementation (default)
  * - **cpu-fftw**: FFTW-based CPU implementation using OpenMP
  * - **cuda**: NVIDIA CUDA GPU implementation using cuFFT
  *
- * @see FftwFactory for CPU implementation
+ * @see MklFactory for CPU implementation (MKL)
+ * @see FftwFactory for CPU implementation (FFTW)
  * @see CudaFactory for GPU implementation
  * @see PlatformSelector for factory creation
  *

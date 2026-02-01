@@ -51,8 +51,8 @@ params = {
     "distinct_polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
-            ["A", 0.5, 0, 1],      # [monomer, length, start_vertex, end_vertex]
-            ["B", 0.5, 1, 2]
+            {"type": "A", "length": 0.5},  # For linear chains, v/u are optional
+            {"type": "B", "length": 0.5}
         ]
     }],
 

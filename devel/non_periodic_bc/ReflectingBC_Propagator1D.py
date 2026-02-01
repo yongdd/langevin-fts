@@ -46,7 +46,8 @@ def main():
         nx=[N], lx=[L],
         bc=["reflecting", "reflecting"],
         ds=ds,
-        bond_lengths={"A": 1.0}
+        bond_lengths={"A": 1.0},
+        chain_model="continuous"
     )
 
     # Add a simple homopolymer

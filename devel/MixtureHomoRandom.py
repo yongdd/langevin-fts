@@ -13,7 +13,7 @@ eps = 3.0              # a_A/a_B, conformational asymmetry
 RCP_A_frac = 0.4       # fraction of A monomer in random copolymer
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-mkl]
     
     "nx":[32,32,32],          # Simulation grid numbers
     "lx":[4.36,4.36,4.36],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,

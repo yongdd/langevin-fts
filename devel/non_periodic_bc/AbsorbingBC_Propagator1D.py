@@ -48,7 +48,8 @@ def main():
         nx=[N], lx=[L],
         bc=["absorbing", "absorbing"],
         ds=ds,
-        bond_lengths={"A": 1.0}
+        bond_lengths={"A": 1.0},
+        chain_model="continuous"
     )
 
     # Add a simple homopolymer
@@ -106,7 +107,8 @@ def main():
         nx=[N], lx=[L],
         bc=["reflecting", "reflecting"],
         ds=ds,
-        bond_lengths={"A": 1.0}
+        bond_lengths={"A": 1.0},
+        chain_model="continuous"
     )
     solver_reflect.add_polymer(volume_fraction=1.0, blocks=[["A", 1.0, 0, 1]])
     solver_reflect.set_fields({"A": w})

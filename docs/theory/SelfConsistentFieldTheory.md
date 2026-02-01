@@ -151,7 +151,7 @@ params = {
     "lx": [4.0, 4.0, 4.0],           # Box size
 
     "chain_model": "continuous",     # or "discrete"
-    "ds": 0.01,                      # Contour step (1/N_ref)
+    "ds": 0.01,                      # Contour step (1/N_Ref)
 
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 20.0},
@@ -204,9 +204,12 @@ import numpy as np
 solver = PropagatorSolver(
     nx=[64, 64], lx=[2.0, 2.0], ds=0.01,
     bond_lengths={"A": 1.0, "B": 1.0},
+    chain_model="continuous",
+    bc=["periodic"] * 4,
 )
 solver.add_polymer(volume_fraction=1.0,
-                   blocks=[["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+                   blocks=[{"type": "A", "length": 0.5},
+                           {"type": "B", "length": 0.5}])
 
 # Initialize fields
 w = {"A": np.sin(...), "B": -np.sin(...)}

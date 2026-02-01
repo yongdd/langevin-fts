@@ -3,7 +3,7 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-import lfts
+from polymerfts import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
@@ -16,7 +16,7 @@ f = 0.4        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-mkl]
 
     "nx":[64, 64, 64],          # Simulation grid numbers
     "lx":[7.31, 7.31, 7.31],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,
@@ -25,7 +25,7 @@ params = {
 
     "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n":18.35,              # Bare interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 18.35},    # Bare interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
@@ -56,7 +56,8 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "am":{
+    "compressor":{
+        "name":"am",                # Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":8e-1,         # When switch to AM from simple mixing
         "mix_min":0.1,              # Minimum mixing rate of simple mixing
@@ -71,10 +72,13 @@ params = {
 random_seed = 12345
 
 # Set initial fields
-print("w_minus and w_plus are initialized to gyroid")
+print("w_A and w_B are initialized to gyroid")
 input_data = loadmat("GyroidInput.mat", squeeze_me=True)
 w_minus = input_data["w_minus"]
 w_plus = input_data["w_plus"]
+# Convert from w_minus/w_plus to w_A/w_B
+w_A = w_plus + w_minus
+w_B = w_plus - w_minus
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
@@ -83,7 +87,7 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 time_start = time.time()
 
 # Run
-simulation.run(w_minus=w_minus, w_plus=w_plus)
+simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
 time_duration = time.time() - time_start

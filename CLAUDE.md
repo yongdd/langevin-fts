@@ -55,8 +55,6 @@ for param in 100 200 400 800; do
 done
 ```
 
-See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
-
 ### Split Large Computations
 
 For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
@@ -78,7 +76,7 @@ For every computation, launch a separate SLURM job for each parameter value inst
 ### Conda Environment
 
 ```bash
-# Create and activate the conda environment
+# Activate the conda environment
 conda activate polymerfts
 ```
 
@@ -109,7 +107,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 
 - Requires C++20 standard (set in CMakeLists.txt)
 - CUDA Toolkit 11.8+ required for GPU support
-- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:102 based on target GPU (default includes compute capabilities 60-90)
+- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:239 based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 - **Development builds**: Enable both MKL and FFTW backends for full test coverage:
@@ -151,8 +149,8 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 56 | ~40 sec | Installation verification |
-| **Full** | `ctest` | 84 | ~4 min | Development validation |
+| **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
 ### Running Tests
 
@@ -184,31 +182,13 @@ ctest -R Pseudo  # runs all tests matching "Pseudo"
 
 ### Performance and Accuracy Benchmarks
 
-Benchmark scripts for numerical method comparison are in `tests/`:
-- `tests/benchmark_numerical_methods.py`: Benchmark comparing RQM4, RK2, and CN-ADI2
+Benchmark scripts are available in `tests/`:
+- `tests/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
+- `tests/benchmark_space_group_speed.py`: Space group performance benchmark
 
 **Running benchmarks with SLURM job scheduler:**
 
-Use the provided SLURM template `slurm_run.sh`:
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=benchmark
-#SBATCH --partition=a10          # GPU partition (adjust for your cluster)
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:1             # Request 1 GPU
-#SBATCH --cpus-per-task=4        # CPUs for OpenMP threads
-#SBATCH --time=02:00:00
-#SBATCH --output=%j.out
-#SBATCH --error=%j.out
-
-export OMP_MAX_ACTIVE_LEVELS=0
-export OMP_NUM_THREADS=4
-
-python -u tests/benchmark_numerical_methods.py
-```
-
-Submit the job:
+Use the provided SLURM template `slurm_run.sh` (adjust the Python script as needed):
 
 ```bash
 sbatch slurm_run.sh
@@ -408,7 +388,7 @@ The `platform` parameter controls which computational backend is used:
 | Problem | Solution |
 |---------|----------|
 | **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
-| **GPU architecture errors** | Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES` |
+| **GPU architecture errors** | Edit `CMakeLists.txt:239` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES` |
 | **Memory issues** | Set `"reduce_memory": True` in parameters |
 | **Single CPU core usage** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports |
 
@@ -600,7 +580,8 @@ Derived classes implement chain-model-specific behavior:
 ```text
       FFT<T>              (abstract base - double* and complex* interfaces)
         ↑
-   FftwFFT<T, DIM>        (CPU: MKL or FFTW for FFT, DCT, DST)
+   FftwFFT<T, DIM>        (CPU: FFTW for FFT, DCT, DST)
+   MklFFT<T, DIM>         (CPU: MKL for FFT, DCT, DST)
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
 
@@ -641,7 +622,7 @@ Changes to `src/python/*.py` take effect after `make install` from build directo
 
 ### Deprecated/Internal Methods
 
-**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_chain_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
+**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
 
 ### Adding New Monomer Types or Interactions
 

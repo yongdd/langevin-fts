@@ -36,7 +36,6 @@ Explore multi-component systems and random copolymers.
 | Example | Description | Complexity |
 |---------|-------------|------------|
 | `scft/MixtureBlockRandom.py` | Block + random copolymer mixture | Intermediate |
-| `scft/AdamRandomToGyroid.py` | Using ADAM optimizer for random to gyroid transition | Advanced |
 
 **4. SCFT Phase Library**
 

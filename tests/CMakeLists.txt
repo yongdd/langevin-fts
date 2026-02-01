@@ -9,7 +9,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
     file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/data" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
-# Basic tests for verification (~50 tests, ~40 sec total)
+# Basic tests for verification (~56 tests, ~40 sec total)
 # Run with: ctest -L basic
 SET(BASIC_TESTS
     # Platform & utilities

@@ -166,7 +166,7 @@ params = {
     "lx": [4.36, 4.36, 4.36],        # Box size
 
     "chain_model": "discrete",       # or "continuous"
-    "ds": 1/90,                      # Contour step (1/N_ref)
+    "ds": 1/90,                      # Contour step (1/N_Ref)
 
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 17.0},
@@ -181,7 +181,7 @@ params = {
 
     "langevin": {
         "max_step": 10000,           # Total Langevin steps
-        "dt": 8.0,                   # Time step (delta_tau * N_ref)
+        "dt": 8.0,                   # Time step (delta_tau * N_Ref)
         "nbar": 10000,               # Invariant polymerization index
     },
 

@@ -195,12 +195,12 @@ class CLFTS:
         assert len(self.monomer_types) == len(set(self.monomer_types)), \
             "There are duplicated monomer_types"
 
-        # Choose platform among [cuda, cpu-fftw, cpu-mkl]
+        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1:
-            platform = "cpu-fftw"
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1:
+            platform = "cpu-mkl"
         elif "cuda" in avail_platforms:
             platform = "cuda"
         else:

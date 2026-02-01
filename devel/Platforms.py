@@ -35,7 +35,7 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
             "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
-# choose platform among [cuda, cpu-fftw, cpu-fftw]
+# choose platform among [cuda, cpu-fftw, cpu-mkl]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
 print("*" * 30, "Run", "*" * 30)
 for dim in [1,2,3]:

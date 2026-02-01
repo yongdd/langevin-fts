@@ -31,7 +31,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 ### Important Build Notes
 - Requires C++20 standard (set in CMakeLists.txt)
 - CUDA Toolkit 11.8+ required for GPU support
-- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:102 based on target GPU (default includes compute capabilities 60-90)
+- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:239 based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 
@@ -75,7 +75,7 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
+| **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
 | **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
 ### Running Tests
@@ -108,30 +108,13 @@ ctest -R Pseudo  # runs all tests matching "Pseudo"
 
 ### Performance and Accuracy Benchmarks
 
-Benchmark scripts for numerical method comparison are in `tests/`:
-- `tests/benchmark_numerical_methods.py`: Benchmark comparing RQM4, RK2, and CN-ADI2
+Benchmark scripts are available in `tests/`:
+- `tests/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
+- `tests/benchmark_space_group_speed.py`: Space group performance benchmark
 
 **Running benchmarks with SLURM job scheduler:**
 
-Use the provided SLURM template `slurm_run.sh`:
-```bash
-#!/bin/bash
-#SBATCH --job-name=benchmark
-#SBATCH --partition=a10          # GPU partition (adjust for your cluster)
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:1             # Request 1 GPU
-#SBATCH --cpus-per-task=4        # CPUs for OpenMP threads
-#SBATCH --time=02:00:00
-#SBATCH --output=%j.out
-#SBATCH --error=%j.out
-
-export OMP_MAX_ACTIVE_LEVELS=0
-export OMP_NUM_THREADS=4
-
-python -u tests/benchmark_numerical_methods.py
-```
-
-Submit the job:
+Use the provided SLURM template `slurm_run.sh` (adjust the Python script as needed):
 ```bash
 sbatch slurm_run.sh
 ```
@@ -177,11 +160,11 @@ solver.check_total_partition()  # Should pass without error
 
 ### Platform Abstraction (Abstract Factory Pattern)
 
-The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with FFTW, CUDA GPUs). This is a key architectural feature:
+The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with MKL/FFTW, CUDA GPUs). This is a key architectural feature:
 
 - **Factory Selection**: `src/common/PlatformSelector.cpp` determines available platforms and creates appropriate factory instances
 - **Platform Implementations**:
-  - `src/platforms/cpu/`: FFTW-based CPU implementations using Intel Math Kernel Library for FFT and linear algebra
+  - `src/platforms/cpu/`: CPU implementations using MKL or FFTW for FFT and linear algebra
   - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
 - **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
 
@@ -281,7 +264,7 @@ Example usage in params:
 See `examples/scft/phases/README.md` for available space groups and reduction factors.
 
 ### L-FTS Examples
-Located in `examples/fts/`:
+Located in `examples/lfts/`:
 - `Lamella.py`: Langevin dynamics of lamellar phase
 - `Gyroid.py`: Fluctuating gyroid phase
 - `MixtureBlockRandom.py`: Block/random copolymer mixture
@@ -295,7 +278,7 @@ Simulations are configured via Python dictionaries with keys:
 - `segment_lengths`: Relative statistical segment lengths
 - `chi_n`: Flory-Huggins interaction parameters x N_Ref
 - `distinct_polymers`: Polymer architectures and volume fractions
-- `platform`: "cuda" or "cpu-fftw" (auto-selected by default: cuda for 2D/3D, cpu-fftw for 1D)
+- `platform`: "cuda", "cpu-mkl", or "cpu-fftw" (auto-selected by default: cuda for 2D/3D, cpu-mkl for 1D)
 - `numerical_method`: Algorithm for propagator computation
   - "rqm4": RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
   - "rk2": RK2 - Pseudo-spectral with 2nd-order operator splitting
@@ -315,7 +298,7 @@ Simulations are configured via Python dictionaries with keys:
 }
 ```
 
-**GPU architecture errors**: Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
+**GPU architecture errors**: Edit `CMakeLists.txt:239` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
 
 **Memory issues**: Set `"reduce_memory": True` in parameters
 
@@ -451,7 +434,6 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
       sbatch --job-name="test_$param" --wrap="python script.py --param $param"
   done
   ```
-  See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
 
 - **로그인 노드에서 빌드/설치/테스트 허용**: 로그인 노드에서 `make`, `make install`, `ctest` 실행을 허용한다.
 
@@ -485,11 +467,11 @@ Derived classes implement chain-model-specific behavior:
 - `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
 
 **Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
-```
+```text
       FFT<T>              (abstract base - double* and complex* interfaces)
-        ^
-   FftwFFT<T, DIM>         (CPU: FFTW for FFT, DCT, DST)
-   FftwFFT<T, DIM>        (CPU: FFTW3 for FFT, DCT, DST - GPL license)
+        ↑
+   FftwFFT<T, DIM>        (CPU: FFTW for FFT, DCT, DST)
+   MklFFT<T, DIM>         (CPU: MKL for FFT, DCT, DST)
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
 
@@ -540,12 +522,12 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 Results must match:
 - **PSCF** (https://github.com/dmorse/pscfpp) for continuous chains with even contour steps
 - **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
-- Results should be **identical across platforms** (CUDA vs FFTW) within machine precision - verify by running same parameters on both platforms
+- Results should be **identical across platforms** (CUDA vs CPU) within machine precision - verify by running same parameters on both platforms
 
 ## Documentation and Learning
 
 - **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
-- **Examples**: `examples/scft/` and `examples/fts/` contain runnable simulation scripts
+- **Examples**: `examples/scft/` and `examples/lfts/` contain runnable simulation scripts
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 

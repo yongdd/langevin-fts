@@ -78,6 +78,7 @@ solver = PropagatorSolver(
     nx=[32], lx=[4.0],
     ds=0.01,
     bond_lengths={"A": 1.0},
+    chain_model="continuous",
     bc=["reflecting", "reflecting"]
 )
 
@@ -86,6 +87,7 @@ solver = PropagatorSolver(
     nx=[32, 24], lx=[4.0, 3.0],
     ds=0.01,
     bond_lengths={"A": 1.0},
+    chain_model="continuous",
     bc=["reflecting", "reflecting", "absorbing", "absorbing"]
 )
 ```
@@ -119,28 +121,39 @@ q_final = solver.propagate(q_init, "A", n_steps=100)
 ```python
 # Pseudo-spectral method (higher accuracy)
 solver = PropagatorSolver(
-    nx=[32], lx=[4.0], bc=["reflecting", "reflecting"],
-    method="pseudospectral"
+    nx=[32], lx=[4.0], ds=0.01, bond_lengths={"A": 1.0},
+    chain_model="continuous", bc=["reflecting", "reflecting"],
+    numerical_method="rqm4"  # or "rk2" for 2nd-order
 )
 
 # Real-space method (Crank-Nicolson, more flexible)
 solver = PropagatorSolver(
-    nx=[32], lx=[4.0], bc=["reflecting", "reflecting"],
-    method="realspace"
+    nx=[32], lx=[4.0], ds=0.01, bond_lengths={"A": 1.0},
+    chain_model="continuous", bc=["reflecting", "reflecting"],
+    numerical_method="cn-adi2"
 )
 ```
 
 ### Platform selection
 
 ```python
-# Auto-select platform: cuda for 2D/3D, cpu-fftw for 1D
-solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="auto")
+# Auto-select platform: cuda for 2D/3D, cpu-mkl for 1D
+solver = PropagatorSolver(
+    nx=[32, 24], lx=[4.0, 3.0], ds=0.01, bond_lengths={"A": 1.0},
+    chain_model="continuous", bc=["periodic"]*4, platform="auto"
+)
 
 # Force CPU
-solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cpu-fftw")
+solver = PropagatorSolver(
+    nx=[32, 24], lx=[4.0, 3.0], ds=0.01, bond_lengths={"A": 1.0},
+    chain_model="continuous", bc=["periodic"]*4, platform="cpu-fftw"
+)
 
-# Force CUDA (note: non-periodic BC requires realspace method on CUDA)
-solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cuda")
+# Force CUDA
+solver = PropagatorSolver(
+    nx=[32, 24], lx=[4.0, 3.0], ds=0.01, bond_lengths={"A": 1.0},
+    chain_model="continuous", bc=["periodic"]*4, platform="cuda"
+)
 ```
 
 ## Notes

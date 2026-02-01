@@ -3,7 +3,7 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-import lfts
+from polymerfts import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
@@ -16,7 +16,7 @@ f = 0.5         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-mkl]
 
     "nx":[32, 32, 32],          # Simulation grid numbers
     "lx":[8.0, 8.0, 8.0],       # Simulation box size as a_Ref * N_Ref^(1/2) unit,
@@ -57,7 +57,8 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "am":{
+    "compressor":{
+        "name":"am",                # Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
@@ -84,7 +85,7 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 time_start = time.time()
 
 # Run
-simulation.run(w_minus=(w_A-w_B)/2, w_plus=(w_A+w_B)/2)
+simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
 time_duration = time.time() - time_start

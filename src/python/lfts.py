@@ -139,12 +139,16 @@ class LFTS:
 
         **Langevin Dynamics Parameters:**
 
-        - langevin_dt : float
-            Langevin time step Δt. Typical values: 0.001-0.1.
-            Smaller values → more accurate but slower.
-        - langevin_nbar : float
-            Average polymerization index N̄. Typical values: 1-100.
-            Controls compositional fluctuation strength (larger → weaker fluctuations).
+        - langevin : dict
+            Langevin dynamics configuration:
+
+            - dt : float
+                Langevin time step Δτ·N_Ref. Typical values: 1.0-10.0.
+            - nbar : float
+                Invariant polymerization index N̄. Typical values: 1000-100000.
+                Controls compositional fluctuation strength (larger → weaker fluctuations).
+            - max_step : int
+                Maximum number of Langevin steps.
 
         **Field Compression Parameters:**
 
@@ -176,10 +180,25 @@ class LFTS:
 
         **Simulation Control:**
 
-        - recording_period : int
-            Number of Langevin steps between data recordings.
-        - total_recorded_iterations : int
-            Total number of recorded snapshots.
+        - recording : dict
+            Recording configuration:
+
+            - dir : str
+                Directory name for saving data.
+            - recording_period : int
+                Number of Langevin steps between data recordings.
+            - sf_computing_period : int
+                Period for computing structure function.
+            - sf_recording_period : int
+                Period for recording structure function.
+
+        - saddle : dict
+            Saddle point iteration configuration:
+
+            - max_iter : int
+                Maximum number of iterations for finding saddle point.
+            - tolerance : float
+                Tolerance for incompressibility error.
 
         **Platform Selection:**
 
@@ -316,17 +335,24 @@ class LFTS:
     ...             {"type": "B", "length": 0.5}
     ...         ]
     ...     }],
-    ...     "langevin_dt": 0.01,
-    ...     "langevin_nbar": 10.0,
+    ...     "langevin": {
+    ...         "max_step": 1000,
+    ...         "dt": 0.01,
+    ...         "nbar": 10.0
+    ...     },
+    ...     "recording": {
+    ...         "dir": "data",
+    ...         "recording_period": 100,
+    ...         "sf_computing_period": 10,
+    ...         "sf_recording_period": 100
+    ...     },
     ...     "compressor": {
     ...         "name": "am",
     ...         "max_hist": 20,
     ...         "start_error": 1e-1,
     ...         "mix_min": 0.1,
     ...         "mix_init": 0.1
-    ...     },
-    ...     "recording_period": 100,
-    ...     "total_recorded_iterations": 1000
+    ...     }
     ... }
     >>>
     >>> # Initialize L-FTS with random seed for reproducibility
@@ -351,9 +377,9 @@ class LFTS:
 
     For complete examples, see:
 
-    - examples/fts/Lamella.py - L-FTS for lamellar phase
-    - examples/fts/Gyroid.py - Gyroid phase with fluctuations
-    - examples/fts/MixtureBlockRandom.py - Block/random copolymer mixture
+    - examples/lfts/Lamella.py - L-FTS for lamellar phase
+    - examples/lfts/Gyroid.py - Gyroid phase with fluctuations
+    - examples/lfts/MixtureBlockRandom.py - Block/random copolymer mixture
     """
     def __init__(self, params, random_seed=None):
 
@@ -365,12 +391,12 @@ class LFTS:
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
 
-        # Choose platform among [cuda, cpu-fftw, cpu-mkl]
+        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-fftw"
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:
@@ -900,8 +926,8 @@ class LFTS:
 
         Fields are periodically saved according to recording parameters:
 
-        - Fields saved to "dir/fields_*.mat" every field_recording_period steps
-        - Hamiltonian H and derivatives dH/dχN recorded every recording_period steps
+        - Fields saved to "dir/fields_*.mat" every recording_period steps
+        - Hamiltonian H and derivatives dH/dχN recorded every sf_recording_period steps
         - Structure functions <φ(k)φ(-k)> accumulated every sf_recording_period steps
 
         **Structure Function:**
@@ -968,9 +994,9 @@ class LFTS:
         ...     },
         ...     "recording": {
         ...         "dir": "recording",
-        ...         "recording_period": 100,
-        ...         "sf_recording_period": 10,
-        ...         "field_recording_period": 1000
+        ...         "recording_period": 1000,
+        ...         "sf_computing_period": 10,
+        ...         "sf_recording_period": 100
         ...     },
         ...     "compressor": {
         ...         "name": "am",
@@ -1000,8 +1026,8 @@ class LFTS:
 
         For complete examples, see:
 
-        - examples/fts/Lamella.py - Basic L-FTS workflow
-        - examples/fts/Gyroid.py - Gyroid phase with fluctuations
+        - examples/lfts/Lamella.py - Basic L-FTS workflow
+        - examples/lfts/Gyroid.py - Gyroid phase with fluctuations
         """
 
         print("---------- Run  ----------")

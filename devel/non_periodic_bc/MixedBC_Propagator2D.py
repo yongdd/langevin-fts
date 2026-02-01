@@ -48,6 +48,7 @@ def main():
         bc=["reflecting", "reflecting", "absorbing", "absorbing"],
         ds=ds,
         bond_lengths={"A": 1.0},
+        chain_model="continuous",
         platform="cpu-fftw"  # Use CPU for 2D non-periodic BC
     )
 

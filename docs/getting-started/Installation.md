@@ -116,12 +116,12 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 56 | ~40 sec | Installation verification |
-| **Full** | `ctest` | 84 | ~4 min | Development validation |
+| **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
 **Note**: Run `make install` before `ctest` so Python tests can import the installed module.
 
-**Basic tests** (56 tests):
+**Basic tests** (~40 tests):
 - FFT: CPU/CUDA, DCT, DST, mixed boundary conditions
 - Propagator: linear, branched, mixture polymers
 - Numerical methods: pseudo-spectral (RQM4, RK2), real-space (CN-ADI)

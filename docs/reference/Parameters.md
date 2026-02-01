@@ -77,14 +77,18 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | `blocks` | list | Block specifications |
 | `grafting` | dict | (Optional) Grafting conditions |
 
-**Block format:** `[monomer_type, contour_length, start_vertex, end_vertex]`
+**Block format:** Each block is a dictionary with:
+- `"type"`: Monomer type (string)
+- `"length"`: Contour length (float)
+- `"v"`: Start vertex (optional for linear chains)
+- `"u"`: End vertex (optional for linear chains)
 
 ```python
 "distinct_polymers": [{
     "volume_fraction": 1.0,
     "blocks": [
-        ["A", 0.5, 0, 1],  # A block, 50% of chain, vertex 0→1
-        ["B", 0.5, 1, 2]   # B block, 50% of chain, vertex 1→2
+        {"type": "A", "length": 0.5},  # A block, 50% of chain
+        {"type": "B", "length": 0.5}   # B block, 50% of chain
     ]
 }]
 ```
@@ -93,28 +97,37 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 
 **Linear AB diblock:**
 ```python
-"blocks": [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]]
+"blocks": [
+    {"type": "A", "length": 0.5},
+    {"type": "B", "length": 0.5}
+]
 #   0 --A-- 1 --B-- 2
 ```
 
-**Star polymer (3-arm):**
+**Star polymer (3-arm AB):**
 ```python
 "blocks": [
-    ["A", 0.33, 0, 1],
-    ["B", 0.33, 0, 2],
-    ["C", 0.34, 0, 3]
+    {"type": "A", "length": 0.5, "v": 0, "u": 1},
+    {"type": "A", "length": 0.5, "v": 0, "u": 2},
+    {"type": "A", "length": 0.5, "v": 0, "u": 3},
+    {"type": "B", "length": 0.5, "v": 1, "u": 4},
+    {"type": "B", "length": 0.5, "v": 2, "u": 5},
+    {"type": "B", "length": 0.5, "v": 3, "u": 6}
 ]
-#        1
-#        |A
-#   2-B--0--C-3
+#      4        5        6
+#      |B       |B       |B
+#      1        2        3
+#       \   A   |   A   /
+#        \      |      /
+#         ------0------
 ```
 
 **ABC triblock:**
 ```python
 "blocks": [
-    ["A", 0.33, 0, 1],
-    ["B", 0.34, 1, 2],
-    ["C", 0.33, 2, 3]
+    {"type": "A", "length": 0.33},
+    {"type": "B", "length": 0.34},
+    {"type": "C", "length": 0.33}
 ]
 #   0 --A-- 1 --B-- 2 --C-- 3
 ```
@@ -261,7 +274,10 @@ params = {
     "chi_n": {"A,B": 20.0},
     "distinct_polymers": [{
         "volume_fraction": 1.0,
-        "blocks": [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]]
+        "blocks": [
+            {"type": "A", "length": 0.5},
+            {"type": "B", "length": 0.5}
+        ]
     }],
     "numerical_method": "rqm4",
     "optimizer": {
@@ -286,7 +302,10 @@ params = {
     "chi_n": {"A,B": 18.0},
     "distinct_polymers": [{
         "volume_fraction": 1.0,
-        "blocks": [["A", 0.375, 0, 1], ["B", 0.625, 1, 2]]
+        "blocks": [
+            {"type": "A", "length": 0.375},
+            {"type": "B", "length": 0.625}
+        ]
     }],
     "numerical_method": "rqm4",
     "box_is_altering": True,

@@ -24,7 +24,7 @@ chain_model = "Continuous" # choose among [Continuous, Discrete]
 dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
             "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
-# choose platform among [cuda, cpu-fftw, cpu-fftw]
+# choose platform among [cuda, cpu-fftw, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

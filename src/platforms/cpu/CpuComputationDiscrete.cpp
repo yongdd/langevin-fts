@@ -2,7 +2,7 @@
  * @file CpuComputationDiscrete.cpp
  * @brief CPU implementation of propagator computation for discrete chains.
  *
- * Implements the PropagatorComputation interface for freely-jointed
+ * Implements the PropagatorComputation interface for bead-spring
  * (discrete) chain models using OpenMP parallelization. Discrete chains
  * require half-bond steps at junction points.
  *

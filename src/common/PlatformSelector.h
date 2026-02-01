@@ -65,8 +65,8 @@
  * **Platform Selection Strategy:**
  *
  * The Python interface typically auto-selects the platform:
- * - 2D/3D simulations: Prefer "cuda" if available, fall back to "cpu-fftw"
- * - 1D simulations: Use "cpu-fftw" (GPU overhead not worthwhile)
+ * - 2D/3D simulations: Prefer "cuda" if available, fall back to "cpu-mkl"
+ * - 1D simulations: Use "cpu-mkl" (GPU overhead not worthwhile)
  *
  * **Build Configuration:**
  *
@@ -105,7 +105,7 @@ public:
      * Creates a platform-specific factory for simulations using real-valued
      * fields (standard SCFT and L-FTS calculations).
      *
-     * @param platform          Platform name: "cuda" or "cpu-fftw"
+     * @param platform          Platform name: "cuda", "cpu-mkl", or "cpu-fftw"
      * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *                          Reduces memory usage but increases computation time.
@@ -136,7 +136,7 @@ public:
      * Creates a platform-specific factory for simulations using complex-valued
      * fields (certain advanced applications with complex order parameters).
      *
-     * @param platform          Platform name: "cuda" or "cpu-fftw"
+     * @param platform          Platform name: "cuda", "cpu-mkl", or "cpu-fftw"
      * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *
