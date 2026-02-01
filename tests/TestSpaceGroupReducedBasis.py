@@ -20,10 +20,12 @@ from polymerfts import _core
 
 
 def get_platform():
-    """Get available platform (cuda if available, otherwise cpu-fftw)."""
+    """Get available platform (cuda > cpu-mkl > cpu-fftw)."""
     available = _core.PlatformSelector.avail_platforms()
     if "cuda" in available:
         return "cuda"
+    if "cpu-mkl" in available:
+        return "cpu-mkl"
     return "cpu-fftw"
 
 
