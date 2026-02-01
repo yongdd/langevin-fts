@@ -16,13 +16,24 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 from polymerfts import scft
+from polymerfts import _core
+
+
+def get_platform():
+    """Get available platform (cuda > cpu-mkl > cpu-fftw)."""
+    available = _core.PlatformSelector.avail_platforms()
+    if "cuda" in available:
+        return "cuda"
+    if "cpu-mkl" in available:
+        return "cpu-mkl"
+    return "cpu-fftw"
 
 
 def main() -> None:
     np.random.seed(1234)
 
     params = {
-        "platform": "cpu-fftw",
+        "platform": get_platform(),
         "nx": [16, 16, 16],
         "lx": [2.0, 2.0, 2.0],
         "box_is_altering": False,
