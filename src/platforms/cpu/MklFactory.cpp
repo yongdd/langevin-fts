@@ -53,6 +53,7 @@
 template <typename T>
 MklFactory<T>::MklFactory(bool reduce_memory)
 {
+    mkl_set_num_threads(1);  // Disable MKL internal threading (parallelism at propagator level)
     this->reduce_memory = reduce_memory;
 }
 

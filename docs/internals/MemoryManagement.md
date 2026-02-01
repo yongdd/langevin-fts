@@ -17,7 +17,7 @@ The library provides two memory modes controlled by the `reduce_memory` paramete
 
 ```python
 params = {
-    "platform": "cuda",  # or "cpu-fftw"
+    "platform": "cuda",  # or "cpu-mkl", "cpu-fftw"
     "reduce_memory": True,  # Enable memory-saving mode
     # ... other parameters
 }
@@ -276,7 +276,7 @@ This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing 
 - **Block-based computation**: Processes concentration in blocks of $2\sqrt{N}$ for efficient checkpoint reuse
 - **$2\sqrt{N}$ checkpoints**: Stores checkpoints at optimal intervals
 - **Single-threaded recomputation**: Minimizes memory during checkpoint reconstruction
-- **FFTW FFT**: FFT for spectral operations
+- **FFT**: MKL or FFTW for spectral operations
 
 ## Troubleshooting
 

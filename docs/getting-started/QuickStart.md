@@ -145,5 +145,5 @@ Results should match [PSCF](https://github.com/dmorse/pscfpp) within machine pre
 
 ### Cross-Platform Consistency
 Results should be identical (~10⁻¹³) regardless of:
-- Platform (`cuda` or `cpu-fftw`)
+- Platform (`cuda`, `cpu-mkl`, or `cpu-fftw`)
 - Memory mode (standard or reduce_memory)

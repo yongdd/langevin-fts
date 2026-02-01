@@ -146,7 +146,7 @@ See [StressTensor.md](StressTensor.md) for detailed stress calculation.
 from polymerfts import scft
 
 params = {
-    "platform": "cuda",              # or "cpu-fftw"
+    "platform": "cuda",              # or "cpu-mkl", "cpu-fftw"
     "nx": [64, 64, 64],              # Grid points
     "lx": [4.0, 4.0, 4.0],           # Box size
 

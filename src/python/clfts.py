@@ -146,7 +146,7 @@ class CLFTS:
             Universality requires k_int ≳ 20/R₀. Default dk_int = 5.0.
 
           Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        - platform : str, optional - "cuda" or "cpu-fftw"
+        - platform : str, optional - "cuda", "cpu-mkl", or "cpu-fftw"
         - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
@@ -195,7 +195,7 @@ class CLFTS:
         assert len(self.monomer_types) == len(set(self.monomer_types)), \
             "There are duplicated monomer_types"
 
-        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
+        # Choose platform among [cuda, cpu-fftw, cpu-mkl]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]

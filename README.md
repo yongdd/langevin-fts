@@ -9,7 +9,7 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 - SCFT, L-FTS, and CL-FTS (beta) simulations
 - Arbitrary acyclic branched polymers and their mixtures
 - Continuous and discrete chain models
-- CPU (FFTW) and GPU (NVIDIA CUDA) platforms
+- CPU (MKL, FFTW) and GPU (NVIDIA CUDA) platforms
 
 For details, see [Features.md](docs/getting-started/Features.md).
 
@@ -27,7 +27,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j8 && make install && ctest -L basic
 ```
 
-> **FFTW License**: To enable the CPU backend, add `-DPOLYMERFTS_USE_FFTW=ON`. FFTW is GPL-licensed, so distributing binaries with FFTW requires GPL compliance.
+> **CPU Backend**: MKL is enabled by default. To use FFTW instead, add `-DPOLYMERFTS_USE_FFTW=ON` (GPL license).
 
 For detailed instructions, troubleshooting, and dependencies, see [Installation.md](docs/getting-started/Installation.md).
 

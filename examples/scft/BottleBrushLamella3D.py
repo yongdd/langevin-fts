@@ -56,7 +56,7 @@ print("Blocks:", *blocks, sep = "\n")
 print("Total alpha:", total_alpha)
 
 params = {
-    # "platform":"cpu-fftw",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
+    # "platform":"cpu-fftw",           # choose platform among [cuda, cpu-fftw, cpu-mkl]
     
     "nx":[64,64,64],      # Simulation grid numbers
     "lx":[7.8,7.8,7.8],   # Simulation box size as a_Ref * N_Ref^(1/2) unit,

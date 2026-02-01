@@ -13,8 +13,6 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref
 
 params = {
-     "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
-    
     "nx":[32,32,32],        # Simulation grid numbers
     "lx":[2.9,2.9,2.9],     # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                             # where "a_Ref" is reference statistical segment length

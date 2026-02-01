@@ -165,6 +165,127 @@ static void fft_dst1(double* data, int N, MklFFTHandle& fft)
 }
 
 /**
+ * @brief DCT-II via FFT: O(N log N) using cuHelmholtz algorithm
+ *
+ * DCT-II formula (FFTW REDFT10):
+ * Y[k] = 2 * sum_{n=0}^{N-1} x[n] cos(π*(2n+1)*k/(2N))
+ */
+static void fft_dct2(double* data, int N, MklFFTHandle& fft,
+                     const std::vector<double>& cos_tbl,
+                     const std::vector<double>& sin_tbl)
+{
+    int complex_size = N / 2 + 1;
+
+    thread_local std::vector<std::complex<double>> fft_in;
+    thread_local std::vector<double> fft_out;
+    thread_local std::vector<double> result;
+
+    if (static_cast<int>(fft_in.size()) < complex_size)
+    {
+        fft_in.resize(complex_size);
+        fft_out.resize(N);
+        result.resize(N);
+    }
+
+    // DCT-II preprocessing: rearrange into complex format
+    fft_in[0] = std::complex<double>(data[0], 0.0);
+    for (int k = 1; k < complex_size - 1; ++k)
+    {
+        double x_2k = data[2 * k];
+        double x_2k_1 = data[2 * k - 1];
+        fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
+    }
+    if (N % 2 == 0)
+    {
+        fft_in[N / 2] = std::complex<double>(data[N - 1], 0.0);
+    }
+    else
+    {
+        int k = N / 2;
+        double x_2k = data[2 * k];
+        double x_2k_1 = data[2 * k - 1];
+        fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
+    }
+
+    // IFFT (c2r)
+    fft.backward(fft_in.data(), fft_out.data());
+
+    // DCT-II postprocessing: apply twiddle factors
+    // FFTW has factor of 2 in formula
+    result[0] = fft_out[0] * 2.0;  // DC needs 2x
+    for (int k = 1; k <= N / 2; ++k)
+    {
+        double Ta = fft_out[k] + fft_out[N - k];
+        double Tb = fft_out[k] - fft_out[N - k];
+
+        double result_k = Ta * cos_tbl[k] + Tb * sin_tbl[k];
+        double result_nk = Ta * sin_tbl[k] - Tb * cos_tbl[k];
+
+        result[k] = result_k;
+        if (k < N - k)
+            result[N - k] = result_nk;
+    }
+
+    std::memcpy(data, result.data(), N * sizeof(double));
+}
+
+/**
+ * @brief DCT-III via FFT: O(N log N) using cuHelmholtz algorithm
+ *
+ * DCT-III formula (FFTW REDFT01):
+ * Y[k] = x[0] + 2 * sum_{n=1}^{N-1} x[n] cos(π*n*(2k+1)/(2N))
+ */
+static void fft_dct3(double* data, int N, MklFFTHandle& fft,
+                     const std::vector<double>& cos_tbl,
+                     const std::vector<double>& sin_tbl)
+{
+    int complex_size = N / 2 + 1;
+
+    thread_local std::vector<double> fft_in;
+    thread_local std::vector<std::complex<double>> fft_out;
+    thread_local std::vector<double> result;
+
+    if (static_cast<int>(fft_in.size()) < N)
+    {
+        fft_in.resize(N);
+        fft_out.resize(complex_size);
+        result.resize(N);
+    }
+
+    // DCT-III preprocessing: apply twiddle factors
+    fft_in[0] = data[0];
+    for (int k = 0; k < N / 2; ++k)
+    {
+        double val_k = data[k + 1];
+        double val_nk = data[N - k - 1];
+
+        double Ta = val_k + val_nk;
+        double Tb = val_k - val_nk;
+
+        fft_in[k + 1] = Ta * sin_tbl[k + 1] + Tb * cos_tbl[k + 1];
+        fft_in[N - k - 1] = Ta * cos_tbl[k + 1] - Tb * sin_tbl[k + 1];
+    }
+
+    // FFT (r2c)
+    fft.forward(fft_in.data(), fft_out.data());
+
+    // DCT-III postprocessing: FFTW is unnormalized
+    result[0] = fft_out[0].real();
+    for (int k = 1; k <= N / 2; ++k)
+    {
+        double re = fft_out[k].real();
+        double im = fft_out[k].imag();
+
+        if (2 * k - 1 < N)
+            result[2 * k - 1] = re - im;
+        if (2 * k < N)
+            result[2 * k] = re + im;
+    }
+
+    std::memcpy(data, result.data(), N * sizeof(double));
+}
+
+/**
  * @brief DST-II via FFT: O(N log N) using cuHelmholtz algorithm
  *
  * DST-II formula (FFTW RODFT10):
@@ -425,9 +546,8 @@ void MklRealTransform1D::init()
 {
     const double PI = std::numbers::pi;
 
-    // DCT-2, DCT-3, DCT-4, DST-4 use MKL TT
-    if (type_ == MKL_DCT_2 || type_ == MKL_DCT_3 ||
-        type_ == MKL_DCT_4 || type_ == MKL_DST_4)
+    // DCT-4, DST-4 use MKL TT (no simple FFT-based algorithm)
+    if (type_ == MKL_DCT_4 || type_ == MKL_DST_4)
     {
         tt_handle_ = std::make_unique<MklTTHandle>(N_, type_);
     }
@@ -441,8 +561,9 @@ void MklRealTransform1D::init()
     {
         fft_handle_ = std::make_unique<MklFFTHandle>(2 * (N_ + 1));
     }
-    // DST-2, DST-3 use N point FFT with twiddle factors (cuHelmholtz algorithm)
-    else if (type_ == MKL_DST_2 || type_ == MKL_DST_3)
+    // DCT-2, DCT-3, DST-2, DST-3 use N point FFT with twiddle factors (cuHelmholtz)
+    else if (type_ == MKL_DCT_2 || type_ == MKL_DCT_3 ||
+             type_ == MKL_DST_2 || type_ == MKL_DST_3)
     {
         fft_handle_ = std::make_unique<MklFFTHandle>(N_);
 
@@ -475,6 +596,12 @@ void MklRealTransform1D::execute(double* data)
         {
             case MKL_DCT_1:
                 fft_dct1(data, N_, *fft_handle_);
+                break;
+            case MKL_DCT_2:
+                fft_dct2(data, N_, *fft_handle_, cos_tbl_, sin_tbl_);
+                break;
+            case MKL_DCT_3:
+                fft_dct3(data, N_, *fft_handle_, cos_tbl_, sin_tbl_);
                 break;
             case MKL_DST_1:
                 fft_dst1(data, N_, *fft_handle_);

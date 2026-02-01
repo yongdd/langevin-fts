@@ -32,7 +32,7 @@ The library uses the **Abstract Factory Pattern** to support multiple computatio
 src/
 ├── common/           # Platform-independent interfaces and utilities
 ├── platforms/
-│   ├── cpu/          # FFTW implementations
+│   ├── cpu/          # CPU implementations (MKL, FFTW)
 │   └── cuda/         # NVIDIA CUDA implementations
 ├── python/           # Python interface modules
 └── pybind11/         # C++/Python bindings
@@ -211,8 +211,9 @@ FFT<T>                                        [Abstract Base]
 ├── forward(T* real, complex* spectral)       [pure virtual, periodic only]
 └── backward(complex* spectral, T* real)      [pure virtual, periodic only]
         │
-        ├── FftwFFT<T, DIM>                    [CPU/FFTW]
+        ├── FftwFFT<T, DIM>                    [CPU]
         │   └── DIM = 1, 2, or 3 (compile-time)
+        │   └── Uses MKL or FFTW backend
         │
         └── CudaFFT<T, DIM>                   [GPU/cuFFT + CudaRealTransform]
             ├── forward_stream(..., cudaStream_t)
@@ -373,7 +374,7 @@ See [Installation.md](../getting-started/Installation.md#testing) for test comma
 ### Platform Implementation
 
 When adding new computational features, you must implement them for both platforms unless explicitly platform-specific:
-- `src/platforms/cpu/` - FFTW-based CPU implementations
+- `src/platforms/cpu/` - CPU implementations (MKL, FFTW)
 - `src/platforms/cuda/` - CUDA GPU implementations
 
 ### Memory Management
@@ -434,7 +435,7 @@ If GPU and CPU give different results:
 
 ### Verifying Numerical Accuracy
 
-1. Run same test on both `cuda` and `cpu-fftw` platforms - results should match to ~10⁻¹³
+1. Run same test on both `cuda` and CPU platforms - results should match to ~10⁻¹³
 2. Check partition function consistency: `solver.check_total_partition()` should pass
 3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within machine precision (~10⁻¹⁵)
 
