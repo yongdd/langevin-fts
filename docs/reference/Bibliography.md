@@ -39,7 +39,7 @@ J. Crank and P. Nicolson, "A practical method for numerical evaluation of soluti
 D. W. Peaceman and H. H. Rachford, "The numerical solution of parabolic and elliptic differential equations", *J. Soc. Indust. Appl. Math.* **1955**, 3, 28-41
 
 ### Material Conservation
-D. Yong and J. U. Kim, "Finite volume method for self-consistent field theory of polymers: Material conservation and application", *Phys. Rev. E* **2017**, 96, 063312
+D. Yong and J. U. Kim, "Material conservation in polymer field theory simulations", *Phys. Rev. E* **2017**, 96, 063312
 
 ### Pseudo-Spectral Algorithm Benchmarks
 P. Stasiak and M. W. Matsen, "Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases", *Eur. Phys. J. E* **2011**, 34, 110

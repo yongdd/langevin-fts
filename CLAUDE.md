@@ -151,8 +151,8 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
-| **Full** | `ctest` | ~65 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | 56 | ~40 sec | Installation verification |
+| **Full** | `ctest` | 84 | ~4 min | Development validation |
 
 ### Running Tests
 
@@ -370,7 +370,7 @@ See `examples/scft/phases/README.md` for available space groups and reduction fa
 
 ### L-FTS Examples
 
-Located in `examples/fts/`:
+Located in `examples/lfts/`:
 - `Lamella.py`: Langevin dynamics of lamellar phase
 - `Gyroid.py`: Fluctuating gyroid phase
 - `MixtureBlockRandom.py`: Block/random copolymer mixture
@@ -657,7 +657,7 @@ Results must match:
 ## Documentation and Learning
 
 - **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
-- **Examples**: `examples/scft/` and `examples/fts/` contain runnable simulation scripts
+- **Examples**: `examples/scft/` and `examples/lfts/` contain runnable simulation scripts
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 

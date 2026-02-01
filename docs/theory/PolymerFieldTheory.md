@@ -1,6 +1,6 @@
 # Polymer Field Theory
 
-> **Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
 This document describes the mathematical formulation of polymer field theory used in SCFT, L-FTS, and CL-FTS simulations. Three representations are covered: monomer potential fields, auxiliary fields (incompressible model), and auxiliary fields (compressible model).
 
