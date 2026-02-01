@@ -56,6 +56,11 @@
 #include "CpuComputationContinuous.h"
 #endif
 
+#ifdef USE_CPU_MKL
+#include "CpuComputationBox.h"
+#include "CpuComputationContinuous.h"
+#endif
+
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaComputationContinuous.h"
@@ -132,7 +137,8 @@ bool run_comparison(const std::string& platform_name,
                     const std::vector<double>& lx,
                     Molecules* molecules,
                     PropagatorComputationOptimizer* prop_opt,
-                    double tolerance)
+                    double tolerance,
+                    FFTBackend fft_backend = FFTBackend::FFTW)
 {
     int dim = nx.size();
     int M = 1;
@@ -170,7 +176,7 @@ bool run_comparison(const std::string& platform_name,
     // Method 1: Absorbing BC (DST-based)
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
     ComputationContinuous<double>* solver_absorbing = new ComputationContinuous<double>(
-        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
+        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -179,7 +185,7 @@ bool run_comparison(const std::string& platform_name,
     // Method 2: Periodic BC with boundary mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
     ComputationContinuous<double>* solver_masked = new ComputationContinuous<double>(
-        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
+        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
@@ -217,7 +223,8 @@ bool run_physical_test(const std::string& platform_name,
                        const std::vector<int>& nx,
                        const std::vector<double>& lx,
                        Molecules* molecules,
-                       PropagatorComputationOptimizer* prop_opt)
+                       PropagatorComputationOptimizer* prop_opt,
+                       FFTBackend fft_backend = FFTBackend::FFTW)
 {
     int dim = nx.size();
     int M = 1;
@@ -243,7 +250,7 @@ bool run_physical_test(const std::string& platform_name,
     // Reflecting BC (reference: should have Q = 1.0 for w=0)
     ComputationBox<double>* cb_ref = new ComputationBox<double>(nx, lx, bc_reflecting);
     ComputationContinuous<double>* solver_ref = new ComputationContinuous<double>(
-        cb_ref, molecules, prop_opt, "pseudospectral", "rqm4");
+        cb_ref, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
     solver_ref->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_reflecting = solver_ref->get_total_partition(0);
     delete solver_ref;
@@ -252,7 +259,7 @@ bool run_physical_test(const std::string& platform_name,
     // Absorbing BC
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
     ComputationContinuous<double>* solver_absorbing = new ComputationContinuous<double>(
-        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
+        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -261,7 +268,7 @@ bool run_physical_test(const std::string& platform_name,
     // Periodic BC with mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
     ComputationContinuous<double>* solver_masked = new ComputationContinuous<double>(
-        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
+        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
@@ -343,6 +350,12 @@ int main()
                 all_passed = false;
             #endif
 
+            #ifdef USE_CPU_MKL
+            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
+                all_passed = false;
+            #endif
+
             #ifdef USE_CUDA
             if (!run_physical_test<CudaComputationBox, CudaComputationContinuous>(
                     "CUDA", nx, lx, &molecules, &prop_opt))
@@ -362,6 +375,12 @@ int main()
                 all_passed = false;
             #endif
 
+            #ifdef USE_CPU_MKL
+            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
+                all_passed = false;
+            #endif
+
             #ifdef USE_CUDA
             if (!run_physical_test<CudaComputationBox, CudaComputationContinuous>(
                     "CUDA", nx, lx, &molecules, &prop_opt))
@@ -378,6 +397,12 @@ int main()
             #ifdef USE_CPU_FFTW
             if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
                     "CPU-FFTW", nx, lx, &molecules, &prop_opt))
+                all_passed = false;
+            #endif
+
+            #ifdef USE_CPU_MKL
+            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
                 all_passed = false;
             #endif
 
@@ -411,6 +436,12 @@ int main()
                 all_passed = false;
             #endif
 
+            #ifdef USE_CPU_MKL
+            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
+                all_passed = false;
+            #endif
+
             #ifdef USE_CUDA
             if (!run_comparison<CudaComputationBox, CudaComputationContinuous>(
                     "CUDA", nx, lx, &molecules, &prop_opt, tolerance))
@@ -430,6 +461,12 @@ int main()
                 all_passed = false;
             #endif
 
+            #ifdef USE_CPU_MKL
+            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
+                all_passed = false;
+            #endif
+
             #ifdef USE_CUDA
             if (!run_comparison<CudaComputationBox, CudaComputationContinuous>(
                     "CUDA", nx, lx, &molecules, &prop_opt, tolerance))
@@ -446,6 +483,12 @@ int main()
             #ifdef USE_CPU_FFTW
             if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
                     "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
+                all_passed = false;
+            #endif
+
+            #ifdef USE_CPU_MKL
+            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
                 all_passed = false;
             #endif
 

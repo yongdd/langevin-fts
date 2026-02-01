@@ -21,6 +21,9 @@
 #ifdef USE_CPU_FFTW
 #include "FftwFFT.h"
 #endif
+#ifdef USE_CPU_MKL
+#include "MklFFT.h"
+#endif
 
 int main()
 {
@@ -84,6 +87,9 @@ int main()
         std::vector<FFT<double>*> fft_list;
 #ifdef USE_CPU_FFTW
         fft_list.push_back(new FftwFFT<double, 3>({II,JJ,KK}));
+#endif
+#ifdef USE_CPU_MKL
+        fft_list.push_back(new MklFFT<double, 3>({II,JJ,KK}));
 #endif
 
         // For each platform    

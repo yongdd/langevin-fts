@@ -55,6 +55,11 @@
 #include "CpuComputationContinuous.h"
 #endif
 
+#ifdef USE_CPU_MKL
+#include "CpuComputationBox.h"
+#include "CpuComputationContinuous.h"
+#endif
+
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaComputationContinuous.h"
@@ -261,12 +266,108 @@ bool run_comparison_test(
         delete cb_ps;
         delete cb_rs;
     }
+#endif
+
+#ifdef USE_CPU_MKL
+#ifndef USE_CPU_FFTW
+    std::vector<double> q_cpu_ref(M);  // Reference for CUDA comparison
+#endif
+
+    if (mixed_bc)
+    {
+        // Mixed BCs: only test real-space
+        std::cout << "  [CPU-MKL RS only] " << std::flush;
+        CpuComputationBox<T>* cb_rs_mkl = new CpuComputationBox<T>(nx, lx, bc);
+        CpuComputationContinuous<T>* solver_rs_mkl = new CpuComputationContinuous<T>(cb_rs_mkl, &molecules, &prop_opt, "realspace", "", FFTBackend::MKL);
+
+        // Run real-space solver
+        solver_rs_mkl->compute_propagators({{"A", w.data()}}, {});
+        q_rs = q_init;
+        for (int step = 0; step < n_steps; ++step)
+        {
+            solver_rs_mkl->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
+            std::swap(q_rs, q_out);
+        }
+
+        // Just verify it ran without errors and produced reasonable output
+        double max_val = *std::max_element(q_rs.begin(), q_rs.end());
+        if (max_val > 0 && std::isfinite(max_val))
+        {
+            std::cout << "PASSED (max_q=" << max_val << ")" << std::endl;
+        }
+        else
+        {
+            std::cout << "FAILED (invalid output)" << std::endl;
+            all_passed = false;
+        }
+
+#ifndef USE_CPU_FFTW
+        q_cpu_ref = q_rs;  // Use CPU real-space as reference for CUDA
+#endif
+
+        delete solver_rs_mkl;
+        delete cb_rs_mkl;
+    }
+    else
+    {
+        // Matching BCs: compare pseudo-spectral vs real-space
+        std::cout << "  [CPU-MKL PS vs RS] " << std::flush;
+        CpuComputationBox<T>* cb_ps_mkl = new CpuComputationBox<T>(nx, lx, bc);
+        CpuComputationBox<T>* cb_rs_mkl = new CpuComputationBox<T>(nx, lx, bc);
+
+        CpuComputationContinuous<T>* solver_ps_mkl = new CpuComputationContinuous<T>(cb_ps_mkl, &molecules, &prop_opt, "pseudospectral", "", FFTBackend::MKL);
+        CpuComputationContinuous<T>* solver_rs_mkl = new CpuComputationContinuous<T>(cb_rs_mkl, &molecules, &prop_opt, "realspace", "", FFTBackend::MKL);
+
+        // Run pseudo-spectral solver
+        solver_ps_mkl->compute_propagators({{"A", w.data()}}, {});
+        q_ps = q_init;
+        for (int step = 0; step < n_steps; ++step)
+        {
+            solver_ps_mkl->advance_propagator_single_segment(q_ps.data(), q_out.data(), 0, 0, 1);
+            std::swap(q_ps, q_out);
+        }
+
+        // Run real-space solver
+        solver_rs_mkl->compute_propagators({{"A", w.data()}}, {});
+        q_rs = q_init;
+        for (int step = 0; step < n_steps; ++step)
+        {
+            solver_rs_mkl->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
+            std::swap(q_rs, q_out);
+        }
+
+        max_diff = 0.0;
+        for (int i = 0; i < M; ++i)
+            max_diff = std::max(max_diff, std::abs(q_ps[i] - q_rs[i]));
+        rel_err = max_diff / (*std::max_element(q_ps.begin(), q_ps.end()));
+
+        if (rel_err > tolerance)
+        {
+            std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
+            all_passed = false;
+        }
+        else
+        {
+            std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
+        }
+
+#ifndef USE_CPU_FFTW
+        q_cpu_ref = q_ps;  // Use CPU pseudo-spectral as reference for CUDA
+#endif
+
+        delete solver_ps_mkl;
+        delete solver_rs_mkl;
+        delete cb_ps_mkl;
+        delete cb_rs_mkl;
+    }
+#endif
 
     // ====================================================================
     // CUDA Tests: Compare CUDA real-space vs CPU reference
     // For matching BCs: compare with CPU pseudo-spectral
     // For mixed BCs: compare with CPU real-space
     // ====================================================================
+#if defined(USE_CPU_FFTW) || defined(USE_CPU_MKL)
 #ifdef USE_CUDA
     std::cout << "  [CUDA RS vs CPU " << (mixed_bc ? "RS" : "PS") << "] " << std::flush;
     {

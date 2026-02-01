@@ -57,6 +57,11 @@
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
 #endif
+#ifdef USE_CPU_MKL
+#include "CpuComputationBox.h"
+#include "CpuComputationContinuous.h"
+#include "CpuComputationReduceMemoryContinuous.h"
+#endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaComputationContinuous.h"
@@ -164,6 +169,13 @@ int main()
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous<double>(
             cb_list.back(), molecules, propagator_computation_optimizer, "pseudospectral"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl");
+        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationContinuous<double>(
+            cb_list.back(), molecules, propagator_computation_optimizer, "pseudospectral", "", FFTBackend::MKL));
         #endif
 
         #ifdef USE_CUDA
@@ -334,6 +346,13 @@ int main()
         cb_list_star.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list_star.push_back(new CpuComputationContinuous<double>(
             cb_list_star.back(), molecules_star, optimizer_star, "pseudospectral"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list_star.push_back("cpu-mkl");
+        cb_list_star.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list_star.push_back(new CpuComputationContinuous<double>(
+            cb_list_star.back(), molecules_star, optimizer_star, "pseudospectral", "", FFTBackend::MKL));
         #endif
 
         #ifdef USE_CUDA
@@ -513,6 +532,13 @@ int main()
         cb_list_homo.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list_homo.push_back(new CpuComputationContinuous<double>(
             cb_list_homo.back(), molecules_homo, optimizer_homo, "pseudospectral"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list_homo.push_back("cpu-mkl");
+        cb_list_homo.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list_homo.push_back(new CpuComputationContinuous<double>(
+            cb_list_homo.back(), molecules_homo, optimizer_homo, "pseudospectral", "", FFTBackend::MKL));
         #endif
 
         #ifdef USE_CUDA
@@ -718,6 +744,25 @@ int main()
             cb_list_brush.end()[-2], molecules_brush, optimizer_brush, "pseudospectral"));
         solver_list_brush.push_back(new CpuComputationReduceMemoryContinuous<double>(
             cb_list_brush.end()[-1], molecules_brush, optimizer_brush_agg, "pseudospectral"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list_brush.push_back("cpu-mkl");
+        solver_name_list_brush.push_back("cpu-mkl, aggregated");
+        solver_name_list_brush.push_back("cpu-mkl, reduce_memory");
+        solver_name_list_brush.push_back("cpu-mkl, reduce_memory, aggregated");
+        cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list_brush.push_back(new CpuComputationContinuous<double>(
+            cb_list_brush.end()[-4], molecules_brush, optimizer_brush, "pseudospectral", "", FFTBackend::MKL));
+        solver_list_brush.push_back(new CpuComputationContinuous<double>(
+            cb_list_brush.end()[-3], molecules_brush, optimizer_brush_agg, "pseudospectral", "", FFTBackend::MKL));
+        solver_list_brush.push_back(new CpuComputationReduceMemoryContinuous<double>(
+            cb_list_brush.end()[-2], molecules_brush, optimizer_brush, "pseudospectral", "", FFTBackend::MKL));
+        solver_list_brush.push_back(new CpuComputationReduceMemoryContinuous<double>(
+            cb_list_brush.end()[-1], molecules_brush, optimizer_brush_agg, "pseudospectral", "", FFTBackend::MKL));
         #endif
 
         #ifdef USE_CUDA

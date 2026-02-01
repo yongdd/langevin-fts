@@ -6,9 +6,10 @@
  * The transforms are unnormalized (FFTW-style); use get_normalization()
  * to obtain the round-trip scale factor.
  *
- * Implementation:
- *   - DCT-II, DCT-III, DCT-IV, DST-IV: MKL TT (Trigonometric Transform) interface
- *   - DCT-I, DST-I, DST-II, DST-III: Direct O(N²) computation (no MKL TT equivalent)
+ * Implementation and Performance:
+ *   - DCT-II, DCT-III, DCT-IV, DST-IV: MKL TT interface, O(N log N)
+ *   - DCT-I, DST-I: FFT-based via symmetric/antisymmetric extension, O(N log N)
+ *   - DST-II, DST-III: Direct computation, O(N²) [TODO: optimize to O(N log N)]
  *
  * MKL TT to FFTW mapping (empirically verified):
  *   - STAGGERED_COSINE backward × 2 = DCT-II
@@ -22,9 +23,11 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 #include "Exception.h"
 
 class MklTTHandle;
+class MklFFTHandle;
 
 /**
  * Transform Type enumeration for DCT and DST.
@@ -101,8 +104,15 @@ private:
     MklTransformType type_;
     bool initialized_{false};
 
-    // MKL TT handle for DCT-2, DCT-3, DCT-4, DST-4 (others use direct computation)
+    // MKL TT handle for DCT-2, DCT-3, DCT-4, DST-4
     std::unique_ptr<MklTTHandle> tt_handle_;
+
+    // FFT handle for DCT-1, DST-1, DST-2, DST-3 (O(N log N) algorithms)
+    std::unique_ptr<MklFFTHandle> fft_handle_;
+
+    // Twiddle factors for DST-2, DST-3 (cuHelmholtz algorithm)
+    std::vector<double> cos_tbl_;
+    std::vector<double> sin_tbl_;
 
     void init();
 };

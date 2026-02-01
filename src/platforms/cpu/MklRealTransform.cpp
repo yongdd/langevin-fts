@@ -1,10 +1,9 @@
 /**
  * @file MklRealTransform.cpp
- * @brief MKL real-to-real DCT/DST implementation using TT interface.
+ * @brief MKL real-to-real DCT/DST implementation using TT interface and FFT.
  *
- * Uses Intel MKL Trigonometric Transform (TT) routines where available.
- * MKL TT is designed for PDE solving (Poisson/Laplace equations), not as
- * general-purpose DCT/DST. Only some transforms have direct MKL TT equivalents.
+ * Uses Intel MKL Trigonometric Transform (TT) routines where available,
+ * and FFT-based O(N log N) algorithms for other transform types.
  *
  * MKL TT to FFTW mapping (empirically verified):
  *   - STAGGERED_COSINE backward × 2 = DCT-II (FFTW REDFT10)
@@ -12,19 +11,22 @@
  *   - STAGGERED2_COSINE forward × N = DCT-IV (FFTW REDFT11)
  *   - STAGGERED2_SINE forward × N   = DST-IV (FFTW RODFT11)
  *
- * No MKL TT equivalent (use direct O(N²) computation):
- *   - DCT-I (MKL COSINE_TRANSFORM uses different formula)
- *   - DST-I, DST-II, DST-III (MKL SINE transforms are PDE-specific)
+ * FFT-based O(N log N) implementations:
+ *   - DCT-I: via 2(N-1) point FFT symmetric extension
+ *   - DST-I: via 2(N+1) point FFT antisymmetric extension
+ *   - DST-II, DST-III: cuHelmholtz algorithm (Makhoul 1980)
  */
 
 #include "MklRealTransform.h"
 
 #include <cmath>
+#include <complex>
 #include <cstring>
 #include <numbers>
 #include <string>
 #include <vector>
 
+#include "mkl_dfti.h"
 #include "mkl_trig_transforms.h"
 
 /**
@@ -49,78 +51,248 @@ static double get_norm_factor(MklTransformType type, int N)
 }
 
 //==============================================================================
-// Direct O(N²) computation for transforms without MKL TT equivalent
+// FFT-based O(N log N) implementations
 //==============================================================================
 
 /**
- * @brief Direct DCT-I computation: Y[k] = x[0] + (-1)^k x[N-1] + 2 * sum_{n=1}^{N-2} x[n] cos(π*n*k/(N-1))
+ * @brief FFT handle for DCT-I/DST-I/DST-II/DST-III transforms
  */
-static void direct_dct1(double* data, int N)
+class MklFFTHandle
 {
-    const double PI = std::numbers::pi;
-    std::vector<double> result(N);
-
-    for (int k = 0; k < N; ++k)
+public:
+    MklFFTHandle(int fft_size)
+        : fft_size_(fft_size)
     {
-        double sum = data[0] + (k % 2 == 0 ? data[N-1] : -data[N-1]);
-        for (int n = 1; n < N - 1; ++n)
-            sum += 2.0 * data[n] * std::cos(PI * n * k / (N - 1));
-        result[k] = sum;
+        MKL_LONG status;
+        status = DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size);
+        status = DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+        status = DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
+        status = DftiCommitDescriptor(hand_forward_);
+
+        status = DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size);
+        status = DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+        status = DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
+        status = DftiCommitDescriptor(hand_backward_);
+
+        if (status != 0)
+            throw_with_line_number("MKL FFT handle creation failed");
     }
+
+    ~MklFFTHandle()
+    {
+        if (hand_forward_ != nullptr)
+            DftiFreeDescriptor(&hand_forward_);
+        if (hand_backward_ != nullptr)
+            DftiFreeDescriptor(&hand_backward_);
+    }
+
+    void forward(double* in, std::complex<double>* out)
+    {
+        DftiComputeForward(hand_forward_, in, out);
+    }
+
+    void backward(std::complex<double>* in, double* out)
+    {
+        DftiComputeBackward(hand_backward_, in, out);
+    }
+
+    int size() const { return fft_size_; }
+
+private:
+    int fft_size_;
+    DFTI_DESCRIPTOR_HANDLE hand_forward_{nullptr};
+    DFTI_DESCRIPTOR_HANDLE hand_backward_{nullptr};
+};
+
+/**
+ * @brief DCT-I via FFT: O(N log N) using 2(N-1) point symmetric extension
+ */
+static void fft_dct1(double* data, int N, MklFFTHandle& fft)
+{
+    int M = 2 * (N - 1);
+
+    thread_local std::vector<double> extended;
+    thread_local std::vector<std::complex<double>> fft_out;
+
+    if (static_cast<int>(extended.size()) < M)
+    {
+        extended.resize(M);
+        fft_out.resize(M / 2 + 1);
+    }
+
+    // Create symmetric extension: [x0, x1, ..., x_{N-1}, x_{N-2}, ..., x_1]
+    for (int i = 0; i < N; ++i)
+        extended[i] = data[i];
+    for (int i = 1; i < N - 1; ++i)
+        extended[N - 1 + i] = data[N - 1 - i];
+
+    fft.forward(extended.data(), fft_out.data());
+
+    // Extract DCT-I coefficients (real parts of first N FFT coefficients)
+    for (int k = 0; k < N; ++k)
+        data[k] = fft_out[k].real();
+}
+
+/**
+ * @brief DST-I via FFT: O(N log N) using 2(N+1) point antisymmetric extension
+ */
+static void fft_dst1(double* data, int N, MklFFTHandle& fft)
+{
+    int M = 2 * (N + 1);
+
+    thread_local std::vector<double> extended;
+    thread_local std::vector<std::complex<double>> fft_out;
+
+    if (static_cast<int>(extended.size()) < M)
+    {
+        extended.resize(M);
+        fft_out.resize(M / 2 + 1);
+    }
+
+    // Create antisymmetric extension: [0, x0, x1, ..., x_{N-1}, 0, -x_{N-1}, ..., -x_0]
+    extended[0] = 0.0;
+    for (int i = 0; i < N; ++i)
+        extended[i + 1] = data[i];
+    extended[N + 1] = 0.0;
+    for (int i = 0; i < N; ++i)
+        extended[N + 2 + i] = -data[N - 1 - i];
+
+    fft.forward(extended.data(), fft_out.data());
+
+    // Extract DST-I coefficients: Y[k] = -Im(X[k+1])
+    for (int k = 0; k < N; ++k)
+        data[k] = -fft_out[k + 1].imag();
+}
+
+/**
+ * @brief DST-II via FFT: O(N log N) using cuHelmholtz algorithm
+ *
+ * DST-II formula (FFTW RODFT10):
+ * Y[k] = 2 * sum_{n=0}^{N-1} x[n] sin(π*(2n+1)*(k+1)/(2N))
+ */
+static void fft_dst2(double* data, int N, MklFFTHandle& fft,
+                     const std::vector<double>& cos_tbl,
+                     const std::vector<double>& sin_tbl)
+{
+    int complex_size = N / 2 + 1;
+
+    thread_local std::vector<std::complex<double>> fft_in;
+    thread_local std::vector<double> fft_out;
+    thread_local std::vector<double> result;
+
+    if (static_cast<int>(fft_in.size()) < complex_size)
+    {
+        fft_in.resize(complex_size);
+        fft_out.resize(N);
+        result.resize(N);
+    }
+
+    // DST-II preprocessing: create complex for IFFT
+    fft_in[0] = std::complex<double>(data[0], 0.0);
+    for (int k = 1; k < complex_size - 1; ++k)
+    {
+        double x_2k = data[2 * k];
+        double x_2k_1 = data[2 * k - 1];
+        fft_in[k] = std::complex<double>((x_2k - x_2k_1) / 2.0, -((x_2k + x_2k_1) / 2.0));
+    }
+    if (N % 2 == 0)
+    {
+        fft_in[N / 2] = std::complex<double>(-data[N - 1], 0.0);
+    }
+    else
+    {
+        int k = N / 2;
+        double x_2k = data[2 * k];
+        double x_2k_1 = data[2 * k - 1];
+        fft_in[k] = std::complex<double>((x_2k - x_2k_1) / 2.0, -((x_2k + x_2k_1) / 2.0));
+    }
+
+    // IFFT (c2r)
+    fft.backward(fft_in.data(), fft_out.data());
+
+    // DST-II postprocessing: apply twiddle factors
+    // FFTW has factor of 2 in formula, so no 0.5 scaling here
+    for (int k = 1; k <= N / 2; ++k)
+    {
+        double Ta = fft_out[k] + fft_out[N - k];
+        double Tb = fft_out[k] - fft_out[N - k];
+
+        double result_k = Ta * sin_tbl[k] + Tb * cos_tbl[k];
+        double result_nk = Ta * cos_tbl[k] - Tb * sin_tbl[k];
+
+        result[k - 1] = result_k;
+        if (k < N - k)
+            result[N - k - 1] = result_nk;
+    }
+    result[N - 1] = fft_out[0] * 2.0;  // DC also needs 2x for FFTW convention
+
     std::memcpy(data, result.data(), N * sizeof(double));
 }
 
 /**
- * @brief Direct DST-I computation: Y[k] = 2 * sum_{n=0}^{N-1} x[n] sin(π*(n+1)*(k+1)/(N+1))
+ * @brief DST-III via FFT: O(N log N) using cuHelmholtz algorithm
+ *
+ * DST-III formula (FFTW RODFT01):
+ * Y[k] = (-1)^k * x[N-1] + 2 * sum_{n=0}^{N-2} x[n] sin(π*(n+1)*(2k+1)/(2N))
  */
-static void direct_dst1(double* data, int N)
+static void fft_dst3(double* data, int N, MklFFTHandle& fft,
+                     const std::vector<double>& cos_tbl,
+                     const std::vector<double>& sin_tbl)
 {
-    const double PI = std::numbers::pi;
-    std::vector<double> result(N);
+    int complex_size = N / 2 + 1;
 
+    thread_local std::vector<double> fft_in;
+    thread_local std::vector<std::complex<double>> fft_out;
+    thread_local std::vector<double> result;
+
+    if (static_cast<int>(fft_in.size()) < N)
+    {
+        fft_in.resize(N);
+        fft_out.resize(complex_size);
+        result.resize(N);
+    }
+
+    // Save last element for the (-1)^k term
+    double x_last = data[N - 1];
+
+    // DST-III preprocessing: apply twiddle factors (only first N-1 elements)
+    fft_in[0] = 0.0;
+    for (int k = 1; k <= N / 2; ++k)
+    {
+        double val_k = data[k - 1];
+        // For val_nk, ensure we don't use data[N-1] in the FFT part
+        double val_nk = (k == N - k) ? val_k : ((N - k - 1 >= 0 && N - k - 1 < N - 1) ? data[N - k - 1] : 0.0);
+
+        double Ta = val_k + val_nk;
+        double Tb = val_k - val_nk;
+
+        fft_in[k] = Ta * cos_tbl[k] + Tb * sin_tbl[k];
+        if (k < N - k)
+            fft_in[N - k] = Ta * sin_tbl[k] - Tb * cos_tbl[k];
+    }
+
+    // FFT (r2c)
+    fft.forward(fft_in.data(), fft_out.data());
+
+    // DST-III postprocessing (no scaling - FFTW is unnormalized)
+    result[0] = fft_out[0].real();
+    for (int k = 1; k <= N / 2; ++k)
+    {
+        double re = fft_out[k].real();
+        double im = -fft_out[k].imag();
+
+        if (2 * k - 1 < N)
+            result[2 * k - 1] = im - re;
+        if (2 * k < N)
+            result[2 * k] = re + im;
+    }
+
+    // Add the (-1)^k * X[N-1] term for FFTW RODFT01 formula
     for (int k = 0; k < N; ++k)
     {
-        double sum = 0.0;
-        for (int n = 0; n < N; ++n)
-            sum += data[n] * std::sin(PI * (n + 1) * (k + 1) / (N + 1));
-        result[k] = 2.0 * sum;
+        result[k] += ((k % 2 == 0) ? 1.0 : -1.0) * x_last;
     }
-    std::memcpy(data, result.data(), N * sizeof(double));
-}
 
-/**
- * @brief Direct DST-II computation: Y[k] = 2 * sum_{n=0}^{N-1} x[n] sin(π*(n+0.5)*(k+1)/N)
- */
-static void direct_dst2(double* data, int N)
-{
-    const double PI = std::numbers::pi;
-    std::vector<double> result(N);
-
-    for (int k = 0; k < N; ++k)
-    {
-        double sum = 0.0;
-        for (int n = 0; n < N; ++n)
-            sum += data[n] * std::sin(PI * (n + 0.5) * (k + 1) / N);
-        result[k] = 2.0 * sum;
-    }
-    std::memcpy(data, result.data(), N * sizeof(double));
-}
-
-/**
- * @brief Direct DST-III computation: Y[k] = (-1)^k x[N-1] + 2 * sum_{n=0}^{N-2} x[n] sin(π*(n+1)*(k+0.5)/N)
- */
-static void direct_dst3(double* data, int N)
-{
-    const double PI = std::numbers::pi;
-    std::vector<double> result(N);
-
-    for (int k = 0; k < N; ++k)
-    {
-        double sum = (k % 2 == 0 ? 1.0 : -1.0) * data[N - 1];
-        for (int n = 0; n < N - 1; ++n)
-            sum += 2.0 * data[n] * std::sin(PI * (n + 1) * (k + 0.5) / N);
-        result[k] = sum;
-    }
     std::memcpy(data, result.data(), N * sizeof(double));
 }
 
@@ -129,7 +301,7 @@ static void direct_dst3(double* data, int N)
 //==============================================================================
 
 /**
- * @brief Wrapper for MKL TT transforms that have direct FFTW equivalents.
+ * @brief Wrapper for MKL TT transforms.
  *
  * Supported transforms:
  *   - DCT-II: STAGGERED_COSINE backward × 2
@@ -251,14 +423,39 @@ MklRealTransform1D::~MklRealTransform1D()
 
 void MklRealTransform1D::init()
 {
-    // Only DCT-2, DCT-3, DCT-4, DST-4 use MKL TT
-    // Others use direct computation
+    const double PI = std::numbers::pi;
+
+    // DCT-2, DCT-3, DCT-4, DST-4 use MKL TT
     if (type_ == MKL_DCT_2 || type_ == MKL_DCT_3 ||
         type_ == MKL_DCT_4 || type_ == MKL_DST_4)
     {
         tt_handle_ = std::make_unique<MklTTHandle>(N_, type_);
     }
-    // DCT-1, DST-1, DST-2, DST-3 use direct computation (no MKL TT equivalent)
+    // DCT-1 uses 2(N-1) point FFT
+    else if (type_ == MKL_DCT_1)
+    {
+        fft_handle_ = std::make_unique<MklFFTHandle>(2 * (N_ - 1));
+    }
+    // DST-1 uses 2(N+1) point FFT
+    else if (type_ == MKL_DST_1)
+    {
+        fft_handle_ = std::make_unique<MklFFTHandle>(2 * (N_ + 1));
+    }
+    // DST-2, DST-3 use N point FFT with twiddle factors (cuHelmholtz algorithm)
+    else if (type_ == MKL_DST_2 || type_ == MKL_DST_3)
+    {
+        fft_handle_ = std::make_unique<MklFFTHandle>(N_);
+
+        // Precompute twiddle factors
+        int num_twiddles = N_ / 2 + 1;
+        cos_tbl_.resize(num_twiddles);
+        sin_tbl_.resize(num_twiddles);
+        for (int k = 0; k <= N_ / 2; ++k)
+        {
+            cos_tbl_[k] = std::cos(k * PI / (2.0 * N_));
+            sin_tbl_[k] = std::sin(k * PI / (2.0 * N_));
+        }
+    }
 
     initialized_ = true;
 }
@@ -272,26 +469,30 @@ void MklRealTransform1D::execute(double* data)
     {
         tt_handle_->execute(data);
     }
-    else
+    else if (fft_handle_)
     {
-        // Direct computation for transforms without MKL TT equivalent
         switch (type_)
         {
             case MKL_DCT_1:
-                direct_dct1(data, N_);
+                fft_dct1(data, N_, *fft_handle_);
                 break;
             case MKL_DST_1:
-                direct_dst1(data, N_);
+                fft_dst1(data, N_, *fft_handle_);
                 break;
             case MKL_DST_2:
-                direct_dst2(data, N_);
+                fft_dst2(data, N_, *fft_handle_, cos_tbl_, sin_tbl_);
                 break;
             case MKL_DST_3:
-                direct_dst3(data, N_);
+                fft_dst3(data, N_, *fft_handle_, cos_tbl_, sin_tbl_);
                 break;
             default:
-                throw_with_line_number("Unsupported transform type.");
+                throw_with_line_number("Unsupported transform type for FFT handle.");
         }
+    }
+    else
+    {
+        throw_with_line_number("No transform handle available for type: " +
+                               std::string(getTransformName(type_)));
     }
 }
 
