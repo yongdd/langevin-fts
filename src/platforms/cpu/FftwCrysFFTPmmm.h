@@ -1,108 +1,88 @@
 /**
  * @file FftwCrysFFTPmmm.h
- * @brief CPU Crystallographic FFT using DCT-II/III for Pmmm symmetry.
+ * @brief FFTW implementation of crystallographic FFT for Pmmm symmetry.
  *
- * For Pmmm symmetry (3 perpendicular mirrors), DCT-II/III provides exact
- * pseudo-spectral diffusion with 1/8 the computational cost.
+ * Uses native FFTW3 DCT-II/III (REDFT10/REDFT01) for O(N log N) diffusion
+ * computation with Pmmm mirror symmetry.
  *
- * **Algorithm:**
- *
- * DCT-II/III (FFTW REDFT10/REDFT01) solves the diffusion equation with
- * Neumann boundary conditions at half-grid points:
- *   q_out(r) = DCT-III[ exp(-k²ds) * DCT-II[q_in(r)] ]
- *
- * **Grid size:**
- *
- * Logical grid: Nx × Ny × Nz (full simulation box, must be even)
- * Physical grid: (Nx/2) × (Ny/2) × (Nz/2) (1/8 of logical grid)
- *
- * The physical grid stores the asymmetric unit, excluding boundary points.
- *
- * **Reference:**
- *
- * Qiang & Li, "Accelerated pseudo-spectral method of self-consistent field
- * theory via crystallographic fast Fourier transform", Macromolecules (2020)
- *
- * @see FftwFFT for standard FFT implementation
- * @see Fftw3mFFT for the faster 2x2y2z algorithm
+ * @see CrysFFTPmmmBase for common functionality
+ * @see MklCrysFFTPmmm for MKL implementation
  */
 
 #ifndef FFTW_CRYS_FFT_PMMM_H_
 #define FFTW_CRYS_FFT_PMMM_H_
 
 #include <array>
-#include <atomic>
-#include <cstdint>
-#include <limits>
-#include <map>
-#include <memory>
+#include <tuple>
 #include <fftw3.h>
+#include "CrysFFTPmmmBase.h"
 
 /**
  * @class FftwCrysFFTPmmm
- * @brief CPU crystallographic FFT using FFTW3 DCT-II/III.
+ * @brief FFTW-based crystallographic FFT using native DCT-II/III.
  *
- * Uses DCT-II (forward) and DCT-III (backward) for Pmmm symmetry.
- *
- * **Memory Layout:**
- *
- * - Logical grid: Nx × Ny × Nz (must be even in all dimensions)
- * - Physical grid: (Nx/2) × (Ny/2) × (Nz/2)
- * - Boltzmann factors: one real array per ds value
+ * Uses FFTW's real-to-real 3D DCT plans (REDFT10/REDFT01) for
+ * efficient computation of Pmmm symmetric diffusion.
  */
-class FftwCrysFFTPmmm
+class FftwCrysFFTPmmm : public CrysFFTPmmmBase<FftwCrysFFTPmmm>
 {
 private:
-    std::array<int, 3> nx_logical_;    ///< Logical grid dimensions (Nx, Ny, Nz)
-    std::array<int, 3> nx_physical_;   ///< Physical grid: (Nx/2, Ny/2, Nz/2)
-    int M_logical_;                     ///< Total logical grid size
-    int M_physical_;                    ///< Total physical grid size
-
-    // Cell parameters (Lx, Ly, Lz, alpha, beta, gamma)
-    std::array<double, 6> cell_para_;
-
-    struct BoltzDeleter {
-        void operator()(double* ptr) const { delete[] ptr; }
-    };
-    struct ThreadState
-    {
-        std::map<double, std::unique_ptr<double, BoltzDeleter>> boltzmann;
-        const double* boltz_current = nullptr;
-        double ds_current = std::numeric_limits<double>::quiet_NaN();
-        uint64_t epoch = 0;
-        uint64_t instance_id = 0;
-    };
-    inline static std::atomic<uint64_t> next_instance_id_{1};
-    uint64_t instance_id_{0};
-    mutable std::atomic<uint64_t> cache_epoch_{1};
+    using Base = CrysFFTPmmmBase<FftwCrysFFTPmmm>;
+    friend Base;
 
     // FFTW plans for DCT-II/III
     fftw_plan plan_forward_;    ///< Forward DCT-II (REDFT10)
     fftw_plan plan_backward_;   ///< Backward DCT-III (REDFT01)
 
-    // Work buffers
-    double* io_buffer_;    ///< I/O buffer for physical grid
-    double* temp_buffer_;  ///< Temp buffer for DCT output
+    /**
+     * @brief Thread-local buffer structure for FFTW.
+     */
+    struct AlignedDeleter {
+        void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
+    };
 
-    // Normalization factor for DCT-II/III round trip: 1/(8*Nx2*Ny2*Nz2) = 1/M_logical
-    double norm_factor_;
+    struct ThreadBuffers {
+        std::unique_ptr<double, AlignedDeleter> io;
+        std::unique_ptr<double, AlignedDeleter> temp;
+        int size = 0;
+    };
 
     /**
-     * @brief Generate Boltzmann factors for given ds.
-     * @param ds Contour step size
+     * @brief Get thread-local buffers.
      */
-    double* generateBoltzmann(double ds) const;
+    std::pair<double*, double*> get_thread_local_buffers()
+    {
+        thread_local ThreadBuffers buffers;
+        if (buffers.size != M_physical_)
+        {
+            buffers.io.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+            buffers.temp.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+            if (!buffers.io || !buffers.temp)
+            {
+                throw_with_line_number("Failed to allocate thread-local FFTW buffers.");
+            }
+            buffers.size = M_physical_;
+        }
+        return {buffers.io.get(), buffers.temp.get()};
+    }
 
     /**
-     * @brief Initialize FFTW DCT-II/III plans.
+     * @brief Apply DCT-II forward (FFTW REDFT10).
      */
-    void initFFTPlans();
+    void dct_forward_impl(double* io, double* temp)
+    {
+        fftw_execute_r2r(plan_forward_, io, temp);
+        std::memcpy(io, temp, sizeof(double) * M_physical_);
+    }
 
     /**
-     * @brief Free Boltzmann factor memory.
+     * @brief Apply DCT-III backward (FFTW REDFT01).
      */
-    void freeBoltzmann();
-    ThreadState& get_thread_state() const;
+    void dct_backward_impl(double* io, double* temp)
+    {
+        fftw_execute_r2r(plan_backward_, io, temp);
+        std::memcpy(io, temp, sizeof(double) * M_physical_);
+    }
 
 public:
     /**
@@ -110,8 +90,7 @@ public:
      *
      * @param nx_logical Logical grid dimensions (must be even)
      * @param cell_para  Cell parameters [Lx, Ly, Lz, alpha, beta, gamma]
-     *                   Angles in radians. For cubic: all 90° = π/2.
-     * @param trans_part (Ignored for DCT-II/III, kept for API compatibility)
+     * @param trans_part (Ignored, kept for API compatibility)
      */
     FftwCrysFFTPmmm(
         std::array<int, 3> nx_logical,
@@ -119,78 +98,9 @@ public:
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
 
     /**
-     * @brief Destructor. Frees memory and FFTW plans.
+     * @brief Destructor. Frees FFTW plans and buffers.
      */
     ~FftwCrysFFTPmmm();
-
-    /**
-     * @brief Update cell parameters.
-     *
-     * Invalidates all Boltzmann factors (they will be regenerated on next use).
-     *
-     * @param cell_para New cell parameters [Lx, Ly, Lz, alpha, beta, gamma]
-     */
-    void set_cell_para(const std::array<double, 6>& cell_para);
-
-    /**
-     * @brief Set contour step size and prepare Boltzmann factors.
-     *
-     * If Boltzmann factors for this ds don't exist, they will be generated.
-     * Otherwise, cached factors will be used.
-     *
-     * @param ds Contour step size
-     */
-    void set_contour_step(double ds);
-
-    /**
-     * @brief Apply diffusion operator using DCT-II/III.
-     *
-     * Computes: q_out = DCT-III[ exp(-k²ds) * DCT-II[q_in] ]
-     *
-     * Input and output are on the PHYSICAL grid ((N/2)³).
-     *
-     * @param q_in  Input field on physical grid
-     * @param q_out Output field on physical grid
-     */
-    void diffusion(double* q_in, double* q_out);
-
-    /**
-     * @brief Apply custom multiplier in Fourier space using DCT-II/III.
-     *
-     * Computes: q_out = DCT-III[ multiplier * DCT-II[q_in] ]
-     *
-     * Input/output and multiplier are on the PHYSICAL grid ((N/2)³).
-     *
-     * @param q_in       Input field on physical grid
-     * @param q_out      Output field on physical grid
-     * @param multiplier Real multiplier on physical grid (same size as q_in)
-     */
-    void apply_multiplier(const double* q_in, double* q_out, const double* multiplier);
-
-    /**
-     * @brief Get logical grid dimensions.
-     */
-    const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }
-
-    /**
-     * @brief Get physical grid dimensions ((N/2)³).
-     */
-    const std::array<int, 3>& get_nx_physical() const { return nx_physical_; }
-
-    /**
-     * @brief Get logical grid size.
-     */
-    int get_M_logical() const { return M_logical_; }
-
-    /**
-     * @brief Get physical grid size.
-     */
-    int get_M_physical() const { return M_physical_; }
-
-    /**
-     * @brief Get I/O buffer pointer.
-     */
-    double* get_io_buffer() { return io_buffer_; }
 };
 
 #endif  // FFTW_CRYS_FFT_PMMM_H_

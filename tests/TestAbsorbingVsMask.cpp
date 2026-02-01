@@ -66,6 +66,15 @@
 #include "CudaComputationContinuous.h"
 #endif
 
+// Type trait to detect CUDA computation types
+template<template<typename> class T>
+struct is_cuda_computation : std::false_type {};
+
+#ifdef USE_CUDA
+template<>
+struct is_cuda_computation<CudaComputationContinuous> : std::true_type {};
+#endif
+
 /**
  * @brief Create a boundary mask for simulating absorbing BC with periodic FFT.
  *
@@ -175,8 +184,14 @@ bool run_comparison(const std::string& platform_name,
 
     // Method 1: Absorbing BC (DST-based)
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
-    ComputationContinuous<double>* solver_absorbing = new ComputationContinuous<double>(
-        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    ComputationContinuous<double>* solver_absorbing;
+    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
+        solver_absorbing = new ComputationContinuous<double>(
+            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
+    } else {
+        solver_absorbing = new ComputationContinuous<double>(
+            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    }
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -184,8 +199,14 @@ bool run_comparison(const std::string& platform_name,
 
     // Method 2: Periodic BC with boundary mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
-    ComputationContinuous<double>* solver_masked = new ComputationContinuous<double>(
-        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    ComputationContinuous<double>* solver_masked;
+    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
+        solver_masked = new ComputationContinuous<double>(
+            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
+    } else {
+        solver_masked = new ComputationContinuous<double>(
+            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    }
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
@@ -249,8 +270,14 @@ bool run_physical_test(const std::string& platform_name,
 
     // Reflecting BC (reference: should have Q = 1.0 for w=0)
     ComputationBox<double>* cb_ref = new ComputationBox<double>(nx, lx, bc_reflecting);
-    ComputationContinuous<double>* solver_ref = new ComputationContinuous<double>(
-        cb_ref, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    ComputationContinuous<double>* solver_ref;
+    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
+        solver_ref = new ComputationContinuous<double>(
+            cb_ref, molecules, prop_opt, "pseudospectral", "rqm4");
+    } else {
+        solver_ref = new ComputationContinuous<double>(
+            cb_ref, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    }
     solver_ref->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_reflecting = solver_ref->get_total_partition(0);
     delete solver_ref;
@@ -258,8 +285,14 @@ bool run_physical_test(const std::string& platform_name,
 
     // Absorbing BC
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
-    ComputationContinuous<double>* solver_absorbing = new ComputationContinuous<double>(
-        cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    ComputationContinuous<double>* solver_absorbing;
+    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
+        solver_absorbing = new ComputationContinuous<double>(
+            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
+    } else {
+        solver_absorbing = new ComputationContinuous<double>(
+            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    }
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -267,8 +300,14 @@ bool run_physical_test(const std::string& platform_name,
 
     // Periodic BC with mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
-    ComputationContinuous<double>* solver_masked = new ComputationContinuous<double>(
-        cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    ComputationContinuous<double>* solver_masked;
+    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
+        solver_masked = new ComputationContinuous<double>(
+            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
+    } else {
+        solver_masked = new ComputationContinuous<double>(
+            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
+    }
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
