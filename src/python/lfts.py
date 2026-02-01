@@ -22,6 +22,7 @@ from .utils import (
     DEFAULT_MONOMER_COLORS,
 )
 from .smearing import Smearing
+from .wtmd import WTMD
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -509,6 +510,36 @@ class LFTS:
             params.get("smearing", None)
         )
 
+        # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
+        wtmd_params = params.get("wtmd", None)
+        if wtmd_params is not None:
+            self.wtmd = WTMD(
+                nx=list(self.cb.get_nx()),
+                lx=list(self.cb.get_lx()),
+                ell=wtmd_params.get("ell", 4),
+                sigma_psi=wtmd_params.get("sigma_psi", 40.0),
+                delta_t=wtmd_params.get("delta_t", 5.0),
+                kc=wtmd_params.get("kc", 6.02),
+                psi_min=wtmd_params.get("psi_min", 0.0),
+                psi_max=wtmd_params.get("psi_max", 500.0),
+                n_bins=wtmd_params.get("n_bins", 5000),
+                update_freq=wtmd_params.get("update_freq", 1000),
+            )
+            # Find exchange field index (minimum eigenvalue among real fields)
+            # Same logic as deep-langevin-fts
+            eigen_value_min = 0.0
+            self.wtmd_exchange_idx = self.mpt.aux_fields_real_idx[0]  # default
+            self.wtmd_langevin_idx = 0
+            for count, i in enumerate(self.mpt.aux_fields_real_idx):
+                if self.mpt.eigenvalues[i] < eigen_value_min:
+                    eigen_value_min = self.mpt.eigenvalues[i]
+                    self.wtmd_exchange_idx = i
+                    self.wtmd_langevin_idx = count
+            print("WTMD enabled: ell=%d, sigma_psi=%.1f, delta_t=%.1f, kc=%.2f, exchange_idx=%d" % (
+                self.wtmd.ell, self.wtmd.sigma_psi, self.wtmd.delta_t, self.wtmd.kc, self.wtmd_exchange_idx))
+        else:
+            self.wtmd = None
+
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
             am = self.prop_solver.create_anderson_mixing(
@@ -785,6 +816,22 @@ class LFTS:
         for name in self.monomer_types:
             mdic["phi_" + name] = phi[name]
 
+        # Add WTMD state if enabled
+        if self.wtmd is not None:
+            mdic["wtmd_u"] = self.wtmd.u
+            mdic["wtmd_up"] = self.wtmd.up
+            mdic["wtmd_step"] = self.wtmd.step
+            mdic["wtmd_params"] = {
+                "ell": self.wtmd.ell,
+                "sigma_psi": self.wtmd.sigma_psi,
+                "delta_t": self.wtmd.delta_t,
+                "kc": self.wtmd.kc,
+                "psi_min": self.wtmd.psi_min,
+                "psi_max": self.wtmd.psi_max,
+                "n_bins": self.wtmd.n_bins,
+                "update_freq": self.wtmd.update_freq,
+            }
+
         # Save data with matlab format
         savemat(path, mdic, long_field_names=True, do_compression=True)
 
@@ -856,6 +903,13 @@ class LFTS:
                       'inc':   int(load_data["random_state_inc"])},
                       'has_uint32': 0, 'uinteger': 0}
         print("Restored Random Number Generator: ", self.random_bg.state)
+
+        # Restore WTMD state if available
+        if self.wtmd is not None and "wtmd_u" in load_data:
+            self.wtmd.u = np.array(load_data["wtmd_u"])
+            self.wtmd.up = np.array(load_data["wtmd_up"])
+            self.wtmd.step = int(load_data["wtmd_step"])
+            print(f"Restored WTMD state: step={self.wtmd.step}")
 
         # Make initial_fields
         initial_fields = {}
@@ -1090,8 +1144,25 @@ class LFTS:
             w_aux_copy = w_aux.copy()
             phi_copy = phi.copy()
 
-            # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields 
+            # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
+
+            # Add WTMD bias force if enabled
+            if self.wtmd is not None:
+                # Use exchange field with minimum eigenvalue (same as deep-langevin-fts)
+                w_exchange = w_aux[self.wtmd_exchange_idx]
+
+                # Get order parameter and update bias
+                psi = self.wtmd.get_psi(w_exchange)
+                self.wtmd.update_bias(psi)
+
+                # Get bias field and add to Langevin force (same as deep-langevin-fts)
+                bias_field = self.wtmd.get_bias_field(w_exchange)
+                w_lambda[self.wtmd_langevin_idx] += bias_field
+
+                # Log WTMD info periodically
+                if langevin_step % self.recording["sf_computing_period"] == 0:
+                    print(f"  WTMD: Ψ = {psi:.2f}")
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])

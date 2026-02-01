@@ -25,3 +25,8 @@
 56. Check get_negative_frequency_mapping() and compute_single_segment_stress()
 57. Add tests for Anderson mixing with complex type
 58. Figure out why 'os.environ' does not work under Python and openmp installation with conda-forge
+59. Parameter sweep / continuation (use previous solution as initial guess for phase diagram construction)
+60. Grand canonical ensemble (GCE) - core functions implemented (get_stress_gce, get_total_concentration_gce), needs SCFT/LFTS high-level API
+61. Documentation: Python API reference (Sphinx + autodoc for PropagatorSolver, SCFT, LFTS classes)
+62. Documentation: File formats (fields_*.mat, structure_function_*.mat, YAML/JSON config)
+63. Documentation: Examples guide (detailed README for examples/scft/, examples/lfts/)
