@@ -22,6 +22,11 @@
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
 #endif
+#ifdef USE_CPU_MKL
+#include "CpuComputationBox.h"
+#include "CpuComputationContinuous.h"
+#include "CpuComputationReduceMemoryContinuous.h"
+#endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaComputationContinuous.h"
@@ -110,6 +115,14 @@ int main()
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
+        #ifdef USE_CPU_MKL
+        repeat += 2;
+        solver_name_list.push_back("cpu-mkl, absorbing");
+        solver_name_list.push_back("cpu-mkl, absorbing, reduce_memory");
+        solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        #endif
+
         #ifdef USE_CUDA
         repeat += 2;
         solver_name_list.push_back("cuda, absorbing");
@@ -125,6 +138,13 @@ int main()
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
+        #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl, reflecting");
+        solver_name_list.push_back("cpu-mkl, reflecting, reduce_memory");
+        solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        #endif
+
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, reflecting");
         solver_name_list.push_back("cuda, reflecting, reduce_memory");
@@ -138,7 +158,14 @@ int main()
         solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         #endif
-        
+
+        #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl, periodic");
+        solver_name_list.push_back("cpu-mkl, periodic, reduce_memory");
+        solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        #endif
+
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, periodic");
         solver_name_list.push_back("cuda, periodic, reduce_memory");
