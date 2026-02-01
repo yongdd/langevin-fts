@@ -12,7 +12,7 @@ env:
 
 jobs:
   build-cpu:
-    name: Build and Test (CPU-FFTW-MKL)
+    name: Build and Test (CPU-MKL)
     runs-on: ubuntu-latest
 
     steps:
@@ -34,14 +34,12 @@ jobs:
           numpy scipy pandas matplotlib spglib \
           make git pip pyyaml \
           jupyter networkx pygments plotly nbformat \
-          fftw mkl mkl-devel mkl-include
+          mkl mkl-devel mkl-include
 
     - name: Debug installation
       shell: bash -l {0}
       run: |
         echo "=== CONDA_PREFIX: $CONDA_PREFIX ==="
-        echo "=== FFTW files ==="
-        ls -la $CONDA_PREFIX/lib/libfftw* 2>/dev/null | head -10 || echo "No libfftw files"
         echo "=== MKL files ==="
         ls -la $CONDA_PREFIX/lib/libmkl* 2>/dev/null | head -10 || echo "No libmkl files"
         echo "=== MKL include ==="
@@ -52,14 +50,12 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        export FFTWROOT=$CONDA_PREFIX
         export MKLROOT=$CONDA_PREFIX
         export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
         cmake .. -DCMAKE_BUILD_TYPE=Release \
-          -DPOLYMERFTS_USE_FFTW=ON \
+          -DPOLYMERFTS_USE_FFTW=OFF \
           -DPOLYMERFTS_USE_MKL=ON \
           -DPOLYMERFTS_USE_CUDA=OFF \
-          -DFFTW_ROOT=$CONDA_PREFIX \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           2>&1 | tail -50
 
