@@ -161,7 +161,7 @@ from polymerfts import lfts
 import numpy as np
 
 params = {
-    "platform": "cuda",              # or "cpu-fftw"
+    "platform": "cuda",              # or "cpu-mkl", "cpu-fftw"
     "nx": [40, 40, 40],              # Grid points
     "lx": [4.36, 4.36, 4.36],        # Box size
 

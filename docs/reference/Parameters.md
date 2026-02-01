@@ -147,11 +147,12 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
 **Available platforms:**
 - `"cuda"`: NVIDIA GPU (cuFFT)
-- `"cpu-fftw"`: CPU (FFTW library)
+- `"cpu-mkl"`: CPU (Intel MKL library)
+- `"cpu-fftw"`: CPU (FFTW library, GPL license)
 
 **Auto-selection logic:**
-- 1D simulations → `"cpu-fftw"`
-- 2D/3D simulations → `"cuda"` if available, else `"cpu-fftw"`
+- 1D simulations → CPU
+- 2D/3D simulations → `"cuda"` if available, else CPU
 
 ---
 

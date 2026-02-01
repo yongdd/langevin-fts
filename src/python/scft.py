@@ -290,9 +290,9 @@ class SCFT:
 
         **Platform Selection:**
 
-        - platform : {'cuda', 'cpu-fftw', 'cpu-fftw'}, optional
+        - platform : {'cuda', 'cpu-mkl', 'cpu-fftw'}, optional
             Computational backend. Auto-selected if not specified:
-            1D → cpu-fftw, 2D/3D → cuda (if available).
+            1D → CPU, 2D/3D → cuda (if available).
         - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
@@ -450,8 +450,8 @@ class SCFT:
 
     **Performance:**
 
-    - 1D simulations: cpu-fftw or cpu-fftw is recommended
-    - 2D/3D simulations: cuda provides 10-20x speedup over cpu-fftw/cpu-fftw
+    - 1D simulations: CPU is recommended
+    - 2D/3D simulations: cuda provides 10-20x speedup over CPU
     - Memory usage: ~500MB for 64³ grid (standard), ~50MB (reduce_memory)
 
     References
@@ -563,7 +563,7 @@ class SCFT:
         if len(self.monomer_types) != len(set(self.monomer_types)):
             raise ValidationError("There are duplicated monomer_types")
 
-        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
+        # Choose platform among [cuda, cpu-fftw, cpu-mkl]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]

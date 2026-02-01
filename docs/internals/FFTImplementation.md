@@ -29,7 +29,7 @@ The library provides spectral transforms for solving the modified diffusion equa
 | DST | Absorbing | Dirichlet (zero value) |
 
 **Implementations:**
-- **CPU**: FFTW library (REDFT/RODFT for DCT/DST)
+- **CPU**: MKL or FFTW library
 - **CUDA**: cuFFT for FFT, custom `CudaRealTransform` for DCT/DST
 
 ---
@@ -331,7 +331,23 @@ transform.execute(d_data);
 
 All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative error) when compared to FFTW.
 
-### 8.2 CrysFFT Benchmark (64³, Im-3m BCC)
+### 8.2 FFTW vs MKL Benchmark (CPU)
+
+**Setup**: 3D transforms, single-threaded, Intel Xeon
+
+The MKL implementation (`MklRealTransform`) uses FFT-based algorithms (Makhoul method) for DCT-2, DCT-3, DST-2, and DST-3.
+
+| Transform | 32³ | 48³ | 64³ |
+|-----------|-----|-----|-----|
+| DFT | 0.55× | 1.09× | 0.76× |
+| DCT-2 | 0.82× | 1.16× | 1.06× |
+| DCT-3 | 0.78× | 1.20× | 1.10× |
+| DST-2 | 0.79× | 1.28× | 1.03× |
+| DST-3 | 0.74× | 1.18× | 1.01× |
+
+Speedup = FFTW time / MKL time (>1× means MKL is faster)
+
+### 8.4 CrysFFT Benchmark (64³, Im-3m BCC)
 
 **Setup**: nx=[64,64,64], coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
 
@@ -340,7 +356,7 @@ All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative 
 | CUDA | 0.177 ms | 0.056 ms (3.1x) | 0.091 ms (2.0x) |
 | CPU | 2.09 ms | 0.41 ms (5.1x) | 0.58 ms (3.6x) |
 
-### 8.3 ObliqueZ Benchmark (64³, Hexagonal P6/mmm)
+### 8.5 ObliqueZ Benchmark (64³, Hexagonal P6/mmm)
 
 **Setup**: nx=[64,64,64], γ=120°, coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
 

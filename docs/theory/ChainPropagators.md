@@ -226,7 +226,6 @@ solver = PropagatorSolver(
     bc=["periodic"] * 4,
     chain_model="continuous",
     method="pseudospectral",
-    platform="cpu-fftw",
 )
 
 # Add AB diblock copolymer

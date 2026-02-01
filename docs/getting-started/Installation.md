@@ -25,24 +25,30 @@ ctest -L basic  # Basic installation verification (~40 seconds)
 * **C++ Compiler**: C++20 support (GCC 10+)
 
 ### Optional
-* **FFTW3**: CPU backend — enable with `-DPOLYMERFTS_USE_FFTW=ON`
 * **CUDA Toolkit 11.8+**: GPU backend (https://developer.nvidia.com/cuda-toolkit)
+* **FFTW3**: Alternative CPU backend — enable with `-DPOLYMERFTS_USE_FFTW=ON`
 
 ## CMake Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
+| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
+
+### CPU Backends
+
+Two CPU backends are available:
+- **MKL** (default): Intel Math Kernel Library, included via conda
+- **FFTW**: Enable with `-DPOLYMERFTS_USE_FFTW=ON` (GPL license)
 
 Example (enable FFTW CPU backend):
 ```bash
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 ```
 
-## GPL License Warning
+## GPL License Warning (FFTW)
 
 > **Important**: FFTW3 is licensed under the **GNU General Public License (GPL)**.
 >

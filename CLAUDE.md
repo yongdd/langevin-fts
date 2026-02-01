@@ -71,7 +71,8 @@ For every computation, launch a separate SLURM job for each parameter value inst
 | C++ Compiler | C++20 support | GCC 10+, Clang 10+ |
 | Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
 | CUDA Toolkit | 11.8+ | For GPU support |
-| FFTW | 3.3+ | CPU FFT backend |
+| MKL | - | CPU FFT backend (via conda) |
+| FFTW | 3.3+ | Alternative CPU backend (GPL, optional) |
 | pybind11 | 2.13+ | Python bindings |
 
 ### Conda Environment
@@ -255,11 +256,11 @@ solver.check_total_partition()  # Should pass without error
 
 ### Platform Abstraction (Abstract Factory Pattern)
 
-The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with FFTW, CUDA GPUs). This is a key architectural feature:
+The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with MKL/FFTW, CUDA GPUs). This is a key architectural feature:
 
 - **Factory Selection**: `src/common/PlatformSelector.cpp` determines available platforms and creates appropriate factory instances
 - **Platform Implementations**:
-  - `src/platforms/cpu/`: FFTW-based CPU implementations using Intel Math Kernel Library for FFT and linear algebra
+  - `src/platforms/cpu/`: CPU implementations using MKL or FFTW for FFT and linear algebra
   - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
 - **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
 
@@ -393,11 +394,12 @@ Simulations are configured via Python dictionaries with keys:
 
 The `platform` parameter controls which computational backend is used:
 - `"cuda"`: NVIDIA GPU with cuFFT (requires CUDA)
-- `"cpu-fftw"`: CPU with FFTW library
+- `"cpu-mkl"`: CPU with Intel MKL library
+- `"cpu-fftw"`: CPU with FFTW library (GPL license)
 
 **Auto-selection logic** (when `platform` is not specified):
-- **1D simulations**: Uses `cpu-fftw` (GPU overhead outweighs benefits for small problems)
-- **2D/3D simulations**: Uses `cuda` if available, otherwise falls back to `cpu-fftw`
+- **1D simulations**: Uses CPU (GPU overhead outweighs benefits for small problems)
+- **2D/3D simulations**: Uses `cuda` if available, otherwise falls back to CPU
 
 ## Troubleshooting
 
@@ -428,7 +430,7 @@ Reduce mixing parameters:
 1. **Run with verbose output**: `ctest -V -R <test_name>`
 2. **Check for NaN/Inf**: Add `np.isnan(result).any()` checks
 3. **Verify partition function**: Call `solver.check_total_partition()` - should be ~1.0
-4. **Compare platforms**: Run same test on both `cuda` and `cpu-fftw` to isolate platform-specific issues
+4. **Compare platforms**: Run same test on both `cuda` and CPU to isolate platform-specific issues
 5. **Check material conservation**: Verify `np.mean(sum(phi_species))` ≈ 1.0
 
 ### Interpreting Error Messages
@@ -598,8 +600,7 @@ Derived classes implement chain-model-specific behavior:
 ```text
       FFT<T>              (abstract base - double* and complex* interfaces)
         ↑
-   FftwFFT<T, DIM>         (CPU: FFTW for FFT, DCT, DST)
-   FftwFFT<T, DIM>        (CPU: FFTW3 for FFT, DCT, DST - GPL license)
+   FftwFFT<T, DIM>        (CPU: MKL or FFTW for FFT, DCT, DST)
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
 
@@ -651,7 +652,7 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 Results must match:
 - **PSCF** (https://github.com/dmorse/pscfpp) for continuous chains with even contour steps
 - **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
-- Results should be **identical across platforms** (CUDA vs FFTW) within machine precision - verify by running same parameters on both platforms
+- Results should be **identical across platforms** (CUDA vs CPU) within machine precision - verify by running same parameters on both platforms
 
 ## Documentation and Learning
 

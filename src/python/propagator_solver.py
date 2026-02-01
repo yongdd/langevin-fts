@@ -91,7 +91,7 @@ class PropagatorSolver:
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
         Note: Discrete chain model has its own solver; this parameter is ignored.
     platform : str
-        Computational platform: "cpu-fftw", "cpu-fftw", or "cuda".
+        Computational platform: "cuda", "cpu-mkl", or "cpu-fftw".
     reduce_memory : bool
         If True, store only propagator checkpoints instead of full histories,
         recomputing propagators as needed. Reduces memory usage but increases
