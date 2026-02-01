@@ -1,5 +1,7 @@
 # Installation
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 ```bash
 # Clone repository
 git clone https://github.com/yongdd/langevin-fts.git
@@ -114,12 +116,12 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 54 | ~40 sec | Installation verification |
-| **Full** | `ctest` | 73 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | 56 | ~40 sec | Installation verification |
+| **Full** | `ctest` | 84 | ~4 min | Development validation |
 
 **Note**: Run `make install` before `ctest` so Python tests can import the installed module.
 
-**Basic tests** (54 tests):
+**Basic tests** (56 tests):
 - FFT: CPU/CUDA, DCT, DST, mixed boundary conditions
 - Propagator: linear, branched, mixture polymers
 - Numerical methods: pseudo-spectral (RQM4, RK2), real-space (CN-ADI)
@@ -130,7 +132,7 @@ Two test modes are available:
 - Aggregation: propagator optimization
 - Scheduler: parallel computation
 
-**Full tests** add (19 tests):
+**Full tests** add (28 tests):
 - SCFT: 3D, hexagonal cylinder
 - Stress tensor: 2D, 3D calculations
 - Complex field: CL-FTS propagators
