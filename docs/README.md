@@ -29,9 +29,10 @@
 | [PropagatorSystem.md](internals/PropagatorSystem.md) | Propagator identification and scheduling |
 | [MemoryManagement.md](internals/MemoryManagement.md) | Memory optimization and checkpointing |
 
-## Reference
+## References
 
 | Document | Description |
 |----------|-------------|
-| [Parameters.md](reference/Parameters.md) | Complete parameter reference |
-| [Bibliography.md](reference/Bibliography.md) | Publication references |
+| [Parameters.md](references/Parameters.md) | Complete parameter reference |
+| [Tools.md](references/Tools.md) | Utility scripts for visualization and data conversion |
+| [Bibliography.md](references/Bibliography.md) | Publication references |

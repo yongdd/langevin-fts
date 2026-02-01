@@ -48,7 +48,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | [Getting Started](docs/getting-started/) | Installation, quick start, and features |
 | [Theory](docs/theory/) | Chain propagators, field theory, SCFT, L-FTS, numerical methods |
 | [Internals](docs/internals/) | Architecture, FFT implementation, propagator system |
-| [Reference](docs/reference/) | Parameter reference, bibliography |
+| [References](docs/references/) | Parameter reference, bibliography, tools |
 | `tutorials/` | Jupyter notebooks explaining theory and usage |
 
 ## Numerical Methods
@@ -73,4 +73,4 @@ Contributions are welcome. See [DeveloperGuide.md](docs/internals/DeveloperGuide
 
 ## References
 
-See [Bibliography.md](docs/reference/Bibliography.md) for the complete list of publications.
+See [Bibliography.md](docs/references/Bibliography.md) for the complete list of publications.
