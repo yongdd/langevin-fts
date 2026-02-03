@@ -3,6 +3,8 @@
 This module implements well-tempered metadynamics to enhance sampling
 in Langevin field-theoretic simulations of block copolymers.
 
+This implementation follows deep-langevin-fts exactly.
+
 References
 ----------
 T. M. Beardsley and M. W. Matsen, "Well-tempered metadynamics applied to
@@ -10,306 +12,208 @@ field-theoretic simulations of diblock copolymer melts",
 J. Chem. Phys. 157, 114902 (2022).
 """
 
+import os
 import numpy as np
-from typing import List, Optional, Tuple
+from scipy.io import savemat, loadmat
+from typing import List, Dict, Optional, Tuple
 
 
 class WTMD:
     """Well-Tempered Metadynamics for enhanced sampling in L-FTS.
 
-    Adds Gaussian hills to bias the order parameter, enabling efficient
-    exploration of phase space and calculation of free energy landscapes.
-
-    Parameters
-    ----------
-    nx : list of int
-        Grid dimensions [nx, ny, nz].
-    lx : list of float
-        Box dimensions [lx, ly, lz].
-    ell : int, optional
-        Order parameter exponent. Default: 4.
-    sigma_psi : float, optional
-        Gaussian width for hills. Default: 40.0.
-    delta_t : float, optional
-        Well-tempering factor (ΔT). Default: 5.0.
-    kc : float, optional
-        Wavenumber cutoff for order parameter. Default: 6.02.
-    psi_min : float, optional
-        Minimum Ψ for bias histogram. Default: 0.0.
-    psi_max : float, optional
-        Maximum Ψ for bias histogram. Default: 500.0.
-    n_bins : int, optional
-        Number of bins for bias histogram. Default: 5000.
-    update_freq : int, optional
-        Hill deposition frequency (steps). Default: 1000.
-
-    Attributes
-    ----------
-    u : ndarray
-        Bias potential U(Ψ).
-    up : ndarray
-        Derivative of bias potential dU/dΨ.
-
-    Examples
-    --------
-    >>> wtmd = WTMD(nx=[32, 32, 32], lx=[4.0, 4.0, 4.0])
-    >>> # In L-FTS loop:
-    >>> psi = wtmd.get_psi(w_minus)
-    >>> bias_field = wtmd.get_bias_field(w_minus)
-    >>> wtmd.update_bias(psi)
+    This implementation matches deep-langevin-fts exactly.
     """
 
-    def __init__(
-        self,
-        nx: List[int],
-        lx: List[float],
-        ell: int = 4,
-        sigma_psi: float = 40.0,
-        delta_t: float = 5.0,
-        kc: float = 6.02,
-        psi_min: float = 0.0,
-        psi_max: float = 500.0,
-        n_bins: int = 5000,
-        update_freq: int = 1000,
-    ):
-        self.nx = np.array(nx)
-        self.lx = np.array(lx)
-        self.dim = len(nx)
-        self.n_grid = np.prod(nx)
-        self.volume = np.prod(lx)
+    def __init__(self, nx, lx, nbar,
+                 eigenvalues, real_fields_idx,
+                 l=4,
+                 kc=6.02,
+                 dT=5.0,
+                 sigma_psi=0.16,
+                 psi_min=0.0,
+                 psi_max=10.0,
+                 dpsi=2e-3,
+                 update_freq=1000,
+                 recording_period=10000,
+                 u=None, up=None, I0=None, I1=None):
 
-        # WTMD parameters
-        self.ell = ell
-        self.sigma_psi = sigma_psi
-        self.delta_t = delta_t
+        self.l = l
         self.kc = kc
-        self.update_freq = update_freq
-
-        # Bias histogram
+        self.sigma_psi = sigma_psi
+        self.dT = dT
         self.psi_min = psi_min
         self.psi_max = psi_max
-        self.n_bins = n_bins
-        self.d_psi = (psi_max - psi_min) / n_bins
-        self.psi_bins = np.linspace(psi_min, psi_max, n_bins)
+        self.dpsi = dpsi
+        self.bins = int(np.round((psi_max - psi_min) / dpsi))
+        self.update_freq = update_freq
+        self.recording_period = recording_period
 
-        # Bias potential and derivative
-        self.u = np.zeros(n_bins)      # U(Ψ)
-        self.up = np.zeros(n_bins)     # dU/dΨ
+        self.nx = nx
+        self.lx = lx
+        self.M = nx[0] * nx[1] * nx[2]
+        self.Mk = nx[0] * nx[1] * (nx[2] // 2 + 1)
 
-        # Normalization integrals (for reweighting)
-        self.I0 = np.zeros(n_bins)     # ∫ exp(-U/ΔT) dΨ
-        self.I1 = np.zeros(n_bins)     # ∫ Ψ exp(-U/ΔT) dΨ
+        self.V = lx[0] * lx[1] * lx[2]
+        self.CV = np.sqrt(nbar) * self.V
 
-        # Step counter
-        self.step = 0
+        # Choose one index of w_aux to use order parameter
+        self.eigenvalues = eigenvalues
+        self.real_fields_idx = real_fields_idx
+        eigen_value_min = 0.0
+        for count, i in enumerate(self.real_fields_idx):
+            if self.eigenvalues[i] < eigen_value_min:
+                eigen_value_min = self.eigenvalues[i]
+                self.exchange_idx = i
+                self.langevin_idx = count
 
-        # Setup Fourier space arrays
-        self._setup_fourier_space()
+        self.u = np.zeros(self.bins)
+        self.up = np.zeros(self.bins)
+        self.I0 = np.zeros(self.bins)
+        self.I1 = {}
 
-    def _setup_fourier_space(self):
-        """Initialize wavenumber arrays and filters."""
-        # Grid spacing
-        dx = self.lx / self.nx
+        # Copy data and normalize them by sqrt(nbar)*V
+        if u is not None:
+            self.u = u.copy() / self.CV
+        if up is not None:
+            self.up = up.copy() / self.CV
+        if I0 is not None:
+            self.I0 = I0.copy()
+        if I1 is not None:
+            self.I1 = I1.copy()
+            for key in self.I1:
+                self.I1[key] /= self.CV
 
-        # Wavenumber arrays for each dimension
-        if self.dim == 3:
-            kx = 2 * np.pi * np.fft.fftfreq(self.nx[0], dx[0])
-            ky = 2 * np.pi * np.fft.fftfreq(self.nx[1], dx[1])
-            kz = 2 * np.pi * np.fft.rfftfreq(self.nx[2], dx[2])
+        self.psi_range = np.linspace(self.psi_min, self.psi_max, num=self.bins, endpoint=False)
+        self.psi_range_hist = np.linspace(self.psi_min - self.dpsi / 2, self.psi_max - self.dpsi / 2, num=self.bins + 1, endpoint=True)
 
-            KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing='ij')
-            self.K = np.sqrt(KX**2 + KY**2 + KZ**2)
+        # Store order parameters for updating U and U_hat
+        self.order_parameter_history = []
+        # Store dH for updating I1
+        self.dH_history = {}
 
-            # Weighting for rfft (last dimension has half the modes)
-            self.wt = 2.0 * np.ones_like(self.K)
-            self.wt[:, :, 0] = 1.0
-            if self.nx[2] % 2 == 0:
-                self.wt[:, :, -1] = 1.0
+        # Initialize arrays in Fourier spaces
+        self.wt = 2 * np.ones([nx[0], nx[1], nx[2] // 2 + 1])
+        self.wt[:, :, [0, nx[2] // 2]] = 1.0
 
-        elif self.dim == 2:
-            kx = 2 * np.pi * np.fft.fftfreq(self.nx[0], dx[0])
-            ky = 2 * np.pi * np.fft.rfftfreq(self.nx[1], dx[1])
+        space_kx, space_ky, space_kz = np.meshgrid(
+            2 * np.pi / lx[0] * np.concatenate([np.arange((nx[0] + 1) // 2), nx[0] // 2 - np.arange(nx[0] // 2)]),
+            2 * np.pi / lx[1] * np.concatenate([np.arange((nx[1] + 1) // 2), nx[1] // 2 - np.arange(nx[1] // 2)]),
+            2 * np.pi / lx[2] * np.arange(nx[2] // 2 + 1), indexing='ij')
+        mag_k = np.sqrt(space_kx**2 + space_ky**2 + space_kz**2)
+        self.fk = 1.0 / (1.0 + np.exp(12.0 * (mag_k - kc) / kc))
 
-            KX, KY = np.meshgrid(kx, ky, indexing='ij')
-            self.K = np.sqrt(KX**2 + KY**2)
+        # Compute fourier transform of gaussian functions
+        X = self.dpsi * np.concatenate([np.arange((self.bins + 1) // 2), np.arange(self.bins // 2) - self.bins // 2]) / self.sigma_psi
+        self.u_kernel = np.fft.rfft(np.exp(-0.5 * X**2))
+        self.up_kernel = np.fft.rfft(-X / self.sigma_psi * np.exp(-0.5 * X**2))
 
-            self.wt = 2.0 * np.ones_like(self.K)
-            self.wt[:, 0] = 1.0
-            if self.nx[1] % 2 == 0:
-                self.wt[:, -1] = 1.0
-
-        elif self.dim == 1:
-            kx = 2 * np.pi * np.fft.rfftfreq(self.nx[0], dx[0])
-            self.K = np.abs(kx)
-
-            self.wt = 2.0 * np.ones_like(self.K)
-            self.wt[0] = 1.0
-            if self.nx[0] % 2 == 0:
-                self.wt[-1] = 1.0
-
-        # Low-pass filter
-        self.fk = np.where(self.K < self.kc, 1.0, 0.0)
-
-    def get_psi(self, w_minus: np.ndarray) -> float:
-        """Calculate order parameter Ψ from exchange field.
-
-        Parameters
-        ----------
-        w_minus : ndarray
-            Exchange field w- in real space, shape (n_grid,).
-
-        Returns
-        -------
-        psi : float
-            Order parameter value.
-
-        Notes
-        -----
-        The order parameter is defined as:
-
-        .. math::
-            \\Psi = \\left( \\sum_k |\\tilde{w}_k|^\\ell f_k w_t / M \\right)^{1/\\ell}
-
-        where f_k is a low-pass filter and w_t accounts for rfft weighting.
-        """
-        # Reshape to grid
-        w = w_minus.reshape(self.nx)
-
-        # FFT to Fourier space
-        w_k = np.fft.rfftn(w)
-
-        # Order parameter: sum of |w_k|^ell with filter
-        psi_sum = np.sum(np.abs(w_k)**self.ell * self.fk * self.wt)
-        psi = psi_sum**(1.0 / self.ell) / self.n_grid
-
+    # Compute order parameter Ψ
+    def compute_order_parameter(self, langevin_step, w_aux):
+        self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
+        psi = np.sum(np.power(np.absolute(self.w_aux_k), self.l) * self.fk * self.wt)
+        psi = np.power(psi, 1.0 / self.l) / self.M
         return psi
 
-    def get_bias_field(self, w_minus: np.ndarray) -> np.ndarray:
-        """Calculate bias field contribution for Langevin dynamics.
+    def store_order_parameter(self, psi, dH):
+        self.order_parameter_history.append(psi)
+        for key in dH:
+            if key not in self.dH_history:
+                self.dH_history[key] = []
+            self.dH_history[key].append(dH[key])
 
-        Parameters
-        ----------
-        w_minus : ndarray
-            Exchange field w- in real space, shape (n_grid,).
+    # Compute bias from psi and w_aux_k, and add it to the DH/DW
+    def add_bias_to_langevin(self, psi, langevin):
 
-        Returns
-        -------
-        bias_field : ndarray
-            Bias field -dU/dw in real space, shape (n_grid,).
+        # Calculate current value of U'(Ψ) using linear interpolation
+        up_hat = np.interp(psi, self.psi_range, self.up)
+        # Calculate derivative of order parameter with respect to w_aux_k
+        dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
+        # Calculate derivative of order parameter with respect to w
+        dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx) * np.power(self.M, 2.0 - self.l) / self.V
 
-        Notes
-        -----
-        The bias field is computed as:
+        # Add bias
+        bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)
+        langevin[self.langevin_idx] += bias
 
-        .. math::
-            -\\frac{dU}{dw} = -\\frac{dU}{d\\Psi} \\frac{d\\Psi}{dw}
-        """
-        # Reshape to grid
-        w = w_minus.reshape(self.nx)
+        print("\t[WTMD] Ψ:%8.5f, np.std(dΨ_dwr):%8.5e, np.std(bias):%8.5e" % (psi, np.std(dpsi_dwr), np.std(bias)))
 
-        # FFT to Fourier space
-        w_k = np.fft.rfftn(w)
+    def update_statistics(self):
 
-        # Calculate Ψ
-        psi_sum = np.sum(np.abs(w_k)**self.ell * self.fk * self.wt)
-        psi = psi_sum**(1.0 / self.ell) / self.n_grid
+        # Compute histogram
+        hist, bin_edges = np.histogram(self.order_parameter_history, bins=self.psi_range_hist, density=True)
+        hist_k = np.fft.rfft(hist)
+        bin_mids = bin_edges[1:] - self.dpsi / 2
 
-        # Get dU/dΨ from interpolation
-        du_dpsi = self._interpolate_derivative(psi)
+        dI1 = {}
+        for key in self.dH_history:
+            hist_dH_, _ = np.histogram(self.order_parameter_history,
+                                       weights=self.dH_history[key],
+                                       bins=self.psi_range_hist, density=False)
+            hist_dH_ /= len(self.order_parameter_history)
+            hist_dH_k = np.fft.rfft(hist_dH_)
+            dI1[key] = np.fft.irfft(hist_dH_k * self.u_kernel, self.bins)
 
-        # dΨ/dw_k (chain rule for |w_k|^ℓ derivative)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            dpsi_dwk = (
-                np.abs(w_k)**(self.ell - 2) *
-                psi**(1.0 - self.ell) *
-                w_k * self.fk
-            )
-            dpsi_dwk = np.nan_to_num(dpsi_dwk, nan=0.0, posinf=0.0, neginf=0.0)
+        # Compute dU(Ψ), dU'(Ψ)
+        amplitude = np.exp(-self.CV * self.u / self.dT) / self.CV
+        gaussian = np.fft.irfft(hist_k * self.u_kernel, self.bins) * self.dpsi
+        du = amplitude * gaussian
+        dup = amplitude * np.fft.irfft(hist_k * self.up_kernel, self.bins) * self.dpsi - self.CV * self.up / self.dT * du
 
-        # IFFT to real space
-        dpsi_dw = np.fft.irfftn(dpsi_dwk, s=self.nx) * self.n_grid**(2.0 - self.ell) / self.volume
+        print("np.max(np.abs(amplitude)):%8.5e" % (np.max(np.abs(amplitude))))
+        print("np.max(np.abs(gaussian)):%8.5e" % (np.max(np.abs(gaussian))))
+        print("np.max(np.abs(du)):%8.5e" % (np.max(np.abs(du))))
+        print("np.max(np.abs(dup)):%8.5e" % (np.max(np.abs(dup))))
+        for key in dI1:
+            print("np.max(np.abs(dI1[%s])):%8.5e" % (key, np.max(np.abs(dI1[key]))))
 
-        # Bias field: V * dU/dΨ * dΨ/dw (same as deep-langevin-fts)
-        bias_field = self.volume * du_dpsi * dpsi_dw.flatten()
+        # Update u, up, I0, I1
+        self.u += du
+        self.up += dup
+        self.I0 += gaussian
+        for key in dI1:
+            if key not in self.I1:
+                self.I1[key] = np.zeros(self.bins)
+            self.I1[key] += dI1[key]
 
-        return bias_field
+        # Reset lists
+        self.order_parameter_history = []
+        self.dH_history = {}
 
-    def _interpolate_derivative(self, psi: float) -> float:
-        """Interpolate dU/dΨ at given Ψ value."""
-        if psi <= self.psi_min:
-            return self.up[0]
-        elif psi >= self.psi_max:
-            return self.up[-1]
+    def write_data(self, file_name):
+        mdic = {
+            "l": self.l,
+            "kc": self.kc,
+            "sigma_psi": self.sigma_psi,
+            "dT": self.dT,
+            "psi_min": self.psi_min,
+            "psi_max": self.psi_max,
+            "dpsi": self.dpsi,
+            "bins": self.bins,
+            "psi_range": self.psi_range,
+            "update_freq": self.update_freq,
+            "nx": self.nx,
+            "lx": self.lx,
+            "volume": self.V,
+            "nbar": (self.CV / self.V)**2,
+            "eigenvalues": self.eigenvalues,
+            "real_fields_idx": self.real_fields_idx,
+            "exchange_idx": self.exchange_idx,
+            "langevin_idx": self.langevin_idx,
+            "u": self.u * self.CV,
+            "up": self.up * self.CV,
+            "I0": self.I0
+        }
 
-        # Linear interpolation
-        idx = (psi - self.psi_min) / self.d_psi
-        i = int(idx)
-        i = min(i, self.n_bins - 2)
-        frac = idx - i
+        # Add I0 and dH_Ψ to the dictionary
+        for key in self.I1:
+            I1 = self.I1[key] * self.CV
+            dH_psi = I1.copy()
+            dH_psi[np.abs(self.I0) > 0] /= self.I0[np.abs(self.I0) > 0]
+            monomer_pair = sorted(key.split(","))
+            mdic["I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = I1
+            mdic["dH_psi_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_psi
 
-        return (1.0 - frac) * self.up[i] + frac * self.up[i + 1]
-
-    def _interpolate_bias(self, psi: float) -> float:
-        """Interpolate U(Ψ) at given Ψ value."""
-        if psi <= self.psi_min:
-            return self.u[0]
-        elif psi >= self.psi_max:
-            return self.u[-1]
-
-        idx = (psi - self.psi_min) / self.d_psi
-        i = int(idx)
-        i = min(i, self.n_bins - 2)
-        frac = idx - i
-
-        return (1.0 - frac) * self.u[i] + frac * self.u[i + 1]
-
-    def update_bias(self, psi: float):
-        """Add Gaussian hill to bias potential (well-tempered).
-
-        Parameters
-        ----------
-        psi : float
-            Current order parameter value.
-
-        Notes
-        -----
-        In well-tempered metadynamics, the hill height decreases as:
-
-        .. math::
-            h(\\Psi) = h_0 \\exp(-U(\\Psi) / \\Delta T)
-
-        This ensures eventual convergence to the free energy surface.
-        """
-        self.step += 1
-
-        if self.step % self.update_freq != 0:
-            return
-
-        # Well-tempered amplitude
-        u_current = self._interpolate_bias(psi)
-
-        # Normalization factor (prevent division by zero)
-        cv = np.sum(np.exp(-self.u / self.delta_t)) * self.d_psi
-        cv = max(cv, 1e-10)
-
-        amplitude = np.exp(-u_current / self.delta_t) / cv
-
-        # Add Gaussian to each bin
-        for i in range(self.n_bins):
-            psi_i = self.psi_bins[i]
-            temp = (psi_i - psi) / self.sigma_psi
-            gaussian = np.exp(-0.5 * temp**2)
-
-            # Update bias potential
-            self.u[i] += amplitude * gaussian
-
-            # Update derivative (dU/dΨ)
-            self.up[i] += amplitude * gaussian * (-temp / self.sigma_psi)
-
-        # Update normalization integrals
-        exp_factor = np.exp(-self.u / self.delta_t)
-        self.I0 = np.cumsum(exp_factor) * self.d_psi
-        self.I1 = np.cumsum(self.psi_bins * exp_factor) * self.d_psi
+        savemat(file_name, mdic, long_field_names=True, do_compression=True)
 
     def get_free_energy(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get free energy estimate from bias potential.
@@ -319,74 +223,9 @@ class WTMD:
         psi_bins : ndarray
             Order parameter values.
         free_energy : ndarray
-            Free energy F(Ψ) = -U(Ψ) * (1 + ΔT) / ΔT.
+            Free energy F(Ψ) = -(1 + ΔT) * U(Ψ).
         """
         # In well-tempered metadynamics:
         # F(Ψ) = -(1 + ΔT/T) * U(Ψ) = -(1 + ΔT) * U(Ψ) (with T=1)
-        free_energy = -(1.0 + self.delta_t) / self.delta_t * self.u
-
-        return self.psi_bins.copy(), free_energy
-
-    def save(self, filename: str):
-        """Save WTMD state to file.
-
-        Parameters
-        ----------
-        filename : str
-            Output filename (.npz format).
-        """
-        np.savez(
-            filename,
-            nx=self.nx,
-            lx=self.lx,
-            ell=self.ell,
-            sigma_psi=self.sigma_psi,
-            delta_t=self.delta_t,
-            kc=self.kc,
-            psi_min=self.psi_min,
-            psi_max=self.psi_max,
-            n_bins=self.n_bins,
-            update_freq=self.update_freq,
-            u=self.u,
-            up=self.up,
-            I0=self.I0,
-            I1=self.I1,
-            step=self.step,
-        )
-
-    @classmethod
-    def load(cls, filename: str) -> 'WTMD':
-        """Load WTMD state from file.
-
-        Parameters
-        ----------
-        filename : str
-            Input filename (.npz format).
-
-        Returns
-        -------
-        wtmd : WTMD
-            Restored WTMD instance.
-        """
-        data = np.load(filename)
-
-        wtmd = cls(
-            nx=data['nx'].tolist(),
-            lx=data['lx'].tolist(),
-            ell=int(data['ell']),
-            sigma_psi=float(data['sigma_psi']),
-            delta_t=float(data['delta_t']),
-            kc=float(data['kc']),
-            psi_min=float(data['psi_min']),
-            psi_max=float(data['psi_max']),
-            n_bins=int(data['n_bins']),
-            update_freq=int(data['update_freq']),
-        )
-
-        wtmd.u = data['u']
-        wtmd.up = data['up']
-        wtmd.I0 = data['I0']
-        wtmd.I1 = data['I1']
-        wtmd.step = int(data['step'])
-
-        return wtmd
+        free_energy = -(1 + self.dT) * self.u * self.CV
+        return self.psi_range, free_energy

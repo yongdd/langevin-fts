@@ -387,6 +387,10 @@ class LFTS:
         # Validate input parameters
         validate_lfts_params(params)
 
+        # Validation runtime config (needed early for compute_concentrations)
+        self.validation_runtime = params.get("validation_runtime", None)
+        self._partition_checked = False  # Only check partition once
+
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
@@ -511,32 +515,28 @@ class LFTS:
         )
 
         # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
+        # Uses same interface as deep-langevin-fts
         wtmd_params = params.get("wtmd", None)
         if wtmd_params is not None:
             self.wtmd = WTMD(
                 nx=list(self.cb.get_nx()),
                 lx=list(self.cb.get_lx()),
-                ell=wtmd_params.get("ell", 4),
-                sigma_psi=wtmd_params.get("sigma_psi", 40.0),
-                delta_t=wtmd_params.get("delta_t", 5.0),
+                nbar=params["langevin"]["nbar"],
+                eigenvalues=self.mpt.eigenvalues,
+                real_fields_idx=self.mpt.aux_fields_real_idx,
+                l=wtmd_params.get("ell", 4),
                 kc=wtmd_params.get("kc", 6.02),
+                dT=wtmd_params.get("delta_t", 5.0),
+                sigma_psi=wtmd_params.get("sigma_psi", 0.16),
                 psi_min=wtmd_params.get("psi_min", 0.0),
-                psi_max=wtmd_params.get("psi_max", 500.0),
-                n_bins=wtmd_params.get("n_bins", 5000),
+                psi_max=wtmd_params.get("psi_max", 10.0),
+                dpsi=wtmd_params.get("dpsi", 1e-3),
                 update_freq=wtmd_params.get("update_freq", 1000),
+                recording_period=wtmd_params.get("recording_period", 100000),
             )
-            # Find exchange field index (minimum eigenvalue among real fields)
-            # Same logic as deep-langevin-fts
-            eigen_value_min = 0.0
-            self.wtmd_exchange_idx = self.mpt.aux_fields_real_idx[0]  # default
-            self.wtmd_langevin_idx = 0
-            for count, i in enumerate(self.mpt.aux_fields_real_idx):
-                if self.mpt.eigenvalues[i] < eigen_value_min:
-                    eigen_value_min = self.mpt.eigenvalues[i]
-                    self.wtmd_exchange_idx = i
-                    self.wtmd_langevin_idx = count
-            print("WTMD enabled: ell=%d, sigma_psi=%.1f, delta_t=%.1f, kc=%.2f, exchange_idx=%d" % (
-                self.wtmd.ell, self.wtmd.sigma_psi, self.wtmd.delta_t, self.wtmd.kc, self.wtmd_exchange_idx))
+            print("WTMD enabled: l=%d, sigma_psi=%.4f, dT=%.4f, kc=%.4f, exchange_idx=%d, langevin_idx=%d" % (
+                self.wtmd.l, self.wtmd.sigma_psi, self.wtmd.dT, self.wtmd.kc,
+                self.wtmd.exchange_idx, self.wtmd.langevin_idx))
         else:
             self.wtmd = None
 
@@ -626,7 +626,6 @@ class LFTS:
         self.verbose_level = params["verbose_level"]
         self.saddle = params["saddle"].copy()
         self.recording = params["recording"].copy()
-        self.validation_runtime = params.get("validation_runtime", None)
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -712,14 +711,20 @@ class LFTS:
         elapsed_time["phi"] = time.time() - time_phi_start
 
         # Runtime guardrails: validate material conservation and partition consistency.
+        # Partition check is only done once (first call) for performance.
         time_validation_start = time.time()
+        validation_config = self.validation_runtime.copy() if self.validation_runtime else {}
+        if self._partition_checked:
+            validation_config["partition_check"] = False
         runtime_metrics = validate_runtime_state(
             prop_solver=self.prop_solver,
             phi=phi,
             monomer_types=self.monomer_types,
             numerical_method=self.prop_solver.numerical_method,
-            user_config=self.validation_runtime,
+            user_config=validation_config,
         )
+        if not self._partition_checked:
+            self._partition_checked = True
         elapsed_time["validation"] = time.time() - time_validation_start
         elapsed_time.update(runtime_metrics)
 
@@ -817,19 +822,22 @@ class LFTS:
             mdic["phi_" + name] = phi[name]
 
         # Add WTMD state if enabled
+        # Add WTMD state if enabled (same format as deep-langevin-fts)
         if self.wtmd is not None:
-            mdic["wtmd_u"] = self.wtmd.u
-            mdic["wtmd_up"] = self.wtmd.up
-            mdic["wtmd_step"] = self.wtmd.step
+            mdic["wtmd_u"] = self.wtmd.u * self.wtmd.CV
+            mdic["wtmd_up"] = self.wtmd.up * self.wtmd.CV
+            mdic["wtmd_I0"] = self.wtmd.I0
             mdic["wtmd_params"] = {
-                "ell": self.wtmd.ell,
+                "l": self.wtmd.l,
                 "sigma_psi": self.wtmd.sigma_psi,
-                "delta_t": self.wtmd.delta_t,
+                "dT": self.wtmd.dT,
                 "kc": self.wtmd.kc,
                 "psi_min": self.wtmd.psi_min,
                 "psi_max": self.wtmd.psi_max,
-                "n_bins": self.wtmd.n_bins,
+                "dpsi": self.wtmd.dpsi,
+                "bins": self.wtmd.bins,
                 "update_freq": self.wtmd.update_freq,
+                "recording_period": self.wtmd.recording_period,
             }
 
         # Save data with matlab format
@@ -904,12 +912,13 @@ class LFTS:
                       'has_uint32': 0, 'uinteger': 0}
         print("Restored Random Number Generator: ", self.random_bg.state)
 
-        # Restore WTMD state if available
+        # Restore WTMD state if available (normalize by CV as in deep-langevin-fts)
         if self.wtmd is not None and "wtmd_u" in load_data:
-            self.wtmd.u = np.array(load_data["wtmd_u"])
-            self.wtmd.up = np.array(load_data["wtmd_up"])
-            self.wtmd.step = int(load_data["wtmd_step"])
-            print(f"Restored WTMD state: step={self.wtmd.step}")
+            self.wtmd.u = np.array(load_data["wtmd_u"]) / self.wtmd.CV
+            self.wtmd.up = np.array(load_data["wtmd_up"]) / self.wtmd.CV
+            if "wtmd_I0" in load_data:
+                self.wtmd.I0 = np.array(load_data["wtmd_I0"])
+            print("Restored WTMD state")
 
         # Make initial_fields
         initial_fields = {}
@@ -1147,22 +1156,13 @@ class LFTS:
             # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
 
-            # Add WTMD bias force if enabled
+            # Add WTMD bias force if enabled (same as deep-langevin-fts)
             if self.wtmd is not None:
-                # Use exchange field with minimum eigenvalue (same as deep-langevin-fts)
-                w_exchange = w_aux[self.wtmd_exchange_idx]
+                # Compute order parameter
+                psi = self.wtmd.compute_order_parameter(langevin_step, w_aux)
 
-                # Get order parameter and update bias
-                psi = self.wtmd.get_psi(w_exchange)
-                self.wtmd.update_bias(psi)
-
-                # Get bias field and add to Langevin force (same as deep-langevin-fts)
-                bias_field = self.wtmd.get_bias_field(w_exchange)
-                w_lambda[self.wtmd_langevin_idx] += bias_field
-
-                # Log WTMD info periodically
-                if langevin_step % self.recording["sf_computing_period"] == 0:
-                    print(f"  WTMD: Ψ = {psi:.2f}")
+                # Add bias to w_lambda
+                self.wtmd.add_bias_to_langevin(psi, w_lambda)
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
@@ -1196,6 +1196,20 @@ class LFTS:
                     break
             else:
                 successive_fail_count = 0
+
+            # WTMD: store order parameter and update statistics (same as deep-langevin-fts)
+            if self.wtmd is not None:
+                # Store current order parameter and dH/dχN for updating statistics
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
+                self.wtmd.store_order_parameter(psi, dH)
+
+                # Update WTMD bias
+                if langevin_step % self.wtmd.update_freq == 0:
+                    self.wtmd.update_statistics()
+
+                # Write WTMD data
+                if langevin_step % self.wtmd.recording_period == 0:
+                    self.wtmd.write_data(os.path.join(self.recording["dir"], "wtmd_statistics_%06d.mat" % (langevin_step)))
 
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:

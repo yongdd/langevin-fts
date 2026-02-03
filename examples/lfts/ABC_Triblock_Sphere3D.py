@@ -30,6 +30,8 @@ params = {
               "A,C":chin*1.75,
               "B,C":chin},
 
+    "platform": "cuda",       # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
+
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # ABC triblock Copolymer
