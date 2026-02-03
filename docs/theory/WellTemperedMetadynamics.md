@@ -234,9 +234,9 @@ wtmd = WTMD(
     sigma_psi=0.16,            # Gaussian width
     psi_min=0.0,               # Minimum Ψ
     psi_max=10.0,              # Maximum Ψ
-    dpsi=2e-3,                 # Bin width
+    dpsi=1e-3,                 # Bin width
     update_freq=1000,          # Statistics update frequency
-    recording_period=10000,    # Data recording frequency
+    recording_period=100000,   # Data recording frequency
 )
 ```
 
@@ -271,9 +271,9 @@ params = {
         "sigma_psi": 0.16,     # Gaussian width
         "psi_min": 0.0,
         "psi_max": 10.0,
-        "dpsi": 2e-3,          # Bin width
+        "dpsi": 1e-3,          # Bin width
         "update_freq": 1000,   # Statistics update frequency
-        "recording_period": 10000,
+        "recording_period": 100000,
     },
 }
 
@@ -324,7 +324,7 @@ if langevin_step % wtmd.recording_period == 0:
 | `sigma_psi` | `sigma_psi` | 0.16 | Gaussian width $\sigma_\Psi$. Larger = smoother $U(\Psi)$ |
 | `delta_t` | `dT` | 5.0 | Well-tempering factor $\Delta T/T$. Similar to barrier height |
 | `update_freq` | `update_freq` | 1000 | Langevin steps between statistics updates |
-| `recording_period` | `recording_period` | 10000 | Langevin steps between data file outputs |
+| `recording_period` | `recording_period` | 100000 | Langevin steps between data file outputs |
 
 ### 7.3 Histogram Parameters
 
@@ -332,7 +332,7 @@ if langevin_step % wtmd.recording_period == 0:
 |------------|---------------|---------|-------------|
 | `psi_min` | `psi_min` | 0.0 | Minimum $\Psi$ for bias histogram |
 | `psi_max` | `psi_max` | 10.0 | Maximum $\Psi$ for bias histogram |
-| `dpsi` | `dpsi` | 2e-3 | Bin width $d\Psi$ (number of bins = `(psi_max - psi_min) / dpsi`) |
+| `dpsi` | `dpsi` | 1e-3 | Bin width $d\Psi$ (number of bins = `(psi_max - psi_min) / dpsi`) |
 
 ### 7.4 Parameter Selection Guidelines
 
