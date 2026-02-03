@@ -4,6 +4,7 @@ build
 doc
 temp*
 *.sh
+!scripts/*.sh
 *.dat
 *.out
 *.png

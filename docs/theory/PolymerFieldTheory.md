@@ -145,7 +145,7 @@ The compressible model includes a finite compressibility parameter $\zeta$. This
 
 ### 3.1 Interaction Energy
 
-$$U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \left\{ \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r}) + \zeta \left[ \sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0 \right]^2 \right\}$$
+$$U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \left\lbrace \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r}) + \zeta \left[ \sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0 \right]^2 \right\rbrace$$
 
 ### 3.2 Effective Hamiltonian
 

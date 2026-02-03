@@ -133,7 +133,7 @@ If SCFT doesn't converge, reduce the mixing parameters:
 
 - **Tutorials**: Start with notebooks in `tutorials/` (see `tutorials/README.md` for order)
 - **Examples**: Explore `examples/scft/`, `examples/lfts/`, and `examples/clfts/` for various polymer systems
-- **Parameters**: See [Parameters.md](../reference/Parameters.md) for complete parameter reference
+- **Parameters**: See [Parameters.md](../references/Parameters.md) for complete parameter reference
 - **Theory**: Read [NumericalMethods.md](../theory/NumericalMethods.md) for algorithm details
 
 ## Validation
