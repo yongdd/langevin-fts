@@ -1721,7 +1721,7 @@ class SCFT:
                 for Q in total_partitions:
                     print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("lx=[", ",".join(["%9.6f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
+                print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
                 # Also print angles if optimizing non-orthogonal system
                 if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
                     print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")

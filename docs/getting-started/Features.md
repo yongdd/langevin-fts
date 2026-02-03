@@ -21,8 +21,8 @@
 
 | Type | Description |
 |------|-------------|
-| **SCFT** | Mean-field equilibrium with Anderson mixing, stress-based box optimization, and space groups. |
-| **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations. |
+| **SCFT** | Mean-field equilibrium with Anderson mixing or ADAM optimizer, stress-based box optimization, and space groups. |
+| **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations and Well-Tempered Metadynamics (WTMD). |
 | **CL-FTS** (beta) | Complex Langevin with smearing and dynamical stabilization. |
 
 ---
@@ -32,6 +32,7 @@
 | Feature | Description |
 |---------|-------------|
 | Branched polymers | Star, comb, dendritic, bottle-brush architectures |
+| Random copolymers | Statistical copolymers with specified monomer fractions |
 | Propagator optimization | Dynamic programming for redundant calculation elimination |
 | Numerical methods | RQM4 (4th), RK2 (2nd), CN-ADI2 (2nd) for continuous chains |
 | Custom initial conditions | Arbitrary initial conditions at chain ends (core library) |
@@ -39,6 +40,12 @@
 | Boundary conditions | Periodic (FFT), reflecting (DCT), absorbing (DST) (core library) |
 | Space groups | 230 space groups via spglib (beta) |
 | CrysFFT | Symmetry-accelerated FFT: Pmmm (BCC), 3m (Gyroid), hexagonal (HCP, PL) (beta) |
+| Non-orthogonal box | Monoclinic and triclinic unit cells with arbitrary angles |
+| Crystal system constraints | Orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic |
+| ADAM optimizer | Alternative to Anderson mixing for SCFT (SCFT) |
+| Well-Tempered Metadynamics | Enhanced sampling for phase transitions (L-FTS) |
+| Field compressors | Linear Response (LR), Anderson Mixing (AM), and hybrid (LRAM) for saddle point (L-FTS) |
+| Smearing | Finite-range interactions for improved stability (CL-FTS) |
 | Memory saving | Checkpoint-based storage for large systems |
 | Parallel execution | OpenMP threads (CPU), multi-stream (CUDA) |
 

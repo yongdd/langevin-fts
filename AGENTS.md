@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -108,15 +108,15 @@ ctest -R Pseudo  # runs all tests matching "Pseudo"
 
 ### Performance and Accuracy Benchmarks
 
-Benchmark scripts are available in `tests/`:
-- `tests/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
-- `tests/benchmark_space_group_speed.py`: Space group performance benchmark
+Benchmark scripts are available in `scripts/`:
+- `scripts/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
+- `scripts/benchmark_space_group_speed.py`: Space group performance benchmark
 
 **Running benchmarks with SLURM job scheduler:**
 
-Use the provided SLURM template `slurm_run.sh` (adjust the Python script as needed):
+Use the provided SLURM template `scripts/slurm_run.sh` (adjust the Python script as needed):
 ```bash
-sbatch slurm_run.sh
+sbatch scripts/slurm_run.sh
 ```
 
 **Benchmark output:**
@@ -140,7 +140,7 @@ When testing propagator solvers or numerical methods, always follow these requir
 
 3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 5. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
 
-4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
+4. **Final validation with Gyroid SCFT**: Run `examples/scft/Gyroid.py` with the **continuous chain model** as the final integration test (should complete within 5.7 seconds on GPU). This complex 3D morphology is sensitive to numerical errors and validates the complete simulation pipeline.
 
 Example test setup:
 ```python
@@ -511,7 +511,7 @@ Changes to `src/python/*.py` take effect after `make install` from build directo
 
 ### Deprecated/Internal Methods
 
-**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_chain_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
+**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
 
 ### Adding New Monomer Types or Interactions
 

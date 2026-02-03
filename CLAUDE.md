@@ -112,7 +112,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 - **Development builds**: Enable both MKL and FFTW backends for full test coverage:
   ```bash
-  cmake ../ -DCMAKE_BUILD_TYPE=Release -DBUILD_CPU_MKL_LIB=ON -DBUILD_CPU_FFTW_LIB=ON
+  cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON
   ```
   Note: User default is both OFF. During development, always build with both ON to run all tests.
 
@@ -182,16 +182,16 @@ ctest -R Pseudo  # runs all tests matching "Pseudo"
 
 ### Performance and Accuracy Benchmarks
 
-Benchmark scripts are available in `tests/`:
-- `tests/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
-- `tests/benchmark_space_group_speed.py`: Space group performance benchmark
+Benchmark scripts are available in `scripts/`:
+- `scripts/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
+- `scripts/benchmark_space_group_speed.py`: Space group performance benchmark
 
 **Running benchmarks with SLURM job scheduler:**
 
-Use the provided SLURM template `slurm_run.sh` (adjust the Python script as needed):
+Use the provided SLURM template `scripts/slurm_run.sh` (adjust the Python script as needed):
 
 ```bash
-sbatch slurm_run.sh
+sbatch scripts/slurm_run.sh
 ```
 
 **Benchmark output:**
@@ -215,7 +215,7 @@ When testing propagator solvers or numerical methods, always follow these requir
 
 3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 5. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
 
-4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
+4. **Final validation with Gyroid SCFT**: Run `examples/scft/Gyroid.py` with the **continuous chain model** as the final integration test (should complete within 5.7 seconds on GPU). This complex 3D morphology is sensitive to numerical errors and validates the complete simulation pipeline.
 
 Example test setup:
 
