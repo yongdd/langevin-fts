@@ -80,12 +80,12 @@ This continuum definition is the fundamental formula from which the discrete imp
 
 The discrete formula is derived from the continuum definition (Section 3.1) by applying the discretization rules in Section 3.4:
 
-$$\Psi = \left( \frac{1}{M} \sum_k f(k) |\tilde{W}_-(k)|^\ell \right)^{1/\ell}$$
+$$\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
 
-where $\tilde{W}_-(k) = \text{DFT}[W_-]$ and $M = n_x n_y n_z$ is the total number of grid points.
+where $\tilde{W}_k = \text{DFT}[W_-]$, $M = n_x n_y n_z$ is the total number of grid points, and $w_t$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
 
 > **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) uses $1/M^2$ normalization:
-> $$\Psi_{\text{paper}} = \left( \frac{1}{M^2} \sum_k f(k) |\tilde{W}_-(k)|^\ell \right)^{1/\ell}$$
+> $$\Psi_{\text{paper}} = \frac{1}{M^2} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
 > Our implementation uses $1/M$ normalization instead, which makes $\Psi$ an intensive quantity—consistent regardless of the number of natural periods in the simulation box.
 
 **Multi-monomer systems:** For systems with more than two monomer types, the "exchange field" is the auxiliary field with the **most negative eigenvalue** (i.e., largest magnitude among negative eigenvalues). This is determined automatically from the eigenvalue decomposition of the interaction matrix (same as [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts)).
@@ -234,9 +234,9 @@ wtmd = WTMD(
     sigma_psi=0.16,            # Gaussian width
     psi_min=0.0,               # Minimum Ψ
     psi_max=10.0,              # Maximum Ψ
-    dpsi=1e-3,                 # Bin width
+    dpsi=2e-3,                 # Bin width
     update_freq=1000,          # Statistics update frequency
-    recording_period=100000,   # Data recording frequency
+    recording_period=10000,    # Data recording frequency
 )
 ```
 
@@ -271,9 +271,9 @@ params = {
         "sigma_psi": 0.16,     # Gaussian width
         "psi_min": 0.0,
         "psi_max": 10.0,
-        "dpsi": 1e-3,          # Bin width
+        "dpsi": 2e-3,          # Bin width
         "update_freq": 1000,   # Statistics update frequency
-        "recording_period": 100000,
+        "recording_period": 10000,
     },
 }
 
@@ -373,13 +373,10 @@ P = np.exp(-F)  # Unnormalized probability
 ### 8.3 Checkpoint and Resume
 
 ```python
-# Save WTMD state
-simulation.wtmd.save("wtmd_state.npz")
+# WTMD state is automatically saved in wtmd_statistics_*.mat files
+# at every recording_period steps
 
-# Or use LFTS checkpoint (includes WTMD state)
-# Automatically saved in fields_*.mat files
-
-# Resume
+# Resume simulation from checkpoint
 simulation.continue_run("fields_100000.mat")
 ```
 
