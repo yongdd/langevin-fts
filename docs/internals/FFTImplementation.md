@@ -55,7 +55,7 @@ The library provides spectral transforms for solving the modified diffusion equa
 | DCT-4 | Even at half-point | Even at half-point | Half-sample symmetric |
 
 **Inverse relationships:**
-- DCT-1 is self-inverse: DCT-1(DCT-1(x)) = 2N · x
+- DCT-1 is self-inverse: DCT-1(DCT-1(x)) = 2(N-1) · x (for N+1 point array)
 - DCT-2 and DCT-3 are inverses: DCT-3(DCT-2(x)) = 2N · x
 - DCT-4 is self-inverse: DCT-4(DCT-4(x)) = 2N · x
 
@@ -139,7 +139,7 @@ The CUDA implementation uses the Fast Cosine Transform (FCT) method [1], which u
 | DCT-1 | N+1 |
 | DCT-2/3 | N |
 | DCT-4 | 2N (complex) |
-| DST-1 | N+2 (FCT/FST padded) |
+| DST-1 | N+3 (FCT/FST padded) |
 | DST-2 | N/2+1 complex |
 | DST-3 | N+2 (padded) |
 | DST-4 | 2N (complex) |
@@ -154,7 +154,8 @@ Both DCT and DST follow FFTW's unnormalized convention.
 
 | Transform | Round-trip Scale |
 |-----------|------------------|
-| 1D DCT-1/2/3/4 | 2N |
+| 1D DCT-1 | 2(N-1) for N+1 points |
+| 1D DCT-2/3/4 | 2N |
 | 2D (all types) | 4 N_x N_y |
 | 3D (all types) | 8 N_x N_y N_z |
 
@@ -335,7 +336,10 @@ All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative 
 
 **Setup**: 3D transforms, single-threaded, Intel Xeon
 
-The MKL implementation (`MklRealTransform`) uses FFT-based algorithms (Makhoul method) for DCT-2, DCT-3, DST-2, and DST-3.
+The MKL implementation (`MklRealTransform`) uses:
+- **DCT-II, DCT-III, DCT-IV, DST-IV**: MKL TT interface, O(N log N)
+- **DCT-I, DST-I**: FFT-based via symmetric/antisymmetric extension, O(N log N)
+- **DST-II, DST-III**: Direct computation, O(N²) (optimization pending)
 
 | Transform | 32³ | 48³ | 64³ |
 |-----------|-----|-----|-----|

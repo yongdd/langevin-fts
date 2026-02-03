@@ -130,19 +130,20 @@ where $\chi_{\Omega_+}$ is the response function.
 
 ### 5.1 Definition
 
-The structure function measures density-density correlations in Fourier space:
+The structure function is computed using response theory (chemical potential-density correlation):
 
-$$S_{ij}(\mathbf{k}) = \frac{1}{V} \int d\mathbf{r} \int d\mathbf{r}' \, e^{-i\mathbf{k} \cdot (\mathbf{r} - \mathbf{r}')} \langle \delta\hat{\rho}_i(\mathbf{r}) \delta\hat{\rho}_j(\mathbf{r}') \rangle$$
+$$S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k}) \rangle$$
 
-where $\delta\hat{\rho}_i(\mathbf{r}) = \hat{\rho}_i(\mathbf{r}) - \langle \hat{\rho}_i(\mathbf{r}) \rangle$.
+where $\tilde{\mu}_i(\mathbf{k})$ is the Fourier transform of the chemical potential field and $\tilde{\phi}_j(\mathbf{k})$ is the Fourier transform of the concentration field.
 
 ### 5.2 Computing Structure Functions
 
 In L-FTS, structure functions are computed by:
-1. Fourier transforming the concentration fields
-2. Computing $|\tilde{\phi}(\mathbf{k})|^2$
-3. Averaging over Langevin trajectory
-4. Spherically averaging in $k$-space
+1. Fourier transforming the chemical potential fields $\mu_i(\mathbf{r})$
+2. Fourier transforming the concentration fields $\phi_j(\mathbf{r})$
+3. Computing $\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k})$
+4. Averaging over Langevin trajectory
+5. Multiplying by $V \sqrt{\bar{n}}$ normalization factor
 
 ### 5.3 Physical Interpretation
 

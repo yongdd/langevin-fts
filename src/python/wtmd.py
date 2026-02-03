@@ -15,7 +15,6 @@ J. Chem. Phys. 157, 114902 (2022).
 import os
 import numpy as np
 from scipy.io import savemat, loadmat
-from typing import List, Dict, Optional, Tuple
 
 
 class WTMD:
@@ -32,9 +31,9 @@ class WTMD:
                  sigma_psi=0.16,
                  psi_min=0.0,
                  psi_max=10.0,
-                 dpsi=2e-3,
+                 dpsi=1e-3,
                  update_freq=1000,
-                 recording_period=10000,
+                 recording_period=100000,
                  u=None, up=None, I0=None, I1=None):
 
         self.l = l
@@ -214,18 +213,3 @@ class WTMD:
             mdic["dH_psi_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_psi
 
         savemat(file_name, mdic, long_field_names=True, do_compression=True)
-
-    def get_free_energy(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get free energy estimate from bias potential.
-
-        Returns
-        -------
-        psi_bins : ndarray
-            Order parameter values.
-        free_energy : ndarray
-            Free energy F(Ψ) = -(1 + ΔT) * U(Ψ).
-        """
-        # In well-tempered metadynamics:
-        # F(Ψ) = -(1 + ΔT/T) * U(Ψ) = -(1 + ΔT) * U(Ψ) (with T=1)
-        free_energy = -(1 + self.dT) * self.u * self.CV
-        return self.psi_range, free_energy

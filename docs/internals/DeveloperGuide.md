@@ -56,7 +56,11 @@ AbstractFactory<T>                    [Abstract Base]
 ├── create_anderson_mixing()          [pure virtual]
 └── display_info()                    [pure virtual]
         │
-        ├── FftwFactory<T>             [CPU Implementation]
+        ├── FftwFactory<T>             [CPU - FFTW backend]
+        │   └── Creates: CpuComputationBox, CpuComputation*,
+        │                CpuAndersonMixing, CpuSolver*
+        │
+        ├── MklFactory<T>              [CPU - MKL backend]
         │   └── Creates: CpuComputationBox, CpuComputation*,
         │                CpuAndersonMixing, CpuSolver*
         │
@@ -202,7 +206,7 @@ CpuSolver<T>                                  [Abstract Base]
 
 ### 3.4 FFT Hierarchy
 
-**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`
+**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`, `src/platforms/cpu/MklFFT.h`
 
 ```
 FFT<T>                                        [Abstract Base]
@@ -211,9 +215,11 @@ FFT<T>                                        [Abstract Base]
 ├── forward(T* real, complex* spectral)       [pure virtual, periodic only]
 └── backward(complex* spectral, T* real)      [pure virtual, periodic only]
         │
-        ├── FftwFFT<T, DIM>                    [CPU]
+        ├── FftwFFT<T, DIM>                    [CPU - FFTW backend]
         │   └── DIM = 1, 2, or 3 (compile-time)
-        │   └── Uses MKL or FFTW backend
+        │
+        ├── MklFFT<T, DIM>                     [CPU - MKL backend]
+        │   └── DIM = 1, 2, or 3 (compile-time)
         │
         └── CudaFFT<T, DIM>                   [GPU/cuFFT + CudaRealTransform]
             ├── forward_stream(..., cudaStream_t)

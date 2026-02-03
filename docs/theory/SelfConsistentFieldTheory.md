@@ -134,6 +134,12 @@ $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{bc}$$
 
 where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish.
 
+**Implementation details:**
+- Box size changes are limited to 10% per iteration
+- Angle changes are limited to 5° per iteration
+- Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 3)
+- Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
+
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.
 
 ---
@@ -167,7 +173,7 @@ params = {
     "optimizer": {
         "name": "am",                # Anderson Mixing
         "max_hist": 20,
-        "start_error": 1e-2,
+        "start_error": 1e-1,
         "mix_min": 0.1,
         "mix_init": 0.1,
     },
@@ -246,6 +252,22 @@ for iteration in range(1000):
 | Partition function | `solver.get_partition_function(p)` | Single-chain partition function |
 | Box size | `calculation.cb.get_lx()` | Final box dimensions |
 | Stress | `calculation.stress` | Stress tensor components |
+
+### 5.4 Additional Features
+
+The SCFT class supports several advanced features not covered in the basic examples above:
+
+| Feature | Parameter | Description |
+|---------|-----------|-------------|
+| ADAM optimizer | `"optimizer": {"name": "adam", ...}` | Alternative to Anderson mixing |
+| Space group symmetry | `"space_group": {"symbol": "Ia-3d"}` | Exploit crystallographic symmetry (beta) |
+| Smearing | `"smearing": {...}` | Finite-range interactions |
+| Random copolymers | `{"fraction": {"A": 0.3, "B": 0.7}}` | Statistical copolymer blocks |
+| Non-orthogonal cells | `"angles": [90, 90, 120]` | Monoclinic/triclinic unit cells |
+| Memory saving | `"reduce_memory": True` | Checkpoint-based propagator storage |
+| Stress interval | `"stress_interval": 3` or `"adaptive"` | Control stress computation frequency |
+
+See [Parameters.md](../references/Parameters.md) for complete parameter reference.
 
 ---
 

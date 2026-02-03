@@ -114,6 +114,8 @@ When identical propagator branches are detected, they are merged to reduce redun
 [dep_code1,dep_code2,...]MonomerType+ds_index
 ```
 
+> **Note**: Inside brackets, dependencies use the DK format (without the original segment count N) plus the sliced n_segment or length_index. The outer key uses DK+M format where M is the ds_index.
+
 **Examples:**
 
 **Continuous chain aggregation:**

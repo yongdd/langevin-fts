@@ -181,7 +181,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 |-----|------|-------------|---------|
 | `name` | str | Optimizer name | `"am"` |
 | `max_hist` | int | Maximum history length | `20` |
-| `start_error` | float | Error threshold to start Anderson mixing | `1e-2` |
+| `start_error` | float | Error threshold to start Anderson mixing | `1e-1` |
 | `mix_min` | float | Minimum mixing parameter | `0.1` |
 | `mix_init` | float | Initial mixing parameter | `0.1` |
 
@@ -190,7 +190,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 "optimizer": {
     "name": "am",
     "max_hist": 20,
-    "start_error": 1e-2,
+    "start_error": 1e-1,
     "mix_min": 0.1,
     "mix_init": 0.1
 }
@@ -205,6 +205,90 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 | `b1` | float | Momentum parameter (β₁) | `0.9` |
 | `b2` | float | Second moment parameter (β₂) | `0.999` |
 | `gamma` | float | Learning rate decay factor | `1.0` |
+
+### SCFT Advanced Options
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `stress_interval` | int or str | Stress computation interval. Integer for fixed interval, `"adaptive"` for automatic adjustment | `3` |
+
+---
+
+## L-FTS Parameters
+
+### Langevin Dynamics
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `langevin` | dict | Langevin dynamics configuration |
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `dt` | float | Langevin time step $\Delta\tau \cdot N_{ref}$ | Required |
+| `nbar` | float | Invariant polymerization index $\bar{n}$ | Required |
+| `max_step` | int | Maximum Langevin steps | Required |
+
+### Saddle Point
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `saddle` | dict | Saddle point iteration configuration |
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `max_iter` | int | Maximum iterations for saddle point | Required |
+| `tolerance` | float | Convergence tolerance | Required |
+
+### Recording
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `recording` | dict | Data recording configuration |
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `dir` | str | Output directory name |
+| `recording_period` | int | Period for saving fields |
+| `sf_computing_period` | int | Period for computing structure function |
+| `sf_recording_period` | int | Period for saving structure function |
+
+### Compressor
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `compressor` | dict | Field compressor configuration |
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `name` | str | Compressor type: `"am"`, `"lr"`, or `"lram"` | Required |
+| `max_hist` | int | Anderson mixing history length | `20` |
+| `start_error` | float | Error threshold to start AM | `5e-1` |
+| `mix_min` | float | Minimum mixing parameter | `0.01` |
+| `mix_init` | float | Initial mixing parameter | `0.01` |
+
+### Well-Tempered Metadynamics (Optional)
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `wtmd` | dict | WTMD configuration (optional) |
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `ell` | int | $\ell$-norm for order parameter | `4` |
+| `kc` | float | Cutoff wavenumber | `6.02` |
+| `delta_t` | float | Well-tempering factor $\Delta T/T$ | `5.0` |
+| `sigma_psi` | float | Gaussian width $\sigma_\Psi$ | `0.16` |
+| `psi_min` | float | Minimum $\Psi$ | `0.0` |
+| `psi_max` | float | Maximum $\Psi$ | `10.0` |
+| `dpsi` | float | Bin width $d\Psi$ | `1e-3` |
+| `update_freq` | int | Statistics update frequency | `1000` |
+| `recording_period` | int | Data recording frequency | `100000` |
+
+### Other L-FTS Options
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `verbose_level` | int | Output verbosity (1: per step, 2: per iteration) |
 
 ---
 
@@ -283,7 +367,7 @@ params = {
     "optimizer": {
         "name": "am",
         "max_hist": 20,
-        "start_error": 1e-2,
+        "start_error": 1e-1,
         "mix_min": 0.1,
         "mix_init": 0.1
     }
