@@ -19,6 +19,7 @@
 | [NumericalMethods.md](theory/NumericalMethods.md) | Pseudo-spectral and real-space solvers |
 | [StressTensor.md](theory/StressTensor.md) | Stress tensor calculation |
 | [SpaceGroup.md](theory/SpaceGroup.md) | Space group symmetry |
+| [WellTemperedMetadynamics.md](theory/WellTemperedMetadynamics.md) | Well-Tempered Metadynamics for enhanced sampling |
 
 ## Internals
 

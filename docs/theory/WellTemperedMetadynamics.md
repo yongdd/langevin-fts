@@ -9,10 +9,11 @@ Well-tempered metadynamics (WTMD) is an enhanced sampling technique that overcom
 1. [Overview](#1-overview)
 2. [Theory](#2-theory)
 3. [Order Parameter](#3-order-parameter)
-   - [3.1 Definition](#31-definition)
-   - [3.2 Low-Pass Filter](#32-low-pass-filter)
-   - [3.3 Discretization](#33-discretization)
-   - [3.4 Implementation](#34-implementation)
+   - [3.1 Definition (Continuum)](#31-definition-continuum)
+   - [3.2 Discrete Formula](#32-discrete-formula)
+   - [3.3 Low-Pass Filter](#33-low-pass-filter)
+   - [3.4 Discretization Rules](#34-discretization-rules)
+   - [3.5 Implementation](#35-implementation)
 4. [Bias Potential Update](#4-bias-potential-update)
 5. [Free Energy Estimation](#5-free-energy-estimation)
 6. [Implementation](#6-implementation)
@@ -62,9 +63,9 @@ $$\frac{dU}{dW_-(\mathbf{r})} = U'(\Psi) \frac{d\Psi}{dW_-(\mathbf{r})}$$
 
 ## 3. Order Parameter
 
-### 3.1 Definition
+### 3.1 Definition (Continuum)
 
-The order parameter is a weighted $\ell$-norm of the Fourier transform of the exchange field:
+The order parameter is defined in the continuum as a weighted $\ell$-norm of the Fourier transform of the exchange field:
 
 $$\Psi = \frac{N}{V} \left( \frac{V}{(2\pi)^3} \int f(k) |W_-(k)|^\ell \, dk \right)^{1/\ell}$$
 
@@ -73,7 +74,11 @@ where:
 - $\ell = 4$ is the recommended exponent (empirically determined)
 - $f(k)$ is a low-pass filter function
 
-**Discrete implementation** (used in `wtmd.py`):
+This continuum definition is the fundamental formula from which the discrete implementation is derived.
+
+### 3.2 Discrete Formula
+
+The discrete formula is derived from the continuum definition (Section 3.1) by applying the discretization rules in Section 3.4:
 
 $$\Psi = \left( \frac{1}{M} \sum_k f(k) |\tilde{W}_-(k)|^\ell \right)^{1/\ell}$$
 
@@ -85,21 +90,17 @@ where $\tilde{W}_-(k) = \text{DFT}[W_-]$ and $M = n_x n_y n_z$ is the total numb
 
 **Multi-monomer systems:** For systems with more than two monomer types, the "exchange field" is the auxiliary field with the **most negative eigenvalue** (i.e., largest magnitude among negative eigenvalues). This is determined automatically from the eigenvalue decomposition of the interaction matrix (same as [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts)).
 
-### 3.2 Low-Pass Filter
+### 3.3 Low-Pass Filter
 
-The filter suppresses high-wavevector noise. The paper uses a smooth sigmoid:
+The filter suppresses high-wavevector noise using a smooth sigmoid:
 
 $$f(k) = \frac{1}{1 + \exp(12(k/k_c - 1))}$$
 
 The cutoff $k_c$ is typically set to 1.4 times the peak position of the disordered-state structure function $S(k)$.
 
-**Simplified implementation** (used in `wtmd.py`):
+### 3.4 Discretization Rules
 
-$$f(k) = \begin{cases} 1 & \text{if } k < k_c \\ 0 & \text{otherwise} \end{cases}$$
-
-### 3.3 Discretization
-
-**Key relationships for discretization:**
+**Key relationships for discretization (continuum → discrete):**
 
 | Continuum | Discrete |
 |-----------|----------|
@@ -109,7 +110,7 @@ $$f(k) = \begin{cases} 1 & \text{if } k < k_c \\ 0 & \text{otherwise} \end{cases
 
 **Field convention:** $w_{\text{code}} = N \cdot w_{\text{paper}}$ (per reference chain vs per segment)
 
-### 3.4 Implementation
+### 3.5 Implementation
 
 The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts) exactly.
 
@@ -117,45 +118,68 @@ The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-la
 $$\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
 
 ```python
-psi_sum = np.sum(np.abs(w_k)**self.ell * self.fk * self.wt)
-psi = psi_sum**(1.0 / self.ell) / self.n_grid
+self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
+psi = np.sum(np.power(np.absolute(self.w_aux_k), self.l) * self.fk * self.wt)
+psi = np.power(psi, 1.0 / self.l) / self.M
 ```
 
 **Bias field:**
 $$\text{bias} = V \cdot U'(\Psi) \cdot \frac{M^{2-\ell}}{V} \Psi^{1-\ell} \cdot \text{irfftn}\left[ f_k |\tilde{W}_k|^{\ell-2} \tilde{W}_k \right]$$
 
 ```python
-dpsi_dwk = np.abs(w_k)**(self.ell - 2) * psi**(1.0 - self.ell) * w_k * self.fk
-dpsi_dw = np.fft.irfftn(dpsi_dwk, s=self.nx) * self.n_grid**(2.0 - self.ell) / self.volume
-bias_field = self.volume * du_dpsi * dpsi_dw.flatten()
+up_hat = np.interp(psi, self.psi_range, self.up)
+dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
+dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx) * np.power(self.M, 2.0 - self.l) / self.V
+bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)
+langevin[self.langevin_idx] += bias
 ```
 
 ---
 
 ## 4. Bias Potential Update
 
-### 4.1 Gaussian Hill Deposition
+### 4.1 Histogram-Based Update
 
-Starting from $U(\Psi) = 0$, Gaussian hills are periodically added at the current order parameter value $\hat{\Psi}$:
+The implementation uses a histogram-based approach with FFT convolution for efficient updates. Order parameters are collected during simulation and processed at `update_freq` intervals.
 
-$$\beta \delta U(\Psi) = \exp\left(-\frac{U(\Psi)}{k_B \Delta T}\right) \exp\left(-\frac{(\hat{\Psi} - \Psi)^2}{2\sigma_\Psi^2}\right)$$
+**Normalization constant:**
+$$CV = \sqrt{\bar{N}} \cdot V$$
 
-Key features:
-- **Gaussian width** $\sigma_\Psi$: Controls smoothness of $U(\Psi)$
-- **Well-tempering factor** $\Delta T$: Controls decay rate of hill heights
+where $\bar{N}$ is the invariant polymerization index (`nbar`) and $V$ is the box volume.
 
-### 4.2 Well-Tempering
+**Gaussian kernels (precomputed in Fourier space):**
+```python
+X = dpsi * np.concatenate([np.arange((bins+1)//2), np.arange(bins//2) - bins//2]) / sigma_psi
+u_kernel = np.fft.rfft(np.exp(-0.5 * X**2))
+up_kernel = np.fft.rfft(-X / sigma_psi * np.exp(-0.5 * X**2))
+```
 
-The exponential prefactor $\exp(-U(\Psi)/k_B\Delta T)$ causes hill heights to decrease in frequently visited regions. This ensures:
+### 4.2 Statistics Update
+
+At every `update_freq` steps, the bias potential is updated using FFT convolution:
+
+```python
+# Compute histogram of order parameters
+hist, _ = np.histogram(order_parameter_history, bins=psi_range_hist, density=True)
+hist_k = np.fft.rfft(hist)
+
+# Compute updates via FFT convolution
+amplitude = np.exp(-CV * u / dT) / CV
+gaussian = np.fft.irfft(hist_k * u_kernel, bins) * dpsi
+du = amplitude * gaussian
+dup = amplitude * np.fft.irfft(hist_k * up_kernel, bins) * dpsi - CV * up / dT * du
+
+# Update bias potential and derivative
+u += du
+up += dup
+```
+
+### 4.3 Well-Tempering
+
+The exponential prefactor $\exp(-CV \cdot U(\Psi)/\Delta T)$ causes hill heights to decrease in frequently visited regions. This ensures:
 
 1. Early stages: Large hills for rapid exploration
 2. Late stages: Small hills for convergence to free energy
-
-### 4.3 Derivative Update
-
-The derivative $U'(\Psi)$ is updated simultaneously:
-
-$$\delta U'(\Psi) = \left( \frac{\hat{\Psi} - \Psi}{\sigma_\Psi^2} - \frac{U'(\Psi)}{k_B \Delta T} \right) \delta U(\Psi)$$
 
 ---
 
@@ -193,17 +217,26 @@ $$\frac{\partial F}{\partial \chi_b} = \left\langle \frac{\partial H}{\partial \
 
 ### 6.1 Class Structure
 
+The WTMD class is initialized automatically by LFTS when the `wtmd` parameter is provided. The class requires `nbar`, `eigenvalues`, and `real_fields_idx` from the simulation context.
+
 ```python
-from polymerfts import WTMD
+from polymerfts.wtmd import WTMD
 
 wtmd = WTMD(
-    nx=[32, 32, 32],      # Grid dimensions
-    lx=[4.0, 4.0, 4.0],   # Box dimensions
-    ell=4,                # Order parameter exponent
-    sigma_psi=40.0,       # Gaussian width
-    delta_t=5.0,          # Well-tempering factor
-    kc=6.02,              # Wavenumber cutoff
-    update_freq=1000,     # Hill deposition frequency
+    nx=[32, 32, 32],           # Grid dimensions
+    lx=[4.0, 4.0, 4.0],        # Box dimensions
+    nbar=10000,                # Invariant polymerization index
+    eigenvalues=eigenvalues,   # From field theory
+    real_fields_idx=real_idx,  # Indices of real auxiliary fields
+    l=4,                       # Order parameter exponent
+    kc=6.02,                   # Wavenumber cutoff
+    dT=5.0,                    # Well-tempering factor (ΔT/T)
+    sigma_psi=0.16,            # Gaussian width
+    psi_min=0.0,               # Minimum Ψ
+    psi_max=10.0,              # Maximum Ψ
+    dpsi=1e-3,                 # Bin width
+    update_freq=1000,          # Statistics update frequency
+    recording_period=100000,   # Data recording frequency
 )
 ```
 
@@ -211,11 +244,12 @@ wtmd = WTMD(
 
 | Method | Description |
 |--------|-------------|
-| `get_psi(w_minus)` | Calculate order parameter $\Psi$ |
-| `get_bias_field(w_minus)` | Calculate bias force $-dU/dW_-$ |
-| `update_bias(psi)` | Add Gaussian hill at current $\Psi$ |
-| `get_free_energy()` | Return $(Ψ, F(Ψ))$ arrays |
-| `save(filename)` / `load(filename)` | Save/restore state |
+| `compute_order_parameter(step, w_aux)` | Calculate order parameter $\Psi$ from auxiliary fields |
+| `add_bias_to_langevin(psi, langevin)` | Add bias force to Langevin dynamics |
+| `store_order_parameter(psi, dH)` | Store $\Psi$ and $dH/d\chi$ for statistics |
+| `update_statistics()` | Update $U(\Psi)$ and $U'(\Psi)$ via FFT convolution |
+| `write_data(filename)` | Save statistics to .mat file |
+| `get_free_energy()` | Return $(\Psi, F(\Psi))$ arrays |
 
 ### 6.3 Integration with LFTS
 
@@ -224,13 +258,22 @@ WTMD is integrated into the LFTS class via the `wtmd` parameter:
 ```python
 params = {
     # ... standard LFTS parameters ...
+    "langevin": {
+        "max_step": 5000000,
+        "dt": 8.0,
+        "nbar": 10000,
+    },
 
     "wtmd": {
-        "ell": 4,
-        "sigma_psi": 40.0,
-        "delta_t": 5.0,
-        "kc": 6.02,
-        "update_freq": 1000,
+        "ell": 4,              # l (order parameter exponent)
+        "kc": 6.02,            # Wavenumber cutoff
+        "delta_t": 5.0,        # dT (well-tempering factor)
+        "sigma_psi": 0.16,     # Gaussian width
+        "psi_min": 0.0,
+        "psi_max": 10.0,
+        "dpsi": 1e-3,          # Bin width
+        "update_freq": 1000,   # Statistics update frequency
+        "recording_period": 100000,
     },
 }
 
@@ -241,32 +284,55 @@ simulation.run(initial_fields=w)
 psi_bins, free_energy = simulation.wtmd.get_free_energy()
 ```
 
+### 6.4 Langevin Loop Integration
+
+The WTMD methods are called in the following order during the Langevin loop:
+
+```python
+# Before Langevin update
+psi = wtmd.compute_order_parameter(langevin_step, w_aux)
+wtmd.add_bias_to_langevin(psi, w_lambda)
+
+# ... Langevin update and saddle point ...
+
+# After successful saddle point convergence
+dH = mpt.compute_h_deriv_chin(chi_n, w_aux)
+wtmd.store_order_parameter(psi, dH)
+
+if langevin_step % wtmd.update_freq == 0:
+    wtmd.update_statistics()
+
+if langevin_step % wtmd.recording_period == 0:
+    wtmd.write_data("wtmd_statistics_%06d.mat" % langevin_step)
+```
+
 ---
 
 ## 7. Parameters
 
 ### 7.1 Order Parameter Parameters
 
-| Parameter | Symbol | Default | Description |
-|-----------|--------|---------|-------------|
-| `ell` | $\ell$ | 4 | Norm exponent. Use 4 for L/C phases, 2 for S/G phases |
-| `kc` | $k_c$ | 6.02 | Wavenumber cutoff. Set to ~1.4× peak of $S(k)$ |
+| Config Key | Internal Name | Default | Description |
+|------------|---------------|---------|-------------|
+| `ell` | `l` | 4 | Norm exponent $\ell$. Use 4 for L/C phases, 2 for S/G phases |
+| `kc` | `kc` | 6.02 | Wavenumber cutoff $k_c$. Set to ~1.4× peak of $S(k)$ |
 
 ### 7.2 Bias Potential Parameters
 
-| Parameter | Symbol | Default | Description |
-|-----------|--------|---------|-------------|
-| `sigma_psi` | $\sigma_\Psi$ | 40.0 | Gaussian width. Larger = smoother $U(\Psi)$ |
-| `delta_t` | $\Delta T/T$ | 5.0 | Well-tempering factor. Similar to barrier height |
-| `update_freq` | - | 1000 | Langevin steps between hill depositions |
+| Config Key | Internal Name | Default | Description |
+|------------|---------------|---------|-------------|
+| `sigma_psi` | `sigma_psi` | 0.16 | Gaussian width $\sigma_\Psi$. Larger = smoother $U(\Psi)$ |
+| `delta_t` | `dT` | 5.0 | Well-tempering factor $\Delta T/T$. Similar to barrier height |
+| `update_freq` | `update_freq` | 1000 | Langevin steps between statistics updates |
+| `recording_period` | `recording_period` | 10000 | Langevin steps between data file outputs |
 
 ### 7.3 Histogram Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `psi_min` | 0.0 | Minimum $\Psi$ for bias histogram |
-| `psi_max` | 500.0 | Maximum $\Psi$ for bias histogram |
-| `n_bins` | 5000 | Number of bins for bias histogram |
+| Config Key | Internal Name | Default | Description |
+|------------|---------------|---------|-------------|
+| `psi_min` | `psi_min` | 0.0 | Minimum $\Psi$ for bias histogram |
+| `psi_max` | `psi_max` | 10.0 | Maximum $\Psi$ for bias histogram |
+| `dpsi` | `dpsi` | 2e-3 | Bin width $d\Psi$ (number of bins = `(psi_max - psi_min) / dpsi`) |
 
 ### 7.4 Parameter Selection Guidelines
 

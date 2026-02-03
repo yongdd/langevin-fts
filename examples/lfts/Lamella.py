@@ -28,6 +28,8 @@ params = {
 
     "chi_n": {"A,B":17.0},     # Bare interaction parameter, Flory-Huggins params * N_Ref
 
+    "platform": "cuda",        # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
+
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # Volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer

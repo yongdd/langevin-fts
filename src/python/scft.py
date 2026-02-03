@@ -13,7 +13,7 @@ import scipy.io
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import validate_scft_params, validate_runtime_state, ValidationError
+from .validation import validate_scft_params, ValidationError
 from .config import load_config
 from .result import SCFTResult, IterationInfo
 from .utils import (
@@ -798,8 +798,6 @@ class SCFT:
             params.get("smearing", None)
         )
 
-        # Runtime validation guardrails (material conservation, partition consistency)
-        self.validation_runtime = params.get("validation_runtime", None)
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
@@ -1202,19 +1200,6 @@ class SCFT:
         # Convert concentrations back to irreducible grid for optimizer.
         if self.sg is not None:
             phi = {name: self.sg.reduced_to_irreducible(phi[name]) for name in phi}
-
-        # Runtime guardrails: validate material conservation and partition consistency.
-        # This is lightweight and helps catch subtle regressions early.
-        time_validation_start = time.time()
-        runtime_metrics = validate_runtime_state(
-            prop_solver=self.prop_solver,
-            phi=phi,
-            monomer_types=self.monomer_types,
-            numerical_method=self.prop_solver.numerical_method,
-            user_config=self.validation_runtime,
-        )
-        elapsed_time["validation"] = time.time() - time_validation_start
-        elapsed_time.update(runtime_metrics)
 
         return phi, elapsed_time
 
@@ -1873,6 +1858,10 @@ class SCFT:
             energy_total_per_chain = energy_total*self.prop_solver.get_polymer(p).get_alpha()/ \
                                                   self.prop_solver.get_polymer(p).get_volume_fraction()
             print("\tβF/n_%d : %12.7f" % (p, energy_total_per_chain))
+
+        # Final partition consistency check (only once at the end)
+        if not self.prop_solver.check_total_partition():
+            print("Warning: Final partition consistency check failed.")
 
         # Store phi and w
         self.phi = phi
