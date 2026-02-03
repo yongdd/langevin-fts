@@ -642,6 +642,20 @@ Results must match:
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 
+### LaTeX Validation for Documentation
+
+GitHub uses KaTeX to render LaTeX in markdown files. Before pushing documentation changes, validate LaTeX syntax:
+
+```bash
+# Requires: npm install -g katex
+python scripts/check_latex.py
+```
+
+This script extracts all LaTeX blocks from `docs/*.md` and validates them with KaTeX CLI. Common issues that cause rendering failures:
+- `\left\{` → use `\left\lbrace` instead
+- `\right\}` → use `\right\rbrace` instead
+- Unmatched `\left` and `\right` delimiters
+
 ## Key References
 
 The implementation is based on these publications:
