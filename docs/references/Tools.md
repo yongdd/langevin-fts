@@ -59,6 +59,60 @@ matlab -nodisplay -r "run('plot_structure_function.m'); exit"
 - `file_path`: Path to structure function files
 - `type_pair`: Correlation type (`"A_A"`, `"A_B"`, or `"B_B"`)
 
+### 1.3 WTMD Statistics
+
+| File | Language | Description |
+|------|----------|-------------|
+| `plot_wtmd_statistics.m` | MATLAB | Plot WTMD bias potential and probability distribution |
+| `plot_wtmd_statistics.ipynb` | Python | Same functionality as Jupyter notebook |
+| `plot_wtmd_chib_AB.ipynb` | Python | χN reweighting analysis for free energy computation |
+
+These tools visualize Well-Tempered Metadynamics (WTMD) simulation output, including:
+- **U(Ψ)**: Bias potential as a function of order parameter
+- **U'(Ψ)**: Derivative of bias potential
+- **P(Ψ)**: Probability distribution (from converged bias potential)
+- **∂F/∂χN**: Free energy derivative for histogram reweighting
+
+**Usage (basic statistics):**
+```matlab
+% Copy script to directory containing wtmd_statistics_*.mat
+cd /path/to/simulation/data_simulation
+matlab -nodisplay -r "run('/path/to/tools/plot_wtmd_statistics.m'); exit"
+```
+
+**Usage (χN reweighting):**
+```bash
+cd /path/to/simulation
+jupyter notebook /path/to/tools/plot_wtmd_chib_AB.ipynb
+# Edit chin (simulation χN), dchiN (shift), and data_dir in the notebook
+```
+
+**χN Reweighting Analysis:**
+
+The `plot_wtmd_chib_AB.ipynb` notebook computes free energy at different χN values using histogram reweighting:
+
+$$F(\Psi; \chi N + \delta\chi N) = F(\Psi; \chi N) + \frac{\partial F}{\partial \chi N} \cdot \frac{\delta\chi N}{z_\infty}$$
+
+where $z_\infty$ is the renormalization factor from the discrete chain model.
+
+**Parameters in reweighting notebook:**
+- `chin`: Simulation χN value
+- `dchiN`: χN shift for reweighting (set to 0 for no shift)
+- `z_inf`: Renormalization factor (default: 0.7691138 for discrete chain)
+- `langevin_step`: Step number for statistics file
+
+**Input files:** `wtmd_statistics_XXXXXX.mat` containing:
+- `psi_range`: Order parameter values
+- `u`: Bias potential U(Ψ)
+- `up`: Bias potential derivative U'(Ψ)
+- `I0`: Histogram of visited states
+- `dH_psi_A_B`: Free energy derivative ∂F/∂χN
+- `dT`: Temperature factor
+- `dpsi`: Order parameter bin width
+
+**Reference:**
+- T. M. Beardsley and M. W. Matsen, "Using metadynamics to locate the order-disorder transition of diblock copolymer melts," *J. Chem. Phys.* **2022**, 157, 114902
+
 ---
 
 ## 2. PSCF Interoperability
