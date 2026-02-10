@@ -578,7 +578,7 @@ class LFTS:
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
         for i in range(M-1):
-            self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues))
+            self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues[:M-1]))
 
         # Set random generator
         if random_seed is None:         
