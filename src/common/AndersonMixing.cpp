@@ -24,6 +24,9 @@
 #include <complex>
 #include <vector>
 #include <type_traits>
+#include <cstdio>
+#include <unistd.h>
+#include <fcntl.h>
 
 #if __has_include(<lapacke.h>)
 #include <lapacke.h>
@@ -32,6 +35,23 @@
 #else
 #error "LAPACKE header not found. Install with: conda install -c conda-forge lapack"
 #endif
+
+// RAII helper to suppress stderr (LAPACK xerbla warnings)
+struct SuppressStderr {
+    int saved_fd;
+    SuppressStderr() {
+        fflush(stderr);
+        saved_fd = dup(STDERR_FILENO);
+        int devnull = open("/dev/null", O_WRONLY);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+    }
+    ~SuppressStderr() {
+        fflush(stderr);
+        dup2(saved_fd, STDERR_FILENO);
+        close(saved_fd);
+    }
+};
 
 #include "AndersonMixing.h"
 
@@ -77,6 +97,28 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
 {
     if (n <= 0) return;
 
+    // Handle n=1 case directly (avoids LAPACK overhead and DLASCL warnings)
+    if (n == 1)
+    {
+        if (std::abs(u[0][0]) > 1e-20)
+            a[0] = v[0] / u[0][0];
+        else
+            a[0] = static_cast<T>(0.0);
+        return;
+    }
+
+    // Check max element to avoid LAPACK warnings on zero/tiny matrices
+    double max_elem = 0.0;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            max_elem = std::max(max_elem, std::abs(u[i][j]));
+    if (max_elem < 1e-20)
+    {
+        for (int i = 0; i < n; i++)
+            a[i] = static_cast<T>(0.0);
+        return;
+    }
+
     std::vector<double> s(n);  // singular values
     lapack_int rank;
     lapack_int info;
@@ -93,9 +135,12 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                              A.data(), n, b.data(), 1,
-                              s.data(), 1e-10, &rank);
+        {
+            SuppressStderr guard;
+            info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                                  A.data(), n, b.data(), 1,
+                                  s.data(), 1e-10, &rank);
+        }
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : 0.0;
@@ -111,10 +156,13 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                              reinterpret_cast<lapack_complex_double*>(A.data()), n,
-                              reinterpret_cast<lapack_complex_double*>(b.data()), 1,
-                              s.data(), 1e-10, &rank);
+        {
+            SuppressStderr guard;
+            info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                                  reinterpret_cast<lapack_complex_double*>(A.data()), n,
+                                  reinterpret_cast<lapack_complex_double*>(b.data()), 1,
+                                  s.data(), 1e-10, &rank);
+        }
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : std::complex<double>(0.0, 0.0);
