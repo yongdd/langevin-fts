@@ -22,6 +22,8 @@
  */
 
 #include <complex>
+#include <algorithm>
+#include <cmath>
 
 #include "AndersonMixing.h"
 
@@ -75,9 +77,42 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
 {
     int i,j,k;
     T factor, temp_sum;
-    // Elimination process
+
+    // Regularize diagonal for numerical stability (Tikhonov)
+    double max_diag = 0.0;
+    for(i=0; i<n; i++)
+        max_diag = std::max(max_diag, std::abs(u[i][i]));
+    if(max_diag > 0.0)
+    {
+        double reg = max_diag * 1e-8;
+        for(i=0; i<n; i++)
+            u[i][i] += static_cast<T>(reg);
+    }
+
+    // Gaussian elimination with partial pivoting
     for(i=0; i<n; i++)
     {
+        // Find pivot row
+        int max_row = i;
+        double max_val = std::abs(u[i][i]);
+        for(j=i+1; j<n; j++)
+        {
+            if(std::abs(u[j][i]) > max_val)
+            {
+                max_val = std::abs(u[j][i]);
+                max_row = j;
+            }
+        }
+        // Swap rows if needed
+        if(max_row != i)
+        {
+            std::swap(u[i], u[max_row]);
+            T tmp = v[i]; v[i] = v[max_row]; v[max_row] = tmp;
+        }
+        // Skip near-zero pivot
+        if(std::abs(u[i][i]) < 1e-30)
+            continue;
+
         for(j=i+1; j<n; j++)
         {
             factor = u[j][i]/u[i][i];
@@ -88,16 +123,18 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             }
         }
     }
-    // Find the solution
-    a[n-1] = v[n-1]/u[n-1][n-1];
-    for(i=n-2; i>=0; i--)
+    // Back substitution with zero-pivot protection
+    for(i=n-1; i>=0; i--)
     {
-        temp_sum = 0.0;
+        temp_sum = static_cast<T>(0.0);
         for(j=i+1; j<n; j++)
         {
             temp_sum = temp_sum + u[i][j]*a[j];
         }
-        a[i] = (v[i] - temp_sum)/u[i][i];
+        if(std::abs(u[i][i]) < 1e-30)
+            a[i] = static_cast<T>(0.0);
+        else
+            a[i] = (v[i] - temp_sum)/u[i][i];
     }
 }
 
