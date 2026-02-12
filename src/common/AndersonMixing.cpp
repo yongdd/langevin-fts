@@ -2,7 +2,7 @@
  * @file AndersonMixing.cpp
  * @brief Implementation of AndersonMixing base class.
  *
- * Provides the constructor and Gaussian elimination solver for the
+ * Provides the constructor and SVD-based least-squares solver for the
  * Anderson mixing algorithm. The actual mixing computation is implemented
  * in platform-specific derived classes (CpuAndersonMixing, CudaAndersonMixing).
  *
@@ -13,7 +13,7 @@
  *
  *     min || Σ a_i d_i ||²  subject to Σ a_i = 1
  *
- * This leads to a least-squares problem solved by Gaussian elimination.
+ * This leads to a least-squares problem solved via SVD (LAPACKE_dgelsd/zgelsd).
  *
  * **Template Instantiations:**
  *
@@ -22,8 +22,16 @@
  */
 
 #include <complex>
-#include <algorithm>
-#include <cmath>
+#include <vector>
+#include <type_traits>
+
+#if __has_include(<lapacke.h>)
+#include <lapacke.h>
+#elif __has_include(<mkl_lapacke.h>)
+#include <mkl_lapacke.h>
+#else
+#error "LAPACKE header not found. Install with: conda install -c conda-forge lapack"
+#endif
 
 #include "AndersonMixing.h"
 
@@ -54,87 +62,62 @@ AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
 }
 
 /**
- * @brief Solve linear system Ua = v using Gaussian elimination.
+ * @brief Solve least-squares problem Ua = v via SVD (LAPACKE_dgelsd/zgelsd).
  *
- * Implements forward elimination followed by back substitution to solve
- * the normal equations arising from the Anderson mixing least-squares problem.
+ * Uses SVD decomposition for robust handling of ill-conditioned normal
+ * equations (e.g., compressible model with condition number ~100).
  *
- * **Algorithm:**
- *
- * 1. Forward elimination: Transform U to upper triangular form
- * 2. Back substitution: Solve for coefficients a_i
- *
- * @param u Input matrix U (n × n), modified in place
- * @param v Input/output vector (size n), modified to intermediate values
+ * @param u Input matrix U (n × n), stored as pointer-to-pointer rows
+ * @param v Input vector (size n)
  * @param a Output solution vector (size n)
  * @param n System size (number of history entries used)
- *
- * @warning Matrix u is modified during elimination. Caller should
- *          provide a copy if original values are needed.
  */
 template <typename T>
 void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
 {
-    int i,j,k;
-    T factor, temp_sum;
+    if (n <= 0) return;
 
-    // Regularize diagonal for numerical stability (Tikhonov)
-    double max_diag = 0.0;
-    for(i=0; i<n; i++)
-        max_diag = std::max(max_diag, std::abs(u[i][i]));
-    if(max_diag > 0.0)
+    std::vector<double> s(n);  // singular values
+    lapack_int rank;
+    lapack_int info;
+
+    if constexpr (std::is_same_v<T, double>)
     {
-        double reg = max_diag * 1e-8;
-        for(i=0; i<n; i++)
-            u[i][i] += static_cast<T>(reg);
+        // Copy to contiguous row-major array for LAPACKE
+        std::vector<double> A(n * n);
+        std::vector<double> b(n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+                A[i * n + j] = u[i][j];
+            b[i] = v[i];
+        }
+
+        info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              A.data(), n, b.data(), 1,
+                              s.data(), 1e-10, &rank);
+
+        for (int i = 0; i < n; i++)
+            a[i] = (info == 0) ? b[i] : 0.0;
     }
-
-    // Gaussian elimination with partial pivoting
-    for(i=0; i<n; i++)
+    else  // std::complex<double>
     {
-        // Find pivot row
-        int max_row = i;
-        double max_val = std::abs(u[i][i]);
-        for(j=i+1; j<n; j++)
+        std::vector<std::complex<double>> A(n * n);
+        std::vector<std::complex<double>> b(n);
+        for (int i = 0; i < n; i++)
         {
-            if(std::abs(u[j][i]) > max_val)
-            {
-                max_val = std::abs(u[j][i]);
-                max_row = j;
-            }
+            for (int j = 0; j < n; j++)
+                A[i * n + j] = u[i][j];
+            b[i] = v[i];
         }
-        // Swap rows if needed
-        if(max_row != i)
-        {
-            std::swap(u[i], u[max_row]);
-            T tmp = v[i]; v[i] = v[max_row]; v[max_row] = tmp;
-        }
-        // Skip near-zero pivot
-        if(std::abs(u[i][i]) < 1e-30)
-            continue;
 
-        for(j=i+1; j<n; j++)
-        {
-            factor = u[j][i]/u[i][i];
-            v[j] = v[j] - v[i]*factor;
-            for(k=i+1; k<n; k++)
-            {
-                u[j][k] = u[j][k] - u[i][k]*factor;
-            }
-        }
-    }
-    // Back substitution with zero-pivot protection
-    for(i=n-1; i>=0; i--)
-    {
-        temp_sum = static_cast<T>(0.0);
-        for(j=i+1; j<n; j++)
-        {
-            temp_sum = temp_sum + u[i][j]*a[j];
-        }
-        if(std::abs(u[i][i]) < 1e-30)
-            a[i] = static_cast<T>(0.0);
-        else
-            a[i] = (v[i] - temp_sum)/u[i][i];
+        info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              reinterpret_cast<lapack_complex_double*>(A.data()), n,
+                              reinterpret_cast<lapack_complex_double*>(b.data()), 1,
+                              s.data(), 1e-10, &rank);
+
+        for (int i = 0; i < n; i++)
+            a[i] = (info == 0) ? b[i] : std::complex<double>(0.0, 0.0);
     }
 }
 

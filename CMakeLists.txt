@@ -76,6 +76,14 @@ ELSE()
     MESSAGE(WARNING "spglib not found. SpaceGroup functionality will not be available.")
 ENDIF()
 
+# LAPACKE (for Anderson Mixing SVD-based solver)
+FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke)
+IF(LAPACKE_LIBRARY)
+    MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY}")
+ELSE()
+    MESSAGE(WARNING "LAPACKE not found. Install with: conda install -c conda-forge lapack")
+ENDIF()
+
 # Common Files
 ADD_LIBRARY(common
     src/common/Array.cpp
@@ -96,6 +104,9 @@ ADD_LIBRARY(common
 )
 IF(SPGLIB_FOUND)
     TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES})
+ENDIF()
+IF(LAPACKE_LIBRARY)
+    TARGET_LINK_LIBRARIES(common ${LAPACKE_LIBRARY})
 ENDIF()
 
 # FFTW3
