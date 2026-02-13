@@ -31,6 +31,7 @@ examples/temp*
 examples/test*
 devel/test*
 devel/*.m
+devel/cl-fts/
 references
 Testing
 benchmark_results.json

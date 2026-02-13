@@ -36,6 +36,8 @@ params = {
     },
     "chi_n": {"A,B": 17.148912},
 
+    "platform": "cuda",
+
     "distinct_polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
@@ -78,8 +80,9 @@ params = {
         "sigma_psi": 0.16,     # σ_Ψ
         "psi_min": 0.0,        # Ψ_min
         "psi_max": 10.0,       # Ψ_max
-        "n_bins": 10000,       # Number of bins (dpsi = 1e-3)
+        "dpsi": 1e-3,          # dΨ, bin width
         "update_freq": 1000,   # Update frequency
+        "recording_period": 100000,  # Period for recording statistics
     },
 
     "verbose_level": 1,
