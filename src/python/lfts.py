@@ -427,8 +427,14 @@ class LFTS:
             if sorted_monomer_pair not in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
+        # Compressibility parameter (zeta_n)
+        if "zeta_n" in params:
+            self.zeta_n = params["zeta_n"]
+        else:
+            self.zeta_n = None  # incompressible (default)
+
         # Multimonomer polymer field theory
-        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
 
         # The numbers of real and imaginary fields, respectively
         M = len(self.monomer_types)
@@ -606,6 +612,8 @@ class LFTS:
         print("χN: ")
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
+        if self.zeta_n is not None:
+            print("zeta_n: %f" % (self.zeta_n))
 
         self.prop_solver._molecules.display_architectures()
 
@@ -1444,7 +1452,8 @@ class LFTS:
             # Calculate new fields using compressor (AM, LR, LRAM)
             w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.prop_solver.n_grid])
 
-        # Set mean of pressure field to zero
-        w_aux[M-1] -= self.cb.mean(w_aux[M-1])
+        # Set mean of pressure field to zero (gauge fixing for incompressible only)
+        if self.zeta_n is None:
+            w_aux[M-1] -= self.cb.mean(w_aux[M-1])
 
         return phi, hamiltonian, saddle_iter, error_level

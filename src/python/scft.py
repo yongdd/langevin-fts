@@ -595,6 +595,11 @@ class SCFT:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
         # Multimonomer polymer field theory
+        # Compressible model (zeta_n) is not yet supported in SCFT.
+        # Mean subtraction in the iteration loop assumes incompressible gauge fixing.
+        if "zeta_n" in params and params["zeta_n"] is not None:
+            raise ValueError("SCFT does not yet support compressible model (zeta_n). "
+                             "Use zeta_n=None (incompressible) or use L-FTS instead.")
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
 
         # Matrix for field residuals.
