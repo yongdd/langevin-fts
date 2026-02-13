@@ -30,3 +30,4 @@
 61. Documentation: Python API reference (Sphinx + autodoc for PropagatorSolver, SCFT, LFTS classes)
 62. Documentation: File formats (fields_*.mat, structure_function_*.mat, YAML/JSON config)
 63. Documentation: Examples guide (detailed README for examples/scft/, examples/lfts/)
+64. SCFT preconditioner for Anderson Mixing (left-preconditioning failed; try right-preconditioning or modified AM inner product)

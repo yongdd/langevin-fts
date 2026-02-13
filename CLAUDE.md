@@ -87,7 +87,7 @@ conda activate polymerfts
 ```bash
 # Initial build (from repository root)
 mkdir build && cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release
+cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 
 # Install Python modules to conda environment (required before testing)
@@ -100,7 +100,7 @@ ctest -L basic
 ctest
 
 # Clean build (if needed)
-cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make install
+cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON && make -j8 && make install
 ```
 
 ### Important Build Notes
@@ -110,11 +110,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make
 - Set `CUDA_ARCHITECTURES` in CMakeLists.txt:239 based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
-- **Development builds**: Enable both MKL and FFTW backends for full test coverage:
-  ```bash
-  cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON
-  ```
-  Note: User default is both OFF. During development, always build with both ON to run all tests.
+- **User builds**: CMakeLists.txt defaults are both OFF. Users who only need one backend can build without these flags.
 
 ### Environment Setup
 
