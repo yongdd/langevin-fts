@@ -145,8 +145,8 @@ fields_smeared = smear.apply_to_dict({"A": w_A, "B": w_B})
 
 When smearing is specified in the simulation parameters, the `SCFT`, `LFTS`, and `CLFTS` classes automatically:
 1. Initialize the smearing object
-2. Apply smearing to concentration fields before propagator computation
-3. Use smeared fields consistently throughout the simulation
+2. Apply smearing to potential fields before propagator computation: $w_i^{\text{smeared}} = \Gamma * w_i$
+3. Apply smearing to concentration fields before force/residual computation: $\phi_i^{\text{smeared}} = \Gamma * \phi_i$
 
 ## Choosing Smearing Parameters
 
