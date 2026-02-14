@@ -43,7 +43,7 @@ $$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf
 
 where $\xi(\mathbf{r})$ is a Lagrange multiplier enforcing incompressibility.
 
-### 1.3 Field Residuals
+### 1.3 Field Residuals (Incompressible)
 
 The field residuals $\mathbf{R}_w$ are defined as:
 
@@ -56,7 +56,21 @@ where:
 
 $$P = I - \frac{\mathbf{e} \mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}$$
 
-### 1.4 Example: AB Diblock Copolymer
+### 1.4 Self-Consistent Conditions (Compressible)
+
+With finite compressibility $\zeta N$, the pressure field is known:
+
+$$\xi(\mathbf{r}) = \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]$$
+
+$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})$$
+
+In SCFT iteration, the same projection residual $\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}$ is used for the fluctuation part, while the field means are pinned to the saddle-point values:
+
+$$\langle w_i \rangle = \sum_j X_{ij} \langle \phi_j \rangle + \xi, \qquad \xi = \zeta N \left( \left\langle \sum_j \phi_j \right\rangle - 1 \right)$$
+
+See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on the compressible SCFT iteration.
+
+### 1.5 Example: AB Diblock Copolymer
 
 For AB-type systems:
 
