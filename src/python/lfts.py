@@ -560,14 +560,23 @@ class LFTS:
             if I != 1:
                 raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
 
+            # Baseline: h_deriv at w=0
+            w_aux_zero = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+            phi_zero, _ = self.compute_concentrations(w_aux_zero)
+            h_deriv_zero = self.mpt.compute_func_deriv(w_aux_zero, phi_zero, self.mpt.aux_fields_imag_idx)
+
+            # Perturbed: h_deriv at w with small perturbation
             w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field
             w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.prop_solver.nx))/np.prod(self.prop_solver.nx)
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
-            h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
-            jk_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
+
+            # jk = (h(w_pert) - h(0)) / w_pert  (correct finite difference)
+            h_deriv_diff = h_deriv_perturbed - h_deriv_zero
+            h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
+            jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
 
             lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric)
 
@@ -1124,6 +1133,13 @@ class LFTS:
         print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
         phi, _, _, _, = self.find_saddle_point(w_aux=w_aux)
 
+        # For compressible models, pin mean(W+) to the initial saddle value.
+        # Without this, mean drifts slowly (tau~170) because the LRAM k=0
+        # correction is weak. The initial saddle is the natural SCFT solution.
+        if self.zeta_n is not None:
+            self._target_mean_wp = float(self.cb.mean(w_aux[M-1]))
+            print(f"  Compressible: pinning mean(W+) = {self._target_mean_wp:.6f}")
+
         # Dictionary to record history of H and dH/dχN
         H_history = []
         dH_history = {}
@@ -1452,8 +1468,12 @@ class LFTS:
             # Calculate new fields using compressor (AM, LR, LRAM)
             w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.prop_solver.n_grid])
 
-        # Set mean of pressure field to zero (gauge fixing for incompressible only)
+        # Fix mean of pressure field after convergence.
+        # Incompressible: gauge fix to mean=0.
+        # Compressible: pin to target_mean (set during first saddle solve).
         if self.zeta_n is None:
             w_aux[M-1] -= self.cb.mean(w_aux[M-1])
+        elif hasattr(self, '_target_mean_wp'):
+            w_aux[M-1] -= (self.cb.mean(w_aux[M-1]) - self._target_mean_wp)
 
         return phi, hamiltonian, saddle_iter, error_level
