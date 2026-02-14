@@ -204,7 +204,7 @@ class Smearing:
         # Return real part for real input, full complex for complex input
         result = np.reshape(field_smeared, self.n_grid)
         if np.isrealobj(field):
-            return np.real(result)
+            return np.ascontiguousarray(np.real(result))
         return result
 
     def apply_to_dict(self, fields):

@@ -1649,7 +1649,8 @@ class SCFT:
 
             # Calculate self-consistency error (vectorized)
             # phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
-            phi_array = np.array([phi[m] for m in self.monomer_types])
+            phi_smeared = self.smearing.apply_to_dict(phi)
+            phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
             w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
 
             # Keep the level of functional derivatives

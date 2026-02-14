@@ -563,7 +563,7 @@ class LFTS:
             # Baseline: h_deriv at w=0
             w_aux_zero = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             phi_zero, _ = self.compute_concentrations(w_aux_zero)
-            h_deriv_zero = self.mpt.compute_func_deriv(w_aux_zero, phi_zero, self.mpt.aux_fields_imag_idx)
+            h_deriv_zero = self.mpt.compute_func_deriv(w_aux_zero, self.smearing.apply_to_dict(phi_zero), self.mpt.aux_fields_imag_idx)
 
             # Perturbed: h_deriv at w with small perturbation
             w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
@@ -571,7 +571,7 @@ class LFTS:
             w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.prop_solver.nx))/np.prod(self.prop_solver.nx)
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
-            h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
+            h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, self.smearing.apply_to_dict(phi_perturbed), self.mpt.aux_fields_imag_idx)
 
             # jk = (h(w_pert) - h(0)) / w_pert  (correct finite difference)
             h_deriv_diff = h_deriv_perturbed - h_deriv_zero
@@ -1178,7 +1178,8 @@ class LFTS:
             phi_copy = phi.copy()
 
             # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields
-            w_lambda = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
+            phi_for_force = self.smearing.apply_to_dict(phi)
+            w_lambda = self.mpt.compute_func_deriv(w_aux, phi_for_force, self.mpt.aux_fields_real_idx)
 
             # Add WTMD bias force if enabled (same as deep-langevin-fts)
             if self.wtmd is not None:
@@ -1431,8 +1432,9 @@ class LFTS:
                     self.prop_solver.numerical_method,
                 )
 
-            # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
-            h_deriv = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_imag_idx)
+            # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields
+            phi_for_saddle = self.smearing.apply_to_dict(phi)
+            h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_saddle, self.mpt.aux_fields_imag_idx)
 
             # Compute total error
             old_error_level = error_level
