@@ -595,12 +595,8 @@ class SCFT:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
         # Multimonomer polymer field theory
-        # Compressible model (zeta_n) is not yet supported in SCFT.
-        # Mean subtraction in the iteration loop assumes incompressible gauge fixing.
-        if "zeta_n" in params and params["zeta_n"] is not None:
-            raise ValueError("SCFT does not yet support compressible model (zeta_n). "
-                             "Use zeta_n=None (incompressible) or use L-FTS instead.")
-        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
+        self.zeta_n = params.get("zeta_n", None)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
 
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902
@@ -980,6 +976,8 @@ class SCFT:
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
+        if self.zeta_n is not None:
+            print("zeta_n: %f" % self.zeta_n)
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         self.prop_solver._molecules.display_architectures()
@@ -1611,8 +1609,9 @@ class SCFT:
 
         # Keep the level of field value
         # mean() works correctly with reduced basis when space group is set
-        for i in range(M):
-            w[i] -= self.prop_solver.mean(w[i])
+        if self.zeta_n is None:
+            for i in range(M):
+                w[i] -= self.prop_solver.mean(w[i])
 
         # Iteration begins here
         # w is in reduced basis when space group is set, full grid otherwise
@@ -1852,8 +1851,15 @@ class SCFT:
 
             # Normalize field values
             # mean() works correctly with reduced basis when space group is set
-            for i in range(M):
-                w[i] -= self.prop_solver.mean(w[i])
+            if self.zeta_n is None:
+                for i in range(M):
+                    w[i] -= self.prop_solver.mean(w[i])
+            else:
+                # Pin field means to saddle point: mean(w_i) = Σ_j χ_{ij} mean(φ_j) + ξ
+                xi = self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
+                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
+                for i in range(M):
+                    w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
 
             # Irreducible grid remains valid without extra symmetrization.
 
