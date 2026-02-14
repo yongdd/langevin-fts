@@ -32,6 +32,8 @@ examples/test*
 devel/test*
 devel/*.m
 devel/cl-fts/
+devel/wtmd_*/
 references
 Testing
 benchmark_results.json
+result_*.json
