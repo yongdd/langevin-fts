@@ -63,6 +63,50 @@ $$R_{w_A} = \chi N \phi_B(\mathbf{r}) - \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathb
 
 $$R_{w_B} = \chi N \phi_A(\mathbf{r}) + \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))$$
 
+### 2.4 Compressible Model ($\zeta N \neq 0$)
+
+When a finite compressibility parameter $\zeta N$ is introduced, the incompressibility constraint is replaced by a penalty:
+
+$$U_{comp} = \frac{\zeta N}{2V} \int d\mathbf{r} \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]^2$$
+
+The pressure field becomes a known function of the concentrations rather than an unknown Lagrange multiplier:
+
+$$\xi(\mathbf{r}) = \zeta N \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]$$
+
+The self-consistency conditions become:
+
+$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]$$
+
+#### Field Residuals (Compressible)
+
+A direct residual formulation using $R_w = (X + \zeta N \, \mathbf{e}\mathbf{e}^T) \boldsymbol{\phi} - \zeta N \, \mathbf{e} - \mathbf{w}$ is mathematically correct but numerically stiff. The effective interaction matrix $X + \zeta N \, \mathbf{e}\mathbf{e}^T$ has eigenvalue $\chi N + 2\zeta N$ (e.g., 213.27 for $\chi N = 13.27$, $\zeta N = 100$), requiring very small mixing rates for convergence.
+
+Instead, the iteration separates the field into fluctuations and mean:
+
+1. **Fluctuation residual** (same as incompressible):
+
+$$\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}, \qquad R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle$$
+
+The projection matrix $P$ eliminates the stiff pressure mode from the residual, leaving only composition modes with eigenvalue $\sim \chi N$.
+
+2. **Mean pinning** (after each field update):
+
+$$\langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi$$
+
+where $\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)$.
+
+This approach converges at the same rate as the incompressible case because:
+- The fluctuation part sees only the $\chi N$ eigenvalue (via $P$)
+- The mean is set directly from the known pressure field, requiring no iteration
+
+#### Example: AB Diblock (Compressible)
+
+At convergence with $\phi_A = \phi_B \approx 0.5$ and $\xi \approx 0$:
+
+$$\langle w_A \rangle = \langle w_B \rangle = \frac{\chi N}{2} = 6.635$$
+
+$$\langle W_+ \rangle = \frac{\langle w_A \rangle + \langle w_B \rangle}{\sqrt{2}} = \frac{\chi N}{\sqrt{2}} \approx 9.38$$
+
 ---
 
 ## 3. Iterative Methods
