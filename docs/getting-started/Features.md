@@ -23,7 +23,7 @@
 |------|-------------|
 | **SCFT** | Mean-field equilibrium with Anderson mixing or ADAM optimizer, stress-based box optimization, and space groups. |
 | **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations and Well-Tempered Metadynamics (WTMD). |
-| **CL-FTS** (beta) | Complex Langevin with smearing and dynamical stabilization. |
+| **CL-FTS** (beta) | Complex Langevin with dynamical stabilization. |
 
 ---
 
@@ -45,7 +45,7 @@
 | ADAM optimizer | Alternative to Anderson mixing for SCFT (SCFT) |
 | Well-Tempered Metadynamics | Enhanced sampling for phase transitions (L-FTS) |
 | Field compressors | Linear Response (LR), Anderson Mixing (AM), and hybrid (LRAM) for saddle point (L-FTS) |
-| Smearing | Finite-range interactions for improved stability (CL-FTS) |
+| Smearing | Finite-range interactions for UV regularization (SCFT, L-FTS, CL-FTS) |
 | Memory saving | Checkpoint-based storage for large systems |
 | Parallel execution | OpenMP threads (CPU), multi-stream (CUDA) |
 

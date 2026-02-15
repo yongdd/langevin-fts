@@ -93,13 +93,17 @@ For results to be **universal** (independent of spatial discretization and match
 
 These conditions ensure that the smearing does not significantly alter the polymer chain statistics at length scales relevant to the physics of interest.
 
-## Role in CL-FTS Stabilization
+## Role of Smearing
 
-In Complex Langevin Field-Theoretic Simulations (CL-FTS), smearing plays a crucial role in preventing numerical instabilities known as "hot spots" - localized regions where field values grow uncontrollably.
+Smearing serves two purposes depending on the simulation type:
 
-### Mechanism
+### UV Regularization (SCFT, L-FTS, CL-FTS)
 
-Hot spots arise from high-frequency fluctuations that can destabilize the simulation. Smearing damps these high-frequency modes:
+In the continuum limit, the point-contact Flory-Huggins interaction leads to ultraviolet (UV) divergence. Smearing introduces a finite interaction range, making the theory well-defined and ensuring that results are independent of spatial discretization. This applies to all simulation methods: SCFT, L-FTS, and CL-FTS.
+
+### CL-FTS Stabilization
+
+In CL-FTS, smearing additionally prevents numerical instabilities known as "hot spots" — localized regions where field values grow uncontrollably. Hot spots arise from high-frequency fluctuations that can destabilize the simulation. Smearing damps these high-frequency modes:
 
 - **Gaussian smearing**: Exponential decay $\exp(-a_{\text{int}}^2 k^2/2)$ strongly suppresses high-$k$ modes
 - **Sigmoidal smearing**: Sharp cutoff at $k \approx k_{\text{int}}$ eliminates modes above the cutoff
@@ -178,4 +182,6 @@ When smearing is specified in the simulation parameters, the `SCFT`, `LFTS`, and
 
 - [DYNAMICAL_STABILIZATION.md](DYNAMICAL_STABILIZATION.md) - Dynamical stabilization for CL-FTS
 - `src/python/smearing.py` - Smearing class implementation
+- `examples/scft/` - SCFT example scripts
+- `examples/lfts/` - L-FTS example scripts
 - `examples/clfts/` - CL-FTS example scripts
