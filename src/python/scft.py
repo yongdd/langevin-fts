@@ -1853,8 +1853,16 @@ class SCFT:
             # Normalize field values
             # mean() works correctly with reduced basis when space group is set
             if self.zeta_n is None:
+                # Pin P-projected mean to saddle: P@mean(w) = P@(χ@mean(φ))
+                # mean(φ_i) = f_i exactly by chain normalization, so target is constant.
+                # mean(W+) is gauge (P annihilates it); only mean(W-) is pinned.
+                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
+                p_target = self.matrix_p @ chi_phi_mean
+                w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
+                p_current = self.matrix_p @ w_mean
+                shift = p_target - p_current
                 for i in range(M):
-                    w[i] -= self.prop_solver.mean(w[i])
+                    w[i] += shift[i]
             else:
                 # Pin field means to saddle point: mean(w_i) = Σ_j χ_{ij} mean(φ_j) + ξ
                 xi = self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
