@@ -21,13 +21,13 @@ Initial configurations of network phases are obtained from the Kevin Dorfman's p
 | DG | DG.py | Ia-3d | 530 | -0.2131824 |
 | DP | DP.py | Im-3m | 529 | -0.1445778 |
 | Fddd | Fddd.py | Fddd | 336 | -0.1606698 |
-| PL | PL_Hexagonal.py | P6/mmm | 485 | -0.2119551 |
+| PL | PL_Hexagonal.py | P6_3/mmc | 488 | -0.2100188 |
 
 ---
 
 ## Initial Field Generation
 
-Phases with non-cubic crystal systems (HCP, Sigma, PL) generate initial fields from **Wyckoff positions** instead of loading from .mat files. This ensures the initial field has full space group symmetry.
+Phases with non-cubic crystal systems (HCP, Sigma) generate initial fields from **Wyckoff positions** instead of loading from .mat files. PL loads from a converged PSCF solution (PL.mat).
 
 Example (HCP with P6_3/mmc):
 ```python
@@ -63,7 +63,7 @@ Space group symmetry reduces the computational mesh significantly:
 | Im-3m (BCC) | ~48x |
 | Pm-3m (SC) | ~48x |
 | P6_3/mmc (HCP) | ~22x |
-| P6/mmm (PL) | ~24x |
+| P6_3/mmc (PL) | ~22x |
 | P4_2/mnm (Sigma) | ~15x |
 
 ---
