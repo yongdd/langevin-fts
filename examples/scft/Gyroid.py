@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
@@ -77,14 +76,11 @@ for i in range(0,params["nx"][0]):
 calculation = scft.SCFT(params=params)
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("fields.mat")

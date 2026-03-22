@@ -23,7 +23,6 @@ Results:
 """
 
 import os
-import time
 import numpy as np
 import scipy.io
 from scipy.ndimage import zoom
@@ -117,14 +116,11 @@ print(f"  w_B: min={w_B.min():.2f}, max={w_B.max():.2f}, mean={w_B.mean():.2f}")
 calculation = scft.SCFT(params=params)
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results
 calculation.save_results("PL_Hexagonal.json")

@@ -22,7 +22,6 @@ Results:
 """
 
 import os
-import time
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from polymerfts import scft
@@ -112,14 +111,11 @@ print(f"Initial field: w_A min={w_A.min():.2f}, max={w_A.max():.2f}, std={np.std
 calculation = scft.SCFT(params=params)
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("HCP_Hexagonal.json")

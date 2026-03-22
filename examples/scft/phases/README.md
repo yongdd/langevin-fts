@@ -8,20 +8,20 @@ Initial configurations of network phases are obtained from the Kevin Dorfman's p
 |-------|------|-------------|--------|---------------------|
 | Lamellar | Lamella1D.py | - | - | -0.1429224 |
 | Cylinder | Cylinder2D.py | - | - | -0.5058274 |
-| A15 | A15.py | Pm-3n | 520 | -1.8685845 |
-| BCC | BCC.py | Im-3m | 529 | -1.0753648 |
-| FCC | FCC.py | Fm-3m | 523 | -1.0744336 |
-| HCP | HCP_Hexagonal.py | P6_3/mmc | 488 | -1.3845346 |
-| Sigma | Sigma.py | P4_2/mnm | 419 | -2.0320150 |
-| SC | SC.py | Pm-3m | 517 | -2.3718046 |
-| SD | SD.py | Fd-3m | 526 | -0.3427212 |
-| SG | SG.py | I4_132 | 510 | -0.3473548 |
-| SP | SP.py | Pm-3m | 517 | -0.3235695 |
-| DD | DD.py | Pn-3m | 522 | -0.3497210 |
-| DG | DG.py | Ia-3d | 530 | -0.3631824 |
-| DP | DP.py | Im-3m | 529 | -0.2945778 |
-| Fddd | Fddd.py | Fddd | 336 | -0.2292698 |
-| PL | PL_Hexagonal.py | P6_3/mmc | 488 | -0.3600188 |
+| A15 | A15.py | Pm-3n | 520 | -0.8688101 |
+| BCC | BCC.py | Im-3m | 529 | -0.0899198 |
+| FCC | FCC.py | Fm-3m | 523 | -0.0889438 |
+| HCP | HCP_Hexagonal.py | P6_3/mmc | 488 | -0.1335563 |
+| Sigma | Sigma.py | P4_2/mnm | 419 | -0.4703563 |
+| SC | SC.py | Pm-3m | 517 | -0.1218295 |
+| SD | SD.py | Fd-3m | 526 | -0.1927233 |
+| SG | SG.py | I4_132 | 510 | -0.1973792 |
+| SP | SP.py | Pm-3m | 517 | -0.1735711 |
+| DD | DD.py | Pn-3m | 522 | -0.1997226 |
+| DG | DG.py | Ia-3d | 530 | -0.2129858 |
+| DP | DP.py | Im-3m | 529 | -0.1445790 |
+| Fddd | Fddd.py | Fddd | 336 | -0.1606772 |
+| PL | PL_Hexagonal.py | P6_3/mmc | 488 | -0.2100188 |
 
 ---
 
@@ -68,4 +68,4 @@ Space group symmetry reduces the computational mesh significantly:
 
 ---
 
-Last updated: 2026-02-22
+Last updated: 2026-03-22
