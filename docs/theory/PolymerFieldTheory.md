@@ -43,7 +43,7 @@ $$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf
 
 where $\xi(\mathbf{r})$ is a Lagrange multiplier enforcing incompressibility.
 
-### 1.3 Field Residuals (Incompressible)
+### 1.3 SCFT Iteration (Incompressible)
 
 The field residuals $\mathbf{R}_w$ are defined as:
 
@@ -55,6 +55,18 @@ where:
 - $P$ is the projection matrix:
 
 $$P = I - \frac{\mathbf{e} \mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}$$
+
+In addition to the $\mathbf{k} \neq 0$ residual update, the $\mathbf{k}=0$ mode (field mean) must be normalized correctly. The pressure field $W_+$ is shift-invariant (gauge degree of freedom), but the exchange field $W_-$ has a **physical mean** determined by the saddle-point condition. Simply setting $\langle w_i \rangle = 0$ violates the $\mathbf{k}=0$ self-consistency condition when $f \neq 0.5$.
+
+The saddle condition for the $\mathbf{k}=0$ mode is:
+
+$$P \langle \mathbf{w} \rangle = P \left( X \langle \boldsymbol{\phi} \rangle \right)$$
+
+where $\langle \cdot \rangle$ denotes the spatial mean. Since $\langle \phi_i \rangle = f_i$ exactly by chain normalization, the right-hand side is a constant. At each iteration, the $P$-projected mean of $\mathbf{w}$ is shifted to the target:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + P \left( X \langle \boldsymbol{\phi} \rangle \right) - P \langle \mathbf{w} \rangle$$
+
+This pins $\langle W_- \rangle$ to the saddle value while leaving $\langle W_+ \rangle$ untouched (since $P$ annihilates the uniform $[1, 1, \ldots]$ direction). For AB diblocks, the saddle gives $\langle W_- \rangle = (1 - 2f) \chi N / 2$. Setting $\langle W_- \rangle = 0$ instead introduces a free energy error of $\chi N (f - 1/2)^2$, which vanishes for symmetric diblocks ($f = 0.5$). The $P$ and $X$ matrices are $M \times M$ for $M$ monomer types, so this applies to arbitrary multi-monomer systems.
 
 ### 1.4 Self-Consistent Conditions (Compressible)
 

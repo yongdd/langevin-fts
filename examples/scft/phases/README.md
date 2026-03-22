@@ -68,4 +68,4 @@ Space group symmetry reduces the computational mesh significantly:
 
 ---
 
-Last updated: 2026-01-27
+Last updated: 2026-03-22

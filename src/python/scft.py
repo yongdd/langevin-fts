@@ -1000,6 +1000,12 @@ class SCFT:
         self.max_iter = max_iter
         self.tolerance = tolerance
 
+        # Use FTS-consistent energy convention by pinning field means to the saddle point.
+        # When enabled, the SCFT free energy matches the field-theoretic Hamiltonian
+        # used in L-FTS/CL-FTS (F_dis = -chi_N*(f-1/2)^2 for disordered phase).
+        # Default is off (mean=0 convention, F_dis=0 for disordered phase).
+        self.fts_consistent_energy = params.get("fts_consistent_energy", False)
+
         # For context manager
         self._is_open = True
 
@@ -1607,14 +1613,37 @@ class SCFT:
             for i in range(M):
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
-        # Keep the level of field value
+        # Normalize initial field means
         # mean() works correctly with reduced basis when space group is set
-        if self.zeta_n is None:
-            for i in range(M):
-                w[i] -= self.prop_solver.mean(w[i])
+        if self.fts_consistent_energy:
+            # Pin initial field means to saddle-point values using mean(φ_i) = f_i.
+            # Compute f_i (average concentration of each monomer type) from polymer params.
+            phi_mean = np.zeros(M)
+            for polymer in self.distinct_polymers:
+                vf = polymer["volume_fraction"]
+                for block in polymer["blocks"]:
+                    idx = self.monomer_types.index(block["type"])
+                    phi_mean[idx] += vf * block["length"]
+            if self.zeta_n is None:
+                chi_phi_mean = self.matrix_chi @ phi_mean
+                p_target = self.matrix_p @ chi_phi_mean
+                w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
+                p_current = self.matrix_p @ w_mean
+                shift = p_target - p_current
+                for i in range(M):
+                    w[i] += shift[i]
+            else:
+                chi_phi_mean = self.matrix_chi @ phi_mean
+                for i in range(M):
+                    w[i] += chi_phi_mean[i] - self.prop_solver.mean(w[i])
+        else:
+            if self.zeta_n is None:
+                for i in range(M):
+                    w[i] -= self.prop_solver.mean(w[i])
 
         # Iteration begins here
         # w is in reduced basis when space group is set, full grid otherwise
+        time_iter_start = time.time()
         for iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
@@ -1852,17 +1881,34 @@ class SCFT:
 
             # Normalize field values
             # mean() works correctly with reduced basis when space group is set
-            if self.zeta_n is None:
-                for i in range(M):
-                    w[i] -= self.prop_solver.mean(w[i])
+            if self.fts_consistent_energy:
+                if self.zeta_n is None:
+                    # Pin P-projected mean to saddle: P@mean(w) = P@(χ@mean(φ))
+                    # mean(φ_i) = f_i exactly by chain normalization, so target is constant.
+                    # mean(W+) is gauge (P annihilates it); only mean(W-) is pinned.
+                    chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
+                    p_target = self.matrix_p @ chi_phi_mean
+                    w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
+                    p_current = self.matrix_p @ w_mean
+                    shift = p_target - p_current
+                    for i in range(M):
+                        w[i] += shift[i]
+                else:
+                    # Pin field means to saddle point: mean(w_i) = Σ_j χ_{ij} mean(φ_j) + ξ
+                    xi = self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
+                    chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
+                    for i in range(M):
+                        w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
             else:
-                # Pin field means to saddle point: mean(w_i) = Σ_j χ_{ij} mean(φ_j) + ξ
-                xi = self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
-                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
-                for i in range(M):
-                    w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
+                if self.zeta_n is None:
+                    for i in range(M):
+                        w[i] -= self.prop_solver.mean(w[i])
 
             # Irreducible grid remains valid without extra symmetrization.
+
+        # Print iteration timing
+        time_iter_total = time.time() - time_iter_start
+        print("Iteration time: %.3f seconds (%.4f sec/iter, %d iterations)" % (time_iter_total, time_iter_total/iter, iter))
 
         # Print free energy as per chain expression
         print("Free energy per chain (for each chain type):")

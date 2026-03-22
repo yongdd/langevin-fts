@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
@@ -78,14 +77,11 @@ for x,y,z in sphere_positions:
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B, "C": w_C})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("fields.mat")

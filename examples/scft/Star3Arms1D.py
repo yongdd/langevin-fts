@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 from scipy.io import savemat
 from polymerfts import scft
@@ -66,14 +65,11 @@ for i in range(0,params["nx"][0]):
 calculation = scft.SCFT(params=params)
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results (.mat or .yaml file)
 calculation.save_results("fields.mat")

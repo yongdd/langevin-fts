@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 from scipy.io import savemat
 from scipy.ndimage import gaussian_filter
@@ -72,14 +71,11 @@ w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 calculation = scft.SCFT(params=params)
 
 # Set a timer
-time_start = time.time()
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("A15.json")

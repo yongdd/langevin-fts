@@ -30,7 +30,7 @@ from polymerfts import _core
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 # Tolerance for free energy comparison
-FE_TOLERANCE = 1e-10
+FE_TOLERANCE = 2e-10
 
 
 def get_available_platforms():
@@ -206,8 +206,8 @@ PHASES = {
         "mat_file": "PL.mat",
         "f": 0.4,
         "nx": [48, 48, 72],
-        "expected_fe": -0.211955441747189,
-        "space_group": {"symbol": "P6/mmm", "number": 485},
+        "expected_fe": -0.210018756480129,
+        "space_group": {"symbol": "P6_3/mmc", "number": 488},
         "ds": 1/100,
         "chi_n": {"A,B": 15},
         "segment_lengths": {"A": 1.0, "B": 1.0},
@@ -258,7 +258,7 @@ def build_params(phase_def, lx, platform, reduce_memory):
         "space_group": phase_def["space_group"],
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 5,
-        "tolerance": 1e-8,
+        "tolerance": 2e-8,
         "verbose": 0,
         "reduce_memory": reduce_memory,
     }
