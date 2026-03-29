@@ -995,7 +995,7 @@ class SCFT:
         # - "adaptive": automatically adjust based on error level
         #   (more frequent when error high, less frequent when converging)
         # Default is 3 for ~15% speedup with minimal impact on convergence
-        self.stress_interval = params.get("stress_interval", 3)
+        self.stress_interval = params.get("stress_interval", 1)
 
         self.max_iter = max_iter
         self.tolerance = tolerance
