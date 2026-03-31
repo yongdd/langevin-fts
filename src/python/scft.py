@@ -456,12 +456,12 @@ class SCFT:
 
     References
     ----------
-    .. [1] Kang, H., et al. "Efficient Computation of Chain Propagators for
-           Polymers with Complex Architectures." J. Chem. Theory Comput. 2025,
-           21, 3676.
-    .. [2] Delaney Vigil, D. L., et al. "Multimonomer Field Theory of
-           Conformationally Asymmetric Polymer Blends." Macromolecules 2025,
-           58, 816.
+    .. [1] Yong, D.; Kim, J. U. "Dynamic Programming for Chain Propagator
+           Computation of Branched Block Copolymers in Polymer Field Theory
+           Simulations." J. Chem. Theory Comput. 2025, 21, 3676.
+    .. [2] Morse, D.; Yong, D.; Chen, K. "Polymer Field Theory for
+           Multimonomer Incompressible Models: Symmetric Formulation and ABC
+           Systems." Macromolecules 2025, 58, 816.
 
     Examples
     --------
