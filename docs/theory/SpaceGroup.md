@@ -304,6 +304,7 @@ Note: The reduction factor (10.7x) is less than the number of symmetry operation
 - Grid must be compatible with space group symmetry
 - Beta feature - validate results carefully
 - Requires `spglib` library
+- **Hexagonal/trigonal artifact**: Cell-centered grids are mathematically incompatible with hexagonal rotation matrices. Rotations with even row sums (e.g., $[1, -1, 0]$) map cell-centered positions $(i+0.5)/N$ to cell boundaries $(integer)/N$, causing inconsistent orbit assignments and X-shaped density artifacts. Cubic/orthorhombic space groups are unaffected (rotation matrix row sums are always odd). The `star` git branch implements a Fourier star basis that eliminates this artifact by working in reciprocal space where wavevector rotations are exact integer operations.
 
 ## References
 

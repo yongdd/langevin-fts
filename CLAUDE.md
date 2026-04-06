@@ -333,6 +333,8 @@ The `examples/scft/phases/` directory contains examples using space group symmet
 - **Memory savings**: Proportional to grid reduction ratio
 - **Speedup**: ~5-10% from smaller field operations (propagator computation still uses full grid FFT)
 
+**Known limitation — Hexagonal artifact**: Hexagonal and trigonal space groups (e.g., P6₃/mmc) produce X-shaped visual artifacts in density fields. This is caused by cell-centered grid points `(i+0.5)/N` mapping to cell boundaries `(integer)/N` under hexagonal rotations (row sum = 0 annihilates the 0.5 offset). No rounding strategy can fix this — it is a mathematical incompatibility between cell-centered grids and hexagonal rotation matrices. Cubic/orthorhombic space groups are unaffected (row sum always odd). The `star` branch implements a Fourier star basis solution that eliminates this artifact.
+
 Example usage in params:
 
 ```python

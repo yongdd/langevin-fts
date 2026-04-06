@@ -735,6 +735,9 @@ class SCFT:
                     except Exception:
                         pass
             elif z_axis_orthogonal:
+                # NOTE: Hexagonal/trigonal space groups produce X-shaped artifacts
+                # in density fields due to cell-centered grid incompatibility with
+                # hexagonal rotations. See 'star' branch for Fourier star basis fix.
                 try:
                     self.sg.enable_z_mirror_physical_basis()
                 except Exception:

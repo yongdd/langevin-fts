@@ -389,6 +389,14 @@ void SpaceGroup::get_symmetry_operations()
 
 void SpaceGroup::find_irreducible_mesh()
 {
+    // WARNING: For hexagonal/trigonal crystal systems, this real-space orbit
+    // mapping produces visible artifacts (X-shaped glitches in density fields).
+    // Hexagonal rotation matrices have rows with even sums, causing cell-centered
+    // grid points (i+0.5)/N to map to cell boundaries (integer/N) — equidistant
+    // from two cells. The floor() rounding creates inconsistent orbit assignments.
+    // This is a mathematical incompatibility, not fixable by rounding strategy.
+    // See the 'star' branch for a Fourier star basis solution.
+
     // Initialize full_to_reduced_map with -1 (unvisited)
     full_to_reduced_map_.resize(total_grid_, -1);
     reduced_basis_indices_.clear();
