@@ -776,6 +776,15 @@ void MklFFT<T, DIM>::applyDST3Backward(double* data, double* temp, int dim)
                 if (2 * k < n)
                     temp[offset + (2 * k) * stride] = (re + im) * scale;
             }
+
+            // The FFT-based preprocessing loop above (k = 1..n/2) never reads the
+            // highest DST-III coefficient slice[n-1], so the Nyquist mode was being
+            // dropped (backward of a delta at k=n-1 returned all zeros instead of the
+            // correct (1/n)(-1)^i, which made absorbing-BC results differ from FFTW/CUDA
+            // for fields with (-1)^i content). Add that mode's contribution explicitly.
+            double c_high = slice[n - 1] * scale;
+            for (int i = 0; i < n; ++i)
+                temp[offset + i * stride] += (i % 2 == 0 ? c_high : -c_high);
         }
     }
 
