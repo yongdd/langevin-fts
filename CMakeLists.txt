@@ -128,6 +128,17 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
     SET(BUILD_CPU_FFTW_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
+    # Put the FFTW library directory on the linker search path so short-form
+    # (-lfftw3) references resolve without relying on LIBRARY_PATH in the shell.
+    IF(FFTW3_LIBRARY_DIRS)
+        LINK_DIRECTORIES(${FFTW3_LIBRARY_DIRS})
+    ENDIF()
+    FOREACH(_fftw_lib ${FFTW3_LIBRARIES})
+        IF(EXISTS "${_fftw_lib}")
+            GET_FILENAME_COMPONENT(_fftw_dir "${_fftw_lib}" DIRECTORY)
+            LINK_DIRECTORIES(${_fftw_dir})
+        ENDIF()
+    ENDFOREACH()
     ADD_LIBRARY(cpu-fftw
         src/platforms/cpu/FftwFFT.cpp
         src/platforms/cpu/FftwCrysFFTPmmm.cpp
@@ -219,6 +230,12 @@ ENDIF()
 IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     ENABLE_LANGUAGE(CUDA)
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
+    # Put the CUDA toolkit library directory on the linker search path so the static
+    # CUDA runtime references (-lcudart_static, -lcudadevrt) resolve without relying
+    # on LIBRARY_PATH being set in the shell (e.g. by `module load cuda`).
+    IF(CUDAToolkit_LIBRARY_DIR)
+        LINK_DIRECTORIES(${CUDAToolkit_LIBRARY_DIR})
+    ENDIF()
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
