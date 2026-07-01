@@ -155,3 +155,23 @@ def test_cuda_refuses_unsupported_bc():
             f"CUDA guardrail failed to refuse unsupported combination: "
             f"chain_model={chain_model}, bc={bc[0]}"
         )
+
+
+if __name__ == "__main__":
+    # ctest runs this file as `python <file>.py` (no pytest), so explicitly run
+    # every test_* function here and fail the process if any assertion fails.
+    import sys
+
+    _tests = [
+        obj for name, obj in sorted(globals().items())
+        if name.startswith("test_") and callable(obj)
+    ]
+    _failures = 0
+    for _fn in _tests:
+        try:
+            _fn()
+            print(f"PASS  {_fn.__name__}")
+        except Exception as exc:  # noqa: BLE001 - report and continue
+            _failures += 1
+            print(f"FAIL  {_fn.__name__}: {type(exc).__name__}: {exc}")
+    sys.exit(1 if _failures else 0)
