@@ -238,18 +238,36 @@ class PropagatorSolver:
                 platform = "cpu-mkl"
         self.platform = platform
 
-        # Check if non-periodic BC is used with CUDA pseudospectral
+        # CUDA pseudo-spectral fully supports periodic (FFT) and reflecting (DCT)
+        # boundary conditions (verified to match CPU to machine precision). It does
+        # NOT yet reliably support absorbing (DST) BC — the CUDA DST has a
+        # high-frequency-mode error — and the spectral transform cannot mix periodic
+        # with non-periodic directions on either platform.
+        bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(
-            b.lower() in ["reflecting", "absorbing"] for b in self.bc
+            b in ["reflecting", "absorbing"] for b in bc_lower
         )
-        if (self._has_non_periodic_bc and
-            self.platform == "cuda" and
-            self.method == "pseudospectral"):
-            # CUDA pseudospectral only supports periodic BC, fall back to realspace
-            print("Note: CUDA pseudo-spectral only supports periodic BC. "
-                  "Switching to real-space CN-ADI2 method.")
-            self.method = "realspace"
-            self.numerical_method = "cn-adi2"
+        has_periodic = any(b == "periodic" for b in bc_lower)
+        has_absorbing = any(b == "absorbing" for b in bc_lower)
+        if self.platform == "cuda" and self.method == "pseudospectral":
+            if has_absorbing:
+                # CUDA DST (absorbing) has a high-frequency-mode bug: refuse rather
+                # than silently degrade to a different (real-space) method.
+                raise NotImplementedError(
+                    "CUDA pseudo-spectral does not support absorbing (DST) boundary "
+                    "conditions (the CUDA DST has a high-frequency-mode error). "
+                    "Use platform='cpu-mkl' or 'cpu-fftw', or select the real-space "
+                    "method explicitly (numerical_method='cn-adi2'), or use "
+                    "reflecting/periodic boundary conditions."
+                )
+            if has_periodic and self._has_non_periodic_bc:
+                # The spectral transform cannot mix periodic and non-periodic
+                # directions; the real-space CN-ADI2 method handles this.
+                print("Note: mixing periodic and non-periodic BCs is not supported by "
+                      "the pseudo-spectral transform; switching to the real-space "
+                      "CN-ADI2 method.")
+                self.method = "realspace"
+                self.numerical_method = "cn-adi2"
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
