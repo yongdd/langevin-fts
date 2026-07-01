@@ -238,11 +238,13 @@ class PropagatorSolver:
                 platform = "cpu-mkl"
         self.platform = platform
 
-        # CUDA pseudo-spectral fully supports periodic (FFT) and reflecting (DCT)
-        # boundary conditions (verified to match CPU to machine precision). It does
-        # NOT yet reliably support absorbing (DST) BC — the CUDA DST has a
-        # high-frequency-mode error — and the spectral transform cannot mix periodic
-        # with non-periodic directions on either platform.
+        # CUDA pseudo-spectral non-periodic BC support (verified against CPU):
+        #   - continuous + reflecting (DCT): correct (matches CPU to machine precision)
+        #   - continuous + absorbing (DST): WRONG (high-frequency-mode error)
+        #   - discrete  + reflecting/absorbing: WRONG (DCT/DST path is incorrect for
+        #     the discrete bond model, all dimensions)
+        # Only periodic works for the discrete chain on CUDA. Refuse the broken
+        # combinations rather than silently returning wrong numbers.
         bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(
             b in ["reflecting", "absorbing"] for b in bc_lower
@@ -250,6 +252,15 @@ class PropagatorSolver:
         has_periodic = any(b == "periodic" for b in bc_lower)
         has_absorbing = any(b == "absorbing" for b in bc_lower)
         if self.platform == "cuda" and self.method == "pseudospectral":
+            if self.chain_model == "discrete" and self._has_non_periodic_bc:
+                # CUDA discrete-chain DCT/DST propagator is incorrect; there is no
+                # real-space fallback for the discrete model. Require CPU.
+                raise NotImplementedError(
+                    "CUDA does not support non-periodic (reflecting/absorbing) "
+                    "boundary conditions for the discrete chain model (the CUDA "
+                    "DCT/DST propagator is incorrect for discrete chains). "
+                    "Use platform='cpu-mkl' or 'cpu-fftw', or use periodic BCs."
+                )
             if has_absorbing:
                 # CUDA DST (absorbing) has a high-frequency-mode bug: refuse rather
                 # than silently degrade to a different (real-space) method.
@@ -262,7 +273,7 @@ class PropagatorSolver:
                 )
             if has_periodic and self._has_non_periodic_bc:
                 # The spectral transform cannot mix periodic and non-periodic
-                # directions; the real-space CN-ADI2 method handles this.
+                # directions; the real-space CN-ADI2 method (continuous only) handles it.
                 print("Note: mixing periodic and non-periodic BCs is not supported by "
                       "the pseudo-spectral transform; switching to the real-space "
                       "CN-ADI2 method.")
