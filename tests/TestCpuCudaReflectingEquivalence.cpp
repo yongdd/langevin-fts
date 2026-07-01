@@ -84,6 +84,11 @@ int main()
             {"Discrete",   {16, 16},      {3.0, 3.0}},
             {"Continuous", {16, 16, 16},  {3.0, 3.0, 3.0}},
             {"Discrete",   {16, 16, 16},  {3.0, 3.0, 3.0}},
+            // Grid with M > 65536 (= n_blocks*n_threads) to exercise the grid-stride
+            // loops in the CudaFFT non-periodic glue kernels; a fixed-launch bug there
+            // leaves the tail uninitialized and shows up as NaN.
+            {"Continuous", {48, 48, 48},  {3.0, 3.0, 3.0}},
+            {"Discrete",   {48, 48, 48},  {3.0, 3.0, 3.0}},
         };
         const double ds = 1.0 / 50.0;
         const double rtol = 1e-9;

@@ -22,24 +22,25 @@
 // CUDA Kernels for copy and scale operations
 //------------------------------------------------------------------------------
 
+// NOTE: these glue kernels are launched with a fixed grid (n_blocks*n_threads),
+// so they MUST use a grid-stride loop to cover all M elements. Without it, arrays
+// larger than n_blocks*n_threads (e.g. 65536) are left partially uninitialized,
+// which shows up as NaN in the non-periodic (DCT/DST) transform path.
 __global__ void ker_copy_data(double* dst, const double* src, int M)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M; idx += blockDim.x * gridDim.x)
         dst[idx] = src[idx];
 }
 
 __global__ void ker_complex_to_real(double* dst, const cuDoubleComplex* src, int M)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M; idx += blockDim.x * gridDim.x)
         dst[idx] = src[idx].x;
 }
 
 __global__ void ker_real_to_complex(cuDoubleComplex* dst, const double* src, int M)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M; idx += blockDim.x * gridDim.x)
     {
         dst[idx].x = src[idx];
         dst[idx].y = 0.0;
@@ -48,8 +49,7 @@ __global__ void ker_real_to_complex(cuDoubleComplex* dst, const double* src, int
 
 __global__ void ker_complex_to_interleaved(double* dst, const cuDoubleComplex* src, int M_COMPLEX)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M_COMPLEX)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M_COMPLEX; idx += blockDim.x * gridDim.x)
     {
         dst[2 * idx] = src[idx].x;
         dst[2 * idx + 1] = src[idx].y;
@@ -58,8 +58,7 @@ __global__ void ker_complex_to_interleaved(double* dst, const cuDoubleComplex* s
 
 __global__ void ker_interleaved_to_complex(cuDoubleComplex* dst, const double* src, int M_COMPLEX)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M_COMPLEX)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M_COMPLEX; idx += blockDim.x * gridDim.x)
     {
         dst[idx].x = src[2 * idx];
         dst[idx].y = src[2 * idx + 1];
@@ -68,8 +67,7 @@ __global__ void ker_interleaved_to_complex(cuDoubleComplex* dst, const double* s
 
 __global__ void ker_scale(double* data, double scale, int M)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < M)
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < M; idx += blockDim.x * gridDim.x)
         data[idx] *= scale;
 }
 
