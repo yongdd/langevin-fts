@@ -866,23 +866,43 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
             }
         }
 
-        // Execute a forward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
+        if (this->is_periodic_)
+        {
+            // Execute a forward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+
+            // Multiply exp(-k^2 ds/6) in fourier space
+            ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+
+            // Execute a backward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
+            else
+                cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
+
+            // Evaluate exp(-w*ds) in real space (1/M normalization from unnormalized cuFFT)
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
+        }
         else
-            cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+        {
+            // Non-periodic BC (reflecting/absorbing): use CudaFFT (DCT/DST) with real
+            // coefficients. forward() copies the input into its own work buffer, so
+            // fft_in is preserved. Uses the default stream throughout, matching CudaFFT.
+            fft_[STREAM]->forward(reinterpret_cast<T*>(fft_in), d_rk_in_1_one[STREAM]);
 
-        // Multiply exp(-k^2 ds/6) in fourier space
-        ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            // Multiply bond Boltzmann factor (real DCT/DST coefficients)
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Execute a backward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
-        else
-            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
+            fft_[STREAM]->backward(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out));
 
-        // Evaluate exp(-w*ds) in real space
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
+            // Evaluate exp(-w*ds); DCT/DST backward is already normalized (no 1/M).
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(fft_out, fft_out, _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
 
         // Multiply mask (on full grid)
         if (d_q_mask != nullptr)
@@ -998,23 +1018,35 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             }
         }
 
-        // 3D fourier discrete transform, forward
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
-        else
-            cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+        if (this->is_periodic_)
+        {
+            // 3D fourier discrete transform, forward
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
-        gpu_error_check(cudaPeekAtLastError());
+            // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
+            ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // 3D fourier discrete transform, backward
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
+            // 3D fourier discrete transform, backward
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
+            else
+                cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
+            gpu_error_check(cudaPeekAtLastError());
+        }
         else
-            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
-        gpu_error_check(cudaPeekAtLastError());
+        {
+            // Non-periodic BC (reflecting/absorbing): CudaFFT (DCT/DST), real
+            // coefficients, default stream. backward() includes normalization (no 1/M).
+            fft_[STREAM]->forward(reinterpret_cast<T*>(fft_in), d_rk_in_1_one[STREAM]);
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+            fft_[STREAM]->backward(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out));
+        }
 
         // Reduce full grid → reduced basis
         if (space_group_ != nullptr)

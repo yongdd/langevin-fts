@@ -90,12 +90,7 @@ def test_cpu_cuda_equivalence_rqm4():
     )
 
 
-def test_cpu_cuda_equivalence_reflecting_continuous():
-    """Continuous chain + reflecting (DCT) BC must match between CPU and CUDA.
-
-    Regression guard for the CUDA pseudo-spectral DCT path: this is the case the
-    guardrail allows on CUDA, so it must stay correct.
-    """
+def _check_reflecting_equivalence(chain_model):
     platforms = _available_platforms()
     if "cpu-fftw" not in platforms or "cuda" not in platforms:
         return
@@ -103,17 +98,33 @@ def test_cpu_cuda_equivalence_reflecting_continuous():
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1")
 
     bc = ["reflecting"] * 6
-    cpu = _run_solver("cpu-fftw", bc=bc, chain_model="continuous")
-    cuda = _run_solver("cuda", bc=bc, chain_model="continuous")
+    cpu = _run_solver("cpu-fftw", bc=bc, chain_model=chain_model)
+    cuda = _run_solver("cuda", bc=bc, chain_model=chain_model)
 
     assert np.isclose(cpu["Q"], cuda["Q"], rtol=5e-12, atol=1e-12), (
-        f"Reflecting-BC partition mismatch: cpu={cpu['Q']:.15e}, cuda={cuda['Q']:.15e}"
+        f"Reflecting-BC ({chain_model}) partition mismatch: "
+        f"cpu={cpu['Q']:.15e}, cuda={cuda['Q']:.15e}"
     )
     max_diff_a = float(np.max(np.abs(cpu["phi_a"] - cuda["phi_a"])))
     max_diff_b = float(np.max(np.abs(cpu["phi_b"] - cuda["phi_b"])))
     assert max(max_diff_a, max_diff_b) < 1e-9, (
-        f"Reflecting-BC concentration mismatch: A={max_diff_a:.3e}, B={max_diff_b:.3e}"
+        f"Reflecting-BC ({chain_model}) concentration mismatch: "
+        f"A={max_diff_a:.3e}, B={max_diff_b:.3e}"
     )
+
+
+def test_cpu_cuda_equivalence_reflecting_continuous():
+    """Continuous chain + reflecting (DCT) BC must match between CPU and CUDA."""
+    _check_reflecting_equivalence("continuous")
+
+
+def test_cpu_cuda_equivalence_reflecting_discrete():
+    """Discrete chain + reflecting (DCT) BC must match between CPU and CUDA.
+
+    Regression guard for the discrete-chain CUDA DCT/DST path, which previously
+    always used the periodic FFT plans and returned wrong numbers for reflecting BC.
+    """
+    _check_reflecting_equivalence("discrete")
 
 
 def test_cuda_refuses_unsupported_bc():
@@ -122,8 +133,7 @@ def test_cuda_refuses_unsupported_bc():
     returning incorrect results:
 
       - continuous + absorbing  (CUDA DST high-frequency-mode error)
-      - discrete   + reflecting (CUDA DCT wrong for the discrete bond model)
-      - discrete   + absorbing  (CUDA DST wrong for the discrete bond model)
+      - discrete   + absorbing  (CUDA DST high-frequency-mode error)
     """
     platforms = _available_platforms()
     if "cuda" not in platforms:
@@ -133,7 +143,6 @@ def test_cuda_refuses_unsupported_bc():
 
     unsupported = [
         ("continuous", ["absorbing"] * 6),
-        ("discrete", ["reflecting"] * 6),
         ("discrete", ["absorbing"] * 6),
     ]
     for chain_model, bc in unsupported:
