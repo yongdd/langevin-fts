@@ -501,15 +501,18 @@ int main()
                     }
 
                     // ============ ANGLE DERIVATIVE TESTS ============
-                    // The off-diagonal stress components (stress[3], stress[4], stress[5]) are related to
-                    // angle derivatives. The relationship between dH/d(angle) and stress involves geometric
-                    // conversion factors that depend on the crystal system. These tests verify that:
-                    // 1. The off-diagonal stress changes correctly when angles change
-                    // 2. The computed stress matches the numerical derivative within tolerance
-                    //
-                    // NOTE: The conversion factor between dH/dangle and off-diagonal stress is complex
-                    // and depends on the reciprocal metric tensor derivatives. For now, we directly
-                    // compare numerical dH/dangle with the stress times an empirical factor.
+                    // Verified convention (validated by finite difference; see docs/theory/StressTensor.md):
+                    //   stress[3] = +dH/dgamma
+                    //   stress[4] = +dH/dbeta
+                    //   stress[5] = +dH/dalpha
+                    // These tests compare the numerical derivative dH/d(angle) against the
+                    // corresponding stress component and assert agreement within tolerance.
+                    // Like the diagonal checks above, asserted only for rqm4 (and the discrete
+                    // solver, which uses the exact bond-derivative formula): rk2 uses the
+                    // continuum stress formula with a 2nd-order propagator, giving an
+                    // inherent O(ds^2) mismatch (~5e-3) against the finite difference.
+                    if (numerical_method == "rqm4")
+                    {
 
                     // Test dF/dγ (gamma, ab angle) vs stress[3] (xy shear)
                     {
@@ -557,10 +560,11 @@ int main()
 
                         double dAngle_rad = dAngle * PI / 180.0;
                         double dh_dangle = (energy_total_1 - energy_total_2) / dAngle_rad;
-                        // Compute conversion factor: dH/dangle = -factor × stress[3]
-                        double factor_gamma = -dh_dangle / stress[3];
-                        std::cout << "dH/dgamma : " << dh_dangle << ", stress[3] : " << stress[3];
-                        std::cout << ", factor : " << factor_gamma << std::endl;
+                        std::cout << "dH/dgamma : " << dh_dangle << ", stress[3] : " << stress[3] << std::endl;
+                        double relative_stress_error = std::abs(dh_dangle - stress[3])/std::abs(stress[3]);
+                        std::cout << "Relative angle stress error : " << relative_stress_error << std::endl;
+                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                            return -1;
                     }
 
                     // Test dF/dβ (beta, ac angle) vs stress[4] (xz shear)
@@ -609,9 +613,11 @@ int main()
 
                         double dAngle_rad = dAngle * PI / 180.0;
                         double dh_dangle = (energy_total_1 - energy_total_2) / dAngle_rad;
-                        double factor_beta = -dh_dangle / stress[4];
-                        std::cout << "dH/dbeta : " << dh_dangle << ", stress[4] : " << stress[4];
-                        std::cout << ", factor : " << factor_beta << std::endl;
+                        std::cout << "dH/dbeta : " << dh_dangle << ", stress[4] : " << stress[4] << std::endl;
+                        double relative_stress_error = std::abs(dh_dangle - stress[4])/std::abs(stress[4]);
+                        std::cout << "Relative angle stress error : " << relative_stress_error << std::endl;
+                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                            return -1;
                     }
 
                     // Test dF/dα (alpha, bc angle) vs stress[5] (yz shear)
@@ -660,9 +666,12 @@ int main()
 
                         double dAngle_rad = dAngle * PI / 180.0;
                         double dh_dangle = (energy_total_1 - energy_total_2) / dAngle_rad;
-                        double factor_alpha = -dh_dangle / stress[5];
-                        std::cout << "dH/dalpha: " << dh_dangle << ", stress[5] : " << stress[5];
-                        std::cout << ", factor : " << factor_alpha << std::endl;
+                        std::cout << "dH/dalpha: " << dh_dangle << ", stress[5] : " << stress[5] << std::endl;
+                        double relative_stress_error = std::abs(dh_dangle - stress[5])/std::abs(stress[5]);
+                        std::cout << "Relative angle stress error : " << relative_stress_error << std::endl;
+                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                            return -1;
+                    }
                     }
 
                     delete molecules;
