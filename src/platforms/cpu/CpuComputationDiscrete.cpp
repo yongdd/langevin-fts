@@ -258,15 +258,23 @@ void CpuComputationDiscrete<T>::compute_propagators(
         // Update dw or exp_dw (solver handles reduced basis internally when enabled)
         this->propagator_solver->update_dw(w_input);
 
-        // Compute exp_dw in reduced basis for later use in compute_concentrations
+        // Compute exp_dw in reduced basis for later use in compute_concentrations.
+        // In CrysFFT mode the solver already stores exp_dw in the reduced basis
+        // (size N); otherwise it is on the full grid and must be converted.
         if (use_reduced_basis)
         {
-            for (const auto& [monomer_type, exp_dw_full] : this->propagator_solver->exp_dw[0])
+            for (const auto& [monomer_type, exp_dw_solver] : this->propagator_solver->exp_dw[0])
             {
                 if (exp_dw_reduced_.find(monomer_type) == exp_dw_reduced_.end())
                     exp_dw_reduced_[monomer_type].resize(N);
                 if constexpr (std::is_same_v<T, double>)
-                    this->space_group_->to_reduced_basis(exp_dw_full.data(), exp_dw_reduced_[monomer_type].data(), 1);
+                {
+                    if (static_cast<int>(exp_dw_solver.size()) == N)
+                        std::copy(exp_dw_solver.begin(), exp_dw_solver.end(),
+                                  exp_dw_reduced_[monomer_type].begin());
+                    else
+                        this->space_group_->to_reduced_basis(exp_dw_solver.data(), exp_dw_reduced_[monomer_type].data(), 1);
+                }
             }
         }
 
@@ -445,9 +453,18 @@ void CpuComputationDiscrete<T>::compute_propagators(
                             this->propagator_solver->advance_propagator_half_bond_step(
                                 _propagator[1], _propagator[1], monomer_type);
 
-                            // Add full segment (in reduced basis)
-                            for(int i=0; i<N; i++)
-                                _propagator[1][i] *= _exp_dw[i];
+                            // Add full segment (apply exp_dw in appropriate basis)
+                            if (use_reduced_basis)
+                            {
+                                const T* _exp_dw_reduced = exp_dw_reduced_[monomer_type].data();
+                                for(int i=0; i<N; i++)
+                                    _propagator[1][i] *= _exp_dw_reduced[i];
+                            }
+                            else
+                            {
+                                for(int i=0; i<N; i++)
+                                    _propagator[1][i] *= _exp_dw[i];
+                            }
                         }
                         else
                         {
@@ -781,14 +798,12 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             double volume_fraction = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
-            // Partition function needs full grid for cb->mean
-            const T *_exp_dw_full = this->propagator_solver->exp_dw[0][monomer_type].data();
-            this->single_solvent_partitions[s] = this->cb->mean(_exp_dw_full);
-
-            // Use appropriate basis for phi calculation
+            // cb->mean operates on the reduced basis when space_group is set,
+            // and on the full grid otherwise — pass the matching representation.
             const T *_exp_dw = use_reduced_basis
                 ? exp_dw_reduced_[monomer_type].data()
-                : _exp_dw_full;
+                : this->propagator_solver->exp_dw[0][monomer_type].data();
+            this->single_solvent_partitions[s] = this->cb->mean(_exp_dw);
             T norm = volume_fraction / this->single_solvent_partitions[s];
             for(int i=0; i<N; i++)
                 _phi[i] = _exp_dw[i] * norm;
@@ -968,7 +983,7 @@ void CpuComputationDiscrete<T>::compute_stress()
         //   ∂H/∂L₁ ∝ L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃
         //   ∂H/∂γ  ∝ -L₁L₂sinγ·V₁₂
         //
-        // @see docs/StressTensorCalculation.md for derivation
+        // @see docs/theory/StressTensor.md for derivation
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);
