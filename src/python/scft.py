@@ -1732,20 +1732,20 @@ class SCFT:
 
                 # Only include stress components that are being optimized
                 # Stress array layout differs by dimension:
-                # 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-                # 2D: [σ_xx, σ_yy, σ_xy, 0, 0, 0]
+                # 3D: [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
+                # 2D: [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]
                 # For 1D/2D, only include stress components for existing dimensions
                 diagonal_stress = stress_array[0:dim]
                 # For non-orthogonal systems, include off-diagonal stress if angles are being optimized
                 angle_stress_indices = []
                 if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
                     # Mapping from angle index to stress array index
-                    # 3D: α→σ_yz(5), β→σ_xz(4), γ→σ_xy(3)
-                    # 2D: γ→σ_xy(2) (only γ matters in 2D)
+                    # 3D: α→index 5, β→index 4, γ→index 3
+                    # 2D: γ→index 2 (only γ matters in 2D)
                     if dim == 3:
                         angle_stress_map = {0: 5, 1: 4, 2: 3}
                     else:  # dim == 2
-                        angle_stress_map = {2: 2}  # γ→σ_xy at index 2 for 2D
+                        angle_stress_map = {2: 2}  # γ at index 2 for 2D
                     for i in self.angles_reduced_indices:
                         if i in angle_stress_map:
                             angle_stress_indices.append(angle_stress_map[i])
@@ -1796,17 +1796,17 @@ class SCFT:
             # Note: w and w_diff are in irreducible basis when space group is set
             if self.box_is_altering:
                 # Stress components:
-                # [0,1,2] = σ_xx, σ_yy, σ_zz (diagonal) - for box lengths
-                # [3,4,5] = σ_xy, σ_xz, σ_yz (off-diagonal) - for angles
+                # [0,1,2] = dH/dL1, dH/dL2, dH/dL3 - for box lengths
+                # [3,4,5] = dH/dγ, dH/dβ, dH/dα - for angles
                 dlx_full = -stress_array[0:3]  # Diagonal stress for lengths
 
                 # For crystal systems with constraints (a=b or a=b=c), average the constrained stress components
                 if hasattr(self, 'crystal_system'):
                     if self.crystal_system == "Hexagonal2D":
-                        # 2D hexagonal: a = b, average σ_xx and σ_yy for the combined parameter
+                        # 2D hexagonal: a = b, average the two length derivatives
                         dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
                     elif self.crystal_system == "Tetragonal" or (self.crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
-                        # Tetragonal/3D Hexagonal: a = b ≠ c, average σ_xx and σ_yy for a, keep σ_zz for c
+                        # Tetragonal/3D Hexagonal: a = b ≠ c, average first two derivatives for a, keep third for c
                         dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
                     elif self.crystal_system == "Cubic":
                         # Cubic: a = b = c, average all three components
@@ -1818,20 +1818,20 @@ class SCFT:
                     dlx_reduced = dlx_full[self.lx_reduced_indices]
 
                 # Map off-diagonal stress to angle gradients
-                # For Monoclinic: σ_xz (index 4) drives β angle
-                # For Triclinic: σ_xy→γ, σ_xz→β, σ_yz→α
+                # For Monoclinic: stress index 4 (dH/dβ) drives β angle
+                # For Triclinic: index 3→γ, index 4→β, index 5→α
                 # Stress array layout differs by dimension:
-                # 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-                # 2D: [σ_xx, σ_yy, σ_xy, 0, 0, 0]
-                # Note: Sign is POSITIVE (not negative like for lengths) because:
-                # - Metric g_ij contains cos(γ) for off-diagonal terms
-                # - d(cos(γ))/dγ = -sin(γ), which flips the sign
-                # - So dγ = +σ_xy (not -σ_xy) for gradient descent
+                # 3D: [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
+                # 2D: [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]
+                # get_stress() returns +dH/d(parameter) for angles as well as lengths
+                # (the d(cosγ)/dγ = -sinγ factor is already applied in the C++
+                # compute_stress post-processing), so gradient descent uses the
+                # same negative sign as for the box lengths.
                 if dim == 3:
                     angle_stress_map = {0: 5, 1: 4, 2: 3}
                 else:  # dim == 2
-                    angle_stress_map = {2: 2}  # γ→σ_xy at index 2 for 2D
-                dangle = np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
+                    angle_stress_map = {2: 2}  # γ at index 2 for 2D
+                dangle = -np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
 
                 # Current values
                 current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
