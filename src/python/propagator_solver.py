@@ -238,7 +238,7 @@ class PropagatorSolver:
                 platform = "cpu-mkl"
         self.platform = platform
 
-        # CUDA pseudo-spectral non-periodic BC support (verified vs CPU to machine
+        # Pseudo-spectral non-periodic BC support (verified vs CPU to machine
         # precision, 1D/2D/3D, continuous and discrete):
         #   - reflecting (DCT): correct
         #   - absorbing (DST): correct
@@ -249,22 +249,25 @@ class PropagatorSolver:
             b in ["reflecting", "absorbing"] for b in bc_lower
         )
         has_periodic = any(b == "periodic" for b in bc_lower)
-        if self.platform == "cuda" and self.method == "pseudospectral":
-            if has_periodic and self._has_non_periodic_bc:
-                # The spectral transform cannot mix periodic and non-periodic
-                # directions. CN-ADI2 handles it, but only for continuous chains.
-                if self.chain_model == "discrete":
-                    raise NotImplementedError(
-                        "CUDA does not support mixing periodic and non-periodic "
-                        "boundary conditions for the discrete chain model. "
-                        "Use platform='cpu-mkl' or 'cpu-fftw', or use all-periodic "
-                        "or all-reflecting boundary conditions."
-                    )
-                print("Note: mixing periodic and non-periodic BCs is not supported by "
-                      "the pseudo-spectral transform; switching to the real-space "
-                      "CN-ADI2 method.")
-                self.method = "realspace"
-                self.numerical_method = "cn-adi2"
+        if self.method == "pseudospectral" and has_periodic and self._has_non_periodic_bc:
+            # The spectral transform cannot mix periodic and non-periodic
+            # directions on any platform. Do NOT silently switch solvers —
+            # respect the requested numerical_method and fail loudly instead.
+            if self.chain_model == "discrete":
+                raise NotImplementedError(
+                    "Mixing periodic and non-periodic boundary conditions is not "
+                    "supported by the pseudo-spectral transform, and the discrete "
+                    "chain model has no real-space solver. Use uniform boundary "
+                    "conditions (all-periodic, all-reflecting, or all-absorbing)."
+                )
+            raise ValueError(
+                "Mixing periodic and non-periodic boundary conditions is not "
+                "supported by the pseudo-spectral method "
+                f"(requested numerical_method='{self.numerical_method}'). "
+                "Either set numerical_method='cn-adi2' to use the real-space "
+                "solver (continuous chains only), or use uniform boundary "
+                "conditions in all directions."
+            )
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
@@ -983,7 +986,9 @@ class PropagatorSolver:
         Returns
         -------
         list of float
-            Stress components [sigma_xx, sigma_yy, sigma_zz, sigma_xy, sigma_xz, sigma_yz].
+            Lattice-parameter derivatives of the free energy:
+            3D: [dH/dL1, dH/dL2, dH/dL3, dH/d(gamma), dH/d(beta), dH/d(alpha)]
+            2D: [dH/dL1, dH/dL2, dH/d(gamma), 0, 0, 0]; 1D: only index 0.
         """
         if not self._fields_set:
             raise RuntimeError(
