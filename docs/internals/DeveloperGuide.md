@@ -74,12 +74,19 @@ AbstractFactory<T>                    [Abstract Base]
 ```cpp
 #include "PlatformSelector.h"
 
-// Create factory for specific platform
-auto factory = PlatformSelector::create_factory("cuda", reduce_memory);
+// Create factory for a specific platform ("cpu-fftw", "cpu-mkl", or "cuda")
+AbstractFactory<double>* factory =
+    PlatformSelector::create_factory_real("cuda", reduce_memory);
 
-// Or use automatic selection (GPU for 2D/3D, CPU for 1D)
-auto factory = PlatformSelector::create_factory("auto", reduce_memory);
+// For complex-valued field theories
+AbstractFactory<std::complex<double>>* factory_complex =
+    PlatformSelector::create_factory_complex("cuda", reduce_memory);
 ```
+
+**Notes:**
+
+- The only recognized platform strings are `"cpu-fftw"`, `"cpu-mkl"`, and `"cuda"`; any other name (including `"auto"`) throws `Could not find platform '...'`. Automatic platform selection (GPU for 2D/3D, CPU for 1D) is implemented purely in the Python layer (`src/python/propagator_solver.py`, `src/python/scft.py`), not in C++.
+- The Python binding exposes a static `PlatformSelector.create_factory(platform_name, reduce_memory, type)` (with `type` = `"real"` or `"complex"`) that dispatches to `create_factory_real`/`create_factory_complex` (`src/pybind11/polymerfts_core.cpp`).
 
 ### Factory Methods
 
@@ -88,7 +95,7 @@ auto factory = PlatformSelector::create_factory("auto", reduce_memory);
 | `create_computation_box(nx, lx, bc)` | `ComputationBox<T>*` | Simulation grid with boundary conditions |
 | `create_computation_box(nx, lx, bc, mask)` | `ComputationBox<T>*` | Grid with impenetrable mask regions |
 | `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
-| `create_propagator_computation(box, molecules, optimizer, method)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2) |
+| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
 
 ---
@@ -154,13 +161,23 @@ PropagatorComputation<T>                      [Abstract Base]
         │   └── CpuComputationDiscrete<T>     [Discrete Chains]
         │       └── Boltzmann weight + bond convolution
         │
-        └── CudaComputationBase<T>            [GPU Common Logic]
+        ├── CpuComputationReduceMemoryBase<T> [CPU Checkpointing Logic]
+        │   │
+        │   ├── CpuComputationReduceMemoryContinuous<T>
+        │   └── CpuComputationReduceMemoryDiscrete<T>
+        │
+        ├── CudaComputationBase<T>            [GPU Common Logic]
+        │   │
+        │   ├── CudaComputationContinuous<T>
+        │   └── CudaComputationDiscrete<T>
+        │
+        └── CudaComputationReduceMemoryBase<T> [GPU Checkpointing Logic]
             │
-            ├── CudaComputationContinuous<T>
-            ├── CudaComputationDiscrete<T>
             ├── CudaComputationReduceMemoryContinuous<T>
             └── CudaComputationReduceMemoryDiscrete<T>
 ```
+
+The memory-saving (`reduce_memory=True`) classes on both platforms derive from their own `*ReduceMemoryBase<T>` classes, which inherit directly from `PropagatorComputation<T>` — not from `CpuComputationBase<T>`/`CudaComputationBase<T>`.
 
 **Chain Models:**
 

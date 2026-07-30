@@ -95,6 +95,8 @@ $$\langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi$$
 
 where $\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)$.
 
+> **Implementation note:** In `scft.py`, this per-iteration mean pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). With the default setting, the residual means are subtracted each iteration but the field means themselves are not pinned: in the compressible case they retain their initial values, and in the incompressible case they are simply zeroed ($\langle w_i \rangle = 0$ convention).
+
 This approach converges at the same rate as the incompressible case because:
 - The fluctuation part sees only the $\chi N$ eigenvalue (via $P$)
 - The mean is set directly from the known pressure field, requiring no iteration
@@ -105,7 +107,9 @@ At convergence with $\phi_A = \phi_B \approx 0.5$ and $\xi \approx 0$:
 
 $$\langle w_A \rangle = \langle w_B \rangle = \frac{\chi N}{2} = 6.635$$
 
-$$\langle W_+ \rangle = \frac{\langle w_A \rangle + \langle w_B \rangle}{\sqrt{2}} = \frac{\chi N}{\sqrt{2}} \approx 9.38$$
+$$\langle W_+ \rangle = \frac{\langle w_A \rangle + \langle w_B \rangle}{2} = \frac{\chi N}{2} \approx 6.64$$
+
+using the implemented normalization $\boldsymbol{\Omega} = O^T \mathbf{w} / M$ with $M = 2$ (see [PolymerFieldTheory.md](PolymerFieldTheory.md)).
 
 ---
 
@@ -164,25 +168,26 @@ Iteration terminates when $\epsilon < \text{tolerance}$ (typically $10^{-7}$ to 
 
 The equilibrium unit cell minimizes the free energy. The stress residuals are:
 
-$$\mathbf{R}_{stress} = -\frac{1}{Q} \frac{\partial Q}{\partial \boldsymbol{\theta}}$$
+$$\mathbf{R}_{stress} = -\frac{\partial H}{\partial \boldsymbol{\theta}}$$
 
-where $\boldsymbol{\theta} = [L_a, L_b, L_c, \alpha, \beta, \gamma]^T$ contains the unit cell parameters.
+where $\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T$ contains the unit cell parameters. Note the angle ordering: the API (`get_stress()`) returns the derivatives $+\partial H / \partial \boldsymbol{\theta}$ as the array $[\partial H/\partial L_a, \partial H/\partial L_b, \partial H/\partial L_c, \partial H/\partial \gamma, \partial H/\partial \beta, \partial H/\partial \alpha]$ (in 2D, $\partial H/\partial \gamma$ is stored at index 2). For a single polymer species, $\partial H / \partial \boldsymbol{\theta}$ is equivalent to $-(1/Q) \, \partial Q / \partial \boldsymbol{\theta}$.
 
 ### 4.2 Box Update
 
 During SCFT iteration with `box_is_altering=True`:
 
-$$L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \sigma_a$$
+$$L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}$$
 
-$$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{bc}$$
+$$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \frac{\partial H}{\partial \alpha}$$
 
-where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish.
+where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing or ADAM); the plain gradient-descent update above corresponds to the simple-mixing limit.
 
 **Implementation details:**
 - Box size changes are limited to 10% per iteration
 - Angle changes are limited to 5° per iteration
-- Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 3)
+- Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 1)
 - Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
+- Stress computation currently requires **fully periodic boundary conditions** and a pseudo-spectral method: any non-periodic (reflecting/absorbing) BC raises an error, and the real-space CN-ADI2 solver does not support stress. `box_is_altering=True` is therefore limited to periodic, pseudo-spectral setups.
 
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.
 
@@ -258,11 +263,13 @@ solver = PropagatorSolver(
     bc=["periodic"] * 4,
 )
 solver.add_polymer(volume_fraction=1.0,
-                   blocks=[{"type": "A", "length": 0.5},
-                           {"type": "B", "length": 0.5}])
+                   blocks=[["A", 0.5, 0, 1],   # [monomer_type, length, v, u]
+                           ["B", 0.5, 1, 2]])  # v, u are node indices
 
-# Initialize fields
-w = {"A": np.sin(...), "B": -np.sin(...)}
+# Initialize fields (flattened arrays matching the 64x64 grid)
+x = np.linspace(0, 2*np.pi, 64, endpoint=False)
+X, _ = np.meshgrid(x, x, indexing="ij")
+w = {"A": 5.0*np.sin(X).flatten(), "B": -5.0*np.sin(X).flatten()}
 chi_n = 20.0
 lambda_mix = 0.5
 
@@ -295,7 +302,7 @@ for iteration in range(1000):
 | Free energy | `calculation.free_energy` | Helmholtz free energy per chain |
 | Partition function | `solver.get_partition_function(p)` | Single-chain partition function |
 | Box size | `calculation.cb.get_lx()` | Final box dimensions |
-| Stress | `calculation.stress` | Stress tensor components |
+| Stress | `result.stress` | Stress components; available via `result = calculation.run(..., return_result=True)` (set only when `box_is_altering=True`), or via `solver.compute_stress()` / `solver.get_stress()` |
 
 ### 5.4 Additional Features
 

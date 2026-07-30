@@ -28,7 +28,7 @@ params = {
 Memory usage depends on:
 - $M$: Total grid points (e.g., $64^3 = 262,144$)
 - $N$: Total segments across all propagators
-- $C$: Number of checkpoints (approximately $2\sqrt{N}$ for each propagator)
+- $C$: Number of checkpoints (checkpoints are stored every $\lceil 2\sqrt{N} \rceil$ steps, giving approximately $\sqrt{N}/2$ checkpoints for each propagator)
 
 | Mode | Memory Complexity | Computation Complexity |
 |------|-------------------|------------------------|
@@ -194,8 +194,10 @@ where $N_{\text{checkpoints}} \approx N / (2\sqrt{N}) = \sqrt{N}/2$ per propagat
 | $160^3$ | 31.4 GB | 2.5 GB | 92% |
 | $200^3$ | **61.5 GB** | **4.9 GB** | **92%** |
 
-**Key insight**: For N=500, memory savings are consistently ~92% because:
-$$\text{Savings} \approx 1 - \frac{O(\sqrt{N})}{O(N)} = 1 - \frac{1}{\sqrt{N}} \approx 1 - \frac{1}{22.4} \approx 95.5\%$$
+**Key insight**: For N=500, memory savings are consistently ~92% because the memory-saving mode stores only $\approx \sqrt{N}/2$ checkpoints per propagator plus a recomputation workspace of $\approx 2\sqrt{N}$ arrays, instead of all $N$ propagator arrays:
+$$\text{Savings} \approx 1 - \frac{\sqrt{N}/2 + 2\sqrt{N}}{N} = 1 - \frac{2.5}{\sqrt{N}} \approx 1 - \frac{2.5}{22.4} \approx 89\%$$
+
+The measured savings (~92%) are slightly higher than this estimate because the workspace is shared across propagators rather than allocated per propagator.
 
 ### Target Configuration: N=500, M=200³
 
@@ -222,6 +224,8 @@ $$\text{Savings} \approx 1 - \frac{O(\sqrt{N})}{O(N)} = 1 - \frac{1}{\sqrt{N}} \
 - Long polymer chains (N > 200)
 - Complex architectures with many blocks
 - Running multiple simulations concurrently
+
+**Restriction (space-group symmetry)**: `reduce_memory=True` is not available for discrete chains combined with space-group symmetry — the CPU implementation throws "Space group symmetry is not yet supported for discrete chains with reduce_memory=True." (On CUDA, discrete chains with a space group are unsupported in both standard and reduce-memory modes.) Use continuous chains, standard mode on CPU, or drop the space group.
 
 ### Quick Reference
 
@@ -274,7 +278,7 @@ This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing 
 ### CPU-Specific Details
 
 - **Block-based computation**: Processes concentration in blocks of $2\sqrt{N}$ for efficient checkpoint reuse
-- **$2\sqrt{N}$ checkpoints**: Stores checkpoints at optimal intervals
+- **Checkpoint spacing**: Stores $\sim\sqrt{N}/2$ checkpoints at intervals of $2\sqrt{N}$ segments
 - **Single-threaded recomputation**: Minimizes memory during checkpoint reconstruction
 - **FFT**: MKL or FFTW for spectral operations
 
@@ -285,6 +289,8 @@ This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing 
 # Enable memory-saving mode
 params["reduce_memory"] = True
 ```
+
+**Note**: This does not work for discrete chains with space-group symmetry (`reduce_memory=True` + discrete + space group throws on CPU, and discrete + space group is unsupported on CUDA altogether). See the restriction in [Choosing the Right Mode](#choosing-the-right-mode).
 
 ### Slow Performance with Memory-Saving
 - Consider if standard mode fits in memory

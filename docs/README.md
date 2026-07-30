@@ -29,6 +29,7 @@
 | [FFTImplementation.md](internals/FFTImplementation.md) | FFT, DCT, DST, CrysFFT implementation |
 | [PropagatorSystem.md](internals/PropagatorSystem.md) | Propagator identification and scheduling |
 | [MemoryManagement.md](internals/MemoryManagement.md) | Memory optimization and checkpointing |
+| [CudaMPS.md](internals/CudaMPS.md) | CUDA Multi-Process Service (MPS) for running multiple simulations on one GPU |
 
 ## References
 

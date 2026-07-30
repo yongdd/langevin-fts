@@ -90,7 +90,7 @@ For large systems that exceed GPU memory:
 params["reduce_memory"] = True
 ```
 
-This stores only checkpoints and recomputes intermediate values, reducing memory by ~90% at the cost of 3-4x slower execution.
+This stores only checkpoints and recomputes intermediate values, reducing memory by ~90% at the cost of 2-4x slower execution.
 
 ### Multi-threading Settings
 

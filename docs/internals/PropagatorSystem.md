@@ -240,9 +240,12 @@ Time 20-30: F+0 (stream 0)
 
 ```cpp
 struct ComputationEdge {
-    std::string monomer_type;
     int max_n_segment;  // Number of contour steps
+    std::string monomer_type;
     std::vector<std::tuple<std::string, int, int>> deps;  // (key, n_segment, n_repeated)
+    int height;         // Height of the propagator in the dependency tree (used by the scheduler)
+    std::set<int> junction_ends;  // Indices where additional half-bond-step computation
+                                  // is required (discrete chains)
 };
 ```
 
@@ -276,7 +279,7 @@ for (size_t job = 0; job < parallel_job->size(); job++) {
 }
 ```
 
-Default: 4 CUDA streams (hardcoded in `CudaComputationContinuous`)
+Stream count: `min(OMP_NUM_THREADS, MAX_STREAMS)` when the `OMP_NUM_THREADS` environment variable is set, otherwise `MAX_STREAMS`. The cap `MAX_STREAMS` (= 4) is defined in `CudaCommon.h`.
 
 ### 6.2 CPU (OpenMP Threads)
 
@@ -363,7 +366,7 @@ Time 10-15:
 
 Keys are compared using `ComparePropagatorKey`:
 1. First by height (lower height first)
-2. Then lexicographically (for deterministic ordering)
+2. Then in reverse (descending) lexicographic order (`str1 > str2`) — deterministic, but descending
 
 ---
 

@@ -176,15 +176,17 @@ where:
 
 ### 5.2 Example: Diblock + Homopolymer Mixture
 
+`PropagatorSolver.add_polymer` takes each block as a list `[monomer_type, length, v, u]`, where `v` and `u` are the node indices defining the block connectivity:
+
 ```python
 # AB diblock (80% volume fraction)
 solver.add_polymer(volume_fraction=0.8,
-                   blocks=[{"type": "A", "length": 0.5},
-                           {"type": "B", "length": 0.5}])
+                   blocks=[["A", 0.5, 0, 1],
+                           ["B", 0.5, 1, 2]])
 
 # A homopolymer (20% volume fraction)
 solver.add_polymer(volume_fraction=0.2,
-                   blocks=[{"type": "A", "length": 0.5}])
+                   blocks=[["A", 0.5, 0, 1]])
 ```
 
 ---
@@ -208,6 +210,8 @@ Boundary conditions are specified as a list `[x_low, x_high, y_low, y_high, z_lo
 bc = ["periodic", "periodic", "periodic", "periodic", "reflecting", "reflecting"]
 ```
 
+> **Note:** Mixing periodic and non-periodic boundary conditions is **not** supported by the pseudo-spectral methods (`rqm4`, `rk2`, or the discrete-chain solver) — the solver raises an error on all platforms. The confined-film example above requires `numerical_method="cn-adi2"` (real-space solver, continuous chains only); for discrete chains it cannot be used at all. Uniform boundary conditions (all-periodic, all-reflecting, or all-absorbing) work with all numerical methods.
+
 ---
 
 ## 7. Implementation
@@ -230,14 +234,16 @@ solver = PropagatorSolver(
 )
 
 # Add AB diblock copolymer
+# Each block is [monomer_type, length, v, u] with node indices v, u
 solver.add_polymer(
     volume_fraction=1.0,
-    blocks=[{"type": "A", "length": 0.7},
-            {"type": "B", "length": 0.3}]
+    blocks=[["A", 0.7, 0, 1],
+            ["B", 0.3, 1, 2]]
 )
 
-# Set potential fields
-w_A = np.sin(np.linspace(0, 2*np.pi, 64))
+# Set potential fields (size must match the full grid, 64*64)
+x = np.linspace(0, 2*np.pi, 64, endpoint=False)
+w_A = np.tile(np.sin(x), (64, 1))  # shape (64, 64)
 w_B = -w_A
 solver.compute_propagators({"A": w_A.flatten(), "B": w_B.flatten()})
 

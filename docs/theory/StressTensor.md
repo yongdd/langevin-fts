@@ -134,7 +134,7 @@ The stress is stored as a 6-component array (Voigt notation):
 | 4 | $\sigma_{ac}$ | $\beta$ |
 | 5 | $\sigma_{bc}$ | $\alpha$ |
 
-For 2D systems, indices 0, 1 are used (and 3 for non-orthogonal cells). For 1D systems, only index 0 is used.
+For 2D systems, indices 0, 1 are used, and the $\gamma$ derivative is stored at **index 2** for non-orthogonal cells. For 1D systems, only index 0 is used.
 
 ### Chain Model Dependence
 
@@ -148,13 +148,17 @@ The bond factor $\Phi(k)$ differs between chain models:
 
 ### Boundary Conditions
 
+> **⚠️ Restriction:** Stress computation currently requires **periodic boundary conditions in every direction**. Calling `compute_stress()` with any reflecting or absorbing boundary condition throws `"Stress computation with non-periodic boundary conditions is not supported yet. Use periodic boundary conditions."` on all platforms and for both chain models. (An internal non-periodic branch exists but is disabled: its flat Parseval weight is incorrect for the special DCT/DST modes, e.g. 3D reflecting is off by ~0.6x.) The real-space CN-ADI2 method does not support stress computation either. Consequently, `box_is_altering=True` can only be used with fully periodic boundaries.
+
+For reference, the wavenumber conventions of the spectral transforms are (with $m = 0, 1, \ldots, N-1$):
+
 | Boundary Condition | Transform | Wavenumber |
 |-------------------|-----------|------------|
 | Periodic | FFT | $(2\pi m/L)^2$ |
 | Reflecting | DCT-II | $(\pi m/L)^2$ |
-| Absorbing | DST-II | $(\pi m/L)^2$ |
+| Absorbing | DST-II | $(\pi (m+1)/L)^2$ |
 
-Non-periodic boundary conditions require orthogonal grids.
+Note that the absorbing (DST) wavenumbers are shifted by one mode relative to the reflecting (DCT) wavenumbers: the DST spectrum starts at $\pi/L$ rather than $0$.
 
 ### Computation Steps
 
@@ -172,13 +176,17 @@ $$\sigma_i \propto \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot \frac{\partia
 
 ## 5. Box Optimization
 
-During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
+During SCFT iteration with `box_is_altering=True`, the scaled negative stress components are appended to the potential-field residuals, and the combined vector is passed to the field optimizer (Anderson mixing or ADAM), which updates the fields and lattice parameters together:
+
+$$\Delta\theta_i = \eta \cdot (-\sigma_i)$$
+
+where $\eta$ is the `scale_stress` parameter and $\theta_i$ runs over the optimized lengths and angles (the negative sign applies to both: `get_stress()` returns $+\partial H/\partial\theta_i$ for lengths *and* angles). In the simple-mixing limit this reduces to gradient descent:
 
 $$L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \sigma_a, \quad L_b^{(n+1)} = L_b^{(n)} - \eta \cdot \sigma_b, \quad L_c^{(n+1)} = L_c^{(n)} - \eta \cdot \sigma_c$$
 
 $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{bc}, \quad \beta^{(n+1)} = \beta^{(n)} - \eta \cdot \sigma_{ac}, \quad \gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{ab}$$
 
-where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish.
+but in general the optimizer mixes the stress history along with the field history (Anderson mixing accelerates convergence of both simultaneously). For stability, the resulting step is clipped: each box length may change by at most 10% per iteration, and each angle by at most 5 degrees per iteration. At equilibrium, all stress components vanish.
 
 Tyler and Morse [1] proposed iterating the unit cell parameters simultaneously with the SCFT equations, which typically converges in approximately the same number of iterations as solving in a fixed unit cell.
 

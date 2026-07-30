@@ -156,8 +156,12 @@ Both DCT and DST follow FFTW's unnormalized convention.
 |-----------|------------------|
 | 1D DCT-1 | 2(N-1) for N+1 points |
 | 1D DCT-2/3/4 | 2N |
-| 2D (all types) | 4 N_x N_y |
-| 3D (all types) | 8 N_x N_y N_z |
+| 2D DCT-1 | 4(N_x-1)(N_y-1) |
+| 2D DCT-2/3/4 | 4 N_x N_y |
+| 3D DCT-1 | 8(N_x-1)(N_y-1)(N_z-1) |
+| 3D DCT-2/3/4 | 8 N_x N_y N_z |
+
+Multi-dimensional normalization is the product of the per-dimension factors (DCT-1 contributes 2(N-1) per dimension; types 2/3/4 contribute 2N).
 
 ### DST Normalization Factors
 
@@ -193,7 +197,7 @@ q_out = DCT-III[ exp(-k^2 * coeff) * DCT-II[q_in] ]
 ```
 
 - Physical grid: `(Nx/2) x (Ny/2) x (Nz/2)`
-- Wavenumbers: k = π * i / L
+- Wavenumbers: k = 2π * i / L (the physical DCT grid spans L/2, so the mode spacing is π/(L/2) = 2π/L)
 
 #### 3m Recursive (2x2x2) Algorithm
 
@@ -208,7 +212,7 @@ For space groups with 3m translations (mirror + translational offsets):
 For space groups with z-mirror and α=β=90° (γ arbitrary):
 
 ```
-q_out = DCT-III_z[ exp(-k^2 * coeff) * FFT_xy[ DCT-II_z[q_in] ] ]
+q_out = DCT-III_z[ IFFT_xy[ exp(-k^2 * coeff) * FFT_xy[ DCT-II_z[q_in] ] ] ]
 ```
 
 - Physical grid: `Nx x Ny x (Nz/2)`
@@ -221,8 +225,8 @@ CrysFFT is enabled automatically when:
 - `space_group` is set
 - Dimension is 3D
 - Boundary conditions are periodic
-- `Nx`, `Ny`, `Nz` are even
 - Fields are real-valued
+- Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis)
 
 **Selection order:**
 1. **3m recursive** if space group provides 3m translations and `Nz/2 % 8 == 0`
@@ -261,12 +265,24 @@ The solver automatically selects the fastest compatible physical basis.
 
 ### 7.1 CPU
 
+**FFTW backend** (`POLYMERFTS_USE_FFTW`):
+
 - `FftwFFT<T, DIM>`: Standard FFT using FFTW3
 - `FftwCrysFFTPmmm`: Pmmm DCT using FFTW REDFT10/REDFT01
 - `FftwCrysFFTRecursive3m`: Recursive 3m algorithm
 - `FftwCrysFFTObliqueZ`: DCT-z + FFT-xy
 
-**Threading**: FFTW multithreading is disabled; concurrency is handled at the solver level (OpenMP over propagators). Thread-local buffers are used to avoid race conditions.
+**MKL backend** (`POLYMERFTS_USE_MKL`):
+
+- `MklFFT<T, DIM>`: Standard FFT using MKL DFTI
+- `MklRealTransform1D/2D/3D`: DCT/DST (FFT-based algorithms + MKL TT interface, see Section 8.2)
+- `MklCrysFFTPmmm`: Pmmm DCT
+- `MklCrysFFTRecursive3m`: Recursive 3m algorithm
+- `MklCrysFFTObliqueZ`: DCT-z + FFT-xy
+
+`CpuSolverPseudoBase` holds CrysFFT members for both backends (`crysfft_*_fftw_` and `crysfft_*_mkl_`) and uses whichever library the build enables.
+
+**Threading**: FFTW/MKL multithreading is disabled; concurrency is handled at the solver level (OpenMP over propagators). Thread-local buffers are used to avoid race conditions.
 
 ### 7.2 CUDA
 
@@ -337,9 +353,9 @@ All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative 
 **Setup**: 3D transforms, single-threaded, Intel Xeon
 
 The MKL implementation (`MklRealTransform`) uses:
-- **DCT-II, DCT-III, DCT-IV, DST-IV**: MKL TT interface, O(N log N)
-- **DCT-I, DST-I**: FFT-based via symmetric/antisymmetric extension, O(N log N)
-- **DST-II, DST-III**: Direct computation, O(N²) (optimization pending)
+- **DCT-IV, DST-IV**: MKL TT interface, O(N log N)
+- **DCT-II, DCT-III, DST-II, DST-III**: FFT-based N-point algorithm with precomputed twiddle factors (Makhoul), O(N log N)
+- **DCT-I, DST-I**: FFT-based via symmetric/antisymmetric extension (2(N-1)- and 2(N+1)-point FFTs), O(N log N)
 
 | Transform | 32³ | 48³ | 64³ |
 |-----------|-----|-----|-----|

@@ -38,7 +38,12 @@ This document provides a complete reference for all simulation parameters.
 
 Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implements these boundary conditions using ghost cells.
 
-**Example (reflecting in z, periodic in x/y):**
+**Restrictions:**
+- Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require **uniform** boundary conditions: all-periodic, all-reflecting, or all-absorbing. Mixing periodic with non-periodic directions raises an error on all platforms.
+- Mixed boundary conditions (e.g., periodic in x/y, reflecting in z) require `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot use mixed boundary conditions at all.
+- Stress computation (and therefore `box_is_altering`) requires all-periodic boundary conditions.
+
+**Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
 ```python
 "bc": ["periodic", "periodic",      # x: low, high
        "periodic", "periodic",      # y: low, high
@@ -60,7 +65,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `segment_lengths` | dict | Relative statistical segment lengths $(b/b_{ref})^2$ | `{"A": 1.0, "B": 1.0}` |
+| `segment_lengths` | dict | Relative statistical segment lengths $b/b_{ref}$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
 | `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$ | `{"A,B": 20.0}` |
 
 ### Polymer Definition
@@ -75,7 +80,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 |-----|------|-------------|
 | `volume_fraction` | float | Volume fraction in system |
 | `blocks` | list | Block specifications |
-| `grafting` | dict | (Optional) Grafting conditions |
+| `initial_conditions` | dict | (Optional) Custom propagator initial conditions per node, e.g. `{0: "G"}` maps node 0 to the initial condition labeled `"G"` in `q_init` (used for grafted chains) |
 
 **Block format:** Each block is a dictionary with:
 - `"type"`: Monomer type (string)
@@ -146,7 +151,11 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 |-------|-------|------|-------------|
 | `"rqm4"` | 4th | Pseudo-spectral | Richardson extrapolation (default) |
 | `"rk2"` | 2nd | Pseudo-spectral | Rasmussen-Kalosakas operator splitting |
-| `"cn-adi2"` | 2nd | Real-space | Crank-Nicolson ADI |
+| `"cn-adi2"` | 2nd | Real-space | Crank-Nicolson ADI (continuous chains only) |
+
+**Restrictions:**
+- `numerical_method` applies to the **continuous** chain model only. For `"chain_model": "discrete"`, the parameter is ignored (a note is printed) and the dedicated discrete-chain pseudo-spectral solver is always used.
+- `"cn-adi2"` is the only method that supports mixing periodic and non-periodic boundary conditions; the pseudo-spectral methods require uniform boundary conditions (see [Boundary Conditions](#boundary-conditions)).
 
 See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
@@ -177,13 +186,15 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
 ### Anderson Mixing (`"name": "am"`)
 
-| Key | Type | Description | Default |
-|-----|------|-------------|---------|
+| Key | Type | Description | Typical value |
+|-----|------|-------------|---------------|
 | `name` | str | Optimizer name | `"am"` |
 | `max_hist` | int | Maximum history length | `20` |
 | `start_error` | float | Error threshold to start Anderson mixing | `1e-1` |
 | `mix_min` | float | Minimum mixing parameter | `0.1` |
 | `mix_init` | float | Initial mixing parameter | `0.1` |
+
+All keys are **required** when `"name": "am"` — there are no built-in defaults (omitting a key raises `KeyError`). The values above are typical starting points.
 
 **Example:**
 ```python
@@ -198,19 +209,19 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
 ### ADAM Optimizer (`"name": "adam"`)
 
-| Key | Type | Description | Default |
-|-----|------|-------------|---------|
+| Key | Type | Description | Typical value |
+|-----|------|-------------|---------------|
 | `name` | str | `"adam"` | |
-| `lr` | float | Learning rate | `0.01` |
-| `b1` | float | Momentum parameter (β₁) | `0.9` |
-| `b2` | float | Second moment parameter (β₂) | `0.999` |
-| `gamma` | float | Learning rate decay factor | `1.0` |
+| `lr` | float | Learning rate (required) | `0.01` |
+| `gamma` | float | Learning rate decay factor (required) | `1.0` |
+
+Both `lr` and `gamma` are **required** when `"name": "adam"` (omitting either raises `KeyError`). The momentum parameters are fixed internally at β₁ = 0.9 and β₂ = 0.999; entries such as `"b1"` or `"b2"` in the optimizer dictionary are silently ignored.
 
 ### SCFT Advanced Options
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `stress_interval` | int or str | Stress computation interval. Integer for fixed interval, `"adaptive"` for automatic adjustment | `3` |
+| `stress_interval` | int or str | Stress computation interval. Integer for fixed interval, `"adaptive"` for automatic adjustment | `1` |
 
 ---
 
@@ -258,13 +269,15 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 |-----------|------|-------------|
 | `compressor` | dict | Field compressor configuration |
 
-| Key | Type | Description | Default |
-|-----|------|-------------|---------|
+| Key | Type | Description | Typical value |
+|-----|------|-------------|---------------|
 | `name` | str | Compressor type: `"am"`, `"lr"`, or `"lram"` | Required |
 | `max_hist` | int | Anderson mixing history length | `20` |
 | `start_error` | float | Error threshold to start AM | `5e-1` |
 | `mix_min` | float | Minimum mixing parameter | `0.01` |
 | `mix_init` | float | Initial mixing parameter | `0.01` |
+
+For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `KeyError`).
 
 ### Well-Tempered Metadynamics (Optional)
 
@@ -301,9 +314,11 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 | `reduce_memory` | bool | Enable checkpoint-based memory saving | `False` |
 
 When `True`:
-- Stores only checkpoints (~$2\sqrt{N_{tot}}$ per propagator, where $N_{tot}$ is the total number of contour steps)
+- Stores only checkpoints every ~$2\sqrt{N_{tot}}$ contour steps, i.e. ~$\sqrt{N_{tot}}/2$ checkpoints per propagator (where $N_{tot}$ is the total number of contour steps)
 - Reduces memory by ~90%
-- Increases computation time by 3-4x
+- Increases computation time by 2-4x
+
+**Restriction:** `reduce_memory=True` is not supported for **discrete chains combined with a space group** — this combination raises an error.
 
 ### Space Group Symmetry (Beta)
 
@@ -318,14 +333,20 @@ When `True`:
 }
 ```
 
+**Restrictions:**
+- **Discrete chains + space group** works on CPU platforms but raises an error on CUDA. Since platform auto-selection picks `"cuda"` for 2D/3D simulations, discrete-chain runs with a space group must set `"platform"` to `"cpu-mkl"` or `"cpu-fftw"` explicitly.
+- **Discrete chains + space group + `reduce_memory=True`** is not supported on any platform (raises an error).
+
 See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 
 ### Box Optimization
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `box_is_altering` | bool | Enable box size optimization | `False` |
+| `box_is_altering` | bool | Enable box size optimization (required key in SCFT — omitting it raises `KeyError`) | Required |
 | `scale_stress` | float | Stress scaling factor for box updates | `1.0` |
+
+**Restrictions:** Stress computation is only available with **all-periodic boundary conditions** — it raises an error with any reflecting or absorbing direction — and is not implemented for the real-space `"cn-adi2"` method. Therefore `box_is_altering=True` requires periodic boundary conditions and a pseudo-spectral method.
 
 ### Lattice Angles (Non-orthogonal)
 
@@ -364,6 +385,7 @@ params = {
         ]
     }],
     "numerical_method": "rqm4",
+    "box_is_altering": False,
     "optimizer": {
         "name": "am",
         "max_hist": 20,
@@ -397,13 +419,20 @@ params = {
     "space_group": {
         "symbol": "Ia-3d",
         "number": 530
+    },
+    "optimizer": {
+        "name": "am",
+        "max_hist": 20,
+        "start_error": 1e-1,
+        "mix_min": 0.1,
+        "mix_init": 0.1
     }
 }
 ```
 
 ### Non-Periodic Boundaries (Confined Film)
 
-All numerical methods support non-periodic boundary conditions: RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells.
+All numerical methods support **uniform** non-periodic boundary conditions (all-reflecting or all-absorbing): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions.
 
 ```python
 params = {
@@ -414,7 +443,7 @@ params = {
            "reflecting", "reflecting"],  # Confined in z
     "chain_model": "continuous",
     "ds": 0.01,
-    "numerical_method": "cn-adi2",  # or "rqm4", "rk2"
+    "numerical_method": "cn-adi2",  # required for mixed BCs (rqm4/rk2 raise an error)
     # ... other parameters
 }
 ```

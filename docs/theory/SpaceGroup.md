@@ -15,9 +15,10 @@ Many polymer phases (BCC, gyroid, HCP, etc.) have crystallographic symmetry. By 
 - Faster convergence: Field updates operate on smaller arrays
 - Enforced symmetry: Results guaranteed to have correct space group symmetry
 
-When CrysFFT is available (periodic 3D, orthogonal box, even grid), the solver
-automatically switches to a **physical grid** (1/8 size) to avoid
-gather/scatter mapping during diffusion steps. See
+When CrysFFT is available (periodic 3D simulations meeting the grid and cell
+requirements listed in [Physical Bases for CrysFFT](#physical-bases-for-crysfft)),
+the solver automatically switches to a **physical grid** (1/8 or 1/2 size) to
+avoid gather/scatter mapping during diffusion steps. See
 [FFTImplementation.md](../internals/FFTImplementation.md).
 
 ## Common Space Groups for Polymer Phases
@@ -72,15 +73,19 @@ $$\text{Orbit}(\mathbf{p}) = \{ \mathbf{R}_i \cdot \mathbf{p} + \mathbf{t}_i \mi
 
 (each component wrapped to $[0, 1)$ via periodic boundary conditions)
 
+**Cell-centered grid convention**: The implementation uses a cell-centered grid, so grid point $(i, j, k)$ on an $N_x \times N_y \times N_z$ mesh corresponds to the fractional coordinate
+
+$$\mathbf{p}_{\text{frac}} = \left( \frac{i + 0.5}{N_x}, \frac{j + 0.5}{N_y}, \frac{k + 0.5}{N_z} \right)$$
+
 **Example: Orbit calculation for BCC on 4×4×4 grid**
 
-Consider the point $\mathbf{p} = (1, 0, 0)$ in grid indices, which is $\mathbf{p}_{\text{frac}} = (0.25, 0, 0)$ in fractional coordinates.
+Consider the point $\mathbf{p} = (1, 0, 0)$ in grid indices, which is $\mathbf{p}_{\text{frac}} = (0.375, 0.125, 0.125)$ in cell-centered fractional coordinates.
 
 Applying some symmetry operations:
-- Identity: $(0.25, 0, 0)$ → grid point $(1, 0, 0)$
-- Body-center translation: $(0.25 + 0.5, 0 + 0.5, 0 + 0.5) = (0.75, 0.5, 0.5)$ → grid point $(3, 2, 2)$
-- 4-fold rotation about z: $(0, 0.25, 0)$ → grid point $(0, 1, 0)$
-- Inversion: $(-0.25, 0, 0)$ → wrapped to $(0.75, 0, 0)$ → grid point $(3, 0, 0)$
+- Identity: $(0.375, 0.125, 0.125)$ → grid point $(1, 0, 0)$
+- Body-center translation: $(0.375 + 0.5, 0.125 + 0.5, 0.125 + 0.5) = (0.875, 0.625, 0.625)$ → grid point $(3, 2, 2)$
+- 4-fold rotation about z: $(-0.125, 0.375, 0.125)$ → wrapped to $(0.875, 0.375, 0.125)$ → grid point $(3, 1, 0)$
+- Inversion: $(-0.375, -0.125, -0.125)$ → wrapped to $(0.625, 0.875, 0.875)$ → grid point $(2, 3, 3)$
 
 All these points belong to the same orbit and share one irreducible mesh index.
 
@@ -100,8 +105,8 @@ The irreducible mesh is the minimal set of grid points from which the full field
 ```
 Full mesh:        64 × 64 × 64 = 262,144 points
 Symmetry ops:     96 (48 point group × 2 for body centering)
-Irreducible mesh: 2,761 points
-Reduction factor: 262,144 / 2,761 ≈ 95x
+Irreducible mesh: 2,736 points
+Reduction factor: 262,144 / 2,736 ≈ 96x
 ```
 
 The reduction factor approaches the number of symmetry operations when most orbits have maximum size. Points on symmetry elements (axes, planes, centers) have smaller orbits.
@@ -163,17 +168,21 @@ nx = [64, 64, 64]
 sg = SpaceGroup(nx, "Ia-3d", hall_number=530)
 
 # Output:
-# Using Hall number: 530 for symbol 'Ia-3d'
+# ---------- Space Group ----------
+# Hall number: 530
 # International space group number: 230
+# Symbol: Ia-3d
 # Crystal system: Cubic
-# The number of symmetry operations: 96
+# Number of symmetry operations: 96
 # Original mesh size: 262144
-# Irreducible mesh size: 2761
+# Reduced basis size (irreducible): 2736
+# Pmmm physical basis size (if enabled): n/a
+# M3 physical basis size (if enabled): 32768
 
 # Convert full field to reduced basis
 w_full = np.random.randn(2, 64*64*64)  # 2 fields
 w_reduced = sg.to_reduced_basis(w_full)
-print(w_reduced.shape)  # (2, 2761)
+print(w_reduced.shape)  # (2, 2736)
 
 # Reconstruct full field from reduced
 w_reconstructed = sg.from_reduced_basis(w_reduced)
@@ -185,11 +194,20 @@ w_symmetrized = sg.symmetrize(w_full)
 
 ### Physical Bases for CrysFFT
 
-When CrysFFT is available, the solver may switch the reduced basis from the
-irreducible mesh to a **physical basis** (1/8 grid) to avoid gather/scatter
-mapping during diffusion. This selection is automatic: it prefers the 3m
-physical basis when compatible, otherwise falls back to the Pmmm physical basis,
-and finally uses the irreducible basis if neither is available.
+When CrysFFT is available (periodic 3D only), the solver may switch the reduced
+basis from the irreducible mesh to a **physical basis** to avoid gather/scatter
+mapping during diffusion. This selection is automatic:
+
+- **Orthogonal boxes** (α = β = γ = 90°, even grid): the 3m physical basis
+  (1/8 grid) is preferred when the space group provides the required 3m
+  translations and $(n_z / 2)$ is divisible by 8; otherwise the solver falls
+  back to the Pmmm physical basis (1/8 grid, requires mirror planes along
+  x, y, z).
+- **Non-orthogonal cells with an orthogonal z-axis** (α = β = 90°, γ
+  arbitrary — e.g. hexagonal or monoclinic-γ cells): the z-mirror (ObliqueZ)
+  physical basis (1/2 grid) is used when the space group has a z-mirror
+  operation and $n_z$ is even.
+- If no physical basis applies, the irreducible basis is used.
 
 ## Crystal Systems and Grid Constraints
 
@@ -212,7 +230,11 @@ Some space groups require grid dimensions to be divisible by specific numbers:
 | Ia-3d (Gyroid) | 4 | 1/4, 3/4 translations |
 | Fd-3m (Diamond) | 4 | 1/4, 3/4 translations |
 | Im-3m (BCC) | 2 | 1/2 translations |
-| P6_3/mmc (HCP) | 6 | 1/3, 2/3, 1/2 positions |
+| P6_3/mmc (HCP) | 2 | 1/2 translations |
+
+The required divisor is computed from the denominators of the translation
+components of the symmetry operations (e.g. a 1/4 translation requires the
+grid to be divisible by 4).
 
 ## Class Methods
 
@@ -222,18 +244,23 @@ Some space groups require grid dimensions to be divisible by specific numbers:
 | `from_reduced_basis(reduced)` | Reconstruct full fields from reduced |
 | `symmetrize(fields)` | Average fields over orbits for perfect symmetry |
 
-## Attributes
+## Accessor Methods
 
-| Attribute | Description |
-|-----------|-------------|
-| `hall_number` | Hall number (1-530) |
-| `spacegroup_number` | International space group number (1-230) |
-| `spacegroup_symbol` | ITA short symbol |
-| `crystal_system` | Crystal system name |
-| `lattice_parameters` | Free lattice parameters for this system |
-| `symmetry_operations` | List of (rotation, translation) pairs |
-| `irreducible_mesh` | List of irreducible point coordinates |
-| `indices` | Map from full grid to irreducible point index |
+Metadata is exposed through getter methods (not attributes):
+
+| Method | Description |
+|--------|-------------|
+| `get_hall_number()` | Hall number (1-530) |
+| `get_spacegroup_number()` | International space group number (1-230) |
+| `get_spacegroup_symbol()` | ITA short symbol |
+| `get_crystal_system()` | Crystal system name |
+| `get_n_symmetry_ops()` | Number of symmetry operations |
+| `get_n_reduced_basis()` | Number of irreducible mesh points |
+| `get_reduced_basis_indices()` | Flat grid indices of the irreducible points |
+| `get_full_to_reduced_map()` | Map from full grid to irreducible point index |
+| `get_orbit_counts()` | Orbit size for each irreducible point |
+| `get_nx()` | Grid dimensions |
+| `get_total_grid()` | Total number of grid points |
 
 ## Hexagonal Systems
 
@@ -242,11 +269,11 @@ Hexagonal crystal systems (P6_3/mmc, etc.) require special attention:
 - Lattice: a = b, c independent
 - Angles: α = β = 90°, γ = 120°
 - Grid: nx = ny (first two dimensions must be equal)
-- All dimensions must be divisible by 6 (for P6_3/mmc)
+- All dimensions must be divisible by 2 (for P6_3/mmc, from its 1/2 translations)
 
 **Example:**
 ```python
-nx = [48, 48, 96]  # a = b, c different, all divisible by 6
+nx = [48, 48, 96]  # a = b, c different, all divisible by 2
 sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
 ```
 
@@ -258,45 +285,37 @@ This example demonstrates the irreducible mesh calculation for Im-3m (BCC) on a 
 
 - Grid: 4×4×4 = 64 points
 - Space group: Im-3m (Hall 529), 96 symmetry operations
-- Fractional coordinate of grid point $(i, j, k)$: $(i/4, j/4, k/4)$
+- Fractional coordinate of grid point $(i, j, k)$ (cell-centered): $\left( \frac{i+0.5}{4}, \frac{j+0.5}{4}, \frac{k+0.5}{4} \right)$
 
 ### Orbit Calculation
 
-**Point $(0, 0, 0)$** - Corner (high symmetry)
-- Fractional: $(0, 0, 0)$
-- After all 96 operations: only maps to itself and body center
-- Orbit size: 2
+Because the grid is cell-centered, no grid point sits exactly on a
+high-symmetry position such as the corner $(0,0,0)$ or the body center, so
+orbits are larger than on a node-centered grid.
 
-**Point $(0, 0, 1)$** - Edge
-- Fractional: $(0, 0, 0.25)$
-- Maps to 6 points via point group, doubled by body centering
-- Orbit size: 12
+**Point $(0, 0, 0)$** - Body diagonal
+- Fractional: $(0.125, 0.125, 0.125)$
+- All three coordinates equal: 8 sign combinations $(\pm 0.125, \pm 0.125, \pm 0.125)$, doubled by body centering
+- Orbit size: 16
 
-**Point $(0, 1, 1)$** - Face
-- Fractional: $(0, 0.25, 0.25)$
-- Orbit size: 24
-
-**Point $(1, 1, 1)$** - Body diagonal
-- Fractional: $(0.25, 0.25, 0.25)$
-- Orbit size: 8
+**Point $(0, 0, 1)$** - General position on a mirror plane
+- Fractional: $(0.125, 0.125, 0.375)$
+- Two coordinates equal: 3 placements of the distinct coordinate × 8 sign combinations, doubled by body centering
+- Orbit size: 48
 
 ### Irreducible Mesh
 
 | Index | Representative | Orbit Size | Description |
 |-------|---------------|------------|-------------|
-| 0 | $(0,0,0)$ | 2 | Corner + body center |
-| 1 | $(0,0,1)$ | 12 | Edge |
-| 2 | $(0,0,2)$ | 6 | Face center |
-| 3 | $(0,1,1)$ | 24 | Face |
-| 4 | $(0,1,2)$ | 12 | General |
-| 5 | $(1,1,1)$ | 8 | Body diagonal |
+| 0 | $(0,0,0)$ | 16 | Body diagonal $(0.125, 0.125, 0.125)$ |
+| 1 | $(0,0,1)$ | 48 | $(0.125, 0.125, 0.375)$ |
 
 **Verification:**
-- Total points: $2 + 12 + 6 + 24 + 12 + 8 = 64$ ✓
-- Irreducible mesh size: 6 points
-- Reduction factor: $64 / 6 \approx 10.7 \times$
+- Total points: $16 + 48 = 64$ ✓
+- Irreducible mesh size: 2 points
+- Reduction factor: $64 / 2 = 32 \times$
 
-Note: The reduction factor (10.7x) is less than the number of symmetry operations (96) because high-symmetry points have small orbits.
+Note: The reduction factor (32x) is less than the number of symmetry operations (96) because points on the body diagonal have smaller orbits. On larger grids, most points sit in general positions and the reduction factor approaches 96 (e.g. ≈96x for Ia-3d on a 64³ grid).
 
 ## Limitations
 
@@ -304,6 +323,13 @@ Note: The reduction factor (10.7x) is less than the number of symmetry operation
 - Grid must be compatible with space group symmetry
 - Beta feature - validate results carefully
 - Requires `spglib` library
+- **Discrete chains**: space group symmetry works on **CPU only**; on CUDA it throws
+  "Space group symmetry is not yet supported for discrete chains on CUDA". Since
+  platform auto-selection picks CUDA for 2D/3D simulations, set
+  `"platform": "cpu-mkl"` (or `"cpu-fftw"`) explicitly when combining
+  `"chain_model": "discrete"` with a space group
+- **`reduce_memory=True` + discrete chains + space group** is not supported on any
+  platform (throws on CPU as well)
 - **Hexagonal/trigonal artifact**: Cell-centered grids are mathematically incompatible with hexagonal rotation matrices. Rotations with even row sums (e.g., $[1, -1, 0]$) map cell-centered positions $(i+0.5)/N$ to cell boundaries $(integer)/N$, causing inconsistent orbit assignments and X-shaped density artifacts. Cubic/orthorhombic space groups are unaffected (rotation matrix row sums are always odd). The `star` git branch implements a Fourier star basis that eliminates this artifact by working in reciprocal space where wavevector rotations are exact integer operations.
 
 ## References

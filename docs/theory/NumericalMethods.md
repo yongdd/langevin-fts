@@ -78,6 +78,8 @@ Both pseudo-spectral and real-space methods support the following boundary condi
 | **Reflecting** | Neumann (zero flux) | $\partial q / \partial n = 0$ | DCT |
 | **Absorbing** | Dirichlet (zero value) | $q = 0$ at boundary | DST |
 
+> **Note**: Pseudo-spectral methods (RQM4, RK2) cannot mix **periodic** with **non-periodic** boundary conditions in different directions (e.g., a thin film periodic in $x, y$ and reflecting in $z$); such configurations raise an error on all platforms and require the real-space method `cn-adi2`, which is available for continuous chains only. Non-periodic conditions may be mixed with each other (e.g., reflecting in $x$ and absorbing in $y$), and uniform all-periodic, all-reflecting, or all-absorbing configurations are fully supported.
+
 ---
 
 ## 3. Pseudo-Spectral Methods
@@ -391,7 +393,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest 4th-order, recommended default |
 | Fast iterations, prototyping | **RK2** | Fastest overall, lower accuracy |
 | Brush with grafted delta-function | **CN-ADI2** | Handles sharp initial conditions smoothly |
-| Stress calculations | **RQM4** or **RK2** | Real-space stress not implemented |
+| Stress calculations | **RQM4** or **RK2** | Requires periodic BCs; real-space stress not implemented |
 | Comparison with finite difference | **CN-ADI2** | Same discretization approach |
 
 ### Feature Comparison
@@ -399,13 +401,20 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 | Feature | RQM4 | RK2 | CN-ADI2 |
 |---------|------|-----|---------|
 | Continuous chains | Yes | Yes | Yes |
-| Discrete chains | Yes | Yes | No |
+| Discrete chains | No¹ | No¹ | No |
 | Periodic BC | Yes (FFT) | Yes (FFT) | Yes |
 | Reflecting BC | Yes (DCT) | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes (DST) | Yes |
-| Stress calculation | Yes | Yes | No |
+| Mixed periodic/non-periodic BC | No² | No² | Yes |
+| Stress calculation | Yes (periodic BC only)³ | Yes (periodic BC only)³ | No |
 | Non-orthogonal cells | Yes | Yes | No |
 | Accuracy order | 4th | 2nd | 2nd |
+
+¹ The discrete chain model uses its own dedicated pseudo-spectral solver (bond convolution via the Chapman-Kolmogorov equation); the `numerical_method` parameter is ignored for `chain_model="discrete"` (a note is printed), so neither RQM4 Richardson extrapolation nor RK2 stepping applies to discrete chains.
+
+² Mixing periodic with reflecting/absorbing boundary conditions in different directions raises an error for pseudo-spectral methods on all platforms; such periodic/non-periodic mixes require `numerical_method="cn-adi2"` (continuous chains only). Purely non-periodic mixes (reflecting with absorbing) and uniform all-reflecting or all-absorbing configurations work with RQM4/RK2.
+
+³ `compute_stress()` throws `"Stress computation with non-periodic boundary conditions is not supported yet."` for any non-periodic boundary condition, on all platforms and for both chain models. Box optimization (`box_is_altering=True`) therefore requires fully periodic boundaries.
 
 ---
 
@@ -443,7 +452,9 @@ Cross-term $g_{13}^*$ is non-zero.
 **Constraints:**
 - $L_a$, $L_b$, $L_c$ all independent (3 lengths)
 - $\beta$ is a free parameter (1 angle)
-- Off-diagonal stress $\sigma_{ac}$ drives $\beta$ optimization
+- The angle derivative $\partial H/\partial\beta$ (stress array index 4) drives $\beta$ optimization
+
+> **Note on the stress convention**: `get_stress()` returns lattice-parameter derivatives directly, ordered as $[\partial H/\partial L_1, \partial H/\partial L_2, \partial H/\partial L_3, \partial H/\partial\gamma, \partial H/\partial\beta, \partial H/\partial\alpha]$ in 3D (in 2D, $\partial H/\partial\gamma$ is stored at index 2). Box relaxation steps each optimized parameter along the negative of its derivative. The "off-diagonal stress components" discussed in this section are these angle derivatives, not Cartesian stress-tensor components.
 
 ### 8.4 Triclinic
 

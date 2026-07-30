@@ -68,6 +68,8 @@ $$\mathbf{w} \leftarrow \mathbf{w} + P \left( X \langle \boldsymbol{\phi} \rangl
 
 This pins $\langle W_- \rangle$ to the saddle value while leaving $\langle W_+ \rangle$ untouched (since $P$ annihilates the uniform $[1, 1, \ldots]$ direction). For AB diblocks, the saddle gives $\langle W_- \rangle = (1 - 2f) \chi N / 2$. Setting $\langle W_- \rangle = 0$ instead introduces a free energy error of $\chi N (f - 1/2)^2$, which vanishes for symmetric diblocks ($f = 0.5$). The $P$ and $X$ matrices are $M \times M$ for $M$ monomer types, so this applies to arbitrary multi-monomer systems.
 
+> **Implementation note:** In `scft.py`, this $\mathbf{k}=0$ pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). The default incompressible behavior is the mean-zero convention warned about above — $w_i \leftarrow w_i - \langle w_i \rangle$ at each iteration — which yields $F_{dis} = 0$ for the disordered phase, whereas the pinned convention matches the field-theoretic Hamiltonian used in L-FTS/CL-FTS ($F_{dis} = -\chi N (f - 1/2)^2$).
+
 ### 1.4 Self-Consistent Conditions (Compressible)
 
 With finite compressibility $\zeta N$, the pressure field is known:
@@ -161,7 +163,9 @@ $$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\m
 
 $$O = \begin{pmatrix} 1 & 1 \\ -1 & 1 \end{pmatrix}$$
 
-$$\begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix}$$
+$$\begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix} = O^T \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix}$$
+
+so that $\Phi_- = \phi_A - \phi_B$ and $\Phi_+ = \phi_A + \phi_B$, consistent with $\Phi_i = \sum_j O_{ji} \phi_j$ in Section 4.1 and with the incompressibility condition $\delta H / \delta \Omega_+ \propto \Phi_+ - 1$.
 
 ---
 
@@ -214,6 +218,7 @@ where $\Phi_i(\mathbf{r}) = \sum_j O_{ji} \phi_j(\mathbf{r})$.
 ### 4.2 Usage Example
 
 ```python
+import numpy as np
 import polymerfts
 
 # Define system
@@ -227,12 +232,15 @@ mpt = polymerfts.SymmetricPolymerTheory(monomer_types, chi_n, zeta_n=None)
 mpt_comp = polymerfts.SymmetricPolymerTheory(monomer_types, chi_n, zeta_n=100)
 
 # Convert between field representations
+n_grid = 32**3                        # number of grid points
 omega = np.random.rand(2, n_grid)
 w = mpt.to_monomer_fields(omega)      # Auxiliary → Monomer
 omega = mpt.to_aux_fields(w)          # Monomer → Auxiliary
 
 # Compute Hamiltonian
-H = mpt.compute_hamiltonian(molecules, omega, total_partitions)
+# molecules: C++ Molecules object; total_partitions: list of Q_p;
+# cb: ComputationBox object (required, used for volume averages)
+H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb)
 
 # Compute functional derivatives
 h_deriv = mpt.compute_func_deriv(omega, phi, field_indices)
