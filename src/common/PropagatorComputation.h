@@ -123,10 +123,12 @@ protected:
     std::vector<T> single_solvent_partitions;  ///< Partition functions Q_s[s] for each solvent type s
 
     /**
-     * @brief Stress contributions from each polymer.
+     * @brief Lattice-parameter derivative contributions from each polymer.
      *
-     * dq_dl[p][i] = d(ln Q_p)/d(ε_ij) where ε_ij is strain component.
-     * Layout: [xx, yy, zz, xy, xz, yz] for full stress tensor.
+     * After compute_stress(), dq_dl[p] holds the per-polymer derivatives
+     * [dH/dL₁, dH/dL₂, dH/dL₃, dH/dγ, dH/dβ, dH/dα] (deformation-vector
+     * approach; see docs/theory/StressTensor.md).
+     * For 2D: [dH/dL₁, dH/dL₂, dH/dγ, 0, 0, 0]. For 1D: only index 0.
      * Used for box relaxation in SCFT.
      */
     std::vector<std::array<T,6>> dq_dl;

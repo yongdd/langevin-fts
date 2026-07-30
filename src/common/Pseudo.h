@@ -50,7 +50,7 @@
  *
  * @see CpuSolverPseudoRQM4 for continuous chain solver
  * @see CpuSolverPseudoDiscrete for discrete chain solver
- * @see docs/StressTensorCalculation.md for detailed derivation
+ * @see docs/theory/StressTensor.md for detailed derivation
  */
 
 #ifndef PSEUDO_H_

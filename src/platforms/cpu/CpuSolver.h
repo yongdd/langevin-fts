@@ -233,7 +233,7 @@ public:
      * @param monomer_type       Monomer type for segment length
      * @param is_half_bond_length Whether using half bond length (discrete model)
      *
-     * @return Vector of stress components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+     * @return v⊗v dyad sums [V₁₁, V₂₂, V₃₃, V₁₂, V₁₃, V₂₃] (deformation-vector basis)
      *         Full 6-component stress tensor for non-orthogonal systems.
      *
      * @note Used in box size optimization to find stress-free unit cell.

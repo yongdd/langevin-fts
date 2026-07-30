@@ -34,7 +34,7 @@
  * @see CudaSolver for the abstract interface
  * @see CudaSolverPseudoDiscrete for discrete chain version
  * @see CpuSolverPseudoRQM4 for CPU version
- * @see docs/StressTensorCalculation.md for detailed derivation
+ * @see docs/theory/StressTensor.md for detailed derivation
  */
 
 #ifndef CUDA_SOLVER_PSEUDO_RQM4_H_

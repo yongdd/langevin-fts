@@ -1131,7 +1131,7 @@ void CudaComputationDiscrete<T>::compute_stress()
         //   ∂H/∂L₁ ∝ L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃
         //   ∂H/∂γ  ∝ -L₁L₂sinγ·V₁₂
         //
-        // @see docs/StressTensorCalculation.md for derivation
+        // @see docs/theory/StressTensor.md for derivation
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);

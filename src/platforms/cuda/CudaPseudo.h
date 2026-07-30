@@ -30,7 +30,7 @@
  * @see Pseudo for the abstract interface
  * @see CudaSolverPseudoRQM4 for usage in continuous chains
  * @see CudaSolverPseudoDiscrete for usage in discrete chains
- * @see docs/StressTensorCalculation.md for detailed derivation
+ * @see docs/theory/StressTensor.md for detailed derivation
  */
 
 #ifndef CUDA_PSEUDO_H_

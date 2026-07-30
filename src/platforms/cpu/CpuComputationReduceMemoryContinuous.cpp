@@ -986,6 +986,21 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space this->method does not support stress computation.");
 
+        // Check for non-periodic BC - stress computation not supported
+        // (same guard as the full-memory computation classes; the solver's
+        // non-periodic stress branch has a known Parseval-weight defect)
+        {
+            auto bc_vec = this->cb->get_boundary_conditions();
+            for (const auto& bc : bc_vec)
+            {
+                if (bc != BoundaryCondition::PERIODIC)
+                {
+                    throw_with_line_number("Stress computation with non-periodic boundary conditions "
+                        "is not supported yet. Use periodic boundary conditions.");
+                }
+            }
+        }
+
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
         const int total_grid = this->cb->get_total_grid();
@@ -1218,7 +1233,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
         //   g₁₁ = L₁², g₂₂ = L₂², g₃₃ = L₃²
         //   g₁₂ = L₁L₂cosγ, g₁₃ = L₁L₃cosβ, g₂₃ = L₂L₃cosα
         //
-        // @see docs/StressTensorCalculation.md for derivation
+        // @see docs/theory/StressTensor.md for derivation
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);

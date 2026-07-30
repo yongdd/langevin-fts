@@ -617,7 +617,13 @@ void CpuComputationContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
-        // Check for non-periodic BC - stress computation not supported
+        // Check for non-periodic BC - stress computation not supported.
+        // NOTE: the non-periodic branch of compute_single_segment_stress has
+        // verified-correct basis units (1D reflecting matches dH/dL exactly),
+        // but the flat FACTOR=2 Parseval weight is wrong for modes that hit a
+        // special DCT/DST index (k=0 / highest mode) in one dimension while
+        // being non-special in another (3D reflecting is off by ~0.6x).
+        // Per-mode weights are required before this guard can be lifted.
         auto bc_vec = this->cb->get_boundary_conditions();
         for (const auto& bc : bc_vec)
         {
@@ -731,7 +737,7 @@ void CpuComputationContinuous<T>::compute_stress()
         //   ∂H/∂L₁ ∝ L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃
         //   ∂H/∂γ  ∝ -L₁L₂sinγ·V₁₂
         //
-        // @see docs/StressTensorCalculation.md for derivation
+        // @see docs/theory/StressTensor.md for derivation
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);

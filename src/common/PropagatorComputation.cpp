@@ -16,11 +16,13 @@
  *
  * **Stress Calculation:**
  *
- * Box stress is computed from the derivative of partition function:
- *     σ_d = -(1/Q) × Σ_p φ_p/α_p × dQ_p/dL_d
+ * The "stress" vector holds lattice-parameter derivatives of the free energy:
+ *     stress = [dH/dL₁, dH/dL₂, dH/dL₃, dH/dγ, dH/dβ, dH/dα]
  *
- * where φ_p is volume fraction, α_p is chain length, and dQ_p/dL_d is
- * the box length derivative of single-chain partition function.
+ * Each polymer contributes (φ_p/α_p)·dq_dl_p/Q_p, where dq_dl_p is filled by
+ * compute_stress() in the derived class (deformation-vector approach, see
+ * docs/theory/StressTensor.md). Box relaxation performs gradient descent
+ * with the same negative sign for lengths and angles.
  *
  * **Template Instantiations:**
  *
@@ -72,7 +74,7 @@ PropagatorComputation<T>::PropagatorComputation(
     // Total partition functions for each solvent
     single_solvent_partitions.resize(molecules->get_n_solvent_types());
 
-    // Allocate memory for dq_dl (6 components: xx, yy, zz, xy, xz, yz)
+    // Allocate memory for dq_dl (6 components: dH/dL1..3, dH/dγ, dH/dβ, dH/dα)
     for(int p=0; p<molecules->get_n_polymer_types(); p++){
         dq_dl.push_back({0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
     }
@@ -84,20 +86,20 @@ PropagatorComputation<T>::~PropagatorComputation()
 }
 
 /**
- * @brief Compute stress tensor from propagator derivatives.
+ * @brief Get lattice-parameter derivatives of the free energy (canonical ensemble).
  *
- * Calculates the stress tensor using the canonical ensemble formula:
- *     σ_ij = Σ_p (φ_p/α_p) × (dQ_p/dε_ij) / Q_p
+ * Combines per-polymer contributions:
+ *     stress[d] = Σ_p (φ_p/α_p) × dq_dl_p[d] / Q_p
  *
- * @return Vector of stress values [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
- *         For 1D/2D: cross-terms are zero, only relevant components used.
+ * @return Vector [dH/dL₁, dH/dL₂, dH/dL₃, dH/dγ, dH/dβ, dH/dα].
+ *         For 2D: [dH/dL₁, dH/dL₂, dH/dγ, 0, 0, 0]. For 1D: only index 0.
  *
  * @note dq_dl must be populated by compute_stress() in derived class
  */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 {
-    const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
+    const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
@@ -115,20 +117,20 @@ std::vector<T> PropagatorComputation<T>::get_stress()
 }
 
 /**
- * @brief Compute stress tensor for grand canonical ensemble.
+ * @brief Get lattice-parameter derivatives for grand canonical ensemble.
  *
- * Uses fugacities instead of volume fractions for stress calculation:
- *     σ_ij = Σ_p z_p × (dQ_p/dε_ij)
+ * Uses fugacities instead of volume fractions:
+ *     stress[d] = Σ_p z_p × dq_dl_p[d]
  *
  * where z_p is the fugacity of polymer species p.
  *
  * @param fugacities Vector of polymer fugacities
- * @return Vector of stress values [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+ * @return Vector [dH/dL₁, dH/dL₂, dH/dL₃, dH/dγ, dH/dβ, dH/dα]
  */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 {
-    const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
+    const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();

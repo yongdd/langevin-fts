@@ -74,7 +74,8 @@
  *
  * **Bond Lengths:**
  *
- * The bond_lengths map stores (a_i/a_Ref)^2 for each monomer type i.
+ * The bond_lengths map stores the linear ratio a_i/a_Ref for each monomer
+ * type i (consumers square it where needed, e.g. Pseudo's Boltzmann factors).
  * These affect both the Laplacian operator in the diffusion equation and
  * stress calculations for box relaxation.
  *

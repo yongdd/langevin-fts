@@ -1149,15 +1149,19 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
         gpu_error_check(cudaPeekAtLastError());
 
-        // With k⊗k dyad product, fourier_basis arrays contain Cartesian components directly:
-        // _d_fourier_basis_x = k_x², _d_fourier_basis_y = k_y², etc.
+        // fourier_basis arrays contain v⊗v dyad components of the deformation
+        // vector v = 2π g⁻¹ m (units 1/L², NOT the Cartesian wavevector):
+        // _d_fourier_basis_x = v₁², _d_fourier_basis_xy = v₁v₂, etc.
+        // The accumulated sums V_ij = Σ kernel·v_i·v_j are converted to
+        // lattice-parameter derivatives in compute_stress().
         // No cross-term corrections needed.
 
         // ============================================================================
         // PERFORMANCE-CRITICAL: Orthogonal box optimization
         // ============================================================================
-        // For orthogonal boxes (all angles = 90°), the cross-terms (σ_xy, σ_xz, σ_yz)
-        // are mathematically zero and do not need to be computed. This optimization
+        // For orthogonal boxes (all angles = 90°), the cross-term sums (V₁₂, V₁₃, V₂₃)
+        // are not computed: angle optimization is inactive for orthogonal crystal
+        // systems, so those slots are never consumed. This optimization
         // reduces the number of GPU kernel calls from 6 to 3 for 3D boxes,
         // providing ~10% speedup when box_is_altering=True.
         //
@@ -1170,7 +1174,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
 
         if ( DIM == 3 )
         {
-            // σ_xx
+            // V₁₁
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
@@ -1179,7 +1183,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
-            // σ_yy
+            // V₂₂
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
@@ -1188,7 +1192,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
-            // σ_zz
+            // V₃₃
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
@@ -1201,7 +1205,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             // For orthogonal boxes, these are mathematically zero.
             if (!is_orthogonal)
             {
-                // σ_xy
+                // V₁₂
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, 1.0, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -1210,7 +1214,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                     cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[3], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
-                // σ_xz
+                // V₁₃
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xz, 1.0, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -1219,7 +1223,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                     cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[4], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
-                // σ_yz
+                // V₂₃
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_yz, 1.0, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -1237,7 +1241,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             const double* _d_basis_yy = is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z;
             const double* _d_basis_xy = is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz;
 
-            // σ_xx
+            // V₁₁
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
@@ -1246,7 +1250,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
-            // σ_yy
+            // V₂₂
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_yy, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
@@ -1255,7 +1259,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
-            // σ_xy: only compute for non-orthogonal boxes
+            // V₁₂: only compute for non-orthogonal boxes
             if (!is_orthogonal)
             {
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xy, 1.0, M_COMPLEX);

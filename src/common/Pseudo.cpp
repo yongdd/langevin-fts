@@ -399,7 +399,7 @@ void Pseudo<T>::update_weighted_fourier_basis()
  * - fourier_basis_xz = v₁ × v₃  (V₁₃)
  * - fourier_basis_yz = v₂ × v₃  (V₂₃)
  *
- * @see docs/StressTensorCalculation.md for derivation
+ * @see docs/theory/StressTensor.md for derivation
  */
 template <typename T>
 void update_weighted_fourier_basis_periodic_impl(
@@ -552,17 +552,21 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
         tbc[3 - DIM + d] = bc[d];
     }
 
-    // Compute deformation vector factors v² = (π g⁻¹ m)²
-    // For orthogonal boxes: g⁻¹ = 1/L², so v = πm/L² and v² = (πm)²/L⁴
-    // This is consistent with the periodic BC formula where v = 2π g⁻¹ m
+    // Compute deformation vector factors v² (units 1/L⁴), consistent with the
+    // periodic-BC path where v = 2π g⁻¹ m and g⁻¹ = 1/L² for orthogonal boxes:
+    //   Periodic:      k = 2πm/L → v² = k²/L² = (2πm)²/L⁴
+    //   Reflecting:    k = πm/L  → v² = k²/L² = (πm)²/L⁴
+    //   Absorbing:     k = π(m+1)/L, same scaling
+    // NOTE: stress with non-periodic BCs is currently rejected by
+    // compute_stress() in the computation classes; this path is kept
+    // unit-consistent for when that support is added.
     double xfactor[3];
     for (int d = 0; d < 3; ++d)
     {
         double L = tnx[d] * tdx[d];
         if (tbc[d] == BoundaryCondition::PERIODIC)
-            xfactor[d] = std::pow(2 * PI / L, 2);
+            xfactor[d] = std::pow(2 * PI, 2) / (L * L * L * L);
         else
-            // Deformation vector: v² = k²/L² = (πm/L)²/L² = (πm)²/L⁴
             xfactor[d] = PI * PI / (L * L * L * L);
     }
 

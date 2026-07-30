@@ -987,6 +987,21 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
     // Uses block-based computation to minimize memory usage (O(sqrt(N)) workspace).
     try
     {
+        // Check for non-periodic BC - stress computation not supported
+        // (same guard as the full-memory computation classes; the solver's
+        // non-periodic stress branch has a known Parseval-weight defect)
+        {
+            auto bc_vec = this->cb->get_boundary_conditions();
+            for (const auto& bc : bc_vec)
+            {
+                if (bc != BoundaryCondition::PERIODIC)
+                {
+                    throw_with_line_number("Stress computation with non-periodic boundary conditions "
+                        "is not supported yet. Use periodic boundary conditions.");
+                }
+            }
+        }
+
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
         const int M    = this->cb->get_total_grid();

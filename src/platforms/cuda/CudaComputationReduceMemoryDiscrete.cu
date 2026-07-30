@@ -907,6 +907,21 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
     // Uses block-based computation for memory efficiency.
     try
     {
+        // Check for non-periodic BC - stress computation not supported
+        // (same guard as the full-memory computation classes; the solver's
+        // non-periodic stress branch has a known Parseval-weight defect)
+        {
+            auto bc_vec = this->cb->get_boundary_conditions();
+            for (const auto& bc : bc_vec)
+            {
+                if (bc != BoundaryCondition::PERIODIC)
+                {
+                    throw_with_line_number("Stress computation with non-periodic boundary conditions "
+                        "is not supported yet. Use periodic boundary conditions.");
+                }
+            }
+        }
+
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int DIM = this->cb->get_dim();
