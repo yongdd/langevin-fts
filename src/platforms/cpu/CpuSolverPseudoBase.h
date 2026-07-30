@@ -27,7 +27,7 @@
  *
  * @see CpuSolverPseudoRQM4 for continuous chain implementation
  * @see CpuSolverPseudoDiscrete for discrete chain implementation
- * @see docs/StressTensorCalculation.md for detailed derivation
+ * @see docs/theory/StressTensor.md for detailed derivation
  */
 
 #ifndef CPU_SOLVER_PSEUDO_BASE_H_

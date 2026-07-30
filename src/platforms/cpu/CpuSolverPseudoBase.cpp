@@ -781,17 +781,20 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
 // Compute single segment stress
 //------------------------------------------------------------------------------
 /**
- * @brief Compute stress tensor contribution from a single bond/segment.
+ * @brief Compute stress contribution from a single bond/segment.
  *
- * Uses k⊗k dyad product components stored in fourier_basis arrays:
- * - fourier_basis_x = k_x² (Cartesian)
- * - fourier_basis_y = k_y² (Cartesian)
- * - fourier_basis_z = k_z² (Cartesian)
- * - fourier_basis_xy = k_x × k_y (Cartesian)
- * - fourier_basis_xz = k_x × k_z (Cartesian)
- * - fourier_basis_yz = k_y × k_z (Cartesian)
+ * Uses v⊗v dyad product components stored in fourier_basis arrays, where
+ * v = 2π g⁻¹ m is the deformation vector (units 1/L², NOT the Cartesian
+ * wavevector — see Pseudo::update_weighted_fourier_basis_periodic):
+ * - fourier_basis_x = v₁², fourier_basis_y = v₂², fourier_basis_z = v₃²
+ * - fourier_basis_xy = v₁v₂, fourier_basis_xz = v₁v₃, fourier_basis_yz = v₂v₃
  *
- * Returns Cartesian stress tensor components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz].
+ * Returns the accumulated sums [V₁₁, V₂₂, V₃₃, V₁₂, V₁₃, V₂₃] where
+ * V_ij = Σ_k kernel(k)·v_i·v_j. The caller (compute_stress in the
+ * computation classes) converts these to lattice-parameter derivatives
+ * [dH/dL₁, dH/dL₂, dH/dL₃, dH/dγ, dH/dβ, dH/dα] via the metric tensor.
+ *
+ * @see docs/theory/StressTensor.md for the derivation
  */
 template <typename T>
 std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
@@ -800,7 +803,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     try
     {
         const int DIM = dim_;
-        const int N_STRESS = 6;  // Cartesian stress tensor: xx, yy, zz, xy, xz, yz
+        const int N_STRESS = 6;  // v⊗v dyad sums: V₁₁, V₂₂, V₃₃, V₁₂, V₁₃, V₂₃
         const int M_COMPLEX = pseudo->get_total_complex_grid();
         auto bond_lengths = this->molecules->get_bond_lengths();
 
@@ -826,6 +829,35 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                 const int M_reduced = space_group_->get_n_reduced_basis();
                 const int M_phys = get_crysfft_physical_size();
                 const auto& orbit_counts = space_group_->get_orbit_counts();
+
+                // The CrysFFT multipliers below are weighted by Cartesian k_d² = (2πm_d/L_d)²,
+                // while the standard path accumulates deformation-vector components
+                // v_d² = k_d²/L_d² (see Pseudo::update_weighted_fourier_basis_periodic).
+                // Divide each accumulated sum by L_d² so both paths return the same V_dd.
+                const std::vector<double> lx_vec = cb->get_lx();
+                const double inv_L2[3] = {1.0 / (lx_vec[0] * lx_vec[0]),
+                                          1.0 / (lx_vec[1] * lx_vec[1]),
+                                          1.0 / (lx_vec[2] * lx_vec[2])};
+
+                // Space groups whose point-group operations permute axes (cubic: x,y,z;
+                // tetragonal: x,y) make the per-axis multipliers k_d² non-orbit-invariant,
+                // so the reduced-basis accumulation scrambles the individual components
+                // (only their sum is invariant). Since the kernel q1·q2 is space-group
+                // symmetric, the exact per-direction sum is the average over equivalent axes.
+                const std::string& crystal_system = space_group_->get_crystal_system();
+                auto symmetrize_axis_sums = [&crystal_system](double& sxx, double& syy, double& szz)
+                {
+                    if (crystal_system == "Cubic")
+                    {
+                        double avg = (sxx + syy + szz) / 3.0;
+                        sxx = avg; syy = avg; szz = avg;
+                    }
+                    else if (crystal_system == "Tetragonal")
+                    {
+                        double avg = (sxx + syy) / 2.0;
+                        sxx = avg; syy = avg;
+                    }
+                };
 
                 thread_local std::vector<double> phys_q1;
                 thread_local std::vector<double> phys_q2;
@@ -875,10 +907,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                         double sum_xx = accumulate_component(crysfft_kx2_);
                         double sum_yy = accumulate_component(crysfft_ky2_);
                         double sum_zz = accumulate_component(crysfft_kz2_);
+                        symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                        stress[0] = bond_length_sq * M_full * sum_xx;
-                        stress[1] = bond_length_sq * M_full * sum_yy;
-                        stress[2] = bond_length_sq * M_full * sum_zz;
+                        stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                        stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                        stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                     }
                     else
                     {
@@ -912,10 +945,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                         for (int i = 0; i < M_phys; ++i)
                             multiplier[i] = boltz[i] * crysfft_kz2_[i];
                         double sum_zz = accumulate_component(multiplier);
+                        symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                        stress[0] = bond_length_sq * M_full * sum_xx;
-                        stress[1] = bond_length_sq * M_full * sum_yy;
-                        stress[2] = bond_length_sq * M_full * sum_zz;
+                        stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                        stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                        stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                     }
 
                     return stress;
@@ -935,15 +969,22 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                             return sum;
                         };
 
+                        // Recursive3m applies only to cubic space groups whose symmetry
+                        // operations permute the axes. The per-axis multipliers k_d² are not
+                        // orbit-invariant, so the reduced-basis accumulation scrambles the
+                        // individual components (only their k²-weighted sum is invariant).
+                        // Since the kernel q1·q2 is space-group symmetric, the exact
+                        // per-direction sum equals the orbit average (sum_xx+sum_yy+sum_zz)/3.
                         if (_boltz_bond == nullptr)
                         {
                             double sum_xx = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Kx2, 0.0);
                             double sum_yy = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Ky2, 0.0);
                             double sum_zz = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Kz2, 0.0);
+                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                            stress[0] = bond_length_sq * M_full * sum_xx;
-                            stress[1] = bond_length_sq * M_full * sum_yy;
-                            stress[2] = bond_length_sq * M_full * sum_zz;
+                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                         }
                         else
                         {
@@ -953,10 +994,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                             double sum_xx = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKx2, coeff);
                             double sum_yy = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKy2, coeff);
                             double sum_zz = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKz2, coeff);
+                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                            stress[0] = bond_length_sq * M_full * sum_xx;
-                            stress[1] = bond_length_sq * M_full * sum_yy;
-                            stress[2] = bond_length_sq * M_full * sum_zz;
+                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                         }
 
                         return stress;
@@ -975,15 +1017,18 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                             return sum;
                         };
 
+                        // See the MKL Recursive3m branch above: axis-permuting cubic symmetry
+                        // requires the orbit-averaged sum, converted to v² units via 1/L_d².
                         if (_boltz_bond == nullptr)
                         {
                             double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kx2, 0.0);
                             double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Ky2, 0.0);
                             double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kz2, 0.0);
+                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                            stress[0] = bond_length_sq * M_full * sum_xx;
-                            stress[1] = bond_length_sq * M_full * sum_yy;
-                            stress[2] = bond_length_sq * M_full * sum_zz;
+                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                         }
                         else
                         {
@@ -993,10 +1038,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                             double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKx2, coeff);
                             double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKy2, coeff);
                             double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKz2, coeff);
+                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
 
-                            stress[0] = bond_length_sq * M_full * sum_xx;
-                            stress[1] = bond_length_sq * M_full * sum_yy;
-                            stress[2] = bond_length_sq * M_full * sum_zz;
+                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
+                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
+                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
                         }
 
                         return stress;
@@ -1011,7 +1057,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         std::vector<double> qk_1(coeff_size);
         std::vector<double> qk_2(coeff_size);
 
-        // k⊗k dyad components (Cartesian)
+        // v⊗v dyad components (deformation vector v = 2π g⁻¹ m, units 1/L²)
         const double* kk_xx = pseudo->get_fourier_basis_x();
         const double* kk_yy = pseudo->get_fourier_basis_y();
         const double* kk_zz = pseudo->get_fourier_basis_z();
@@ -1022,9 +1068,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // ============================================================================
         // PERFORMANCE-CRITICAL: Orthogonal box optimization
         // ============================================================================
-        // For orthogonal boxes (all angles = 90°), the cross-terms (σ_xy, σ_xz, σ_yz)
-        // are mathematically zero and do not need to be computed. This optimization
-        // skips unnecessary calculations for the common case of orthogonal boxes.
+        // For orthogonal boxes (all angles = 90°), the cross-term sums (V₁₂, V₁₃, V₂₃)
+        // are not computed: angle optimization is inactive for orthogonal crystal
+        // systems, so those slots are simply left at zero. (For generic asymmetric
+        // fields the true values need not vanish, but they are never consumed.)
         //
         // DO NOT REMOVE THIS OPTIMIZATION without benchmarking! We have experienced
         // performance regressions before when this check was accidentally removed.
@@ -1037,25 +1084,38 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         T* q_1_full = q_1;
         T* q_2_full = q_2;
 
+        // Thread-local buffers: this function is called from OpenMP parallel
+        // regions (block loops in compute_stress), so the shared class members
+        // q_full_in_/q_full_out_ must NOT be used here.
+        thread_local std::vector<T> q_full_1_local;
+        thread_local std::vector<T> q_full_2_local;
+
         if (space_group_ != nullptr)
         {
+            const int M_full = cb->get_total_grid();
+            if (static_cast<int>(q_full_1_local.size()) != M_full)
+            {
+                q_full_1_local.resize(M_full);
+                q_full_2_local.resize(M_full);
+            }
+
             // Expand reduced basis → full grid
             if constexpr (std::is_same<T, double>::value)
             {
-                space_group_->from_reduced_basis(q_1, q_full_in_.data(), 1);
-                space_group_->from_reduced_basis(q_2, q_full_out_.data(), 1);
+                space_group_->from_reduced_basis(q_1, q_full_1_local.data(), 1);
+                space_group_->from_reduced_basis(q_2, q_full_2_local.data(), 1);
             }
             else // complex<double>: expand as 2 interleaved real fields
             {
                 space_group_->from_reduced_basis(
                     reinterpret_cast<const double*>(q_1),
-                    reinterpret_cast<double*>(q_full_in_.data()), 2);
+                    reinterpret_cast<double*>(q_full_1_local.data()), 2);
                 space_group_->from_reduced_basis(
                     reinterpret_cast<const double*>(q_2),
-                    reinterpret_cast<double*>(q_full_out_.data()), 2);
+                    reinterpret_cast<double*>(q_full_2_local.data()), 2);
             }
-            q_1_full = q_full_in_.data();
-            q_2_full = q_full_out_.data();
+            q_1_full = q_full_1_local.data();
+            q_2_full = q_full_2_local.data();
         }
 
         // Transform to Fourier space
@@ -1080,10 +1140,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    // Cartesian stress tensor diagonal components from k⊗k dyad
-                    stress[0] += coeff * kk_xx[i];  // σ_xx
-                    stress[1] += coeff * kk_yy[i];  // σ_yy
-                    stress[2] += coeff * kk_zz[i];  // σ_zz
+                    // Diagonal v⊗v sums
+                    stress[0] += coeff * kk_xx[i];  // V₁₁
+                    stress[1] += coeff * kk_yy[i];  // V₂₂
+                    stress[2] += coeff * kk_zz[i];  // V₃₃
                 }
 
                 // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
@@ -1099,9 +1159,9 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                         else
                             coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                        stress[3] += coeff * kk_xy[i];  // σ_xy
-                        stress[4] += coeff * kk_xz[i];  // σ_xz
-                        stress[5] += coeff * kk_yz[i];  // σ_yz
+                        stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
+                        stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
+                        stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
                     }
                 }
             }
@@ -1116,10 +1176,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    // Cartesian stress tensor components for 2D
-                    stress[0] += coeff * kk_xx[i];  // σ_xx
-                    stress[1] += coeff * kk_yy[i];  // σ_yy
-                    stress[2] += coeff * kk_xy[i];  // σ_xy (stored in index 2 for 2D)
+                    // v⊗v sums for 2D
+                    stress[0] += coeff * kk_xx[i];  // V₁₁
+                    stress[1] += coeff * kk_yy[i];  // V₂₂
+                    stress[2] += coeff * kk_xy[i];  // V₁₂ (stored in index 2 for 2D)
                 }
             }
             else if (DIM == 1)
@@ -1134,7 +1194,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    stress[0] += coeff * kk_xx[i];  // σ_xx (Miller index maps to m1 for periodic)
+                    stress[0] += coeff * kk_xx[i];  // V₁₁ (Miller index maps to m1 for periodic)
                 }
             }
         }
@@ -1155,10 +1215,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    // Cartesian stress tensor diagonal components from k⊗k dyad
-                    stress[0] += coeff * kk_xx[i];  // σ_xx
-                    stress[1] += coeff * kk_yy[i];  // σ_yy
-                    stress[2] += coeff * kk_zz[i];  // σ_zz
+                    // Diagonal v⊗v sums
+                    stress[0] += coeff * kk_xx[i];  // V₁₁
+                    stress[1] += coeff * kk_yy[i];  // V₂₂
+                    stress[2] += coeff * kk_zz[i];  // V₃₃
                 }
 
                 // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
@@ -1170,9 +1230,9 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                         double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                         double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                        stress[3] += coeff * kk_xy[i];  // σ_xy
-                        stress[4] += coeff * kk_xz[i];  // σ_xz
-                        stress[5] += coeff * kk_yz[i];  // σ_yz
+                        stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
+                        stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
+                        stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
                     }
                 }
             }
@@ -1185,10 +1245,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    // Cartesian stress tensor components for 2D (mapped to y-z internally)
-                    stress[0] += coeff * kk_yy[i];  // σ_xx (stored in y due to internal mapping)
-                    stress[1] += coeff * kk_zz[i];  // σ_yy (stored in z due to internal mapping)
-                    stress[2] += coeff * kk_yz[i];  // σ_xy (stored in yz due to internal mapping)
+                    // v⊗v sums for 2D (mapped to y-z internally)
+                    stress[0] += coeff * kk_yy[i];  // V₁₁ (stored in y due to internal mapping)
+                    stress[1] += coeff * kk_zz[i];  // V₂₂ (stored in z due to internal mapping)
+                    stress[2] += coeff * kk_yz[i];  // V₁₂ (stored in yz due to internal mapping)
                 }
             }
             else if (DIM == 1)
@@ -1200,7 +1260,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    stress[0] += coeff * kk_zz[i];  // σ_xx (stored in z due to internal mapping)
+                    stress[0] += coeff * kk_zz[i];  // V₁₁ (stored in z due to internal mapping)
                 }
             }
         }
