@@ -40,6 +40,20 @@ __global__ void kernel_apply_boltzmann_crys(
     d_data[idx] *= d_boltz[idx];
 }
 
+/**
+ * @brief Apply raw multiplier with explicit normalization factor.
+ */
+__global__ void kernel_apply_multiplier_crys(
+    double* __restrict__ d_data,
+    const double* __restrict__ d_multiplier,
+    double norm,
+    int M)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= M) return;
+    d_data[idx] *= d_multiplier[idx] * norm;
+}
+
 //------------------------------------------------------------------------------
 // Constructor
 //------------------------------------------------------------------------------
@@ -93,10 +107,31 @@ CudaCrysFFT::CudaCrysFFT(
 CudaCrysFFT::~CudaCrysFFT()
 {
     freeBoltzmann();
+    freeMultiplierCaches();
 
     if (dct_forward_) delete dct_forward_;
     if (dct_backward_) delete dct_backward_;
     if (d_work_) cudaFree(d_work_);
+}
+
+//------------------------------------------------------------------------------
+// Free cached stress multipliers
+//------------------------------------------------------------------------------
+void CudaCrysFFT::freeMultiplierCaches()
+{
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        if (d_axis_k2_[axis])
+        {
+            cudaFree(d_axis_k2_[axis]);
+            d_axis_k2_[axis] = nullptr;
+        }
+    }
+    for (auto& kv : d_axis_boltz_k2_)
+    {
+        if (kv.second) cudaFree(kv.second);
+    }
+    d_axis_boltz_k2_.clear();
 }
 
 //------------------------------------------------------------------------------
@@ -126,6 +161,7 @@ void CudaCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
 
     cell_para_ = cell_para;
     freeBoltzmann();
+    freeMultiplierCaches();
     ds_current_ = 0.0;
 }
 
@@ -287,4 +323,131 @@ void CudaCrysFFT::set_stream(cudaStream_t stream)
         dct_forward_->set_stream(stream_);
     if (dct_backward_)
         dct_backward_->set_stream(stream_);
+}
+
+//------------------------------------------------------------------------------
+// Apply arbitrary k-space multiplier (for stress computation)
+//------------------------------------------------------------------------------
+void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double* d_multiplier, cudaStream_t stream)
+{
+    set_stream(stream);
+    int threads = 256;
+    int blocks = (M_physical_ + threads - 1) / threads;
+
+    // Same in-place strategy as diffusion(): work directly on the output buffer
+    double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
+    if (d_q_in != d_q_out)
+    {
+        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
+                                        cudaMemcpyDeviceToDevice, stream_));
+    }
+
+    // Forward DCT-II (in-place)
+    dct_forward_->execute(d_work);
+
+    // Apply raw multiplier with round-trip normalization
+    kernel_apply_multiplier_crys<<<blocks, threads, 0, stream_>>>(d_work, d_multiplier, norm_factor_, M_physical_);
+    gpu_error_check(cudaPeekAtLastError());
+
+    // Backward DCT-III (in-place)
+    dct_backward_->execute(d_work);
+}
+
+//------------------------------------------------------------------------------
+// Per-axis k² arrays (host computation)
+//------------------------------------------------------------------------------
+void CudaCrysFFT::computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const
+{
+    kx2.resize(M_physical_);
+    ky2.resize(M_physical_);
+    kz2.resize(M_physical_);
+
+    const double factor_x = 2.0 * M_PI / cell_para_[0];
+    const double factor_y = 2.0 * M_PI / cell_para_[1];
+    const double factor_z = 2.0 * M_PI / cell_para_[2];
+
+    const int Nx2 = nx_physical_[0];
+    const int Ny2 = nx_physical_[1];
+    const int Nz2 = nx_physical_[2];
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        double kx = ix * factor_x;
+        double vx = kx * kx;
+        for (int iy = 0; iy < Ny2; ++iy)
+        {
+            double ky = iy * factor_y;
+            double vy = ky * ky;
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                double kz = iz * factor_z;
+                kx2[idx] = vx;
+                ky2[idx] = vy;
+                kz2[idx] = kz * kz;
+                ++idx;
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+// Cached device multiplier: k_axis² (continuous chain stress)
+//------------------------------------------------------------------------------
+const double* CudaCrysFFT::get_axis_k2_multiplier(int axis)
+{
+    if (axis < 0 || axis > 2)
+        throw std::invalid_argument("CudaCrysFFT::get_axis_k2_multiplier: axis must be 0, 1, or 2");
+
+    if (d_axis_k2_[axis] != nullptr)
+        return d_axis_k2_[axis];
+
+    std::vector<double> kx2, ky2, kz2;
+    computeAxisK2Host(kx2, ky2, kz2);
+    const std::vector<double>* selected[3] = {&kx2, &ky2, &kz2};
+
+    // Upload all three axes at once (they share the host computation)
+    for (int a = 0; a < 3; ++a)
+    {
+        if (d_axis_k2_[a] != nullptr)
+            continue;
+        double* d_ptr;
+        gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
+        gpu_error_check(cudaMemcpy(d_ptr, selected[a]->data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        d_axis_k2_[a] = d_ptr;
+    }
+
+    return d_axis_k2_[axis];
+}
+
+//------------------------------------------------------------------------------
+// Cached device multiplier: exp(-k²·coeff)·k_axis² (discrete chain stress)
+//------------------------------------------------------------------------------
+const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axis, double coeff)
+{
+    if (axis < 0 || axis > 2)
+        throw std::invalid_argument("CudaCrysFFT::get_axis_boltz_k2_multiplier: axis must be 0, 1, or 2");
+
+    auto key = std::make_pair(axis, coeff);
+    auto it = d_axis_boltz_k2_.find(key);
+    if (it != d_axis_boltz_k2_.end())
+        return it->second;
+
+    std::vector<double> kx2, ky2, kz2;
+    computeAxisK2Host(kx2, ky2, kz2);
+
+    std::vector<double> h_mult(M_physical_);
+    for (int i = 0; i < M_physical_; ++i)
+    {
+        double k2 = kx2[i] + ky2[i] + kz2[i];
+        double axis_k2 = (axis == 0) ? kx2[i] : (axis == 1) ? ky2[i] : kz2[i];
+        h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
+    }
+
+    double* d_ptr;
+    gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
+    gpu_error_check(cudaMemcpy(d_ptr, h_mult.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+    d_axis_boltz_k2_[key] = d_ptr;
+
+    return d_ptr;
 }

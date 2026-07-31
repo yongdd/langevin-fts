@@ -154,6 +154,7 @@ private:
     int crysfft_reduced_size_;
     int* d_crysfft_phys_to_reduced_;
     int* d_crysfft_reduced_to_phys_;
+    int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)
     CudaCrysFFTBase* crysfft_[MAX_STREAMS];
     double* d_crysfft_in_[MAX_STREAMS];
     double* d_crysfft_out_[MAX_STREAMS];

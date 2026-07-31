@@ -136,6 +136,7 @@ private:
     int crysfft_reduced_size_;                       ///< Reduced basis size
     int* d_crysfft_phys_to_reduced_;                 ///< Device map: physical index -> reduced index
     int* d_crysfft_reduced_to_phys_;                 ///< Device map: reduced index -> physical index
+    int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)
     CudaCrysFFTBase* crysfft_[MAX_STREAMS];          ///< Per-stream CrysFFT objects
     double* d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
     double* d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output

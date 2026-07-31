@@ -44,6 +44,7 @@
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
 #include "CudaCrysFFTObliqueZ.h"
+#include "CudaCrysFFTStress.h"
 #include "CrysFFTSelector.h"
 
 #ifndef M_PI
@@ -161,6 +162,7 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         crysfft_reduced_size_ = 0;
         d_crysfft_phys_to_reduced_ = nullptr;
         d_crysfft_reduced_to_phys_ = nullptr;
+        d_crysfft_orbit_counts_ = nullptr;
         for(int i=0; i<MAX_STREAMS; i++)
         {
             d_q_full_in_[i] = nullptr;
@@ -380,6 +382,11 @@ void CudaSolverPseudoRQM4<T>::cleanup_crysfft()
     {
         cudaFree(d_crysfft_reduced_to_phys_);
         d_crysfft_reduced_to_phys_ = nullptr;
+    }
+    if (d_crysfft_orbit_counts_ != nullptr)
+    {
+        cudaFree(d_crysfft_orbit_counts_);
+        d_crysfft_orbit_counts_ = nullptr;
     }
 
     for (int i = 0; i < MAX_STREAMS; i++)
@@ -616,6 +623,12 @@ void CudaSolverPseudoRQM4<T>::set_space_group(
                         gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
                                                    sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
                     }
+
+                    // Orbit counts for the CrysFFT stress fast path
+                    const auto& orbit_counts = space_group_->get_orbit_counts();
+                    gpu_error_check(cudaMalloc((void**)&d_crysfft_orbit_counts_, sizeof(int) * M_reduced));
+                    gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
+                                               sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
 
                     auto lx = cb->get_lx();
                     auto angles = cb->get_angles();
@@ -1159,6 +1172,49 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
         const int M = this->cb->get_total_grid();
+
+        // =====================================================================
+        // CrysFFT stress fast path (reduced grid, no full-grid FFT)
+        // Mirrors CpuSolverPseudoBase::compute_single_segment_stress.
+        // ObliqueZ and all other cases fall through to the standard path.
+        // =====================================================================
+        if constexpr (std::is_same_v<T, double>)
+        {
+            if (use_crysfft_ && space_group_ != nullptr && is_periodic_ && DIM == 3
+                && this->cb->is_orthogonal()
+                && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m))
+            {
+                const std::vector<double> lx_vec = this->cb->get_lx();
+
+                CudaCrysFFTStressArgs args{};
+                args.crysfft = crysfft_[STREAM];
+                args.mode = crysfft_mode_;
+                args.identity_map = crysfft_identity_map_;
+                args.M_phys = crysfft_physical_size_;
+                args.n_basis = n_basis_;
+                args.M_full = M;
+                args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
+                args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
+                args.d_orbit_counts = d_crysfft_orbit_counts_;
+                args.d_phys_work = d_crysfft_in_[STREAM];
+                args.d_phys_out = d_crysfft_out_[STREAM];
+                args.d_reduce_buf = d_stress_sum[STREAM];
+                args.d_cub_temp = d_temp_storage[STREAM];
+                args.cub_temp_bytes = temp_storage_bytes[STREAM];
+                args.space_group = space_group_;
+                args.lx[0] = lx_vec[0];
+                args.lx[1] = lx_vec[1];
+                args.lx[2] = lx_vec[2];
+                args.bond_length_sq = bond_length_sq;
+                args.include_bond_factor = false;  // continuous chains
+                args.global_ds = 0.0;
+                args.stream = streams[STREAM][0];
+
+                cuda_crysfft_compute_single_segment_stress(
+                    args, d_q_pair, &d_q_pair[n_basis_], d_segment_stress);
+                return;
+            }
+        }
 
         CuDeviceData<T>* d_q_pair_full = d_q_pair;
         if (space_group_ != nullptr)

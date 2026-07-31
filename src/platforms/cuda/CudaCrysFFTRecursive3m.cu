@@ -274,16 +274,12 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
 CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
 {
     for (auto& kv : k_cache_)
-    {
-        for (int i = 0; i < 8; ++i)
-        {
-            if (kv.second.re[i])
-                cudaFree(kv.second.re[i]);
-            if (kv.second.im[i])
-                cudaFree(kv.second.im[i]);
-        }
-    }
+        free_cache_device(kv.second);
     k_cache_.clear();
+
+    for (auto& kv : multiplier_cache_)
+        free_cache_device(kv.second);
+    multiplier_cache_.clear();
 
     if (d_step1_)
         cudaFree(d_step1_);
@@ -380,6 +376,91 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache(do
         }
     }
 
+    return build_k_cache_from_tempmat(tempmat);
+}
+
+CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache_from_multiplier(
+    MultiplierType type, double coeff)
+{
+    std::vector<double> kx(nx_logical_[0]);
+    std::vector<double> ky(nx_logical_[1]);
+    std::vector<double> kz(nx_logical_[2]);
+
+    double factor_Lx = 2.0 * kPi / cell_para_[0];
+    factor_Lx *= factor_Lx;
+    double factor_Ly = 2.0 * kPi / cell_para_[1];
+    factor_Ly *= factor_Ly;
+    double factor_Lz = 2.0 * kPi / cell_para_[2];
+    factor_Lz *= factor_Lz;
+
+    for (int ix = 0; ix < nx_logical_[0]; ++ix)
+    {
+        int temp = (ix > nx_logical_[0] / 2) ? (nx_logical_[0] - ix) : ix;
+        kx[ix] = temp * temp * factor_Lx;
+    }
+    for (int iy = 0; iy < nx_logical_[1]; ++iy)
+    {
+        int temp = (iy > nx_logical_[1] / 2) ? (nx_logical_[1] - iy) : iy;
+        ky[iy] = temp * temp * factor_Ly;
+    }
+    for (int iz = 0; iz < nx_logical_[2]; ++iz)
+    {
+        int temp = (iz > nx_logical_[2] / 2) ? (nx_logical_[2] - iz) : iz;
+        kz[iz] = temp * temp * factor_Lz;
+    }
+
+    std::vector<double> tempmat(static_cast<size_t>(M_logical_));
+    double factor = 1.0 / static_cast<double>(M_logical_);
+
+    for (int ix = 0; ix < nx_logical_[0]; ++ix)
+    {
+        for (int iy = 0; iy < nx_logical_[1]; ++iy)
+        {
+            size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
+            for (int iz = 0; iz < nx_logical_[2]; ++iz)
+            {
+                double kx2 = kx[ix];
+                double ky2 = ky[iy];
+                double kz2 = kz[iz];
+                double k2 = kx2 + ky2 + kz2;
+                double value = 0.0;
+
+                switch (type)
+                {
+                    case MultiplierType::Kx2:
+                        value = kx2;
+                        break;
+                    case MultiplierType::Ky2:
+                        value = ky2;
+                        break;
+                    case MultiplierType::Kz2:
+                        value = kz2;
+                        break;
+                    case MultiplierType::ExpKx2:
+                        value = std::exp(-k2 * coeff) * kx2;
+                        break;
+                    case MultiplierType::ExpKy2:
+                        value = std::exp(-k2 * coeff) * ky2;
+                        break;
+                    case MultiplierType::ExpKz2:
+                        value = std::exp(-k2 * coeff) * kz2;
+                        break;
+                    default:
+                        value = 0.0;
+                        break;
+                }
+
+                tempmat[base + iz] = value * factor;
+            }
+        }
+    }
+
+    return build_k_cache_from_tempmat(tempmat);
+}
+
+CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_tempmat(
+    const std::vector<double>& tempmat)
+{
     std::array<std::vector<double>, 8> k_split;
     std::array<double*, 8> k_split_ptr{};
     for (int i = 0; i < 8; ++i)
@@ -441,17 +522,30 @@ void CudaCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_par
     cell_para_ = cell_para;
 
     for (auto& kv : k_cache_)
-    {
-        for (int i = 0; i < 8; ++i)
-        {
-            if (kv.second.re[i])
-                cudaFree(kv.second.re[i]);
-            if (kv.second.im[i])
-                cudaFree(kv.second.im[i]);
-        }
-    }
+        free_cache_device(kv.second);
     k_cache_.clear();
     k_current_ = nullptr;
+
+    for (auto& kv : multiplier_cache_)
+        free_cache_device(kv.second);
+    multiplier_cache_.clear();
+}
+
+void CudaCrysFFTRecursive3m::free_cache_device(KCacheDevice& cache)
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        if (cache.re[i])
+        {
+            cudaFree(cache.re[i]);
+            cache.re[i] = nullptr;
+        }
+        if (cache.im[i])
+        {
+            cudaFree(cache.im[i]);
+            cache.im[i] = nullptr;
+        }
+    }
 }
 
 void CudaCrysFFTRecursive3m::set_contour_step(double coeff)
@@ -479,6 +573,12 @@ void CudaCrysFFTRecursive3m::diffusion(double* d_q_in, double* d_q_out, cudaStre
     if (!k_current_)
         throw_with_line_number("CudaCrysFFTRecursive3m::set_contour_step must be called before diffusion().");
 
+    apply_with_cache(*k_current_, d_q_in, d_q_out, stream);
+}
+
+void CudaCrysFFTRecursive3m::apply_with_cache(
+    const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream)
+{
     set_stream(stream);
 
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
@@ -495,15 +595,33 @@ void CudaCrysFFTRecursive3m::diffusion(double* d_q_in, double* d_q_out, cudaStre
 
     ker_apply_k_3m<<<blocks, threads, 0, stream_>>>(
         d_step2_, d_step1_,
-        k_current_->re[0], k_current_->re[1], k_current_->re[2], k_current_->re[3],
-        k_current_->re[4], k_current_->re[5], k_current_->re[6], k_current_->re[7],
-        k_current_->im[0], k_current_->im[1], k_current_->im[2], k_current_->im[3],
-        k_current_->im[4], k_current_->im[5], k_current_->im[6], k_current_->im[7],
+        cache.re[0], cache.re[1], cache.re[2], cache.re[3],
+        cache.re[4], cache.re[5], cache.re[6], cache.re[7],
+        cache.im[0], cache.im[1], cache.im[2], cache.im[3],
+        cache.im[4], cache.im[5], cache.im[6], cache.im[7],
         nx_physical_[0], nx_physical_[1], nx_physical_[2], nx_physical_[2] / 2 + 1);
     gpu_error_check(cudaPeekAtLastError());
 
     if (cufftExecZ2D(plan_c2r_, d_step2_, d_work) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTRecursive3m cufftExecZ2D failed.");
+}
+
+void CudaCrysFFTRecursive3m::apply_multiplier(
+    double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream)
+{
+    // Kx2/Ky2/Kz2 do not depend on coeff; normalize the cache key
+    const bool uses_coeff =
+        (type == MultiplierType::ExpKx2 || type == MultiplierType::ExpKy2 || type == MultiplierType::ExpKz2);
+    auto key = std::make_pair(static_cast<int>(type), uses_coeff ? coeff : 0.0);
+
+    auto it = multiplier_cache_.find(key);
+    if (it == multiplier_cache_.end())
+    {
+        auto inserted = multiplier_cache_.emplace(key, generate_k_cache_from_multiplier(type, coeff));
+        it = inserted.first;
+    }
+
+    apply_with_cache(it->second, d_q_in, d_q_out, stream);
 }
 
 void CudaCrysFFTRecursive3m::set_stream(cudaStream_t stream)

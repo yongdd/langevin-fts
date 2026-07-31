@@ -20,6 +20,8 @@
 
 #include <array>
 #include <map>
+#include <utility>
+#include <vector>
 #include <cuda_runtime.h>
 #include <cufft.h>
 
@@ -85,6 +87,10 @@ private:
     double norm_factor_;
     cudaStream_t stream_{0};      ///< CUDA stream for execution
 
+    // Cached stress multipliers (device memory)
+    double* d_axis_k2_[3] = {nullptr, nullptr, nullptr};          ///< k_axis² per axis
+    std::map<std::pair<int, double>, double*> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·k_axis² per (axis, coeff)
+
     /**
      * @brief Generate Boltzmann factors for given ds.
      */
@@ -94,6 +100,16 @@ private:
      * @brief Free Boltzmann factor memory.
      */
     void freeBoltzmann();
+
+    /**
+     * @brief Free cached stress multiplier arrays.
+     */
+    void freeMultiplierCaches();
+
+    /**
+     * @brief Compute per-axis k² arrays on the physical grid (host).
+     */
+    void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
 
 public:
     /**
@@ -129,6 +145,42 @@ public:
     void diffusion(double* d_q_in, double* d_q_out);
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream);
     void set_stream(cudaStream_t stream);
+
+    /**
+     * @brief Apply an arbitrary k-space multiplier: DCT-II -> multiply -> DCT-III.
+     *
+     * Round-trip normalization (1/M_logical) is applied internally, so the
+     * multiplier array must contain raw (unnormalized) values, mirroring the
+     * CPU CrysFFTPmmmBase::apply_multiplier convention.
+     * The input array is preserved when d_q_in != d_q_out.
+     *
+     * @param d_q_in       Input field on device (physical grid)
+     * @param d_q_out      Output field on device (physical grid)
+     * @param d_multiplier Device multiplier array (physical grid)
+     * @param stream       CUDA stream for execution
+     */
+    void apply_multiplier(double* d_q_in, double* d_q_out, const double* d_multiplier, cudaStream_t stream);
+
+    /**
+     * @brief Device array of Cartesian k_axis² on the physical DCT grid.
+     *
+     * Used for the CrysFFT stress fast path (continuous chains).
+     * Cached; invalidated when the cell parameters change.
+     *
+     * @param axis 0=x, 1=y, 2=z
+     */
+    const double* get_axis_k2_multiplier(int axis);
+
+    /**
+     * @brief Device array of exp(-k²·coeff)·k_axis² on the physical DCT grid.
+     *
+     * Used for the CrysFFT stress fast path (discrete chains).
+     * Cached per (axis, coeff); invalidated when the cell parameters change.
+     *
+     * @param axis  0=x, 1=y, 2=z
+     * @param coeff Bond factor coefficient (b²·ds/6)
+     */
+    const double* get_axis_boltz_k2_multiplier(int axis, double coeff);
 
     // Getters
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

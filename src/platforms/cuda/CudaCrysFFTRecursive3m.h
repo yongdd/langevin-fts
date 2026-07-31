@@ -11,7 +11,9 @@
 #define CUDA_CRYS_FFT_RECURSIVE_3M_H_
 
 #include <array>
+#include <map>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <cuda_runtime.h>
@@ -22,6 +24,23 @@
 class CudaCrysFFTRecursive3m : public CudaCrysFFTBase
 {
 public:
+    /**
+     * @brief Multiplier selection for the stress fast path.
+     *
+     * Mirrors the CPU CrysFFTRecursive3mBase::MultiplierType:
+     * - Kx2/Ky2/Kz2:       Cartesian k_axis² (continuous chains)
+     * - ExpKx2/ExpKy2/ExpKz2: exp(-k²·coeff)·k_axis² (discrete chains)
+     */
+    enum class MultiplierType
+    {
+        Kx2,
+        Ky2,
+        Kz2,
+        ExpKx2,
+        ExpKy2,
+        ExpKz2
+    };
+
     CudaCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para,
@@ -34,6 +53,22 @@ public:
     void diffusion(double* d_q_in, double* d_q_out) override;
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) override;
     void set_stream(cudaStream_t stream) override;
+
+    /**
+     * @brief Apply a k-space multiplier via the 3m pipeline (for stress).
+     *
+     * Uses the same D2Z -> k-multiply -> Z2D pipeline as diffusion() but with
+     * a multiplier cache built from MultiplierType instead of the Boltzmann
+     * factor. Round-trip normalization is included. The input array is
+     * preserved when d_q_in != d_q_out.
+     *
+     * @param d_q_in  Input field on device (physical grid)
+     * @param d_q_out Output field on device (physical grid)
+     * @param type    Multiplier type (per-axis k² with optional bond factor)
+     * @param coeff   Bond factor coefficient (used for Exp* types only)
+     * @param stream  CUDA stream for execution
+     */
+    void apply_multiplier(double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream);
 
 private:
     struct KCacheDevice
@@ -58,6 +93,9 @@ private:
     const KCacheDevice* k_current_{nullptr};
     double coeff_current_{0.0};
 
+    /// Multiplier caches for the stress fast path, keyed by (type, coeff)
+    std::map<std::pair<int, double>, KCacheDevice> multiplier_cache_;
+
     cufftHandle plan_r2c_{};
     cufftHandle plan_c2r_{};
     bool plans_initialized_{false};
@@ -72,6 +110,10 @@ private:
     void free_plans();
     void generate_twiddle_factors();
     KCacheDevice generate_k_cache(double coeff);
+    KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
+    KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);
+    void free_cache_device(KCacheDevice& cache);
+    void apply_with_cache(const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream);
 };
 
 #endif
