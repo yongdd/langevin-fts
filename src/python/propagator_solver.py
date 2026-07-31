@@ -272,11 +272,15 @@ class PropagatorSolver:
         # Store checkpointing option
         self.reduce_memory = reduce_memory
 
-        # Store and validate mask
+        # Store and validate mask.
+        # Compare against the full grid size: the n_grid property cannot be
+        # used here because it touches _propagator_computation, which is not
+        # created until after polymers are added (masks are always supplied
+        # on the full grid regardless of any space group).
         if mask is not None:
-            if np.size(mask) != self.n_grid:
+            if np.size(mask) != self._total_grid:
                 raise ValueError(
-                    f"mask has wrong size: {np.size(mask)} != {self.n_grid}"
+                    f"mask has wrong size: {np.size(mask)} != {self._total_grid}"
                 )
             self.mask = np.asarray(mask)
         else:
