@@ -171,6 +171,16 @@ public:
     void update_laplacian_operator() override;
 
     /**
+     * @brief Force off-diagonal stress computation; forwarded to the solver.
+     */
+    void set_force_off_diagonal_stress(bool force) override
+    {
+        PropagatorComputation<T>::set_force_off_diagonal_stress(force);
+        if (propagator_solver != nullptr)
+            propagator_solver->set_force_off_diagonal_stress(force);
+    }
+
+    /**
      * @brief Compute all statistics.
      *
      * Convenience function that calls compute_propagators() and

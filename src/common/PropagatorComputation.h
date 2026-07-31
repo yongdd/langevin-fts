@@ -146,6 +146,20 @@ protected:
      */
     std::vector<T> phi_full_buffer_;
 
+    /**
+     * @brief Force computation of off-diagonal (cross-term) stress sums.
+     *
+     * By default (false), the stress computation skips the cross-term sums
+     * (V₁₂, V₁₃, V₂₃) for orthogonal boxes as a performance optimization,
+     * because angle optimization is normally inactive for orthogonal crystal
+     * systems. However, when angle optimization starts at exactly 90° angles
+     * (e.g., Monoclinic/Triclinic/Oblique2D runs initialized orthogonal),
+     * the angle derivatives would then be reported as zero and the angles
+     * would never move. Setting this flag to true forces the cross-term
+     * accumulation even for orthogonal boxes.
+     */
+    bool force_off_diagonal_stress_ = false;
+
 public:
     /**
      * @brief Construct a PropagatorComputation solver.
@@ -386,6 +400,25 @@ public:
      * @return Pointer to SpaceGroup, or nullptr if not set
      */
     SpaceGroup* get_space_group() const { return space_group_; }
+
+    /**
+     * @brief Force off-diagonal (cross-term) stress computation for orthogonal boxes.
+     *
+     * Explicit opt-in used when angle optimization is active but the box is
+     * (initially) exactly orthogonal; otherwise the orthogonal-box fast path
+     * would report zero angle derivatives. Platform implementations forward
+     * this flag to their propagator solvers.
+     *
+     * @param force true to always accumulate V₁₂/V₁₃/V₂₃; false (default)
+     *              keeps the orthogonal-box skip.
+     */
+    virtual void set_force_off_diagonal_stress(bool force) { force_off_diagonal_stress_ = force; }
+
+    /**
+     * @brief Get the force-off-diagonal-stress flag.
+     * @return Current flag value (default false)
+     */
+    bool get_force_off_diagonal_stress() const { return force_off_diagonal_stress_; }
 
     /**
      * @brief Compute propagators using reduced basis input fields.

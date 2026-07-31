@@ -805,7 +805,10 @@ void CudaComputationContinuous<T>::compute_stress()
                 _block_dq_dl[i] = 0.0;
 
             // Number of stress components: 3D orthogonal->3, 3D non-orthogonal->6, 2D->3, 1D->1
-            const bool is_ortho = this->cb->is_orthogonal();
+            // Treat the box as non-orthogonal when off-diagonal stress is forced
+            // (angle optimization starting at exactly 90° angles) so that the
+            // cross-term slots are sized, transferred, and accumulated.
+            const bool is_ortho = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
             const int N_STRESS_DIM = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
             CuDeviceData<T> *d_segment_stress;
             T segment_stress[6];  // Max size to avoid VLA issues
@@ -896,7 +899,10 @@ void CudaComputationContinuous<T>::compute_stress()
 
         // Compute total stress
         // N_STRESS_TOTAL: 3D orthogonal->3, 3D non-orthogonal->6, 2D->3, 1D->1
-        const bool is_ortho = this->cb->is_orthogonal();
+        // Treat the box as non-orthogonal when off-diagonal stress is forced
+        // (angle optimization starting at exactly 90° angles) so that the
+        // cross-term slots are sized, transferred, and accumulated.
+        const bool is_ortho = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
         const int N_STRESS_TOTAL = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)

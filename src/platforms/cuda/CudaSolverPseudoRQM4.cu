@@ -1180,8 +1180,15 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         // =====================================================================
         if constexpr (std::is_same_v<T, double>)
         {
+            // NOTE: The CrysFFT fast path computes only the diagonal sums
+            // (V₁₁, V₂₂, V₃₃). This is fine because crystal systems eligible
+            // for CrysFFT are orthogonal and never optimize angles. If the
+            // force-off-diagonal flag is set (angle optimization active),
+            // fall back to the standard path below — which can compute the
+            // cross terms — instead of silently returning zeros for them.
             if (use_crysfft_ && space_group_ != nullptr && is_periodic_ && DIM == 3
                 && this->cb->is_orthogonal()
+                && !this->force_off_diagonal_stress_
                 && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m))
             {
                 const std::vector<double> lx_vec = this->cb->get_lx();
@@ -1291,8 +1298,12 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         // performance regressions before when this check was accidentally removed.
         // See git history for commit 6d1dc54 which caused a regression by always
         // computing all 6 components.
+        //
+        // Explicit opt-in: force_off_diagonal_stress_ (set when angle optimization
+        // is active) disables the skip so that angle derivatives are available
+        // even when the box is at exactly 90° angles. The skip remains the default.
         // ============================================================================
-        const bool is_orthogonal = this->cb->is_orthogonal();
+        const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
 
         if ( DIM == 3 )
         {

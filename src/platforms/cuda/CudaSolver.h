@@ -74,9 +74,26 @@ public:
     std::map<int, std::map<std::string, CuDeviceData<T>*>> d_exp_dw_half;
 
     /**
+     * @brief Force off-diagonal (cross-term) stress accumulation for orthogonal boxes.
+     *
+     * By default the stress computation skips V₁₂/V₁₃/V₂₃ for orthogonal
+     * boxes (performance optimization). Set to true when angle optimization
+     * is active so that angle derivatives are available even when the box
+     * starts at exactly 90° angles. Forwarded from
+     * PropagatorComputation::set_force_off_diagonal_stress().
+     */
+    bool force_off_diagonal_stress_ = false;
+
+    /**
      * @brief Virtual destructor.
      */
     virtual ~CudaSolver() {};
+
+    /**
+     * @brief Set the force-off-diagonal-stress flag (see force_off_diagonal_stress_).
+     * @param force true to always accumulate cross-term stress sums
+     */
+    void set_force_off_diagonal_stress(bool force) { force_off_diagonal_stress_ = force; }
 
     /**
      * @brief Set space group for reduced basis expand/reduce operations.

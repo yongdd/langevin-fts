@@ -131,6 +131,16 @@ public:
     void update_laplacian_operator() override;
 
     /**
+     * @brief Force off-diagonal stress computation; forwarded to the solver.
+     */
+    void set_force_off_diagonal_stress(bool force) override
+    {
+        PropagatorComputation<T>::set_force_off_diagonal_stress(force);
+        if (propagator_solver != nullptr)
+            propagator_solver->set_force_off_diagonal_stress(force);
+    }
+
+    /**
      * @brief Get total partition function for a polymer.
      *
      * @param polymer Polymer index

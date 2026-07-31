@@ -323,6 +323,19 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 - Grid must be compatible with space group symmetry
 - Beta feature - validate results carefully
 - Requires `spglib` library
+- **Initial-field symmetry and stress**: input fields are projected onto the
+  *enabled* symmetry basis, which may be a physical-basis **subgroup** (m3,
+  Pmmm mirrors, or z-mirror) of the full space group. A field that is
+  subgroup-symmetric but not fully symmetric still yields correct partition
+  functions and concentrations, but the space-group **stress** path assumes
+  full-group symmetry of the propagators, so early box-relaxation steps can
+  be distorted. In practice this is self-correcting: the SCFT iteration
+  converges to the fully symmetric saddle point, and the stress becomes
+  exact as the fields converge. Analytic initial guesses built with the
+  corner convention `round(x*nx)` are index-shifted relative to the
+  cell-centered `(i+0.5)/N` orbit map and are therefore never exactly
+  symmetric — this is harmless for the converged answer, but supply fully
+  symmetric fields if the early box-size trajectory matters.
 - **Discrete chains**: space group symmetry is supported on both **CPU and CUDA**
   (standard mode)
 - **`reduce_memory=True` + discrete chains + space group** is not supported on any

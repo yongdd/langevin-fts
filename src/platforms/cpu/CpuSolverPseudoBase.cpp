@@ -821,9 +821,16 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // =====================================================================
         // CrysFFT stress path (reduced grid, no full-grid FFT)
         // =====================================================================
+        // NOTE: The CrysFFT fast path computes only the diagonal sums (V₁₁, V₂₂,
+        // V₃₃). This is fine because crystal systems eligible for CrysFFT are
+        // orthogonal and never optimize angles. If the force-off-diagonal flag
+        // is set (angle optimization active) while a space group + CrysFFT are
+        // in use, fall back to the standard path below — which can compute the
+        // cross terms — instead of silently returning zeros for them.
         if constexpr (std::is_same_v<T, double>)
         {
-            if (use_crysfft() && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal())
+            if (use_crysfft() && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal()
+                && !this->force_off_diagonal_stress_)
             {
                 const int M_full = cb->get_total_grid();
                 const int M_reduced = space_group_->get_n_reduced_basis();
@@ -1077,8 +1084,12 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // performance regressions before when this check was accidentally removed.
         // See git history for commit 6d1dc54 which caused a regression by always
         // computing all 6 components.
+        //
+        // Explicit opt-in: force_off_diagonal_stress_ (set when angle optimization
+        // is active) disables the skip so that angle derivatives are available
+        // even when the box is at exactly 90° angles. The skip remains the default.
         // ============================================================================
-        const bool is_orthogonal = this->cb->is_orthogonal();
+        const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
 
         // Determine pointers based on space group
         T* q_1_full = q_1;

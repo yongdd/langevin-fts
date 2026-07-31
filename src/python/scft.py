@@ -742,6 +742,7 @@ class SCFT:
                     self.sg.enable_z_mirror_physical_basis()
                 except Exception:
                     pass
+
         else:
             self.sg = None
 
@@ -929,6 +930,14 @@ class SCFT:
                 n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
+
+        # Enable off-diagonal (cross-term) stress computation when angle
+        # optimization is active. Without this explicit opt-in, a run started
+        # at exactly 90-degree angles would compute zero angle derivatives
+        # (the orthogonal-box stress fast path skips the V12/V13/V23 cross
+        # terms) and the angles would never move away from 90 degrees.
+        if len(self.angles_reduced_indices) > 0:
+            self.prop_solver._propagator_computation.set_force_off_diagonal_stress(True)
 
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point

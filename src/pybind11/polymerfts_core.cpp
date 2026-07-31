@@ -394,6 +394,10 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
             }
         })
         .def("compute_stress", &PropagatorComputation<T>::compute_stress)
+        .def("set_force_off_diagonal_stress", &PropagatorComputation<T>::set_force_off_diagonal_stress,
+            "Force cross-term (V12/V13/V23) stress accumulation even for orthogonal boxes. "
+            "Needed when angle optimization starts at exactly 90 degree angles.")
+        .def("get_force_off_diagonal_stress", &PropagatorComputation<T>::get_force_off_diagonal_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
         .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
