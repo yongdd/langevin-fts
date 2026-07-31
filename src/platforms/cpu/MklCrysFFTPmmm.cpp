@@ -65,14 +65,21 @@ static void applyDCT2Forward1D(
                                 fft_out.data());
 
             // DCT-II postprocessing
-            temp[offset] = fft_out[0];
+            // Scaled to match FFTW's unnormalized REDFT10 convention:
+            //   X_k = 2 * sum_j x_j cos(pi*(j+0.5)*k/n)
+            // CrysFFTPmmmBase applies norm_factor_ = 1/M_logical afterwards,
+            // which assumes a REDFT10/REDFT01 round-trip gain of 2n per
+            // dimension. (Without the factor 2 here and with the 1/n in the
+            // DCT-III below, the round trip was unity and every diffusion()
+            // call shrank the field by 1/M_logical.)
+            temp[offset] = 2.0 * fft_out[0];
             for (int k = 1; k <= n / 2; ++k)
             {
                 double Ta = fft_out[k] + fft_out[n - k];
                 double Tb = fft_out[k] - fft_out[n - k];
 
-                double result_k = (Ta * cos_tbl[k] + Tb * sin_tbl[k]) * 0.5;
-                double result_nk = (Ta * sin_tbl[k] - Tb * cos_tbl[k]) * 0.5;
+                double result_k = Ta * cos_tbl[k] + Tb * sin_tbl[k];
+                double result_nk = Ta * sin_tbl[k] - Tb * cos_tbl[k];
 
                 temp[offset + k * stride] = result_k;
                 if (k < n - k)
@@ -135,16 +142,20 @@ static void applyDCT3Backward1D(
             DftiComputeForward(fft_forward, fft_in.data(), fft_out.data());
 
             // DCT-III postprocessing
-            double scale = 1.0 / n;
-            temp[offset] = fft_out[0].real() * scale;
+            // No 1/n scaling: matches FFTW's unnormalized REDFT01 convention,
+            //   x_j = X_0 + 2 * sum_{k>=1} X_k cos(pi*k*(j+0.5)/n),
+            // so that REDFT01(REDFT10(x)) = 2n*x per dimension and the
+            // norm_factor_ = 1/M_logical applied by CrysFFTPmmmBase yields a
+            // unit round trip (identical to FftwCrysFFTPmmm).
+            temp[offset] = fft_out[0].real();
             for (int k = 1; k <= n / 2; ++k)
             {
                 double re = fft_out[k].real();
                 double im = fft_out[k].imag();
 
-                temp[offset + (2 * k - 1) * stride] = (re - im) * scale;
+                temp[offset + (2 * k - 1) * stride] = re - im;
                 if (2 * k < n)
-                    temp[offset + (2 * k) * stride] = (re + im) * scale;
+                    temp[offset + (2 * k) * stride] = re + im;
             }
         }
     }

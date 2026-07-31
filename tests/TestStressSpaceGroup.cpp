@@ -340,6 +340,41 @@ int main()
         }
         symmetrize_fields(case_b);
 
+        // Case C: same cubic group on a 40^3 grid, where (nz/2) % 8 != 0 disables
+        // the Recursive3m engine and CrysFFT falls back to the PmmmDct engine.
+        // Regression for two bugs: the MklCrysFFTPmmm DCT normalization (broken
+        // propagators, Q -> 0) and cubic axis-averaging in the PmmmDct stress path.
+        CaseSpec case_c = case_b;
+        case_c.name = "Im-3m (BCC, cubic, 40^3 PmmmDct fallback)";
+        case_c.nx = {40, 40, 40};
+        SpaceGroup sg_bcc40(case_c.nx, "Im-3m", 529);
+        case_c.sg = &sg_bcc40;
+        {
+            const int M = case_c.nx[0]*case_c.nx[1]*case_c.nx[2];
+            case_c.w_full.assign(2*M, 0.0);
+            for(int i=0; i<case_c.nx[0]; i++)
+            {
+                double X = (i+0.5)/case_c.nx[0];
+                for(int j=0; j<case_c.nx[1]; j++)
+                {
+                    double Y = (j+0.5)/case_c.nx[1];
+                    for(int k=0; k<case_c.nx[2]; k++)
+                    {
+                        double Z = (k+0.5)/case_c.nx[2];
+                        int idx = i*case_c.nx[1]*case_c.nx[2] + j*case_c.nx[2] + k;
+                        double c110 = std::cos(2*PI*X)*std::cos(2*PI*Y)
+                                    + std::cos(2*PI*Y)*std::cos(2*PI*Z)
+                                    + std::cos(2*PI*Z)*std::cos(2*PI*X);
+                        double c200 = std::cos(4*PI*X) + std::cos(4*PI*Y) + std::cos(4*PI*Z);
+                        double w_a = 5.0*(c110 + 0.4*c200);
+                        case_c.w_full[idx]   = w_a;
+                        case_c.w_full[idx+M] = -0.6*w_a;
+                    }
+                }
+            }
+        }
+        symmetrize_fields(case_c);
+
         // ================= Run all platform / chain-model combinations =================
         // Any CPU platform (cpu-mkl or cpu-fftw) MUST run for BOTH chain models:
         // the CPU CrysFFT stress path and the discrete+space-group path are the
@@ -356,7 +391,7 @@ int main()
             const bool is_cpu = (platform.rfind("cpu", 0) == 0);
             for(const std::string& chain_model : chain_models)
             {
-                for(const CaseSpec* cs : {&case_a, &case_b})
+                for(const CaseSpec* cs : {&case_a, &case_b, &case_c})
                 {
                     std::cout << "==============================================" << std::endl;
                     std::cout << "Testing: " << platform << ", " << chain_model
