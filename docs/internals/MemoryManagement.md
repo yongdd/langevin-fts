@@ -225,7 +225,7 @@ The measured savings (~92%) are slightly higher than this estimate because the w
 - Complex architectures with many blocks
 - Running multiple simulations concurrently
 
-**Restriction (space-group symmetry)**: `reduce_memory=True` is not available for discrete chains combined with space-group symmetry — the CPU implementation throws "Space group symmetry is not yet supported for discrete chains with reduce_memory=True." (On CUDA, discrete chains with a space group are unsupported in both standard and reduce-memory modes.) Use continuous chains, standard mode on CPU, or drop the space group.
+**Restriction (space-group symmetry)**: `reduce_memory=True` is not available for discrete chains combined with space-group symmetry — the CPU implementation throws "Space group symmetry is not yet supported for discrete chains with reduce_memory=True." (On CUDA, the reduce-memory mode has the same restriction; standard mode supports discrete chains with a space group on both platforms.) Use continuous chains, standard mode, or drop the space group.
 
 ### Quick Reference
 

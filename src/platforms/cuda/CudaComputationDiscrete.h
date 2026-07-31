@@ -45,6 +45,9 @@
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
+template <typename T>
+class CudaSolverPseudoDiscrete;  // Forward declaration
+
 /**
  * @class CudaComputationDiscrete
  * @brief GPU propagator computation for discrete chains.
@@ -71,6 +74,25 @@ class CudaComputationDiscrete : public CudaComputationBase<T>
 private:
     /** @brief Half-bond propagators q(r,n+1/2) at junctions. */
     std::map<std::string, CuDeviceData<T> **> d_propagator_half_steps;
+
+    /// @name Space Group Support (reduced basis)
+    /// @{
+    /** @brief Typed pointer to the discrete solver (owned via propagator_solver). */
+    CudaSolverPseudoDiscrete<T>* solver_discrete_;
+    /** @brief Device array: full grid index -> reduced basis index. */
+    int* d_full_to_reduced_map_;
+    /** @brief Device array: reduced basis index -> full grid index. */
+    int* d_reduced_basis_indices_;
+    /**
+     * @brief exp(-w*ds) in the reduced basis, per monomer type.
+     *
+     * Populated in compute_propagators() when a space group is set.
+     * In CrysFFT mode the solver already stores exp_dw in the reduced basis
+     * (copied here); otherwise the solver stores it on the full grid and it
+     * is gathered to the reduced basis.
+     */
+    std::map<std::string, CuDeviceData<T>*> d_exp_dw_reduced_;
+    /// @}
 
     #ifndef NDEBUG
     /** @brief Debug: track half-step completion. */

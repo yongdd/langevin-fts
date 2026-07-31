@@ -323,13 +323,10 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 - Grid must be compatible with space group symmetry
 - Beta feature - validate results carefully
 - Requires `spglib` library
-- **Discrete chains**: space group symmetry works on **CPU only**; on CUDA it throws
-  "Space group symmetry is not yet supported for discrete chains on CUDA". Since
-  platform auto-selection picks CUDA for 2D/3D simulations, set
-  `"platform": "cpu-mkl"` (or `"cpu-fftw"`) explicitly when combining
-  `"chain_model": "discrete"` with a space group
+- **Discrete chains**: space group symmetry is supported on both **CPU and CUDA**
+  (standard mode)
 - **`reduce_memory=True` + discrete chains + space group** is not supported on any
-  platform (throws on CPU as well)
+  platform (throws on both CPU and CUDA)
 - **Hexagonal/trigonal artifact**: Cell-centered grids are mathematically incompatible with hexagonal rotation matrices. Rotations with even row sums (e.g., $[1, -1, 0]$) map cell-centered positions $(i+0.5)/N$ to cell boundaries $(integer)/N$, causing inconsistent orbit assignments and X-shaped density artifacts. Cubic/orthorhombic space groups are unaffected (rotation matrix row sums are always odd). The `star` git branch implements a Fourier star basis that eliminates this artifact by working in reciprocal space where wavevector rotations are exact integer operations.
 
 ## References

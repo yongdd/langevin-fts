@@ -376,8 +376,10 @@ void CudaSolverPseudoDiscrete<T>::set_space_group(
         const int M = cb->get_total_grid();
         for(int i=0; i<n_streams; i++)
         {
+            // d_q_full_in_ is 2*M so it can hold an expanded propagator pair
+            // for the standard (non-CrysFFT) stress path.
             if (d_q_full_in_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*2*M));
             if (d_q_full_out_[i] == nullptr)
                 gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
         }
@@ -1159,13 +1161,34 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             }
         }
 
+        // Space group without CrysFFT fast path: the propagator pair arrives in
+        // the reduced basis (packed at stride n_basis_). Expand both propagators
+        // to the full grid into a contiguous 2*M buffer for the batched FFT.
+        CuDeviceData<T>* d_q_pair_full = d_q_pair;
+        if (space_group_ != nullptr)
+        {
+            if constexpr (std::is_same_v<T, double>)
+            {
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_full_in_[STREAM], d_q_pair, d_full_to_reduced_map_, M);
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    &d_q_full_in_[STREAM][M], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                d_q_pair_full = d_q_full_in_[STREAM];
+            }
+            else
+            {
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+            }
+        }
+
         if (is_periodic_)
         {
             // Periodic BC: Execute a forward FFT using cuFFT (batched, two propagators)
             if constexpr (std::is_same<T, double>::value)
-                cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
+                cufftExecD2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM]);
             else
-                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
             gpu_error_check(cudaPeekAtLastError());
 
             // Multiply two propagators in the fourier spaces
@@ -1187,8 +1210,8 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             }
             else
             {
-                double* d_q1 = d_q_pair;
-                double* d_q2 = &d_q_pair[M];
+                double* d_q1 = d_q_pair_full;
+                double* d_q2 = &d_q_pair_full[M];
                 double* rk_1 = d_rk_in_1_one[STREAM];
                 double* rk_2 = d_rk_in_2_one[STREAM];
 

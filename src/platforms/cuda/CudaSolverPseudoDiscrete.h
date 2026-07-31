@@ -171,6 +171,16 @@ public:
         int* d_full_to_reduced_map,
         int n_basis) override;
 
+    /**
+     * @brief True when d_exp_dw is stored in the reduced basis (size n_basis).
+     *
+     * In CrysFFT mode the solver keeps exp(-w*ds) in the reduced basis;
+     * otherwise (standard FFT with space group) it is stored on the full grid.
+     * Callers that consume exp_dw in the reduced basis must convert when
+     * this returns false.
+     */
+    bool exp_dw_stored_reduced() const { return use_crysfft_ && space_group_ != nullptr; }
+
     /** @brief Update half-bond diffusion operators. */
     void update_laplacian_operator() override;
 

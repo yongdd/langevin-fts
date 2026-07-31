@@ -334,7 +334,7 @@ When `True`:
 ```
 
 **Restrictions:**
-- **Discrete chains + space group** works on CPU platforms but raises an error on CUDA. Since platform auto-selection picks `"cuda"` for 2D/3D simulations, discrete-chain runs with a space group must set `"platform"` to `"cpu-mkl"` or `"cpu-fftw"` explicitly.
+- **Discrete chains + space group** is supported on both CPU and CUDA platforms (standard mode).
 - **Discrete chains + space group + `reduce_memory=True`** is not supported on any platform (raises an error).
 
 See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
