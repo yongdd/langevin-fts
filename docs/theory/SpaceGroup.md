@@ -200,9 +200,12 @@ mapping during diffusion. This selection is automatic:
 
 - **Orthogonal boxes** (α = β = γ = 90°, even grid): the 3m physical basis
   (1/8 grid) is preferred when the space group provides the required 3m
-  translations and $(n_z / 2)$ is divisible by 8; otherwise the solver falls
-  back to the Pmmm physical basis (1/8 grid, requires mirror planes along
-  x, y, z).
+  translations, the translation-parity fold permutation is valid (each
+  generator translation must be an integral number of grid cells with a
+  bijective parity map — e.g. for Fddd's quarter-cell d-glides at most one
+  of $n_x/4$, $n_y/4$, $n_z/4$ may be odd), and $n_z/2 \ge 8$; otherwise the
+  solver falls back to the Pmmm physical basis (1/8 grid, requires mirror
+  planes along x, y, z).
 - **Non-orthogonal cells with an orthogonal z-axis** (α = β = 90°, γ
   arbitrary — e.g. hexagonal or monoclinic-γ cells): the z-mirror (ObliqueZ)
   physical basis (1/2 grid) is used when the space group has a z-mirror

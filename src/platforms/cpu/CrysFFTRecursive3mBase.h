@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "Exception.h"
+#include "Recursive3mFoldParity.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -235,6 +236,12 @@ protected:
     std::array<double, 6> cell_para_;
     std::array<double, 9> translational_part_;
 
+    /// Pairing permutation of the fold: twiddle r_p multiplies the
+    /// octant-transformed Boltzmann array S_{fold_perm_[p]} (identity when
+    /// all generator translations are an even number of grid cells).
+    /// See Recursive3mFoldParity.h for the derivation.
+    std::array<int, 8> fold_perm_{};
+
     std::array<std::unique_ptr<double[]>, 8> r_re_;
     std::array<std::unique_ptr<double[]>, 8> r_im_;
 
@@ -388,21 +395,25 @@ protected:
         add_sub_by_seq(k_split_ptr, seq1, halfsize);
         add_sub_by_seq(k_split_ptr, seq2, halfsize);
 
-        // Multiply with twiddle factors
+        // Multiply with twiddle factors. Twiddle r_p pairs with
+        // S_{fold_perm_[p]} (translation-parity permutation; identity when all
+        // generator translations are even in grid units).
         constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
         std::array<double*, 8> cache_re_ptr, cache_im_ptr, r_re_ptr, r_im_ptr;
+        std::array<double*, 8> k_split_perm_ptr;
         for (int i = 0; i < 8; ++i)
         {
             cache_re_ptr[i] = cache.re[i].get();
             cache_im_ptr[i] = cache.im[i].get();
             r_re_ptr[i] = r_re_[i].get();
             r_im_ptr[i] = r_im_[i].get();
+            k_split_perm_ptr[i] = k_split[fold_perm_[i]].get();
         }
 
         mul_add_sub_by_seq(
             cache_re_ptr, cache_im_ptr,
             r_re_ptr, r_im_ptr,
-            k_split_ptr,
+            k_split_perm_ptr,
             seq3, halfsize);
 
         return cache;
@@ -517,21 +528,25 @@ protected:
         add_sub_by_seq(k_split_ptr, seq1, halfsize);
         add_sub_by_seq(k_split_ptr, seq2, halfsize);
 
-        // Multiply with twiddle factors
+        // Multiply with twiddle factors. Twiddle r_p pairs with
+        // S_{fold_perm_[p]} (translation-parity permutation; identity when all
+        // generator translations are even in grid units).
         constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
         std::array<double*, 8> cache_re_ptr, cache_im_ptr, r_re_ptr, r_im_ptr;
+        std::array<double*, 8> k_split_perm_ptr;
         for (int i = 0; i < 8; ++i)
         {
             cache_re_ptr[i] = cache.re[i].get();
             cache_im_ptr[i] = cache.im[i].get();
             r_re_ptr[i] = r_re_[i].get();
             r_im_ptr[i] = r_im_[i].get();
+            k_split_perm_ptr[i] = k_split[fold_perm_[i]].get();
         }
 
         mul_add_sub_by_seq(
             cache_re_ptr, cache_im_ptr,
             r_re_ptr, r_im_ptr,
-            k_split_ptr,
+            k_split_perm_ptr,
             seq3, halfsize);
 
         return cache;
@@ -603,14 +618,25 @@ public:
         }
 
         // The k-space multiply loops in the MKL/FFTW implementations pad the
-        // packed z iteration count to align_up(Nz2/2+1, 8), which overruns the
-        // Nx2*Ny2*Nz2-sized buffers (heap corruption) when Nz2 = nz/2 < 8.
-        // CrysFFTSelector never selects such grids, but guard direct
-        // construction (e.g. benchmarks) as well.
-        if (nx_logical_[2] / 2 < 8)
+        // packed z iteration count to align_up(Nz2/2+1, 8) clamped to Nz2, so
+        // any Nz2 = nz/2 >= 2 is safe (the clamp keeps the padded loop inside
+        // each row while still covering the packed range [0, Nz2/2]).
+        if (nx_logical_[2] / 2 < 2)
         {
-            throw_with_line_number("CrysFFTRecursive3m requires Nz/2 >= 8 "
-                "(the vectorized k-space loops pad the packed z count to a multiple of 8).");
+            throw_with_line_number("CrysFFTRecursive3m requires Nz/2 >= 2.");
+        }
+
+        // The fold pairs twiddle r_p with the octant-transformed Boltzmann
+        // array S_{psi(p)}, where psi depends on the parities of the m3
+        // generator translations in grid units (see Recursive3mFoldParity.h).
+        // When psi is not a bijection the even-index physical basis does not
+        // exist on this grid and the fold cannot represent the group;
+        // CrysFFTSelector rejects such grids, but guard direct construction.
+        if (!compute_m3_fold_permutation(translational_part_, nx_logical_, fold_perm_))
+        {
+            throw_with_line_number("CrysFFTRecursive3m: m3 translations are "
+                "incompatible with this grid (translation-parity permutation "
+                "is not a bijection; no even-index physical basis exists).");
         }
 
         nx_physical_ = {

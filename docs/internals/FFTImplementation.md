@@ -229,10 +229,18 @@ CrysFFT is enabled automatically when:
 - Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis)
 
 **Selection order:**
-1. **3m recursive** if space group provides 3m translations and `Nz/2 % 8 == 0`
+1. **3m recursive** if the space group provides 3m translations, the
+   translation-parity fold permutation is valid (every generator translation
+   must be an integral number of grid cells with a bijective parity map — see
+   `Recursive3mFoldParity.h`; e.g. for Fddd's quarter-cell glides at most one
+   of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8`
 2. **Pmmm DCT** if space group has mirror planes in x/y/z
 3. **ObliqueZ** if space group has z-mirror with α=β=90°
 4. Fall back to standard FFT
+
+The 3m fold pairs each twiddle factor with the Boltzmann sub-array selected by
+the translation-parity permutation; glide translations by an odd number of
+grid cells permute this pairing away from the identity.
 
 ### 6.4 Physical Basis Choices
 

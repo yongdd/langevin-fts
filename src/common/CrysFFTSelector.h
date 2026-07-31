@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include "Recursive3mFoldParity.h"
 #include "SpaceGroup.h"
 
 enum class CrysFFTChoice
@@ -42,33 +43,43 @@ inline CrysFFTSelection select_crysfft_mode(
     std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     const bool has_3m = sg->get_m3_translations(trans_part);
     const bool has_pmmm = sg->has_mirror_planes_xyz();
-    // Recursive3m grid condition. The historical ((nx[2]/2) % 8 == 0) check was
-    // neither necessary nor sufficient:
-    // - Not necessary: equal grids work for ANY even nx with nx/2 >= 8
-    //   (verified Im-3m/Fddd, space-group ON vs OFF at ~1e-13, for nx =
-    //   16..44 including nx/2 = 10, 11, 12, 14, 18, 20, 21, 22 and 84^3).
-    //   nx/2 < 8 must be rejected: the k-space multiply loops pad the packed
-    //   z count to align_up(Nz2/2+1, 8) and overrun the buffer (heap
-    //   corruption observed for nx = 12, 14).
-    // - Not sufficient: some UNEQUAL grids are miscomputed even when
-    //   (nz/2) % 8 == 0, e.g. Fddd on 84x48x16 / 84x48x32 (halves 42,24,8|16)
-    //   gives wrong partition functions (~0.6 relative) on both MKL and FFTW,
-    //   while 84x48x84 and 84x84x84 are fine — the failure correlates with
-    //   mismatched quarter-parity between the x and z halves (42/2 = 21 odd
-    //   vs 8/2 = 4 even). This is a latent bug in the shared 3m fold for
-    //   unequal grids; until it is root-caused, unequal grids are allowed
-    //   only when every half-extent is a multiple of 4 (all quarters even).
-    //   This excludes every known-broken case. It is deliberately
-    //   conservative: 84x48x84 (quarter-parity-matched, empirically fine)
-    //   is also excluded and falls back to the standard path; a
-    //   parity-match rule could admit it once the fold is root-caused.
+    // Recursive3m grid condition: even grid, nz/2 >= 8, and a valid
+    // translation-parity permutation (compute_m3_fold_permutation). The fold
+    // pairs twiddle r_p with the octant-transformed Boltzmann array S_{psi(p)}
+    // where psi depends on the parities of the m3 generator translations in
+    // grid units (tau = t*N); psi must be a bijection. Empirically this has
+    // matched the feasibility of the even-index m3 physical basis in every
+    // tested case (for Fddd's quarter-cell d-glides, at most one of Nx/4,
+    // Ny/4, Nz/4 may be odd), but the equivalence is not proven in general:
+    // psi uses the minimal-norm coset representative per generator, while
+    // basis feasibility considers all centering-composed representatives.
+    // Historically the code hard-coded psi = identity, which silently
+    // miscomputed grids with odd tau (e.g. Fddd 84x48x16/24/32, wrong Q at
+    // ~0.6 relative); an interim guard restricted unequal grids to
+    // all-quarters-even. With the psi pairing implemented in
+    // CrysFFTRecursive3mBase/CudaCrysFFTRecursive3m, verified 2026-08:
+    // - Unit level (one diffusion vs full-grid FFT reference, <= 1e-14 rel),
+    //   MKL and FFTW: Fddd 84x48x16, 84x48x24, 84x48x32 (previously broken),
+    //   84x56x16, 84x56x32 (odd qx); 64x52x16, 72x52x16 (odd qy); 64x48x84,
+    //   72x56x84, 64x48x20, 64x48x12 (odd qz); 64x48x16, 88x48x24, 64x56x32,
+    //   32x24x16, 32x24x8 (all even); Fddd 16/24/40/48^3; Im-3m 16/20/22/
+    //   40/44^3. CUDA: 84x48x16, 64x52x16, 64x48x84, 64x48x12, Im-3m 40^3,
+    //   including the k^2-multiplier (stress) caches.
+    // - SCFT space-group ON-vs-OFF partition comparisons (<= 7e-14 rel):
+    //   the trio on cpu-mkl AND cpu-fftw; 64x48x16, 84x56x16, 64x52x16,
+    //   64x48x84 on cpu-mkl; Fddd 84x48x16, 64x48x84 and Im-3m 40^3 on cuda.
+    // - Grids whose psi is singular (verified Fddd 44^3, 84^3, 84x48x84 —
+    //   two or more odd quarters) are rejected here and fall back to the
+    //   standard FFT path (still correct, per the same ON-vs-OFF probes),
+    //   matching SpaceGroup m3-basis feasibility exactly in all cases above.
+    // nz/2 >= 8 is kept as the established performance/selection bound;
+    // smaller nz still works via the standard path (the former buffer-overrun
+    // reason is gone: the padded k-loop is now clamped to the row stride).
     const bool even_all = (nx[0] % 2 == 0) && (nx[1] % 2 == 0) && (nx[2] % 2 == 0);
-    const bool equal_grid = (nx[0] == nx[1]) && (nx[1] == nx[2]);
-    const bool quarters_even = ((nx[0] / 2) % 4 == 0) &&
-                               ((nx[1] / 2) % 4 == 0) &&
-                               ((nx[2] / 2) % 4 == 0);
-    const bool recursive_ok = even_all && ((nx[2] / 2) >= 8) &&
-                              (equal_grid || quarters_even);
+    std::array<int, 8> fold_perm{};
+    const bool fold_ok = has_3m &&
+        compute_m3_fold_permutation(trans_part, nx, fold_perm);
+    const bool recursive_ok = even_all && ((nx[2] / 2) >= 8) && fold_ok;
 
     selection.can_pmmm = has_pmmm;
 

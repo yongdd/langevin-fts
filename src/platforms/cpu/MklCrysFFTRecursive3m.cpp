@@ -4,6 +4,7 @@
  */
 
 #include "MklCrysFFTRecursive3m.h"
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -106,7 +107,12 @@ void MklCrysFFTRecursive3m::apply_with_cache(
     const int Nx2 = nx_physical_[0];
     const int Ny2 = nx_physical_[1];
     const int Nz2 = nx_physical_[2];
-    const size_t Nz_qua = align_up(static_cast<size_t>(Nz2 / 2 + 1), kAlignment / 8);
+    // Pad the packed z count for vectorization, but clamp to the row stride
+    // Nz2 so the loop never overruns the Nx2*Ny2*Nz2-sized buffers. The clamp
+    // still covers the packed range [0, Nz2/2] for any Nz2 >= 2.
+    const size_t Nz_qua = std::min(
+        align_up(static_cast<size_t>(Nz2 / 2 + 1), kAlignment / 8),
+        static_cast<size_t>(Nz2));
 
     const auto& k_re = cache.re;
     const auto& k_im = cache.im;

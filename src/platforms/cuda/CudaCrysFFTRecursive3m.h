@@ -86,6 +86,12 @@ private:
     std::array<double, 6> cell_para_;
     std::array<double, 9> translational_part_;
 
+    /// Pairing permutation of the fold: twiddle r_p multiplies the
+    /// octant-transformed Boltzmann array S_{fold_perm_[p]} (identity when
+    /// all generator translations are an even number of grid cells).
+    /// See Recursive3mFoldParity.h for the derivation.
+    std::array<int, 8> fold_perm_{};
+
     std::array<std::vector<double>, 8> r_re_;
     std::array<std::vector<double>, 8> r_im_;
 

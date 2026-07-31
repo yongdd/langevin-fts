@@ -7,6 +7,7 @@
 
 #include "CudaCommon.h"
 #include "Exception.h"
+#include "Recursive3mFoldParity.h"
 
 #include <cstring>
 #include <cmath>
@@ -253,17 +254,27 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
             throw_with_line_number("CudaCrysFFTRecursive3m requires even, positive grid dimensions.");
         }
     }
-    // Relaxed from ((nz/2) % 8 == 0) to match CrysFFTSelector: the kernels here
-    // are size-agnostic (ker_apply_k_3m iterates the packed z range
-    // Nz2c = Nz2/2+1 with exact bounds; cuFFT D2Z/Z2D handles any length).
-    // The nz/2 >= 8 bound mirrors the guard in CrysFFTRecursive3mBase.h, where
-    // the CPU k-space loops genuinely require it (padded iteration overruns the
-    // buffers for smaller grids); keeping the same bound here keeps CPU and
-    // CUDA constructible for exactly the same grids. Run-verified on CUDA for
-    // Im-3m 24^3 and 40^3 (space-group ON vs OFF at ~1e-14).
-    if ((nx_logical_[2] / 2) < 8)
+    // The kernels here are size-agnostic (ker_apply_k_3m iterates the packed
+    // z range Nz2c = Nz2/2+1 with exact bounds; cuFFT D2Z/Z2D handles any
+    // length). The nz/2 >= 2 bound mirrors the guard in
+    // CrysFFTRecursive3mBase.h so CPU and CUDA stay constructible for exactly
+    // the same grids.
+    if ((nx_logical_[2] / 2) < 2)
     {
-        throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 >= 8 for 3m algorithm.");
+        throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 >= 2.");
+    }
+
+    // The fold pairs twiddle r_p with the octant-transformed Boltzmann array
+    // S_{psi(p)}, where psi depends on the parities of the m3 generator
+    // translations in grid units (see Recursive3mFoldParity.h). When psi is
+    // not a bijection the even-index physical basis does not exist on this
+    // grid and the fold cannot represent the group; CrysFFTSelector rejects
+    // such grids, but guard direct construction.
+    if (!compute_m3_fold_permutation(translational_part_, nx_logical_, fold_perm_))
+    {
+        throw_with_line_number("CudaCrysFFTRecursive3m: m3 translations are "
+            "incompatible with this grid (translation-parity permutation is "
+            "not a bijection; no even-index physical basis exists).");
     }
 
     nx_physical_ = { nx_logical_[0] / 2, nx_logical_[1] / 2, nx_logical_[2] / 2 };
@@ -493,6 +504,7 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     std::array<double*, 8> k_im_ptr{};
     std::array<double*, 8> r_re_ptr{};
     std::array<double*, 8> r_im_ptr{};
+    std::array<double*, 8> k_split_perm_ptr{};
 
     for (int i = 0; i < 8; ++i)
     {
@@ -502,10 +514,14 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
         k_im_ptr[i] = k_im_host[i].data();
         r_re_ptr[i] = r_re_[i].data();
         r_im_ptr[i] = r_im_[i].data();
+        // Twiddle r_p pairs with S_{fold_perm_[p]} (translation-parity
+        // permutation; identity when all generator translations are even in
+        // grid units).
+        k_split_perm_ptr[i] = k_split[fold_perm_[i]].data();
     }
 
     constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
-    mul_add_sub_by_seq(k_re_ptr, k_im_ptr, r_re_ptr, r_im_ptr, k_split_ptr, seq3, halfsize);
+    mul_add_sub_by_seq(k_re_ptr, k_im_ptr, r_re_ptr, r_im_ptr, k_split_perm_ptr, seq3, halfsize);
 
     KCacheDevice cache;
     for (int i = 0; i < 8; ++i)
