@@ -78,22 +78,24 @@ void cuda_crysfft_compute_single_segment_stress(
     // Bond factor coefficient (discrete chains): b²·ds/6
     const double coeff = args.include_bond_factor ? args.bond_length_sq * args.global_ds / 6.0 : 0.0;
 
+    // ===== Step 1: Fill physical grid from reduced basis (q2) =====
+    // Loop-invariant: apply_multiplier preserves its input (both engines copy
+    // to the output buffer before transforming), so expand once for all axes.
+    const double* d_q2_phys;
+    if (args.identity_map)
+    {
+        d_q2_phys = d_q2_reduced;
+    }
+    else
+    {
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
+            args.d_phys_work, d_q2_reduced, args.d_phys_to_reduced, args.M_phys);
+        gpu_error_check(cudaPeekAtLastError());
+        d_q2_phys = args.d_phys_work;
+    }
+
     for (int d = 0; d < 3; ++d)
     {
-        // ===== Step 1: Fill physical grid from reduced basis (q2) =====
-        const double* d_q2_phys;
-        if (args.identity_map)
-        {
-            d_q2_phys = d_q2_reduced;
-        }
-        else
-        {
-            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
-                args.d_phys_work, d_q2_reduced, args.d_phys_to_reduced, args.M_phys);
-            gpu_error_check(cudaPeekAtLastError());
-            d_q2_phys = args.d_phys_work;
-        }
-
         // ===== Step 2: Apply per-axis multiplier (input is preserved) =====
         if (args.mode == CudaCrysFFTMode::PmmmDct)
         {
