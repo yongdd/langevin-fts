@@ -33,10 +33,7 @@ CudaComputationBase<T>::CudaComputationBase(
       d_q_unity(nullptr),
       d_q_mask(nullptr),
       sc(nullptr),
-      d_phi(nullptr),
-      d_full_to_reduced_map_base_(nullptr),
-      d_reduced_basis_indices_base_(nullptr),
-      d_phi_full_buffer_(nullptr)
+      d_phi(nullptr)
 {
 }
 

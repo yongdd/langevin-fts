@@ -163,17 +163,6 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
 
     // Also set space group on ComputationBox for unified field operations
     this->cb->set_space_group(sg);
-
-    if (sg != nullptr) {
-        // Allocate buffers for full grid operations
-        int total_grid = this->cb->get_total_grid();
-
-        phi_full_buffer_.resize(total_grid);
-    } else {
-        // Release buffers
-        phi_full_buffer_.clear();
-        phi_full_buffer_.shrink_to_fit();
-    }
 }
 
 /**

@@ -340,12 +340,14 @@ int main()
         }
         symmetrize_fields(case_b);
 
-        // Case C: same cubic group on a 40^3 grid, where (nz/2) % 8 != 0 disables
-        // the Recursive3m engine and CrysFFT falls back to the PmmmDct engine.
-        // Regression for two bugs: the MklCrysFFTPmmm DCT normalization (broken
-        // propagators, Q -> 0) and cubic axis-averaging in the PmmmDct stress path.
+        // Case C: same cubic group on a 40^3 grid, where nz/2 = 20 is not a
+        // multiple of 8. Historically this grid fell back to the PmmmDct engine
+        // (catching the MklCrysFFTPmmm DCT-normalization bug); since the
+        // Recursive3m grid condition was relaxed to nz/2 >= 8, this now
+        // exercises the Recursive3m engine on a non-multiple-of-16 grid that
+        // the selector previously rejected outright.
         CaseSpec case_c = case_b;
-        case_c.name = "Im-3m (BCC, cubic, 40^3 PmmmDct fallback)";
+        case_c.name = "Im-3m (BCC, cubic, 40^3 non-multiple-of-16 grid)";
         case_c.nx = {40, 40, 40};
         SpaceGroup sg_bcc40(case_c.nx, "Im-3m", 529);
         case_c.sg = &sg_bcc40;

@@ -95,11 +95,6 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
             gpu_error_check(cudaMalloc((void**)&d_full_to_reduced_map_, sizeof(int)*M));
             gpu_error_check(cudaMemcpy(d_full_to_reduced_map_, space_group->get_full_to_reduced_map().data(),
                                        sizeof(int)*M, cudaMemcpyHostToDevice));
-            // Set base class members for use in CudaComputationBase methods
-            this->d_full_to_reduced_map_base_ = d_full_to_reduced_map_;
-            this->d_reduced_basis_indices_base_ = d_reduced_basis_indices_;
-            // Allocate full grid buffer for base class methods (expand for output)
-            gpu_error_check(cudaMalloc((void**)&this->d_phi_full_buffer_, sizeof(T)*M));
         }
 
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
@@ -294,8 +289,6 @@ CudaComputationContinuous<T>::~CudaComputationContinuous()
         cudaFree(d_full_to_reduced_map_);
     if (d_reduced_basis_indices_ != nullptr)
         cudaFree(d_reduced_basis_indices_);
-    if (this->d_phi_full_buffer_ != nullptr)
-        cudaFree(this->d_phi_full_buffer_);
     for (int i = 0; i < MAX_STREAMS; i++)
     {
         if (d_q_full_[i][0] != nullptr)

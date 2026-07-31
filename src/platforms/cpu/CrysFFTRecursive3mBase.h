@@ -602,6 +602,17 @@ public:
             }
         }
 
+        // The k-space multiply loops in the MKL/FFTW implementations pad the
+        // packed z iteration count to align_up(Nz2/2+1, 8), which overruns the
+        // Nx2*Ny2*Nz2-sized buffers (heap corruption) when Nz2 = nz/2 < 8.
+        // CrysFFTSelector never selects such grids, but guard direct
+        // construction (e.g. benchmarks) as well.
+        if (nx_logical_[2] / 2 < 8)
+        {
+            throw_with_line_number("CrysFFTRecursive3m requires Nz/2 >= 8 "
+                "(the vectorized k-space loops pad the packed z count to a multiple of 8).");
+        }
+
         nx_physical_ = {
             nx_logical_[0] / 2,
             nx_logical_[1] / 2,

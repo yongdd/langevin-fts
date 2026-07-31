@@ -33,7 +33,7 @@ devel/test*
 devel/*.m
 devel/cl-fts/
 devel/wtmd_*/
-references
+/references/
 Testing
 benchmark_results.json
 result_*.json

@@ -119,11 +119,6 @@ private:
     CuDeviceData<T>* d_q_full_[2];
 
     /**
-     * @brief Buffer for expanding concentration to full grid (device).
-     */
-    CuDeviceData<T>* d_phi_full_buffer_;
-
-    /**
      * @brief Compute concentration for one block with recomputation.
      *
      * Recomputes propagators from checkpoints as needed.

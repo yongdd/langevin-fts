@@ -142,11 +142,6 @@ protected:
     SpaceGroup* space_group_;
 
     /**
-     * @brief Temporary buffer for full grid concentrations when using reduced basis.
-     */
-    std::vector<T> phi_full_buffer_;
-
-    /**
      * @brief Force computation of off-diagonal (cross-term) stress sums.
      *
      * By default (false), the stress computation skips the cross-term sums

@@ -253,9 +253,17 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
             throw_with_line_number("CudaCrysFFTRecursive3m requires even, positive grid dimensions.");
         }
     }
-    if ((nx_logical_[2] / 2) % 8 != 0)
+    // Relaxed from ((nz/2) % 8 == 0) to match CrysFFTSelector: the kernels here
+    // are size-agnostic (ker_apply_k_3m iterates the packed z range
+    // Nz2c = Nz2/2+1 with exact bounds; cuFFT D2Z/Z2D handles any length).
+    // The nz/2 >= 8 bound mirrors the guard in CrysFFTRecursive3mBase.h, where
+    // the CPU k-space loops genuinely require it (padded iteration overruns the
+    // buffers for smaller grids); keeping the same bound here keeps CPU and
+    // CUDA constructible for exactly the same grids. Run-verified on CUDA for
+    // Im-3m 24^3 and 40^3 (space-group ON vs OFF at ~1e-14).
+    if ((nx_logical_[2] / 2) < 8)
     {
-        throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 aligned to 8 for 3m algorithm.");
+        throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 >= 8 for 3m algorithm.");
     }
 
     nx_physical_ = { nx_logical_[0] / 2, nx_logical_[1] / 2, nx_logical_[2] / 2 };
