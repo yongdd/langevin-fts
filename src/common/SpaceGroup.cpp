@@ -869,6 +869,32 @@ bool SpaceGroup::get_m3_translations(std::array<double, 9>& g, double tol) const
     return found_x && found_y && found_z;
 }
 
+void SpaceGroup::get_pure_translations(std::vector<std::array<double, 3>>& translations) const
+{
+    auto wrap01 = [](double v) {
+        v -= std::floor(v);
+        if (v < 0.0)
+            v += 1.0;
+        return v;
+    };
+
+    translations.clear();
+    for (size_t i = 0; i < rotations_.size(); ++i)
+    {
+        const auto& R = rotations_[i];
+        const bool is_identity =
+            R[0][0] == 1 && R[1][1] == 1 && R[2][2] == 1 &&
+            R[0][1] == 0 && R[0][2] == 0 &&
+            R[1][0] == 0 && R[1][2] == 0 &&
+            R[2][0] == 0 && R[2][1] == 0;
+        if (!is_identity)
+            continue;
+        translations.push_back({wrap01(translations_[i][0]),
+                                wrap01(translations_[i][1]),
+                                wrap01(translations_[i][2])});
+    }
+}
+
 bool SpaceGroup::get_z_mirror_translation(double& t_z, double tol) const
 {
     auto is_zero_mod1 = [tol](double v) {

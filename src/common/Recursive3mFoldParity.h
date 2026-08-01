@@ -20,10 +20,16 @@
  * cells; e.g. Fddd's d-glides translate by a quarter cell (tau = N/4), so any
  * odd quarter makes psi != identity.
  *
- * psi is linear over GF(2); it is a bijection exactly when the m3 physical
- * basis (even-index subgrid) exists for this grid.  When psi is singular some
- * grid-point parity class contains no even-index representative, the basis
- * construction fails, and the fold cannot represent the group on this grid.
+ * psi is linear over GF(2).  If psi is a bijection the m3 physical basis
+ * (even-index subgrid) exists: the parity shift Delta(O) of a diagonal op is
+ * a homomorphism into GF(2)^3 and psi(a) = Delta(O_a), so a bijective psi
+ * realizes every parity class and every grid point folds onto an even index.
+ * The converse holds up to the choice of mirror coset representatives:
+ * basis feasibility means Delta is surjective over ALL diagonal ops
+ * (including centering-composed ones), and an exchange argument shows some
+ * composition of the generators with pure centering translations then gives
+ * a bijective psi.  CrysFFTSelector performs that search, making
+ * selector acceptance exactly equivalent to basis feasibility.
  */
 
 #ifndef RECURSIVE_3M_FOLD_PARITY_H_

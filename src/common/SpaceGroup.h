@@ -214,6 +214,20 @@ public:
     bool get_m3_translations(std::array<double, 9>& g, double tol = 1e-10) const;
 
     /**
+     * @brief Get the translations of all pure-translation operations.
+     *
+     * Collects the translational parts of every symmetry operation whose
+     * rotation matrix is the identity: the trivial (0,0,0) plus the lattice
+     * centering translations (e.g. (1/2,1/2,1/2) for I, the three
+     * half-half-zero vectors for F). Used by the CrysFFT selector to search
+     * alternative mirror coset representatives when the minimal-norm ones
+     * give a singular fold-parity permutation.
+     *
+     * @param translations Output vector of translation vectors in [0, 1).
+     */
+    void get_pure_translations(std::vector<std::array<double, 3>>& translations) const;
+
+    /**
      * @brief Get translation along z for mirror plane (x,y,-z) symmetry.
      *
      * Searches symmetry operations for reflection:

@@ -21,6 +21,8 @@
 #include "MklCrysFFTRecursive3m.h"
 #endif
 #include "SpaceGroup.h"
+#include "CrysFFTSelector.h"
+#include "Recursive3mFoldParity.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -303,20 +305,43 @@ bool test_cuda(int Nx, int Ny, int Nz, double ds)
 // array S_{psi(p)} where psi depends on the parities of the generator
 // translations in grid units (see Recursive3mFoldParity.h); grids with an odd
 // quarter (e.g. 84/4 = 21) exercise psi != identity.
-bool test_recursive3m(int Nx, int Ny, int Nz, double ds)
+bool test_recursive3m(const char* symbol, int hall, int Nx, int Ny, int Nz,
+                      double ds, bool expect_rescued = false)
 {
     double Lx = 3.9, Ly = 2.7, Lz = 1.3;
     int Nx2 = Nx / 2, Ny2 = Ny / 2, Nz2 = Nz / 2;
     int M_logical = Nx * Ny * Nz;
     int M_physical = Nx2 * Ny2 * Nz2;
 
-    SpaceGroup sg({Nx, Ny, Nz}, "Fddd", 336);
-    std::array<double, 9> trans{};
-    if (!sg.get_m3_translations(trans))
+    SpaceGroup sg({Nx, Ny, Nz}, symbol, hall);
+
+    // Production path: the selector supplies the generator translations,
+    // searching centering-composed coset representatives when the
+    // minimal-norm ones give a singular fold-parity permutation.
+    std::array<double, 9> trans_min{};
+    if (!sg.get_m3_translations(trans_min))
     {
         printf("  no m3 translations FAIL\n");
         return false;
     }
+    std::array<int, 8> perm{};
+    const bool minimal_ok =
+        compute_m3_fold_permutation(trans_min, {Nx, Ny, Nz}, perm);
+    if (minimal_ok == expect_rescued)
+    {
+        printf("  minimal-representative psi %s but expected %s FAIL\n",
+               minimal_ok ? "bijective" : "singular",
+               expect_rescued ? "singular (rescued case)" : "bijective");
+        return false;
+    }
+    const auto selection =
+        select_crysfft_mode(&sg, {Nx, Ny, Nz}, 3, true, true, true);
+    if (selection.mode != CrysFFTChoice::Recursive3m)
+    {
+        printf("  selector did not choose Recursive3m FAIL\n");
+        return false;
+    }
+    const std::array<double, 9>& trans = selection.m3_translations;
     sg.enable_m3_physical_basis();
 
     // Random reduced field, symmetrized to a valid symmetric full field
@@ -475,9 +500,17 @@ int main()
     //   pairing fix (partition functions wrong at ~0.6 relative);
     // - 64x48x16 (all quarters even) is the historically working class.
     printf("\nGrid: 84x48x16 (Recursive3m, odd Nx/4)\n");
-    all &= test_recursive3m(84, 48, 16, 0.01);
+    all &= test_recursive3m("Fddd", 336, 84, 48, 16, 0.01);
     printf("Grid: 64x48x16 (Recursive3m, all quarters even)\n");
-    all &= test_recursive3m(64, 48, 16, 0.01);
+    all &= test_recursive3m("Fddd", 336, 64, 48, 16, 0.01);
+
+    // Rescued representative choice: Ibca on an N = 2 (mod 4) grid has a
+    // singular psi for the minimal-norm mirror representatives, but the
+    // selector's centering-composition search finds a bijective psi
+    // (I-centering translation has odd grid parity). Exercises the
+    // representative search added with the psi<->m3-basis equivalence proof.
+    printf("\nGrid: 18x18x18 (Recursive3m, Ibca, rescued representatives)\n");
+    all &= test_recursive3m("Ibca", -1, 18, 18, 18, 0.01, true);
 
     printf(all ? "\nAll passed!\n" : "\nFAILED!\n");
     return all ? 0 : 1;
