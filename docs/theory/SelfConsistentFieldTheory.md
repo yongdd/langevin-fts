@@ -187,7 +187,7 @@ where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress compone
 - Angle changes are limited to 5° per iteration
 - Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 1)
 - Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
-- Stress computation currently requires **fully periodic boundary conditions** and a pseudo-spectral method: any non-periodic (reflecting/absorbing) BC raises an error, and the real-space CN-ADI2 solver does not support stress. `box_is_altering=True` is therefore limited to periodic, pseudo-spectral setups.
+- Stress computation supports periodic, reflecting, and absorbing boundary conditions with pseudo-spectral methods (real fields); the real-space CN-ADI2 solver does not support stress. `box_is_altering=True` therefore requires a pseudo-spectral method; with non-periodic boundaries only box lengths are optimized (angles stay at 90°).
 
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.
 

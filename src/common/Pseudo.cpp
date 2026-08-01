@@ -566,9 +566,6 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
     //   Periodic:      k = 2πm/L → v² = k²/L² = (2πm)²/L⁴
     //   Reflecting:    k = πm/L  → v² = k²/L² = (πm)²/L⁴
     //   Absorbing:     k = π(m+1)/L, same scaling
-    // NOTE: stress with non-periodic BCs is currently rejected by
-    // compute_stress() in the computation classes; this path is kept
-    // unit-consistent for when that support is added.
     double xfactor[3];
     for (int d = 0; d < 3; ++d)
     {
@@ -579,6 +576,25 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
             xfactor[d] = PI * PI / (L * L * L * L);
     }
 
+    // Per-mode Parseval weight, folded into the basis tables (mirroring the
+    // periodic path, which folds the r2c conjugate-pair factor 2 into the
+    // tables). With the textbook DCT-II/DST-II coefficients F(m) = Σ_j f_j φ_m(x_j)
+    // used by the FFT<T> real interface, the discrete Parseval relation per
+    // dimension is Σ_j f_j g_j = (1/n) Σ_m w(m) F(m) G(m) with
+    //   DCT-II (reflecting): w = 1 for m = 0,      w = 2 otherwise
+    //   DST-II (absorbing):  w = 1 for k = m+1 = n, w = 2 otherwise
+    // (the special basis functions cos(0) and sin(πn x/L) have squared norm n
+    // on the cell-centered grid instead of n/2). Composed dimensions multiply
+    // their weights; padded singleton dimensions (n = 1, periodic, m = 0)
+    // contribute weight 1.
+    auto mode_weight = [&](int d, int m) -> double {
+        if (tbc[d] == BoundaryCondition::PERIODIC)
+            return 1.0;  // only padded n=1 dims reach here (mixed BC rejected)
+        if (tbc[d] == BoundaryCondition::REFLECTING)
+            return (m == 0) ? 1.0 : 2.0;
+        return (m == tnx[d] - 1) ? 1.0 : 2.0;  // absorbing: k = m+1 = n
+    };
+
     for (int i = 0; i < tnx[0]; ++i)
     {
         int ki;
@@ -588,6 +604,7 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
             ki = i;
         else
             ki = i + 1;
+        const double wi = mode_weight(0, i);
 
         for (int j = 0; j < tnx[1]; ++j)
         {
@@ -598,6 +615,7 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
                 kj = j;
             else
                 kj = j + 1;
+            const double wij = wi * mode_weight(1, j);
 
             for (int k = 0; k < tnx[2]; ++k)
             {
@@ -608,12 +626,13 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
                     kk = k;
                 else
                     kk = k + 1;
+                const double w = wij * mode_weight(2, k);
 
                 int idx = i * tnx[1] * tnx[2] + j * tnx[2] + k;
 
-                fourier_basis_x[idx] = ki * ki * xfactor[0];
-                fourier_basis_y[idx] = kj * kj * xfactor[1];
-                fourier_basis_z[idx] = kk * kk * xfactor[2];
+                fourier_basis_x[idx] = w * ki * ki * xfactor[0];
+                fourier_basis_y[idx] = w * kj * kj * xfactor[1];
+                fourier_basis_z[idx] = w * kk * kk * xfactor[2];
                 // Cross-terms are zero for non-periodic BC
                 fourier_basis_xy[idx] = 0.0;
                 fourier_basis_xz[idx] = 0.0;

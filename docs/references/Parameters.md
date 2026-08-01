@@ -41,7 +41,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 **Restrictions:**
 - Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require **uniform** boundary conditions: all-periodic, all-reflecting, or all-absorbing. Mixing periodic with non-periodic directions raises an error on all platforms.
 - Mixed boundary conditions (e.g., periodic in x/y, reflecting in z) require `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot use mixed boundary conditions at all.
-- Stress computation (and therefore `box_is_altering`) requires all-periodic boundary conditions.
+- Stress computation (and therefore `box_is_altering`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
 
 **Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
 ```python
@@ -346,7 +346,7 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 | `box_is_altering` | bool | Enable box size optimization (required key in SCFT — omitting it raises `KeyError`) | Required |
 | `scale_stress` | float | Stress scaling factor for box updates | `1.0` |
 
-**Restrictions:** Stress computation is only available with **all-periodic boundary conditions** — it raises an error with any reflecting or absorbing direction — and is not implemented for the real-space `"cn-adi2"` method. Therefore `box_is_altering=True` requires periodic boundary conditions and a pseudo-spectral method.
+**Restrictions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions for pseudo-spectral methods with real fields (complex fields with non-periodic boundaries are rejected), but is not implemented for the real-space `"cn-adi2"` method. Therefore `box_is_altering=True` requires a pseudo-spectral method. With non-periodic boundaries only box lengths can be optimized (angles stay at 90°); discrete-chain stress is exact against d(-lnQ)/dL, continuous-chain stress carries the contour-quadrature error (see docs/theory/StressTensor.md).
 
 ### Lattice Angles (Non-orthogonal)
 

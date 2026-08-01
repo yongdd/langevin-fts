@@ -148,7 +148,9 @@ The bond factor $\Phi(k)$ differs between chain models:
 
 ### Boundary Conditions
 
-> **⚠️ Restriction:** Stress computation currently requires **periodic boundary conditions in every direction**. Calling `compute_stress()` with any reflecting or absorbing boundary condition throws `"Stress computation with non-periodic boundary conditions is not supported yet. Use periodic boundary conditions."` on all platforms and for both chain models. (An internal non-periodic branch exists but is disabled: its flat Parseval weight is incorrect for the special DCT/DST modes, e.g. 3D reflecting is off by ~0.6x.) The real-space CN-ADI2 method does not support stress computation either. Consequently, `box_is_altering=True` can only be used with fully periodic boundaries.
+> **Boundary conditions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields). For non-periodic boundaries the per-mode Parseval weights (2 for interior modes, 1 for the DCT $m=0$ / DST $k=n$ special modes, composed across dimensions) are folded into the spectral stress tables. Cross-terms vanish for non-periodic boundaries, so only orthogonal cells (fixed 90° angles) are meaningful there. Accuracy against the finite difference of $-\ln Q$: **discrete chains are exact** (the stress formula is the exact derivative of the discretized $\ln Q$); **continuous chains** carry the contour-quadrature error — reflecting converges like the periodic case (~$4\times10^{-4}$ relative at $ds = 0.01$), while absorbing degrades to $O(ds)$ (~$5\times10^{-3}$ at $ds = 0.01$) because of the wall boundary layers in the $s$-integrand.
+>
+> **⚠️ Remaining restrictions:** complex fields with non-periodic boundaries are rejected (the real-coefficient transform path drops the imaginary part), and the real-space CN-ADI2 method does not support stress computation.
 
 For reference, the wavenumber conventions of the spectral transforms are (with $m = 0, 1, \ldots, N-1$):
 

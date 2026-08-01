@@ -617,21 +617,17 @@ void CpuComputationContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
-        // Check for non-periodic BC - stress computation not supported.
-        // NOTE: the non-periodic branch of compute_single_segment_stress has
-        // verified-correct basis units (1D reflecting matches dH/dL exactly),
-        // but the flat FACTOR=2 Parseval weight is wrong for modes that hit a
-        // special DCT/DST index (k=0 / highest mode) in one dimension while
-        // being non-special in another (3D reflecting is off by ~0.6x).
-        // Per-mode weights are required before this guard can be lifted.
-        auto bc_vec = this->cb->get_boundary_conditions();
-        for (const auto& bc : bc_vec)
+        // Non-periodic (DCT/DST) stress is supported for real fields; the
+        // per-mode Parseval weights are folded into the fourier_basis tables
+        // (Pseudo::update_weighted_fourier_basis_mixed). The real-coefficient
+        // transform path drops the imaginary part, so complex fields with
+        // non-periodic boundaries are rejected explicitly.
+        if constexpr (std::is_same_v<T, std::complex<double>>)
         {
-            if (bc != BoundaryCondition::PERIODIC)
-            {
-                throw_with_line_number("Stress computation with non-periodic boundary conditions "
-                    "is not supported yet. Use periodic boundary conditions.");
-            }
+            for (const auto& bc : this->cb->get_boundary_conditions())
+                if (bc != BoundaryCondition::PERIODIC)
+                    throw_with_line_number("Stress computation with non-periodic boundary "
+                        "conditions is not supported for complex fields.");
         }
 
         const int DIM = this->cb->get_dim();

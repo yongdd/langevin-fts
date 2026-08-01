@@ -1242,8 +1242,15 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 fft_[STREAM]->forward(d_q2, rk_2);
 
                 // Multiply the two transforms element-wise (real coefficients)
-                // Factor of 2 for DCT/DST Parseval relation (no conjugate pairs like FFT)
-                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 2.0, M_COMPLEX);
+                // Per-mode Parseval weights (2 interior / 1 special modes) are folded
+                // into the fourier_basis tables by Pseudo::update_weighted_fourier_basis_mixed.
+                // CudaFFT's real-coefficient forward is 2x the textbook DCT-II/DST-II
+                // convention per transformed dimension (CudaRealTransform matches FFTW's
+                // unnormalized REDFT10/RODFT10, while the CPU FftwFFT/MklFFT scale by 0.5);
+                // the coefficient product therefore carries 4^DIM, compensated here.
+                // (All dimensions are r2r here: mixed periodic/non-periodic is rejected.)
+                const double dct_scale = std::pow(0.25, DIM);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, dct_scale, M_COMPLEX);
             }
             gpu_error_check(cudaPeekAtLastError());
         }

@@ -393,7 +393,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest 4th-order, recommended default |
 | Fast iterations, prototyping | **RK2** | Fastest overall, lower accuracy |
 | Brush with grafted delta-function | **CN-ADI2** | Handles sharp initial conditions smoothly |
-| Stress calculations | **RQM4** or **RK2** | Requires periodic BCs; real-space stress not implemented |
+| Stress calculations | **RQM4** or **RK2** | All BCs supported (real fields); real-space stress not implemented |
 | Comparison with finite difference | **CN-ADI2** | Same discretization approach |
 
 ### Feature Comparison
@@ -406,7 +406,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 | Reflecting BC | Yes (DCT) | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes (DST) | Yes |
 | Mixed periodic/non-periodic BC | No² | No² | Yes |
-| Stress calculation | Yes (periodic BC only)³ | Yes (periodic BC only)³ | No |
+| Stress calculation | Yes³ | Yes³ | No |
 | Non-orthogonal cells | Yes | Yes | No |
 | Accuracy order | 4th | 2nd | 2nd |
 
@@ -414,7 +414,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 
 ² Mixing periodic with reflecting/absorbing boundary conditions in different directions raises an error for pseudo-spectral methods on all platforms; such periodic/non-periodic mixes require `numerical_method="cn-adi2"` (continuous chains only). Purely non-periodic mixes (reflecting with absorbing) and uniform all-reflecting or all-absorbing configurations work with RQM4/RK2.
 
-³ `compute_stress()` throws `"Stress computation with non-periodic boundary conditions is not supported yet."` for any non-periodic boundary condition, on all platforms and for both chain models. Box optimization (`box_is_altering=True`) therefore requires fully periodic boundaries.
+³ `compute_stress()` supports periodic, reflecting, and absorbing boundary conditions for real fields (per-mode DCT/DST Parseval weights are folded into the spectral stress tables); complex fields with non-periodic boundaries are rejected. Box optimization (`box_is_altering=True`) works with non-periodic boundaries for the box lengths (angles stay at 90°).
 
 ---
 

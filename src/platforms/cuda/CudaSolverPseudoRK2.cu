@@ -1155,8 +1155,12 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
                 fft_[STREAM]->forward(d_q1, rk_1);
                 fft_[STREAM]->forward(d_q2, rk_2);
 
-                // Multiply (real coefficients for non-periodic BC)
-                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 1.0, M_COMPLEX);
+                // Multiply (real coefficients for non-periodic BC).
+                // Per-mode Parseval weights live in the fourier_basis tables;
+                // 4^DIM compensates CudaFFT's 2x-per-dimension forward convention
+                // (see CudaSolverPseudoRQM4 stress path for details).
+                const double dct_scale = std::pow(0.25, DIM);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, dct_scale, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }

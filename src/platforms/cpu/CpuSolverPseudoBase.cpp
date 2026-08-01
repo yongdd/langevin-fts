@@ -1216,12 +1216,14 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         }
         else
         {
-            // For non-periodic BCs (real coefficients from DCT/DST)
-            // Unlike FFT which has conjugate pairs (±m modes contributing 2× each),
-            // DCT/DST modes are purely real and each mode contributes once.
-            // The factor of 2 accounts for the Parseval relation for real transforms.
+            // For non-periodic BCs (real coefficients from DCT/DST) the
+            // per-mode Parseval weights (2 for interior modes, 1 for the
+            // DCT m=0 / DST k=n special modes, composed across dimensions)
+            // are folded into the fourier_basis tables by
+            // Pseudo::update_weighted_fourier_basis_mixed, mirroring the
+            // periodic path. No flat factor is applied here.
             // Cross-terms are zero for non-periodic BC (orthogonal grids only)
-            const double FACTOR = 2.0;
+            const double FACTOR = 1.0;
 
             if (DIM == 3)
             {
