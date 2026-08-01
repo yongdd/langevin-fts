@@ -5,3 +5,8 @@ FftwFFT/bcp_psd_fftw_4th
 FftwFFT/bcp_psd_fftw_uniform_grid_4th
 FftwFFT/*.dat
 FftwFFT/*.mod
+
+# Fortran build artifacts anywhere under devel/
+*.mod
+DFT/bcp_psd_fftw_4th
+DFT/bcp_psd_fftw_uniform_grid_4th

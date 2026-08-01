@@ -3,8 +3,9 @@ __pycache__
 build
 doc
 temp*
-*.sh
-!scripts/*.sh
+# Ad-hoc scripts at the repository root only. Do NOT blanket-ignore *.sh:
+# it silently unversions live scripts under devel/, tests/, examples/.
+/*.sh
 *.dat
 *.out
 *.png

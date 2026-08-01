@@ -1,0 +1,27 @@
+# Normalize line endings: text files are committed with LF.
+# (Nearly half the repo had CRLF endings with no policy; see git history.)
+* text=auto
+
+# Sources and scripts are always LF
+*.c    text eol=lf
+*.cpp  text eol=lf
+*.cu   text eol=lf
+*.h    text eol=lf
+*.py   text eol=lf
+*.sh   text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.ipynb text eol=lf
+
+# Binary data
+*.mat  binary
+*.npz  binary
+*.npy  binary
+*.png  binary
+*.pdf  binary
+*.mod  binary
