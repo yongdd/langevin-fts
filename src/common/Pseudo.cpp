@@ -10,6 +10,7 @@
  * @see Pseudo.h for class documentation
  */
 
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <numbers>
