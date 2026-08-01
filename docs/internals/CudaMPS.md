@@ -1,8 +1,6 @@
-# Developer Documentation
+# CUDA Multi-Process Service (MPS) Guide
 
 > **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
-
-# CUDA Multi-Process Service (MPS) Guide
 
 When running multiple simulations on the same GPU, NVIDIA's default time-slicing between CUDA contexts introduces significant overhead. CUDA MPS (Multi-Process Service) enables true concurrent kernel execution from different processes, eliminating context-switch overhead.
 

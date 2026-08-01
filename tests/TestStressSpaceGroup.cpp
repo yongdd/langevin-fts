@@ -21,6 +21,13 @@
 //    lx together) is used, compared against the sum of the diagonal stress.
 //    In addition, the three diagonal stress components must be equal to each
 //    other within 1e-8 (relative).
+// Case C "Im-3m" 40^3: same checks as B on a grid the Recursive3m selector
+//    historically rejected (nz/2 = 20 not a multiple of 8).
+// Case D "P4/mmm": tetragonal; joint Lx = Ly FD vs stress[0]+stress[1] plus
+//    Lz-only FD, and stress[0] = stress[1] within 1e-8. Exercises the
+//    tetragonal x,y axis-averaging of the CrysFFT stress path (Recursive3m).
+// Case E "Im-3m" 12^3: same checks as B; nz/2 = 6 < 8 forces the PmmmDct
+//    engine, exercising the cubic axis-averaging of the PmmmDct stress path.
 //
 // On CPU this exercises the CrysFFT fast path; on CUDA the expand+FFT path.
 
@@ -56,6 +63,7 @@ struct CaseSpec
     std::vector<double> w_full;   // exactly symmetrized fields on full grid, size 2*M (A then B)
     std::vector<double> w_red;    // fields in reduced basis, size 2*n_red (A then B)
     bool cubic;                   // true: isotropic FD + component-equality check
+    bool tetragonal = false;      // true: joint Lx=Ly FD + x/y component-equality check
 };
 
 // H = -sum_p (phi_p/alpha_p) ln Q_p
@@ -155,9 +163,83 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
             }
         }
     }
+    if (cs.tetragonal)
+    {
+        // Tetragonal symmetry: the x and y components must be equal
+        double rel = std::abs(stress_sg[1]-stress_sg[0])/std::abs(stress_sg[0]);
+        std::cout << "|stress_sg[1] - stress_sg[0]|/|stress_sg[0]| = " << rel << std::endl;
+        if (!std::isfinite(rel) || rel > 1e-8)
+        {
+            std::cout << "ERROR: tetragonal x/y stress components are not equal." << std::endl;
+            return -1;
+        }
+    }
 
     // ============ CHECK 2: finite-difference dH/dL vs stress ============
-    if (cs.cubic)
+    if (cs.tetragonal)
+    {
+        // The reduced basis enforces x = y, so perturb Lx = Ly jointly
+        // (compared against stress[0] + stress[1]) and Lz alone.
+        {
+            double dl = cs.lx[0]*2e-4;
+            std::vector<double> lx_p = cs.lx, lx_m = cs.lx;
+            lx_p[0] = cs.lx[0] + dl/2; lx_p[1] = cs.lx[1] + dl/2;
+            lx_m[0] = cs.lx[0] - dl/2; lx_m[1] = cs.lx[1] - dl/2;
+
+            cb_sg->set_lx(lx_p);
+            solver_sg->update_laplacian_operator();
+            solver_sg->compute_propagators(w_map_sg, {});
+            double energy_p = compute_energy(solver_sg, molecules_sg);
+
+            cb_sg->set_lx(lx_m);
+            solver_sg->update_laplacian_operator();
+            solver_sg->compute_propagators(w_map_sg, {});
+            double energy_m = compute_energy(solver_sg, molecules_sg);
+
+            double dh_dl = (energy_p-energy_m)/dl;
+            double stress_xy = stress_sg[0]+stress_sg[1];
+            double rel = std::abs(dh_dl-stress_xy)/std::abs(stress_xy);
+            std::cout << "dH/d(Lx=Ly) : " << dh_dl << std::endl;
+            std::cout << "stress[0]+stress[1] : " << stress_xy << std::endl;
+            std::cout << "Relative stress error : " << rel << std::endl;
+            if (!std::isfinite(rel) || rel > 1e-3)
+            {
+                std::cout << "ERROR: joint Lx=Ly FD does not match x+y stress." << std::endl;
+                return -1;
+            }
+        }
+        {
+            double dl = cs.lx[2]*2e-4;
+            std::vector<double> lx_p = cs.lx, lx_m = cs.lx;
+            lx_p[2] = cs.lx[2] + dl/2;
+            lx_m[2] = cs.lx[2] - dl/2;
+
+            cb_sg->set_lx(lx_p);
+            solver_sg->update_laplacian_operator();
+            solver_sg->compute_propagators(w_map_sg, {});
+            double energy_p = compute_energy(solver_sg, molecules_sg);
+
+            cb_sg->set_lx(lx_m);
+            solver_sg->update_laplacian_operator();
+            solver_sg->compute_propagators(w_map_sg, {});
+            double energy_m = compute_energy(solver_sg, molecules_sg);
+
+            cb_sg->set_lx(cs.lx);
+            solver_sg->update_laplacian_operator();
+
+            double dh_dl = (energy_p-energy_m)/dl;
+            double rel = std::abs(dh_dl-stress_sg[2])/std::abs(stress_sg[2]);
+            std::cout << "dH/dLz : " << dh_dl << std::endl;
+            std::cout << "stress[2] : " << stress_sg[2] << std::endl;
+            std::cout << "Relative stress error : " << rel << std::endl;
+            if (!std::isfinite(rel) || rel > 1e-3)
+            {
+                std::cout << "ERROR: Lz FD does not match z stress." << std::endl;
+                return -1;
+            }
+        }
+    }
+    else if (cs.cubic)
     {
         // Isotropic perturbation ONLY: under a cubic space group the reduced
         // basis enforces cubic symmetry, so per-direction FD is confounded.
@@ -377,6 +459,82 @@ int main()
         }
         symmetrize_fields(case_c);
 
+        // ================= Case D: P4/mmm, tetragonal =================
+        // 4-fold rotations permute the x and y axes, so the per-axis CrysFFT
+        // stress multipliers are non-orbit-invariant in x,y and the x,y sums
+        // must be averaged (the "tetragonal" mode of symmetrize_axis_sums /
+        // sym_mode = 1). 24x24x16 selects the Recursive3m engine.
+        CaseSpec case_d;
+        case_d.name = "P4/mmm (tetragonal)";
+        case_d.nx = {24, 24, 16};
+        case_d.lx = {2.0, 2.0, 1.5};
+        case_d.cubic = false;
+        case_d.tetragonal = true;
+        SpaceGroup sg_tet(case_d.nx, "P4/mmm");
+        case_d.sg = &sg_tet;
+        {
+            const int M = case_d.nx[0]*case_d.nx[1]*case_d.nx[2];
+            case_d.w_full.assign(2*M, 0.0);
+            for(int i=0; i<case_d.nx[0]; i++)
+            {
+                double X = (i+0.5)/case_d.nx[0];
+                for(int j=0; j<case_d.nx[1]; j++)
+                {
+                    double Y = (j+0.5)/case_d.nx[1];
+                    for(int k=0; k<case_d.nx[2]; k++)
+                    {
+                        double Z = (k+0.5)/case_d.nx[2];
+                        int idx = i*case_d.nx[1]*case_d.nx[2] + j*case_d.nx[2] + k;
+                        // Smooth P4/mmm-compatible harmonics (x<->y symmetric), std ~ 5
+                        double c10 = std::cos(2*PI*X) + std::cos(2*PI*Y);
+                        double c11 = std::cos(2*PI*X)*std::cos(2*PI*Y);
+                        double cz  = std::cos(2*PI*Z);
+                        double w_a = 5.0*(c10 + 0.6*c11 + 0.8*cz + 0.5*c10*cz);
+                        case_d.w_full[idx]   = w_a;
+                        case_d.w_full[idx+M] = -0.6*w_a + 2.0*c11*cz;
+                    }
+                }
+            }
+        }
+        symmetrize_fields(case_d);
+
+        // ================= Case E: Im-3m on 12^3 (PmmmDct fallback) =================
+        // nz/2 = 6 < 8 fails the Recursive3m grid bound, so the selector falls
+        // back to the PmmmDct engine; this exercises the cubic averaging branch
+        // of the PmmmDct stress path, which larger cubic grids no longer reach
+        // (they select Recursive3m since the nz/2 >= 8 relaxation).
+        CaseSpec case_e = case_b;
+        case_e.name = "Im-3m (BCC, cubic, 12^3 PmmmDct fallback)";
+        case_e.nx = {12, 12, 12};
+        case_e.lx = {1.9, 1.9, 1.9};  // same cubic box as case B, coarser grid
+        SpaceGroup sg_bcc12(case_e.nx, "Im-3m", 529);
+        case_e.sg = &sg_bcc12;
+        {
+            const int M = case_e.nx[0]*case_e.nx[1]*case_e.nx[2];
+            case_e.w_full.assign(2*M, 0.0);
+            for(int i=0; i<case_e.nx[0]; i++)
+            {
+                double X = (i+0.5)/case_e.nx[0];
+                for(int j=0; j<case_e.nx[1]; j++)
+                {
+                    double Y = (j+0.5)/case_e.nx[1];
+                    for(int k=0; k<case_e.nx[2]; k++)
+                    {
+                        double Z = (k+0.5)/case_e.nx[2];
+                        int idx = i*case_e.nx[1]*case_e.nx[2] + j*case_e.nx[2] + k;
+                        double c110 = std::cos(2*PI*X)*std::cos(2*PI*Y)
+                                    + std::cos(2*PI*Y)*std::cos(2*PI*Z)
+                                    + std::cos(2*PI*Z)*std::cos(2*PI*X);
+                        double c200 = std::cos(4*PI*X) + std::cos(4*PI*Y) + std::cos(4*PI*Z);
+                        double w_a = 5.0*(c110 + 0.4*c200);
+                        case_e.w_full[idx]   = w_a;
+                        case_e.w_full[idx+M] = -0.6*w_a;
+                    }
+                }
+            }
+        }
+        symmetrize_fields(case_e);
+
         // ================= Run all platform / chain-model combinations =================
         // Any CPU platform (cpu-mkl or cpu-fftw) MUST run for BOTH chain models:
         // the CPU CrysFFT stress path and the discrete+space-group path are the
@@ -393,7 +551,7 @@ int main()
             const bool is_cpu = (platform.rfind("cpu", 0) == 0);
             for(const std::string& chain_model : chain_models)
             {
-                for(const CaseSpec* cs : {&case_a, &case_b, &case_c})
+                for(const CaseSpec* cs : {&case_a, &case_b, &case_c, &case_d, &case_e})
                 {
                     std::cout << "==============================================" << std::endl;
                     std::cout << "Testing: " << platform << ", " << chain_model
