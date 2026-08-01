@@ -19,10 +19,9 @@
 
 ## Pending Tasks
 
-- [ ] **Compare with deep-langevin-fts**
-  - Compare F(Ψ) curves, barrier height, and χN_ODT
-- [ ] (optional) Additional independent runs to tighten χN_ODT
-      (more efficient than extending the cancelled runs)
+(none — the deep-langevin-fts comparison was deemed unnecessary, 2026-08-01;
+additional independent runs remain an option only if a tighter χN_ODT is
+ever needed)
 
 ## Notes
 

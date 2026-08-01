@@ -415,8 +415,6 @@ barrier values:
 
 ![WTMD convergence with simulation time](../figures/wtmd_lamella_convergence.png)
 
-Data and details: `devel/wtmd/RESULTS.md`.
-
 ---
 
 ## 10. Limitations
