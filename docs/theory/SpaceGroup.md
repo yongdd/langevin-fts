@@ -73,9 +73,20 @@ $$\text{Orbit}(\mathbf{p}) = \{ \mathbf{R}_i \cdot \mathbf{p} + \mathbf{t}_i \mi
 
 (each component wrapped to $[0, 1)$ via periodic boundary conditions)
 
-**Cell-centered grid convention**: The implementation uses a cell-centered grid, so grid point $(i, j, k)$ on an $N_x \times N_y \times N_z$ mesh corresponds to the fractional coordinate
+**Cell-centered grid convention**: For cubic, tetragonal, orthorhombic,
+monoclinic, and triclinic settings the implementation uses a cell-centered
+grid, so grid point $(i, j, k)$ on an $N_x \times N_y \times N_z$ mesh
+corresponds to the fractional coordinate
 
 $$\mathbf{p}_{\text{frac}} = \left( \frac{i + 0.5}{N_x}, \frac{j + 0.5}{N_y}, \frac{k + 0.5}{N_z} \right)$$
+
+Hexagonal-axes settings of hexagonal/trigonal groups instead use a **hybrid
+convention** — node-centered in-plane coordinates
+$\left(\frac{i}{N_x}, \frac{j}{N_y}\right)$ with cell-centered $z$ —
+because in-plane hexagonal
+rotations are exact on the grid only in node-centered coordinates (see
+[How Hexagonal/Trigonal Groups Are
+Handled](#how-hexagonaltrigonal-groups-are-handled)).
 
 **Example: Orbit calculation for BCC on 4×4×4 grid**
 
@@ -270,7 +281,7 @@ Metadata is exposed through getter methods (not attributes):
 Hexagonal crystal systems (P6_3/mmc, etc.) require special attention:
 
 - Lattice: a = b, c independent
-- Angles: α = β = 90°, γ = 120°
+- Angles: α = β = 90°, γ = 120° (pass `"angles": [90, 90, 120]` in params)
 - Grid: nx = ny (first two dimensions must be equal)
 - All dimensions must be divisible by 2 (for P6_3/mmc, from its 1/2 translations)
 
@@ -279,6 +290,84 @@ Hexagonal crystal systems (P6_3/mmc, etc.) require special attention:
 nx = [48, 48, 96]  # a = b, c different, all divisible by 2
 sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
 ```
+
+### How Hexagonal/Trigonal Groups Are Handled
+
+Hexagonal-axes settings are treated differently from the other crystal
+systems in two places. Both changes address the same underlying issue: the
+discretization must respect the point group *exactly*, not just to rounding
+accuracy. Historically the naive treatment produced X-shaped artifacts in
+the perforation layers of PL/HCP phases and a $\sim 10^{-3}$ free-energy
+bias; with the two mechanisms below, space-group on/off results agree to
+machine precision (e.g., PL on 48×48×72:
+$\max|\Delta\phi| \approx 5 \times 10^{-15}$).
+
+#### 1. Hybrid orbit convention (real space)
+
+In-plane hexagonal rotations contain matrix rows whose entries sum to zero,
+e.g. the 6-fold rotation
+
+$$\mathbf{R}_{6} = \begin{pmatrix} 1 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}$$
+
+Applied to a cell-centered coordinate, the row $[1, -1, 0]$ gives
+$\frac{(i+0.5) - (j+0.5)}{N} = \frac{i-j}{N}$ — the $0.5$ offset is
+annihilated, so a cell **center** is mapped onto a cell **boundary**, which
+is not a grid point. No rounding rule can fix this: the cell-centered grid
+is simply not invariant under the in-plane hexagonal rotations, and forcing
+nearest-point assignment produces wrong orbit partitions at almost every
+grid point (99.5% of points for P6_3/mmc on 24×24×16).
+
+The fix is a **hybrid convention** used only for hexagonal-axes settings:
+
+$$\mathbf{p}_{\text{frac}} = \left( \frac{i}{N_x}, \frac{j}{N_y}, \frac{k + 0.5}{N_z} \right)$$
+
+i.e. node-centered in-plane, cell-centered along $z$. This works because
+every symmetry operation of every hexagonal-axes Hall setting is
+block-diagonal: a $2 \times 2$ in-plane block acting on $(x, y)$ and $\pm 1$
+acting on $z$. The in-plane block sees node-centered coordinates (invariant
+under the hexagonal rotations), while $\pm z$ (with its screw/glide
+translations, which are integral in grid cells) remains exact on the
+cell-centered $z$ axis. Every orbit map is then evaluated with **exact
+integer modular arithmetic** — no floating-point rounding is involved at
+all. Cubic, tetragonal, orthorhombic, monoclinic, and triclinic settings
+keep the pure cell-centered convention, which is exact for them.
+
+#### 2. Group-invariant alias representative (Fourier space)
+
+Exact real-space orbits are not sufficient: the discretized diffusion
+operator itself must commute with the point group. The pseudo-spectral
+Boltzmann factor $\exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ is tabulated per
+discrete frequency $\mathbf{m}$, but on the discrete grid $\mathbf{m}$ is
+only defined modulo $N$ (aliasing). On an **oblique** cell the squared
+magnitude
+
+$$|\mathbf{k}|^2 = \mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}, \qquad \mathbf{G}^{*} = (2\pi)^2 \, \mathbf{g}^{-1}$$
+
+depends on which alias representative is chosen, because the reciprocal
+metric $\mathbf{G}^{*}$ has off-diagonal terms. The conventional
+principal-zone representative $m_d \in [-N_d/2, N_d/2)$ is **not invariant**
+under hexagonal rotations: a rotation can carry a principal-zone frequency
+outside the zone, and re-aliasing it back changes $|\mathbf{k}|^2$. The
+tabulated operator then breaks the point-group symmetry, so even a
+perfectly symmetrized field loses its symmetry after one propagator step.
+
+The fix is to choose, within each alias class $\{\mathbf{m} + N \mathbf{n}\}$,
+the representative that **minimizes the metric form**
+$\mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}$ (the first-Brillouin-zone
+representative). This choice is group-invariant by construction — rotations
+permute alias classes and preserve the minimal value — so the discretized
+diffusion and stress operators recover exact point-group symmetry. The
+minimal-form search runs only when the cell is actually oblique, detected by
+a *relative* tolerance on the off-diagonal metric elements
+($|G^{*}_{ij}| > 10^{-12} \cdot \max_d G^{*}_{dd}$); orthogonal cells use the
+principal-zone representative unchanged (both conventions coincide there).
+The same representative is used in the k-space Boltzmann tables, the stress
+tables, and the CrysFFT ObliqueZ generators.
+
+**Initial-guess note**: analytic initial fields for hexagonal phases should
+be built with the hybrid convention (in-plane $i/N$, cell-centered $z$) to
+be exactly symmetric; fields built with other conventions are projected
+onto the symmetric basis, which is harmless for the converged answer.
 
 ## Worked Example: BCC on 4×4×4 Grid
 
@@ -343,7 +432,15 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
   (standard mode)
 - **`reduce_memory=True` + discrete chains + space group** is not supported on any
   platform (throws on both CPU and CUDA)
-- **Hexagonal/trigonal artifact**: Cell-centered grids are mathematically incompatible with hexagonal rotation matrices. Rotations with even row sums (e.g., $[1, -1, 0]$) map cell-centered positions $(i+0.5)/N$ to cell boundaries $(integer)/N$, causing inconsistent orbit assignments and X-shaped density artifacts. Cubic/orthorhombic space groups are unaffected (rotation matrix row sums are always odd). The `star` git branch implements a Fourier star basis that eliminates this artifact by working in reciprocal space where wavevector rotations are exact integer operations.
+- **Hexagonal/trigonal groups (hexagonal-axes settings)** are fully
+  supported via a hybrid orbit convention and a group-invariant k-space
+  alias representative; space-group on/off results agree to machine
+  precision. See [How Hexagonal/Trigonal Groups Are
+  Handled](#how-hexagonaltrigonal-groups-are-handled).
+- **Rhombohedral-axes R settings** contain axis-permuting operations that are
+  exact on cell-centered grids only when $n_x = n_y = n_z$; incompatible
+  grids are rejected with an explicit error instead of being silently
+  projected onto wrong orbits.
 
 ## References
 

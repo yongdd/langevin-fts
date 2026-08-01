@@ -699,6 +699,11 @@ class SCFT:
             # Update params for PropagatorSolver creation
             params["nx"] = nx_reordered
             params["lx"] = lx_reordered
+            # Keep params consistent with the reordering: later code (e.g. the
+            # space-group block) re-reads params["angles"] and must see the
+            # reordered values, not the user's original ordering.
+            if angles is not None:
+                params["angles"] = angles
 
             print(f"Axis ordering: {axis_ordering} -> reordered to [a, b, c]")
             print(f"  nx: {params['nx']}, lx: {params['lx']}")
@@ -717,9 +722,12 @@ class SCFT:
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
             # Auto-enable physical basis when possible (m3 → pmmm → z-mirror).
-            angles = params.get("angles", [90.0, 90.0, 90.0])
+            # NOTE: reuse the (possibly axis_ordering-reordered) local `angles`;
+            # missing angles means an orthogonal cell for classification, while
+            # `angles` itself stays None so the computation box is not
+            # needlessly recreated below.
             try:
-                alpha, beta, gamma = angles
+                alpha, beta, gamma = angles if angles is not None else (90.0, 90.0, 90.0)
             except Exception:
                 alpha, beta, gamma = 90.0, 90.0, 90.0
             tol = 1e-8
@@ -735,9 +743,10 @@ class SCFT:
                     except Exception:
                         pass
             elif z_axis_orthogonal:
-                # NOTE: Hexagonal/trigonal space groups produce X-shaped artifacts
-                # in density fields due to cell-centered grid incompatibility with
-                # hexagonal rotations. See 'star' branch for Fourier star basis fix.
+                # Hexagonal/trigonal (hexagonal-axes) space groups use a hybrid
+                # orbit convention (node-centered x,y; cell-centered z), making
+                # all in-plane symmetry maps exact on the grid. The z-mirror
+                # physical basis (cell-centered z fold) remains valid.
                 try:
                     self.sg.enable_z_mirror_physical_basis()
                 except Exception:

@@ -168,14 +168,56 @@ protected:
         const double G33 = recip_metric_[5];
         const double factor = 4.0 * M_PI * M_PI;
 
+        // For oblique in-plane cells (gamma != 90), pick the in-plane alias
+        // representative minimizing the metric form, matching the invariant
+        // (first-Brillouin-zone) convention used by Pseudo for the standard
+        // full-grid path. This keeps the ObliqueZ diffusion operator exactly
+        // symmetric under the hexagonal point group and mode-by-mode
+        // consistent with the full-grid multiplier. The z (DCT) index is a
+        // true non-negative frequency and needs no re-aliasing (ObliqueZ
+        // requires alpha = beta = 90, i.e. G13 = G23 = 0).
+        // Relative-tolerance gate: gamma of exactly 90 degrees gives
+        // cos(pi/2) ~ 6e-17; do not flip rectangular cells onto the
+        // minimal-form alias path.
+        const bool oblique_xy = (std::abs(G12) > 1e-12 * std::max(std::abs(G11), std::abs(G22)));
+        const int Nx = nx_logical_[0];
+        const int Ny = nx_logical_[1];
+        auto min_form_rep_xy = [&](int& m1, int& m2) {
+            auto form = [&](double a, double b) {
+                return G11 * a * a + 2.0 * G12 * a * b + G22 * b * b;
+            };
+            int b1 = m1, b2 = m2;
+            double best = form(m1, m2);
+            for (int a = -1; a <= 1; ++a)
+            {
+                for (int b = -1; b <= 1; ++b)
+                {
+                    if (a == 0 && b == 0)
+                        continue;
+                    const int t1 = m1 + a * Nx;
+                    const int t2 = m2 + b * Ny;
+                    const double f = form(t1, t2);
+                    if (f < best)
+                    {
+                        best = f;
+                        b1 = t1; b2 = t2;
+                    }
+                }
+            }
+            m1 = b1; m2 = b2;
+        };
+
         const int Nyh = nx_logical_[1] / 2 + 1;
         const int Nz2 = nx_physical_[2];
         for (int ix = 0; ix < nx_logical_[0]; ++ix)
         {
-            int m1 = (ix > nx_logical_[0] / 2) ? (ix - nx_logical_[0]) : ix;
+            int m1s = (ix > nx_logical_[0] / 2) ? (ix - nx_logical_[0]) : ix;
             for (int iy = 0; iy < Nyh; ++iy)
             {
+                int m1 = m1s;
                 int m2 = iy;
+                if (oblique_xy)
+                    min_form_rep_xy(m1, m2);
                 for (int iz = 0; iz < Nz2; ++iz)
                 {
                     int m3 = iz;

@@ -389,13 +389,31 @@ void SpaceGroup::get_symmetry_operations()
 
 void SpaceGroup::find_irreducible_mesh()
 {
-    // WARNING: For hexagonal/trigonal crystal systems, this real-space orbit
-    // mapping produces visible artifacts (X-shaped glitches in density fields).
-    // Hexagonal rotation matrices have rows with even sums, causing cell-centered
-    // grid points (i+0.5)/N to map to cell boundaries (integer/N) — equidistant
-    // from two cells. The floor() rounding creates inconsistent orbit assignments.
-    // This is a mathematical incompatibility, not fixable by rounding strategy.
-    // See the 'star' branch for a Fourier star basis solution.
+    // Orbit coordinate conventions:
+    //
+    // (a) Cell-centered sampling x = (i+0.5)/N (default). Exact whenever every
+    //     rotation-matrix row has an odd sum AND any axes mixed by a row have
+    //     equal grid extents: the 0.5 offsets then recombine to an odd multiple
+    //     of 0.5 and grid points map onto grid points. This holds for
+    //     cubic/tetragonal/orthorhombic/monoclinic/triclinic settings, and for
+    //     rhombohedral-axes trigonal settings (signed permutation rows) only
+    //     when Nx = Ny = Nz. Inexact mappings are now detected and rejected
+    //     (see the exactness check in the fallback loop below) instead of
+    //     being silently rounded onto wrong orbits.
+    //
+    // (b) Hybrid sampling for hexagonal-axes settings of trigonal/hexagonal
+    //     groups: NODE-centered in-plane x = i/Nx, y = j/Ny with CELL-centered
+    //     z = (k+0.5)/Nz. In these settings, in-plane rotation rows can have
+    //     even sums (e.g. x' = x - y), which annihilate the 0.5 offset and map
+    //     cell centers onto cell boundaries — no rounding strategy is
+    //     consistent there. Every op in these settings decomposes as a 2x2
+    //     in-plane block (+) (+/-1 in z), so node-centering only x,y makes the
+    //     in-plane action an exact integer map (Nx = Ny is enforced), while the
+    //     z part (+/-z + t_z, odd "row sum") stays exact on cell centers. This
+    //     keeps the z-mirror physical basis and the ObliqueZ CrysFFT (DCT-II
+    //     fold along z) valid unchanged. Symmetry translations are integral in
+    //     grid units by validate_grid_compatibility(), so the whole hybrid map
+    //     is exact integer arithmetic — no rounding at all.
 
     // Initialize full_to_reduced_map with -1 (unvisited)
     full_to_reduced_map_.resize(total_grid_, -1);
@@ -404,6 +422,43 @@ void SpaceGroup::find_irreducible_mesh()
     int Nx = nx_[0];
     int Ny = nx_[1];
     int Nz = nx_[2];
+
+    // Decide whether the hybrid (node-centered x,y; cell-centered z) convention
+    // applies: hexagonal/trigonal crystal system, square in-plane grid, all ops
+    // z-block-diagonal, and all translations integral in grid units.
+    const bool hex_like = (crystal_system_ == "Hexagonal" || crystal_system_ == "Trigonal");
+    bool use_hybrid = hex_like && (Nx == Ny);
+    std::vector<std::array<int, 3>> trans_grid(n_symmetry_ops_, {0, 0, 0});
+    if (use_hybrid)
+    {
+        for (int op = 0; op < n_symmetry_ops_ && use_hybrid; ++op)
+        {
+            const auto& R = rotations_[op];
+            // Require (2x2 in-plane block) (+) (+/-1 in z)
+            if (R[0][2] != 0 || R[1][2] != 0 || R[2][0] != 0 || R[2][1] != 0 ||
+                std::abs(R[2][2]) != 1)
+            {
+                use_hybrid = false;
+                break;
+            }
+            for (int dim = 0; dim < 3; ++dim)
+            {
+                const double t_grid = translations_[op][dim] * static_cast<double>(nx_[dim]);
+                const long t_int = std::lround(t_grid);
+                if (std::abs(t_grid - static_cast<double>(t_int)) > 1e-6)
+                {
+                    use_hybrid = false;
+                    break;
+                }
+                trans_grid[op][dim] = static_cast<int>(((t_int % nx_[dim]) + nx_[dim]) % nx_[dim]);
+            }
+        }
+    }
+
+    auto mod_pos = [](int v, int N) {
+        int r = v % N;
+        return (r < 0) ? r + N : r;
+    };
 
     int count = 0;
 
@@ -420,38 +475,82 @@ void SpaceGroup::find_irreducible_mesh()
             // This is a new irreducible point
             reduced_basis_indices_.push_back(flat_idx);
 
-            // Apply all symmetry operations to find orbit (cell-centered grid)
-            const double x = (static_cast<double>(ix) + 0.5) / static_cast<double>(Nx);
-            const double y = (static_cast<double>(iy) + 0.5) / static_cast<double>(Ny);
-            const double z = (static_cast<double>(iz) + 0.5) / static_cast<double>(Nz);
-            const double eps = 1e-8;
-
-            for (int op = 0; op < n_symmetry_ops_; ++op)
+            if (use_hybrid)
             {
-                // Apply rotation + translation in fractional coordinates
-                double rx = rotations_[op][0][0] * x + rotations_[op][0][1] * y + rotations_[op][0][2] * z + translations_[op][0];
-                double ry = rotations_[op][1][0] * x + rotations_[op][1][1] * y + rotations_[op][1][2] * z + translations_[op][1];
-                double rz = rotations_[op][2][0] * x + rotations_[op][2][1] * y + rotations_[op][2][2] * z + translations_[op][2];
+                // Exact integer orbit: node-centered x,y; cell-centered z.
+                // x' = R00 x + R01 y + tx  (units of 1/Nx, valid since Nx == Ny)
+                // z' = +z + tz  ->  oz = iz + tz
+                // z' = -z + tz  ->  (oz+0.5) = -(iz+0.5) + tz  ->  oz = tz - iz - 1
+                for (int op = 0; op < n_symmetry_ops_; ++op)
+                {
+                    const auto& R = rotations_[op];
+                    const auto& tg = trans_grid[op];
+                    const int ox = mod_pos(R[0][0] * ix + R[0][1] * iy + tg[0], Nx);
+                    const int oy = mod_pos(R[1][0] * ix + R[1][1] * iy + tg[1], Ny);
+                    const int oz = (R[2][2] == 1) ? mod_pos(iz + tg[2], Nz)
+                                                  : mod_pos(tg[2] - iz - 1, Nz);
 
-                // Wrap to [0,1)
-                rx -= std::floor(rx);
-                ry -= std::floor(ry);
-                rz -= std::floor(rz);
+                    // Convert to flat index and mark this orbit point
+                    const int orbit_flat = (ox * Ny + oy) * Nz + oz;
+                    full_to_reduced_map_[orbit_flat] = count;
+                }
+            }
+            else
+            {
+                // Apply all symmetry operations to find orbit (cell-centered grid)
+                const double x = (static_cast<double>(ix) + 0.5) / static_cast<double>(Nx);
+                const double y = (static_cast<double>(iy) + 0.5) / static_cast<double>(Ny);
+                const double z = (static_cast<double>(iz) + 0.5) / static_cast<double>(Nz);
+                const double eps = 1e-8;
 
-                // Map back to cell-centered indices
-                int ox = static_cast<int>(std::floor(rx * Nx + eps));
-                int oy = static_cast<int>(std::floor(ry * Ny + eps));
-                int oz = static_cast<int>(std::floor(rz * Nz + eps));
+                for (int op = 0; op < n_symmetry_ops_; ++op)
+                {
+                    // Apply rotation + translation in fractional coordinates
+                    double rx = rotations_[op][0][0] * x + rotations_[op][0][1] * y + rotations_[op][0][2] * z + translations_[op][0];
+                    double ry = rotations_[op][1][0] * x + rotations_[op][1][1] * y + rotations_[op][1][2] * z + translations_[op][1];
+                    double rz = rotations_[op][2][0] * x + rotations_[op][2][1] * y + rotations_[op][2][2] * z + translations_[op][2];
 
-                if (ox >= Nx) ox -= Nx;
-                if (oy >= Ny) oy -= Ny;
-                if (oz >= Nz) oz -= Nz;
+                    // Wrap to [0,1)
+                    rx -= std::floor(rx);
+                    ry -= std::floor(ry);
+                    rz -= std::floor(rz);
 
-                // Convert to flat index
-                const int orbit_flat = ox * Ny * Nz + oy * Nz + oz;
+                    // Map back to cell-centered indices
+                    int ox = static_cast<int>(std::floor(rx * Nx + eps));
+                    int oy = static_cast<int>(std::floor(ry * Ny + eps));
+                    int oz = static_cast<int>(std::floor(rz * Nz + eps));
 
-                // Mark this orbit point
-                full_to_reduced_map_[orbit_flat] = count;
+                    if (ox >= Nx) ox -= Nx;
+                    if (oy >= Ny) oy -= Ny;
+                    if (oz >= Nz) oz -= Nz;
+
+                    // Exactness check: the mapped coordinate must land on a
+                    // cell center (fractional part 0.5 in index units). If it
+                    // does not, this op/grid/sampling-convention combination
+                    // cannot represent the symmetry consistently (e.g.
+                    // rhombohedral-axes settings with unequal Nx, Ny, Nz);
+                    // fail loudly rather than silently corrupting the orbits.
+                    const double fx = rx * Nx - std::floor(rx * Nx + eps);
+                    const double fy = ry * Ny - std::floor(ry * Ny + eps);
+                    const double fz = rz * Nz - std::floor(rz * Nz + eps);
+                    if (std::abs(fx - 0.5) > 1e-6 || std::abs(fy - 0.5) > 1e-6 ||
+                        std::abs(fz - 0.5) > 1e-6)
+                    {
+                        throw_with_line_number(
+                            "Symmetry operation " + std::to_string(op) +
+                            " does not map the cell-centered grid onto itself "
+                            "(off-center by more than 1e-6 in index units). "
+                            "This grid is incompatible with the space group "
+                            "under the current sampling convention; for "
+                            "rhombohedral-axes settings use Nx = Ny = Nz.");
+                    }
+
+                    // Convert to flat index
+                    const int orbit_flat = ox * Ny * Nz + oy * Nz + oz;
+
+                    // Mark this orbit point
+                    full_to_reduced_map_[orbit_flat] = count;
+                }
             }
 
             ++count;

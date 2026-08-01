@@ -253,106 +253,83 @@ void Pseudo<T>::update_boltz_bond()
 //------------------------------------------------------------------------------
 // Update Boltzmann factors for periodic BC (with recip_metric support)
 //------------------------------------------------------------------------------
-template <typename T>
-void update_boltz_bond_periodic_impl(
-    std::map<std::string, double>& bond_lengths,
-    std::map<std::string, double*>& boltz_bond,
-    std::map<std::string, double*>& boltz_bond_half,
-    const std::vector<int>& nx,
-    double ds,
-    const std::array<double, 6>& recip_metric_)
+namespace {
+/**
+ * @brief Replace Miller indices by the alias representative minimizing the
+ *        reciprocal-metric form (first-Brillouin-zone representative).
+ *
+ * On the discrete torus each mode k is only defined modulo N, and the
+ * multiplier must pick one alias representative. The componentwise
+ * principal-zone choice (|m_d| <= N_d/2) is NOT invariant under point-group
+ * operations that mix axes with a nonzero metric cross term: e.g. the
+ * hexagonal rotation (kx,ky) -> (kx+ky,-kx) can push kx+ky out of the zone,
+ * and re-aliasing changes kx^2 + kx*ky + ky^2. The minimal-form
+ * representative is group-invariant: symmetry operations permute alias
+ * classes and preserve the form, so the minimum over the class is preserved.
+ * This makes the pseudo-spectral evolution operator exactly symmetric under
+ * the crystal point group (required for space-group reduced-basis
+ * computations to match full-grid computations).
+ *
+ * For orthogonal cells the form is separable and the componentwise
+ * representative is already minimal, so callers only invoke this for cells
+ * with a nonzero off-diagonal metric (keeping orthogonal results bit-exact).
+ * A search window of +/-1 period per axis is sufficient for valid cell
+ * geometries (the Voronoi cell of a reduced lattice basis is contained in
+ * the union of neighboring translates).
+ */
+inline void min_form_alias_rep(
+    int& m1, int& m2, int& m3,
+    const std::array<int, 3>& tnx,
+    double G11, double G22, double G33,
+    double G12, double G13, double G23)
 {
-    const double PI = std::numbers::pi;
-    const double FOUR_PI_SQ = 4.0 * PI * PI;
-    const int DIM = nx.size();
+    auto form = [&](double a, double b, double c) {
+        return G11 * a * a + G22 * b * b + G33 * c * c +
+               2.0 * (G12 * a * b + G13 * a * c + G23 * b * c);
+    };
 
-    // Pad to 3D for unified loop
-    std::vector<int> tnx(3, 1);
-    if (DIM == 3)
-        tnx = {nx[0], nx[1], nx[2]};
-    else if (DIM == 2)
-        tnx = {1, nx[0], nx[1]};
-    else if (DIM == 1)
-        tnx = {1, 1, nx[0]};
+    const int s1 = (tnx[0] > 1) ? 1 : 0;
+    const int s2 = (tnx[1] > 1) ? 1 : 0;
+    const int s3 = (tnx[2] > 1) ? 1 : 0;
 
-    // Extract reciprocal metric components
-    double Gii, Gjj, Gkk, Gij, Gik, Gjk;
-    if (DIM == 3) {
-        Gii = recip_metric_[0]; Gjj = recip_metric_[3]; Gkk = recip_metric_[5];
-        Gij = recip_metric_[1]; Gik = recip_metric_[2]; Gjk = recip_metric_[4];
-    } else if (DIM == 2) {
-        Gii = 0.0; Gjj = recip_metric_[0]; Gkk = recip_metric_[3];
-        Gij = 0.0; Gik = 0.0; Gjk = recip_metric_[1];
-    } else {
-        Gii = 0.0; Gjj = 0.0; Gkk = recip_metric_[0];
-        Gij = 0.0; Gik = 0.0; Gjk = 0.0;
-    }
-
-    for (const auto& item : bond_lengths)
+    int b1 = m1, b2 = m2, b3 = m3;
+    double best = form(m1, m2, m3);
+    for (int a = -s1; a <= s1; ++a)
     {
-        std::string monomer_type = item.first;
-        double bond_length_sq = item.second * item.second;
-        double* _boltz_bond = boltz_bond[monomer_type];
-        double* _boltz_bond_half = boltz_bond_half[monomer_type];
-
-        double prefactor = -bond_length_sq * FOUR_PI_SQ * ds / 6.0;
-
-        for (int i = 0; i < tnx[0]; i++)
+        for (int b = -s2; b <= s2; ++b)
         {
-            int itemp = (i > tnx[0]/2) ? tnx[0] - i : i;
-            int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
-
-            for (int j = 0; j < tnx[1]; j++)
+            for (int c = -s3; c <= s3; ++c)
             {
-                int jtemp = (j > tnx[1]/2) ? tnx[1] - j : j;
-                int j_signed = (j > tnx[1]/2) ? j - tnx[1] : j;
-
-                if constexpr (std::is_same<T, double>::value)
+                if (a == 0 && b == 0 && c == 0)
+                    continue;
+                const int t1 = m1 + a * tnx[0];
+                const int t2 = m2 + b * tnx[1];
+                const int t3 = m3 + c * tnx[2];
+                const double f = form(t1, t2, t3);
+                if (f < best)
                 {
-                    for (int k = 0; k < tnx[2]/2+1; k++)
-                    {
-                        int ktemp = k;
-                        int k_signed = k;
-                        int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
-
-                        double mag_q2 = prefactor * (
-                            Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
-                            2.0 * Gij * i_signed * j_signed +
-                            2.0 * Gik * i_signed * k_signed +
-                            2.0 * Gjk * j_signed * k_signed
-                        );
-                        _boltz_bond[idx] = std::exp(mag_q2);
-                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
-                    }
-                }
-                else
-                {
-                    for (int k = 0; k < tnx[2]; k++)
-                    {
-                        int ktemp = (k > tnx[2]/2) ? tnx[2] - k : k;
-                        int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
-                        int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
-
-                        double mag_q2 = prefactor * (
-                            Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
-                            2.0 * Gij * i_signed * j_signed +
-                            2.0 * Gik * i_signed * k_signed +
-                            2.0 * Gjk * j_signed * k_signed
-                        );
-                        _boltz_bond[idx] = std::exp(mag_q2);
-                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
-                    }
+                    best = f;
+                    b1 = t1; b2 = t2; b3 = t3;
                 }
             }
         }
     }
+    m1 = b1; m2 = b2; m3 = b3;
 }
+}  // namespace
+
+// (A duplicated free-function implementation of the periodic Boltzmann
+// table builder used to live here; it had no callers and risked drifting
+// from the live member implementation, so it was removed.)
 
 template <typename T>
 void Pseudo<T>::update_boltz_bond_periodic()
 {
-    // Update for ds_index=0 (global ds)
-    update_boltz_bond_periodic_for_ds_index(1);
+    // Recompute for every registered ds value (writing a hard-coded index
+    // would default-insert a nullptr entry when that index was never
+    // registered via add_ds_value()).
+    for (const auto& ds_pair : ds_values)
+        update_boltz_bond_periodic_for_ds_index(ds_pair.first);
 }
 
 //------------------------------------------------------------------------------
@@ -361,8 +338,9 @@ void Pseudo<T>::update_boltz_bond_periodic()
 template <typename T>
 void Pseudo<T>::update_boltz_bond_mixed()
 {
-    // Update for ds_index=0 (global ds)
-    update_boltz_bond_mixed_for_ds_index(1);
+    // Recompute for every registered ds value (see update_boltz_bond_periodic).
+    for (const auto& ds_pair : ds_values)
+        update_boltz_bond_mixed_for_ds_index(ds_pair.first);
 }
 
 //------------------------------------------------------------------------------
@@ -438,6 +416,30 @@ void update_weighted_fourier_basis_periodic_impl(
         G22 = 0.0; G23 = 0.0; G33 = 0.0;
     }
 
+    // Oblique cells need the group-invariant (minimal-form) alias
+    // representative, consistent with the diffusion Boltzmann factors;
+    // see min_form_alias_rep(). Note the search runs in loop-index space
+    // (i,j,k with padded leading dims), before mapping to Miller indices.
+    // Relative-tolerance gate: exact 90-degree angles produce cos(pi/2)
+    // ~ 6e-17, which must not flip orthogonal cells onto this path.
+    const double G_diag_max2 = std::max({std::abs(G11), std::abs(G22), std::abs(G33)});
+    const bool oblique = (std::abs(G12) > 1e-12 * G_diag_max2 ||
+                          std::abs(G13) > 1e-12 * G_diag_max2 ||
+                          std::abs(G23) > 1e-12 * G_diag_max2);
+    const std::array<int, 3> tnx3 = {tnx[0], tnx[1], tnx[2]};
+    auto to_min_form_rep = [&](int& i_s, int& j_s, int& k_s) {
+        // recip metric in loop-index space: for DIM==3 (i,j,k)=(m1,m2,m3);
+        // DIM==2 (j,k)=(m1,m2); DIM==1 k=m1.
+        if (DIM == 3)
+            min_form_alias_rep(i_s, j_s, k_s, tnx3, G11, G22, G33, G12, G13, G23);
+        else if (DIM == 2)
+        {
+            int dummy = 0;
+            min_form_alias_rep(dummy, j_s, k_s, tnx3, 0.0, G11, G22, 0.0, 0.0, G12);
+        }
+        // DIM==1: separable, componentwise representative already minimal
+    };
+
     for (int i = 0; i < tnx[0]; i++)
     {
         int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
@@ -455,12 +457,15 @@ void update_weighted_fourier_basis_periodic_impl(
 
                     // Get Miller indices based on dimension
                     int m1, m2, m3;
+                    int i_rep = i_signed, j_rep = j_signed, k_rep = k_signed;
+                    if (oblique)
+                        to_min_form_rep(i_rep, j_rep, k_rep);
                     if (DIM == 3) {
-                        m1 = i_signed; m2 = j_signed; m3 = k_signed;
+                        m1 = i_rep; m2 = j_rep; m3 = k_rep;
                     } else if (DIM == 2) {
-                        m1 = j_signed; m2 = k_signed; m3 = 0;
+                        m1 = j_rep; m2 = k_rep; m3 = 0;
                     } else {
-                        m1 = k_signed; m2 = 0; m3 = 0;
+                        m1 = k_rep; m2 = 0; m3 = 0;
                     }
 
                     // Compute deformation vector v = 2π g⁻¹ m
@@ -496,12 +501,15 @@ void update_weighted_fourier_basis_periodic_impl(
 
                     // Get Miller indices based on dimension
                     int m1, m2, m3;
+                    int i_rep = i_signed, j_rep = j_signed, k_rep = k_signed;
+                    if (oblique)
+                        to_min_form_rep(i_rep, j_rep, k_rep);
                     if (DIM == 3) {
-                        m1 = i_signed; m2 = j_signed; m3 = k_signed;
+                        m1 = i_rep; m2 = j_rep; m3 = k_rep;
                     } else if (DIM == 2) {
-                        m1 = j_signed; m2 = k_signed; m3 = 0;
+                        m1 = j_rep; m2 = k_rep; m3 = 0;
                     } else {
-                        m1 = k_signed; m2 = 0; m3 = 0;
+                        m1 = k_rep; m2 = 0; m3 = 0;
                     }
 
                     // Compute deformation vector v = 2π g⁻¹ m
@@ -770,6 +778,17 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
         Gij = 0.0; Gik = 0.0; Gjk = 0.0;
     }
 
+    // Oblique cells need the group-invariant (minimal-form) alias
+    // representative; see min_form_alias_rep().
+    // Treat the cell as oblique only when the off-diagonal metric is
+    // significant relative to the diagonal: angles of exactly 90 degrees
+    // produce cos(pi/2) ~ 6e-17, which must not flip orthogonal cells
+    // onto the minimal-form alias path (bit-identical behavior there).
+    const double G_diag_max = std::max({std::abs(Gd[0]), std::abs(Gd[1]), std::abs(Gd[2])});
+    const bool oblique = (std::abs(Gij) > 1e-12 * G_diag_max ||
+                          std::abs(Gik) > 1e-12 * G_diag_max ||
+                          std::abs(Gjk) > 1e-12 * G_diag_max);
+
     for (const auto& [monomer_type, bond_length] : bond_lengths)
     {
         double bond_length_sq = bond_length * bond_length;
@@ -792,8 +811,19 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                     for (int k = 0; k < tnx[2]/2+1; k++)
                     {
                         int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
-                        double mag_q2 = prefactor * (Gd[0]*ni*ni + Gd[1]*nj*nj + Gd[2]*k*k +
-                            2.0*(Gij*i_signed*j_signed + Gik*i_signed*k + Gjk*j_signed*k));
+                        double mag_q2;
+                        if (oblique)
+                        {
+                            int m1 = i_signed, m2 = j_signed, m3 = k;
+                            min_form_alias_rep(m1, m2, m3, tnx, Gd[0], Gd[1], Gd[2], Gij, Gik, Gjk);
+                            mag_q2 = prefactor * (Gd[0]*m1*m1 + Gd[1]*m2*m2 + Gd[2]*m3*m3 +
+                                2.0*(Gij*m1*m2 + Gik*m1*m3 + Gjk*m2*m3));
+                        }
+                        else
+                        {
+                            mag_q2 = prefactor * (Gd[0]*ni*ni + Gd[1]*nj*nj + Gd[2]*k*k +
+                                2.0*(Gij*i_signed*j_signed + Gik*i_signed*k + Gjk*j_signed*k));
+                        }
                         _boltz_bond[idx] = std::exp(mag_q2);
                         _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                     }
@@ -805,8 +835,19 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                         int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
                         int nk = std::abs(k_signed);
                         int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
-                        double mag_q2 = prefactor * (Gd[0]*ni*ni + Gd[1]*nj*nj + Gd[2]*nk*nk +
-                            2.0*(Gij*i_signed*j_signed + Gik*i_signed*k_signed + Gjk*j_signed*k_signed));
+                        double mag_q2;
+                        if (oblique)
+                        {
+                            int m1 = i_signed, m2 = j_signed, m3 = k_signed;
+                            min_form_alias_rep(m1, m2, m3, tnx, Gd[0], Gd[1], Gd[2], Gij, Gik, Gjk);
+                            mag_q2 = prefactor * (Gd[0]*m1*m1 + Gd[1]*m2*m2 + Gd[2]*m3*m3 +
+                                2.0*(Gij*m1*m2 + Gik*m1*m3 + Gjk*m2*m3));
+                        }
+                        else
+                        {
+                            mag_q2 = prefactor * (Gd[0]*ni*ni + Gd[1]*nj*nj + Gd[2]*nk*nk +
+                                2.0*(Gij*i_signed*j_signed + Gik*i_signed*k_signed + Gjk*j_signed*k_signed));
+                        }
                         _boltz_bond[idx] = std::exp(mag_q2);
                         _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                     }

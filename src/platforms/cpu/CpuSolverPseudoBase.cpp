@@ -829,7 +829,12 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // cross terms — instead of silently returning zeros for them.
         if constexpr (std::is_same_v<T, double>)
         {
-            if (use_crysfft() && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal()
+            // Restrict to the modes that actually have a stress fast path
+            // (ObliqueZ has none); otherwise the expansions below would be
+            // wasted before falling through to the standard path. Mirrors the
+            // explicit mode gate used by the CUDA solvers.
+            if ((use_crysfft_pmmm() || use_crysfft_recursive())
+                && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal()
                 && !this->force_off_diagonal_stress_)
             {
                 const int M_full = cb->get_total_grid();
