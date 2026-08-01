@@ -486,7 +486,7 @@ All cross-terms may be non-zero.
 
 8. Song, J. Q., Liu, Y. X. & Zhang, H. D. "An efficient algorithm for self-consistent field theory calculations of complex self-assembled structures of block copolymer melts." *Chinese J. Polym. Sci.* **36**, 488-496 (2018).
 
-9. Yong, D. & Kim, J. U. "Material conservation in polymer field theory simulations." *Phys. Rev. E* **96**, 063312 (2017).
+9. Yong, D. & Kim, J. U. "Finite volume method for self-consistent field theory of polymers: Material conservation and application." *Phys. Rev. E* **96**, 063312 (2017).
 
 10. Crank, J. & Nicolson, P. "A practical method for numerical evaluation of solutions of partial differential equations of the heat-conduction type." *Proc. Cambridge Phil. Soc.* **43**, 50-67 (1947).
 
