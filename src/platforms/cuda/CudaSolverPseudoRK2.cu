@@ -105,12 +105,22 @@ CudaSolverPseudoRK2<T>::CudaSolverPseudoRK2(
             }
         }
 
-        pseudo = new CudaPseudo<T>(
-            molecules->get_bond_lengths(),
-            cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(),
+        // Pseudo expects ONE boundary condition per dimension; the computation
+        // box stores two (low/high face). Squeeze before passing, otherwise
+        // per-axis mixed BCs (e.g. reflecting-x, absorbing-y) build the
+        // Boltzmann/stress tables with the wrong axis assignment.
+        {
+            auto bc_vec_ctor = cb->get_boundary_conditions();
+            std::vector<BoundaryCondition> bc_dim_ctor;
+            for (int d = 0; d < cb->get_dim(); ++d)
+                bc_dim_ctor.push_back(bc_vec_ctor[2 * d]);
+            pseudo = new CudaPseudo<T>(
+                molecules->get_bond_lengths(),
+                bc_dim_ctor,
+                cb->get_nx(), cb->get_dx(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
+        }
 
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
@@ -675,8 +685,13 @@ void CudaSolverPseudoRK2<T>::update_laplacian_operator()
         // Update Pseudo Fourier basis arrays and boltz_bond for new box dimensions
         // Note: local_ds values are registered once in constructor via add_ds_value()
         // pseudo->update() recomputes boltz_bond for all registered ds values
+        // Squeeze face BCs to one per dimension (see constructor note).
+        auto bc_vec_upd = this->cb->get_boundary_conditions();
+        std::vector<BoundaryCondition> bc_dim_upd;
+        for (int d = 0; d < this->cb->get_dim(); ++d)
+            bc_dim_upd.push_back(bc_vec_upd[2 * d]);
         pseudo->update(
-            this->cb->get_boundary_conditions(),
+            bc_dim_upd,
             this->molecules->get_bond_lengths(),
             this->cb->get_dx(),
             this->cb->get_recip_metric(),
