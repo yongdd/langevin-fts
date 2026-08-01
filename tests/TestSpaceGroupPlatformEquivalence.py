@@ -180,7 +180,7 @@ def make_mask(nx, lx, sg_full):
 
 
 def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                          use_sg):
+                          use_sg, reduce_memory=False):
     """Unmasked run through the public PropagatorSolver interface.
     Returns Q, expanded full-grid phi, check_total_partition, stress[0:3]."""
     solver = PropagatorSolver(
@@ -190,6 +190,7 @@ def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
         chain_model=chain_model,
         numerical_method="rqm4" if chain_model == "continuous" else None,
         platform=platform,
+        reduce_memory=reduce_memory,
         space_group=sg if use_sg else None,
     )
     solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
@@ -301,6 +302,15 @@ def main():
                     check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
                     compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,
                                  with_stress=True)
+                    # reduce_memory (checkpointing) with SG must reproduce the
+                    # standard SG run for both chain models on both platforms.
+                    rm_run = run_propagator_solver(
+                        platform, chain_model, nx, lx, sg, w_full, w_reduced,
+                        use_sg=True, reduce_memory=True)
+                    check(rm_run["chk"],
+                          f"{tag}: SG-on reduce_memory check_total_partition()")
+                    compare_runs(f"{tag}: SG-on reduce_memory vs standard",
+                                 sg_run, rm_run, with_stress=True)
                     # Material conservation, expanded to the full grid first.
                     total_phi = sg_run["phi"]["A"] + sg_run["phi"]["B"]
                     cons = abs(np.mean(total_phi) - 1.0)

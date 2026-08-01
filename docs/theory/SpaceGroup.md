@@ -428,10 +428,8 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
   cell-centered `(i+0.5)/N` orbit map and are therefore never exactly
   symmetric — this is harmless for the converged answer, but supply fully
   symmetric fields if the early box-size trajectory matters.
-- **Discrete chains**: space group symmetry is supported on both **CPU and CUDA**
-  (standard mode)
-- **`reduce_memory=True` + discrete chains + space group** is not supported on any
-  platform (throws on both CPU and CUDA)
+- **Discrete chains**: space group symmetry is supported on both **CPU and CUDA**,
+  in both standard and `reduce_memory=True` modes
 - **Hexagonal/trigonal groups (hexagonal-axes settings)** are fully
   supported via a hybrid orbit convention and a group-invariant k-space
   alias representative; space-group on/off results agree to machine

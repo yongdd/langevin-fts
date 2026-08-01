@@ -59,6 +59,11 @@ __global__ void ker_crysfft_stress_finalize(
     d_stress[0] = v0 * s0;
     d_stress[1] = v1 * s1;
     d_stress[2] = v2 * s2;
+    // NOTE: only the three diagonal components are written (the fast path
+    // serves orthogonal cells, whose cross terms are structurally zero).
+    // Some callers allocate d_stress with exactly 3 elements, so indices
+    // 3..5 must NOT be touched here; callers that read 6 components must
+    // zero-initialize their buffer.
 }
 
 }  // namespace

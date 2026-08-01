@@ -70,15 +70,16 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
         #endif
 
         // Set space group first so that get_n_basis() returns the correct size
-        if (space_group != nullptr) {
-            throw_with_line_number("Space group symmetry is not yet supported for discrete chains with reduce_memory=True. "
-                "Use reduce_memory=False or continuous chains instead.");
+        if (space_group != nullptr)
             PropagatorComputation<T>::set_space_group(space_group);
-        }
 
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, backend);
+
+        // Set space group on solver for internal expand/reduce handling
+        if (space_group != nullptr)
+            this->propagator_solver->set_space_group(space_group);
 
         // The number of parallel streams is always 1 to reduce the memory usage
         this->n_streams = 1;
@@ -316,7 +317,10 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        // All real-space arrays here live in the reduced basis when a space
+        // group is set (the solver expands/reduces internally), so loop
+        // bounds use the basis size, not the full grid.
+        const int M = this->cb->get_n_basis();
 
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
@@ -326,6 +330,32 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
 
         // Update dw or exp_dw
         this->propagator_solver->update_dw(w_input);
+
+        // Compute exp_dw in reduced basis for the real-space multiplies below.
+        // In CrysFFT mode the solver already stores exp_dw in the reduced
+        // basis; otherwise convert from the full grid (size-aware guard).
+        if (this->space_group_ != nullptr)
+        {
+            for (const auto& [monomer_type, exp_dw_solver] : this->propagator_solver->exp_dw[0])
+            {
+                if (exp_dw_reduced_.find(monomer_type) == exp_dw_reduced_.end())
+                    exp_dw_reduced_[monomer_type].resize(M);
+                if constexpr (std::is_same_v<T, double>)
+                {
+                    if (static_cast<int>(exp_dw_solver.size()) == M)
+                        std::copy(exp_dw_solver.begin(), exp_dw_solver.end(),
+                                  exp_dw_reduced_[monomer_type].begin());
+                    else
+                        this->space_group_->to_reduced_basis(exp_dw_solver.data(), exp_dw_reduced_[monomer_type].data(), 1);
+                }
+                else
+                {
+                    // update_dw already throws for complex fields with a space
+                    // group; keep the invariant local in case that changes.
+                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                }
+            }
+        }
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -367,7 +397,9 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                 int n_segment_to   = std::get<2>((*parallel_job)[job]);
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
-                const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+                const T *_exp_dw = (this->space_group_ != nullptr)
+                    ? exp_dw_reduced_[monomer_type].data()
+                    : this->propagator_solver->exp_dw[0][monomer_type].data();
 
                 // Display job info
                 #ifndef NDEBUG
@@ -636,7 +668,9 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            const T *_exp_dw         = this->propagator_solver->exp_dw[0][monomer_type].data();
+            const T *_exp_dw         = (this->space_group_ != nullptr)
+                ? exp_dw_reduced_[monomer_type].data()
+                : this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_polymer_partitions[p] = this->cb->inner_product_inverse_weight(
                 propagator_left, propagator_right, _exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -660,7 +694,8 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_concentrations()
         std::cout << "compute_concentrations 0" << std::endl;
         #endif
 
-        const int M = this->cb->get_total_grid();
+        // Reduced-basis size when a space group is set
+        const int M = this->cb->get_n_basis();
 
         // Calculate segment concentrations
         for(size_t b=0; b<this->phi_block.size();b++)
@@ -719,7 +754,10 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+            // cb->mean expects reduced-basis input when a space group is set
+            const T *_exp_dw = (this->space_group_ != nullptr)
+                ? exp_dw_reduced_[monomer_type].data()
+                : this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->mean(_exp_dw);
             for(int i=0; i<M; i++)
@@ -794,8 +832,11 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         //
         // this->q_skip[0-1]: ping-pong for skip phase, this->q_recal[0..]: storage for block values
 
-        const int M = this->cb->get_total_grid();
-        const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+        // Reduced-basis size when a space group is set
+        const int M = this->cb->get_n_basis();
+        const T *_exp_dw = (this->space_group_ != nullptr)
+            ? exp_dw_reduced_[monomer_type].data()
+            : this->propagator_solver->exp_dw[0][monomer_type].data();
         const double *q_mask = this->cb->get_mask();
         const int k = this->checkpoint_interval;
 
@@ -1004,7 +1045,10 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
 
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
-        const int M    = this->cb->get_total_grid();
+        // Copy loops run over the reduced basis when a space group is set;
+        // the physical normalization below uses the FULL grid size.
+        const int M      = this->cb->get_n_basis();
+        const int M_full = this->cb->get_total_grid();
         const int k = this->checkpoint_interval;
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
@@ -1301,7 +1345,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
 
         // Normalization factor (from Boltzmann factor derivative)
         // Note: local_ds is already multiplied per-block in the stress loop above
-        double norm = -3.0 * M * M;
+        double norm = -3.0 * static_cast<double>(M_full) * static_cast<double>(M_full);
 
         for(int p=0; p<n_polymer_types; p++)
         {
@@ -1356,7 +1400,6 @@ void CpuComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int p
     // Uses O(sqrt(N)) workspace by computing from nearest checkpoint.
     try
     {
-        const int M = this->cb->get_total_grid();
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
@@ -1395,7 +1438,8 @@ void CpuComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int p
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(dep, check_pos)];
 
             // Use ping-pong buffers to compute to position n
-            for(int i=0; i<M; i++)
+            // (checkpoints and q_recal are basis-sized: N, not the full grid)
+            for(int i=0; i<N; i++)
                 this->q_recal[0][i] = q_checkpoint[i];
 
             T* q_prev = this->q_recal[0];
@@ -1433,7 +1477,8 @@ template <typename T>
 bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
 {
     // Uses block-based computation to minimize memory usage (O(sqrt(N)) workspace).
-    const int M = this->cb->get_total_grid();
+    // Reduced-basis size when a space group is set
+    const int M = this->cb->get_n_basis();
     const int k = this->checkpoint_interval;
     int n_polymer_types = this->molecules->get_n_polymer_types();
 
@@ -1460,7 +1505,9 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
         int n_propagators        = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
-        const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+        const T *_exp_dw = (this->space_group_ != nullptr)
+            ? exp_dw_reduced_[monomer_type].data()
+            : this->propagator_solver->exp_dw[0][monomer_type].data();
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;

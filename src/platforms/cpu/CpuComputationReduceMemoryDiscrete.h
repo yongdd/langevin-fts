@@ -109,6 +109,15 @@ private:
      */
     std::map<std::tuple<std::string, int>, T *> propagator_half_steps_at_check_point;
 
+    /**
+     * @brief exp_dw in reduced basis (space group mode only).
+     *
+     * The solver may store exp_dw on the full grid (standard FFT path) or in
+     * the reduced basis (CrysFFT path); this map always holds the
+     * reduced-basis version for real-space multiplies and inner products.
+     */
+    std::map<std::string, std::vector<T>> exp_dw_reduced_;
+
     #ifndef NDEBUG
     /**
      * @brief Debug: track computed half-step propagators.

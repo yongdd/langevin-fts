@@ -42,6 +42,7 @@
 #include "CudaComputationReduceMemoryBase.h"
 #include "CudaCommon.h"
 #include "CudaSolver.h"
+#include "CudaSolverPseudoDiscrete.h"
 #include "Scheduler.h"
 #include "SpaceGroup.h"
 
@@ -86,6 +87,19 @@ private:
      */
     std::map<std::tuple<std::string, int>, T *> propagator_half_steps_at_check_point;
 
+    /** @brief Typed pointer to the discrete solver (owned via propagator_solver). */
+    CudaSolverPseudoDiscrete<T>* solver_discrete_;
+
+    /**
+     * @brief exp(-w*ds) in the reduced basis, per monomer type.
+     *
+     * Populated in compute_propagators() when a space group is set.
+     * In CrysFFT mode the solver already stores exp_dw in the reduced basis
+     * (copied here); otherwise the solver stores it on the full grid and it
+     * is gathered to the reduced basis.
+     */
+    std::map<std::string, CuDeviceData<T>*> d_exp_dw_reduced_;
+
     #ifndef NDEBUG
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
     #endif
@@ -111,12 +125,6 @@ private:
      */
     int* d_reduced_basis_indices_;
 
-    /**
-     * @brief Temporary device buffers for full grid propagator.
-     * d_q_full_[0] = input, d_q_full_[1] = output
-     * Only allocated when space group is set.
-     */
-    CuDeviceData<T>* d_q_full_[2];
 
     /**
      * @brief Compute concentration for one block with recomputation.

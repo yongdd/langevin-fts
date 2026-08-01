@@ -53,11 +53,23 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         std::cout << "--------- Discrete Chain Solver, GPU Memory Saving Version (Checkpointing) ---------" << std::endl;
         #endif
 
+        solver_discrete_ = nullptr;
+        d_full_to_reduced_map_ = nullptr;
+        d_reduced_basis_indices_ = nullptr;
+
         // Set space group first so that get_n_basis() returns the correct size
         if (space_group != nullptr) {
-            throw_with_line_number("Space group symmetry is not yet supported for discrete chains on CUDA. "
-                "Use continuous chains or CPU platform instead.");
             PropagatorComputation<T>::set_space_group(space_group);
+
+            // Allocate and copy reduced-basis mapping arrays
+            const int M_full = this->cb->get_total_grid();
+            const int N_reduced = space_group->get_n_reduced_basis();
+            gpu_error_check(cudaMalloc((void**)&d_reduced_basis_indices_, sizeof(int)*N_reduced));
+            gpu_error_check(cudaMemcpy(d_reduced_basis_indices_, space_group->get_reduced_basis_indices().data(),
+                                       sizeof(int)*N_reduced, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMalloc((void**)&d_full_to_reduced_map_, sizeof(int)*M_full));
+            gpu_error_check(cudaMemcpy(d_full_to_reduced_map_, space_group->get_full_to_reduced_map().data(),
+                                       sizeof(int)*M_full, cudaMemcpyHostToDevice));
         }
 
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
@@ -75,7 +87,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             gpu_error_check(cudaStreamCreate(&this->streams[i][1])); // for memcpy
         }
 
-        this->propagator_solver = new CudaSolverPseudoDiscrete<T>(cb, molecules, this->n_streams, this->streams, true);
+        solver_discrete_ = new CudaSolverPseudoDiscrete<T>(cb, molecules, this->n_streams, this->streams, true);
+        this->propagator_solver = solver_discrete_;
 
         // Find the total sum of segments for workspace allocation
         this->total_max_n_segment = 0;
@@ -256,6 +269,24 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             this->d_q_mask = nullptr;
 
         this->propagator_solver->update_laplacian_operator();
+
+        // Set space group on solver for reduced basis expand/reduce
+        if (space_group != nullptr)
+        {
+            this->propagator_solver->set_space_group(
+                space_group,
+                d_reduced_basis_indices_,
+                d_full_to_reduced_map_,
+                space_group->get_n_reduced_basis());
+
+            // Allocate reduced-basis exp_dw buffers (filled in compute_propagators)
+            for(const auto& item: molecules->get_bond_lengths())
+            {
+                CuDeviceData<T>* d_ptr = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(T)*N));
+                d_exp_dw_reduced_[item.first] = d_ptr;
+            }
+        }
     }
     catch(std::exception& exc)
     {
@@ -266,6 +297,13 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
 template <typename T>
 CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
 {
+    if (d_reduced_basis_indices_ != nullptr)
+        cudaFree(d_reduced_basis_indices_);
+    if (d_full_to_reduced_map_ != nullptr)
+        cudaFree(d_full_to_reduced_map_);
+    for(const auto& item: d_exp_dw_reduced_)
+        cudaFree(item.second);
+
     delete this->propagator_solver;
     delete this->sc;
 
@@ -320,7 +358,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
+        // Propagators and exp_dw live in the reduced basis when a space
+        // group is set (the solver expands/reduces internally), so all
+        // per-element sizes here use the basis size, not the full grid.
+        const int M = this->cb->get_n_basis();
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -341,6 +383,32 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
 
         // Update dw or d_exp_dw
         this->propagator_solver->update_dw(device, w_input);
+
+        // Compute exp_dw in the reduced basis for propagator initialization,
+        // partition functions, and concentrations.
+        // In CrysFFT mode the solver already stores exp_dw in the reduced basis
+        // (size M); otherwise it is on the full grid and must be gathered.
+        if (use_reduced_basis)
+        {
+            const bool solver_stores_reduced = solver_discrete_->exp_dw_stored_reduced();
+            for(const auto& item: w_input)
+            {
+                const std::string& monomer_type = item.first;
+                CuDeviceData<T>* d_exp_dw_solver = this->propagator_solver->d_exp_dw[0][monomer_type];
+                if (solver_stores_reduced)
+                {
+                    gpu_error_check(cudaMemcpy(d_exp_dw_reduced_[monomer_type], d_exp_dw_solver,
+                                               sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                }
+                else
+                {
+                    ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(
+                        d_exp_dw_reduced_[monomer_type], d_exp_dw_solver, d_reduced_basis_indices_, M);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+            }
+            gpu_error_check(cudaDeviceSynchronize());
+        }
 
         // Reset debug flags
         #ifndef NDEBUG
@@ -372,7 +440,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 auto& junction_ends = this->propagator_computation_optimizer->get_computation_propagator(key).junction_ends;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
+                CuDeviceData<T> *_d_exp_dw = use_reduced_basis
+                    ? d_exp_dw_reduced_[monomer_type]
+                    : this->propagator_solver->d_exp_dw[0][monomer_type];
 
                 // Calculate one block end
                 if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -597,7 +667,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
+            CuDeviceData<T> *_d_exp_dw = use_reduced_basis
+                ? d_exp_dw_reduced_[monomer_type]
+                : this->propagator_solver->d_exp_dw[0][monomer_type];
 
             // Copy propagators from host to device
             gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
@@ -623,7 +695,8 @@ std::vector<T*> CudaComputationReduceMemoryDiscrete<T>::recalculate_propagator(
     // Returns q_out where q_out[n] points to propagator at segment N_START+n
     // If propagator exists in checkpoint, reuse it; otherwise compute it
 
-    const int M = this->cb->get_total_grid();
+    // Reduced-basis size when a space group is set
+    const int M = this->cb->get_n_basis();
     const int STREAM = 0;
 
     // An array of pointers for q_out
@@ -668,7 +741,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        // Reduced-basis size when a space group is set
+        const int M = this->cb->get_n_basis();
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
@@ -707,7 +781,10 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
+            // mean_device expects reduced-basis input when a space group is set
+            CuDeviceData<T> *_d_exp_dw = (this->space_group_ != nullptr)
+                ? d_exp_dw_reduced_[monomer_type]
+                : this->propagator_solver->d_exp_dw[0][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->mean_device(_d_exp_dw);
 
@@ -742,7 +819,8 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
+        // Reduced-basis size when a space group is set
+        const int M = this->cb->get_n_basis();
         const int STREAM = 0;
         const int k = this->checkpoint_interval;
 
@@ -763,7 +841,9 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
 
         int p = std::get<0>(block_key);
         int n_repeated = this->propagator_computation_optimizer->get_computation_block(block_key).n_repeated;
-        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = (this->space_group_ != nullptr)
+            ? d_exp_dw_reduced_[monomer_type]
+            : this->propagator_solver->d_exp_dw[0][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;
@@ -941,6 +1021,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
         CuDeviceData<T> *d_segment_stress;
         T segment_stress[N_STRESS];
         gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS));
+        // Zero-initialize: all six components are copied back and accumulated,
+        // but the solver writes only the components that are structurally
+        // nonzero (orthogonal boxes and the CrysFFT fast path skip the cross
+        // terms), so unwritten slots must read as zero, not recycled memory.
+        gpu_error_check(cudaMemset(d_segment_stress, 0, sizeof(T)*N_STRESS));
 
         // Compute stress for each block
         for(const auto& block: this->phi_block)
@@ -1217,8 +1302,9 @@ void CudaComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int 
     // Get chain propagator for a selected polymer, block and direction.
     try
     {
-        const int M = this->cb->get_total_grid();
+        // Checkpoints and workspaces are basis-sized (N == M without a space group)
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
+        const int M = N;
         const int STREAM = 0;
         const int k = this->checkpoint_interval;
 
@@ -1295,7 +1381,8 @@ template <typename T>
 bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
 {
     // Uses block-based computation for memory efficiency
-    const int M = this->cb->get_total_grid();
+    // Reduced-basis size when a space group is set
+    const int M = this->cb->get_n_basis();
     const int STREAM = 0;
     const int k = this->checkpoint_interval;
 
@@ -1324,7 +1411,9 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_propagators = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = (this->space_group_ != nullptr)
+            ? d_exp_dw_reduced_[monomer_type]
+            : this->propagator_solver->d_exp_dw[0][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;
