@@ -10,7 +10,6 @@ ensuring they work even when Python optimization is enabled (-O flag).
 """
 
 from typing import Dict, List, Any, Optional, Union
-import itertools
 import numpy as np
 
 

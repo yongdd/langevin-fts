@@ -7,7 +7,8 @@ without writing Python scripts.
 
 import json
 import os
-from typing import Dict, Any, Optional, Union
+import warnings
+from typing import Dict, Any, Union
 from pathlib import Path
 
 import yaml
@@ -147,7 +148,14 @@ def _process_config_values(obj: Any) -> Any:
                 # Safe evaluation with only numpy functions
                 result = eval(obj, {"np": np, "numpy": np, "__builtins__": {}})
                 return result
-            except Exception:
+            except Exception as e:
+                # A string that LOOKS like a numpy expression but fails to
+                # evaluate is almost certainly a typo in the config; passing
+                # it through silently would surface later as a confusing
+                # type error. Warn so the user can fix the expression.
+                warnings.warn(
+                    f"Config value {obj!r} looks like a numpy expression but "
+                    f"failed to evaluate ({e}); using the raw string instead.")
                 return obj  # Return original string if evaluation fails
         return obj
     else:

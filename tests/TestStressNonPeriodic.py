@@ -95,8 +95,11 @@ def run_fd_case(name, nx, lx, bc, model, platform, tol):
 
 def main():
     platforms = _core.PlatformSelector.avail_platforms()
-    cpu = next(p for p in platforms if p.startswith("cpu"))
+    cpu = next((p for p in platforms if p.startswith("cpu")), None)
     has_cuda = "cuda" in platforms
+    if cpu is None and not has_cuda:
+        print("SKIP: no computational platform available in this build.")
+        sys.exit(0)
 
     # --- FD validation (discrete = exact derivative; continuous = quadrature) ---
     fd_cases = [
@@ -106,7 +109,7 @@ def main():
          ["reflecting", "reflecting", "absorbing", "absorbing",
           "reflecting", "reflecting"]),
     ]
-    test_platforms = [cpu] + (["cuda"] if has_cuda else [])
+    test_platforms = ([cpu] if cpu else []) + (["cuda"] if has_cuda else [])
     for platform in test_platforms:
         for name, nx, lx, bc in fd_cases:
             run_fd_case(name, nx, lx, bc, "discrete", platform, 1e-6)
@@ -116,7 +119,7 @@ def main():
                     "continuous", platform, 1.5e-2)
 
     # --- Cross-platform equivalence for mixed BCs ---
-    if has_cuda:
+    if has_cuda and cpu is not None:
         nx = [24, 20, 16]
         lx = [2.1, 1.7, 1.4]
         w = smooth_fields(nx, 777)

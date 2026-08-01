@@ -76,8 +76,12 @@ Issues = "https://github.com/yongdd/langevin-fts/issues"
 cmake.version = ">=3.17"
 cmake.build-type = "Release"
 
-# Wheel configuration - install Python files from src/python
-wheel.packages = ["src/python"]
+# Pure-Python files and the compiled extension are both installed into the
+# wheel by the CMake install rules (see CMakeLists.txt, SKBUILD branch).
+# Do NOT use wheel.packages = ["src/python"]: scikit-build-core would ship
+# the package under the directory basename, i.e. as a top-level package
+# named "python" instead of "polymerfts".
+wheel.packages = []
 
 # Build directory
 build-dir = "build/{wheel_tag}"
@@ -103,14 +107,6 @@ test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector
 
 [tool.cibuildwheel.linux]
 environment = { OMP_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
-
-[tool.flake8]
-max-line-length = 120
-max-complexity = 15
-select = ["E9", "F63", "F7", "F82"]
-per-file-ignores = [
-    "__init__.py:F401",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -452,7 +452,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            throw_with_line_number("Could not find q_init[\"" + g + "\"].");
+                            throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
                         gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
                         ker_multi<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], this->d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
                     }

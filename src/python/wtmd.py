@@ -14,7 +14,7 @@ J. Chem. Phys. 157, 114902 (2022).
 
 import os
 import numpy as np
-from scipy.io import savemat, loadmat
+from scipy.io import savemat
 
 
 class WTMD:

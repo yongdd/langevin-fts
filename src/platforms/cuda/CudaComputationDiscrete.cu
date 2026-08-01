@@ -548,7 +548,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
+                            throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
                         gpu_error_check(cudaMemcpyAsync(_d_propagator[1], q_init[g], sizeof(T)*N, cudaMemcpyInputToDevice, this->streams[STREAM][0]));
                         ker_multi<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, N);
                         gpu_error_check(cudaPeekAtLastError());

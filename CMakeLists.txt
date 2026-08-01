@@ -26,20 +26,26 @@ OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" 
 
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+# NOTE: nvcc (CUDA 11.x) supports at most C++17, so headers shared between
+# host and device code must stay C++17-compatible even though host-only
+# code may use C++20.
 SET(CMAKE_CUDA_STANDARD 17)
 SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
-# SET(CMAKE_BUILD_TYPE Release)
-# SET(CMAKE_BUILD_TYPE Debug  )
+# Default to an optimized build when the user does not choose one:
+# an unflagged configure would otherwise build with -O0.
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    MESSAGE(STATUS "CMAKE_BUILD_TYPE not set; defaulting to Release")
+ENDIF()
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #---------- FTS_LIBRARIES -----------
-# IF(CMAKE_BUILD_TYPE STREQUAL Release)
-#     ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
-# ENDIF()
+# Basic warnings for host code in every build type (Debug adds -Wextra -pg)
+ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wall>)
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     # SET(CMAKE_VERBOSE_MAKEFILE ON)
-    ADD_COMPILE_OPTIONS(-Wall -Wextra -pg)
+    ADD_COMPILE_OPTIONS(-Wextra -pg)
     # -fsanitize=address -fno-omit-frame-pointer)
     # SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
     # SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
@@ -124,6 +130,11 @@ IF(POLYMERFTS_USE_FFTW)
     ENDIF()
 ENDIF()
 
+IF(POLYMERFTS_USE_FFTW AND NOT FFTW3_FOUND)
+    MESSAGE(FATAL_ERROR "POLYMERFTS_USE_FFTW=ON but FFTW3 was not found. "
+        "Install fftw (e.g. conda install -c conda-forge fftw) or set FFTW_ROOT.")
+ENDIF()
+
 IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
     SET(BUILD_CPU_FFTW_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
@@ -161,7 +172,9 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
         src/platforms/cpu/FftwFactory.cpp
     )
     TARGET_COMPILE_DEFINITIONS(cpu-fftw PRIVATE USE_CPU_FFTW)
-    TARGET_LINK_LIBRARIES(cpu-fftw ${FFTW3_LIBRARIES})
+    # PUBLIC so consumers (tests, _core) inherit FFTW transitively and no
+    # raw -lfftw3 flags are needed anywhere.
+    TARGET_LINK_LIBRARIES(cpu-fftw PUBLIC ${FFTW3_LIBRARIES})
 
     # GPL License Warning
     MESSAGE(WARNING
@@ -188,6 +201,12 @@ ENDIF()
 # Intel MKL
 IF(POLYMERFTS_USE_MKL)
     FIND_PACKAGE(MKL QUIET)
+ENDIF()
+
+IF(POLYMERFTS_USE_MKL AND NOT MKL_FOUND)
+    MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
+        "Install mkl-devel (e.g. conda install -c conda-forge mkl mkl-devel mkl-include) "
+        "or set MKLROOT.")
 ENDIF()
 
 IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
@@ -225,6 +244,14 @@ ENDIF()
 # NVIDIA CUDA
 IF(POLYMERFTS_USE_CUDA)
     FIND_PACKAGE(CUDAToolkit QUIET)
+ENDIF()
+
+IF(POLYMERFTS_USE_CUDA AND NOT CUDAToolkit_FOUND)
+    # CUDA defaults to ON, so a missing toolkit is only a warning: CPU-only
+    # machines should still configure. Explicitly disable with
+    # -DPOLYMERFTS_USE_CUDA=OFF to silence this.
+    MESSAGE(WARNING "POLYMERFTS_USE_CUDA=ON but no CUDA toolkit was found; "
+        "building without the GPU backend.")
 ENDIF()
 
 IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
@@ -285,8 +312,8 @@ ADD_LIBRARY(factory
 )
 
 #---------- Python Wrapper -----------
-FIND_PACKAGE(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
-FIND_PACKAGE(pybind11 REQUIRED)
+FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development NumPy REQUIRED)
+FIND_PACKAGE(pybind11 2.13 REQUIRED)
 SET(PYBIND11_CPP_STANDARD -std=c++17)
 
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
@@ -304,42 +331,49 @@ ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
 SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX "${PYTHON_MODULE_SUFFIX}")
 
 IF(CMAKE_BUILD_TYPE STREQUAL Release)
-    TARGET_COMPILE_OPTIONS(_core PRIVATE -ffast-math)
 ENDIF()
 
 TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
-    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
     $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-    $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
     common
 )
 
-# Set install paths for Python modules
-# if(APPLE)
-#     execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('platlib'))" OUTPUT_VARIABLE Python3_SITEARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
-#     execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('purelib'))" OUTPUT_VARIABLE Python3_SITELIB OUTPUT_STRIP_TRAILING_WHITESPACE)
-# else()
-    EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(Python3_SITEARCH "${PYTHON_SITE_PACKAGES}")
-    set(Python3_SITELIB "${PYTHON_SITE_PACKAGES}")
-# endif()
+# Set install paths for Python modules.
+IF(SKBUILD)
+    # Building a wheel via scikit-build-core (pip install .): relative
+    # destinations are mapped into the wheel's platlib automatically.
+    SET(POLYMERFTS_PY_INSTALL_DIR "polymerfts")
+ELSE()
+    # Direct 'make install': query the SAME interpreter found by
+    # FIND_PACKAGE(Python3) — a bare "python" may be a different (system)
+    # interpreter and would install into the wrong site-packages.
+    # sysconfig replaces distutils, which was removed in Python 3.12.
+    EXECUTE_PROCESS(
+        COMMAND ${Python3_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_path('platlib'))"
+        OUTPUT_VARIABLE Python3_SITEARCH
+        RESULT_VARIABLE _sitearch_result
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    IF(NOT _sitearch_result EQUAL 0)
+        MESSAGE(FATAL_ERROR "Failed to query site-packages path from ${Python3_EXECUTABLE}")
+    ENDIF()
+    SET(POLYMERFTS_PY_INSTALL_DIR "${Python3_SITEARCH}/polymerfts")
+ENDIF()
 
 # ----------------  Install rules  ----------------
 IF(POLYMERFTS_INSTALL_PYTHON)
-    # 1. compiled extension  → platform‑dependent site‑packages dir
+    # 1. compiled extension
     install(TARGETS  _core
-            LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux/macOS
-            ARCHIVE  DESTINATION ${Python3_SITEARCH}/polymerfts
+            LIBRARY  DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}      # Linux/macOS
+            ARCHIVE  DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}
             COMPONENT python)
 
-    # 2. pure‑Python files   → platform‑independent site‑packages dir
-    install(DIRECTORY  src/python/                         # contains __init__.py scfy.py lfts.py …
-            DESTINATION ${Python3_SITELIB}/polymerfts      # keeps sub‑dir structure intact
+    # 2. pure‑Python files
+    install(DIRECTORY  src/python/                         # contains __init__.py scft.py lfts.py …
+            DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}       # keeps sub‑dir structure intact
             COMPONENT python
             FILES_MATCHING PATTERN "*.py")
 ENDIF()

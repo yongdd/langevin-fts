@@ -405,6 +405,8 @@ void CudaSolverPseudoRK2<T>::set_space_group(
     d_full_to_reduced_map_ = d_full_to_reduced_map;
     n_basis_ = n_basis;
 
+    cleanup_crysfft();
+
     const int M = cb->get_total_grid();
     if (space_group_ != nullptr)
     {
@@ -416,8 +418,23 @@ void CudaSolverPseudoRK2<T>::set_space_group(
                 gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
         }
     }
-
-    cleanup_crysfft();
+    else
+    {
+        // Free work buffers if space group is disabled (mirrors RQM4/Discrete)
+        for (int i = 0; i < n_streams; i++)
+        {
+            if (d_q_full_in_[i] != nullptr)
+            {
+                cudaFree(d_q_full_in_[i]);
+                d_q_full_in_[i] = nullptr;
+            }
+            if (d_q_full_out_[i] != nullptr)
+            {
+                cudaFree(d_q_full_out_[i]);
+                d_q_full_out_[i] = nullptr;
+            }
+        }
+    }
 
     if constexpr (std::is_same_v<T, double>)
     {

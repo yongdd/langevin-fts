@@ -70,6 +70,7 @@ import re
 import pathlib
 import copy
 import numpy as np
+from .validation import ValidationError
 import itertools
 
 from scipy.io import savemat, loadmat
@@ -79,8 +80,8 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 
 # OpenMP environment variables
-os.environ["OMP_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_STACKSIZE"] = "1G"
+os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
+os.environ.setdefault("OMP_STACKSIZE", "1G")
 
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
@@ -257,15 +258,15 @@ class CLFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
-        # Total volume fraction
-        assert len(self.distinct_polymers) >= 1, \
-            "There is no polymer chain."
+        # Total volume fraction (raise, not assert: asserts vanish under -O)
+        if len(self.distinct_polymers) < 1:
+            raise ValidationError("There is no polymer chain.")
 
         total_volume_fraction = 0.0
         for polymer in self.distinct_polymers:
             total_volume_fraction += polymer["volume_fraction"]
-        assert np.isclose(total_volume_fraction, 1.0), \
-            "The sum of volume fractions must be equal to 1."
+        if not np.isclose(total_volume_fraction, 1.0):
+            raise ValidationError("The sum of volume fractions must be equal to 1.")
 
         # Polymer chains
         for polymer_counter, polymer in enumerate(self.distinct_polymers):
@@ -424,6 +425,9 @@ class CLFTS:
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
+
+        NOTE: this takes AUXILIARY fields (exchange-mapped), unlike
+        SCFT.compute_concentrations which takes monomer potential fields.
 
         Parameters
         ----------

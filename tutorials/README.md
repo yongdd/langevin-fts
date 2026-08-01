@@ -56,7 +56,9 @@ Include compositional fluctuations beyond mean-field theory.
 
 ## API Levels
 
-The tutorials use two API levels:
+The tutorials use the high-level Python API. (A lower-level factory API —
+`PlatformSelector.create_factory(...)` — exists for advanced use and appears
+in a few notebooks, but is not separately documented here.)
 
 ### High-Level API (Recommended)
 
@@ -125,7 +127,7 @@ $$\text{local weight} \propto e^{-w(\mathbf{r})}$$
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.11+
 - NumPy, Matplotlib
 - `polymerfts` installed (`make install` from build directory)
 - Jupyter notebook or JupyterLab
@@ -137,7 +139,6 @@ For optimal performance, set these environment variables at the start of each no
 ```python
 import os
 os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
-os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded FFTW
 ```
 
 This prevents thread oversubscription when running multiple calculations.
@@ -160,6 +161,6 @@ jupyter notebook
 
 ## Additional Resources
 
-- **Examples**: See `examples/scft/` and `examples/fts/` for production simulation scripts
+- **Examples**: See `examples/scft/` and `examples/lfts/` for production simulation scripts
 - **Documentation**: Run `doxygen Doxyfile` in root directory for API docs
 - **Deep Learning Extension**: https://github.com/yongdd/deep-langevin-fts

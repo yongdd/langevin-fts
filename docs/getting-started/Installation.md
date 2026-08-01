@@ -11,9 +11,9 @@ cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
 
-# Build and install
+# Build and install (enable at least one CPU backend; both are OFF by default)
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
 make -j8
 make install
 ctest -L basic  # Basic installation verification (~40 seconds)
@@ -35,19 +35,21 @@ ctest -L basic  # Basic installation verification (~40 seconds)
 | Option | Default | Description |
 |--------|---------|-------------|
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
+| `POLYMERFTS_USE_MKL` | OFF | Enable Intel MKL CPU backend |
 | `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
 
 ### CPU Backends
 
-Two CPU backends are available:
-- **MKL** (default): Intel Math Kernel Library, included via conda
-- **FFTW**: Enable with `-DPOLYMERFTS_USE_FFTW=ON` (GPL license)
+Two CPU backends are available, and **both are OFF by default** — enable at
+least one (or build CUDA-only):
+- **MKL**: Intel Math Kernel Library, included via conda — enable with `-DPOLYMERFTS_USE_MKL=ON`
+- **FFTW**: enable with `-DPOLYMERFTS_USE_FFTW=ON` (GPL license)
 
-Example (enable FFTW CPU backend):
+Example (enable the MKL CPU backend):
 ```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
 ```
 
 ## GPL License Warning (FFTW)

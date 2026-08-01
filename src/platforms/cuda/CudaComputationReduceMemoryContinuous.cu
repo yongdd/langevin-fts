@@ -468,7 +468,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
+                            throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
                         gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_init[g], sizeof(T)*N_grid, cudaMemcpyInputToDevice));
                     }
                     else

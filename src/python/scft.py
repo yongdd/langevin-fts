@@ -30,8 +30,8 @@ from .smearing import Smearing
 logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
-os.environ["OMP_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_STACKSIZE"] = "1G"
+os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
+os.environ.setdefault("OMP_STACKSIZE", "1G")
 
 # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
 class Adam:
@@ -735,13 +735,17 @@ class SCFT:
             z_axis_orthogonal = (abs(alpha - 90.0) < tol and abs(beta - 90.0) < tol)
 
             if is_orthogonal:
+                # Fall back down the basis hierarchy when a basis is not
+                # applicable to this group/grid (the C++ side throws
+                # RuntimeError). Other exception types indicate real bugs
+                # and must propagate.
                 try:
                     self.sg.enable_m3_physical_basis()
-                except Exception:
+                except RuntimeError:
                     try:
                         self.sg.enable_pmmm_physical_basis()
-                    except Exception:
-                        pass
+                    except RuntimeError:
+                        pass  # keep the irreducible (full-group) basis
             elif z_axis_orthogonal:
                 # Hexagonal/trigonal (hexagonal-axes) space groups use a hybrid
                 # orbit convention (node-centered x,y; cell-centered z), making
@@ -749,8 +753,8 @@ class SCFT:
                 # physical basis (cell-centered z fold) remains valid.
                 try:
                     self.sg.enable_z_mirror_physical_basis()
-                except Exception:
-                    pass
+                except RuntimeError:
+                    pass  # keep the irreducible (full-group) basis
 
         else:
             self.sg = None
@@ -793,10 +797,14 @@ class SCFT:
             self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
                 self.prop_solver._molecules, aggregate
             )
-            # Recreate propagator computation with the new optimizer
+            # Recreate propagator computation with the new optimizer.
+            # Keep the space group: dropping it here would silently disable
+            # the reduced-basis computation configured above.
+            _sg = self.prop_solver._space_group
+            _cpp_sg = _sg._cpp_sg if hasattr(_sg, "_cpp_sg") else _sg
             self.prop_solver._propagator_computation = self.prop_solver._factory.create_propagator_computation(
                 self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer,
-                self.prop_solver.numerical_method
+                self.prop_solver.numerical_method, _cpp_sg
             )
 
         # Display factory info
@@ -806,6 +814,13 @@ class SCFT:
         self.cb = self.prop_solver._computation_box
 
         # Initialize smearing (must be after self.cb is set)
+        if params.get("smearing", None) is not None and self.sg is not None:
+            # Smearing operates on full-grid fields, but with a space group the
+            # fields live in the reduced basis; Smearing.apply would reshape a
+            # reduced-basis array to the full grid and crash (or corrupt data).
+            raise NotImplementedError(
+                "'smearing' is not supported together with 'space_group'. "
+                "Disable one of the two options.")
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
@@ -1106,24 +1121,29 @@ class SCFT:
         return False
 
     def close(self) -> None:
-        """Release resources held by the SCFT instance.
+        """Mark the instance closed (context-manager support).
 
-        Call this method when done with the SCFT instance if not
-        using the context manager. Safe to call multiple times.
+        C++ resources are freed by the garbage collector when the underlying
+        objects are released; this method currently only flips the open flag
+        and drops the solver reference so collection can happen promptly.
+        Safe to call multiple times.
         """
         if self._is_open:
-            # Release propagator solver resources
             if hasattr(self, 'prop_solver'):
-                # PropagatorSolver cleanup if needed
-                pass
+                del self.prop_solver
             self._is_open = False
 
-    def compute_concentrations(self, w):
+    def compute_concentrations(self, w, q_init=None):
         """Compute monomer concentration fields for given potential fields.
+
+        NOTE: unlike LFTS/CLFTS.compute_concentrations (which take AUXILIARY
+        fields), this method takes MONOMER potential fields directly.
 
         Solves the modified diffusion equations to compute chain propagators,
         then integrates over chain contours to obtain monomer concentration
         distributions. Handles both block copolymers and random copolymers.
+        q_init optionally supplies initial propagator values for grafted
+        polymers (passed through to PropagatorSolver.compute_propagators).
 
         Parameters
         ----------
@@ -1210,9 +1230,16 @@ class SCFT:
 
         # For the given fields, compute the polymer statistics
         time_p_start = time.time()
-        self.prop_solver.compute_propagators(w_input_for_propagator)
+        self.prop_solver.compute_propagators(w_input_for_propagator, q_init=q_init)
         self.prop_solver.compute_concentrations()
         elapsed_time["pseudo"] = time.time() - time_p_start
+
+        # Partition-consistency guardrail (checked once, on the first call,
+        # like LFTS): run() warns when "partition_ok" is below 0.5.
+        if not getattr(self, "_partition_checked", False):
+            self._partition_checked = True
+            elapsed_time["partition_ok"] = \
+                1.0 if self.prop_solver.check_total_partition() else 0.0
 
         # Compute total concentration for each monomer type
         phi = {}
@@ -1668,7 +1695,7 @@ class SCFT:
         for iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
-            phi, runtime_info = self.compute_concentrations(w)
+            phi, runtime_info = self.compute_concentrations(w, q_init=q_init)
             if runtime_info.get("partition_ok", 1.0) < 0.5:
                 logger.warning(
                     "Partition consistency check reported a mismatch at iteration %d (method=%s).",

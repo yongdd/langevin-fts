@@ -5,9 +5,8 @@ in various formats including MATLAB (.mat), JSON, YAML, and VTK.
 """
 
 import json
-import os
 from pathlib import Path
-from typing import Dict, Any, Union, Optional, List
+from typing import Dict, Any, Union, List
 
 import numpy as np
 import yaml

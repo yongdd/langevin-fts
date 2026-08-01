@@ -28,8 +28,8 @@ from .wtmd import WTMD
 logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
-os.environ["OMP_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_STACKSIZE"] = "1G"
+os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
+os.environ.setdefault("OMP_STACKSIZE", "1G")
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
     """Calculate Langevin noise strength for L-FTS simulations.
@@ -646,6 +646,9 @@ class LFTS:
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
+
+        NOTE: this takes AUXILIARY fields (exchange-mapped), unlike
+        SCFT.compute_concentrations which takes monomer potential fields.
 
         Converts auxiliary fields to monomer potential fields via inverse
         field transformation, then computes chain propagators and monomer

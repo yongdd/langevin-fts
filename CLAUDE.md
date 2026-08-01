@@ -96,7 +96,7 @@ make install
 # Run basic tests (installation verification, ~40 sec)
 ctest -L basic
 
-# Run full tests (development validation, ~3 min)
+# Run full tests (development validation, ~5 min)
 ctest
 
 # Clean build (if needed)
@@ -107,7 +107,7 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MK
 
 - Requires C++20 standard (set in CMakeLists.txt)
 - CUDA Toolkit 11.8+ required for GPU support
-- Set `CUDA_ARCHITECTURES` in CMakeLists.txt:239 based on target GPU (default includes compute capabilities 60-90)
+- Set `CUDA_ARCHITECTURES` in CMakeLists.txt based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 - **User builds**: CMakeLists.txt defaults are both OFF. Users who only need one backend can build without these flags.
@@ -145,8 +145,8 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
-| **Full** | `ctest` | ~65 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | ~56 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~80 | ~5 min | Development validation |
 
 ### Running Tests
 
@@ -386,7 +386,7 @@ The `platform` parameter controls which computational backend is used:
 | Problem | Solution |
 |---------|----------|
 | **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
-| **GPU architecture errors** | Edit `CMakeLists.txt:239` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES` |
+| **GPU architecture errors** | Edit `CUDA_ARCHITECTURES` in CMakeLists.txt to remove unsupported compute capabilities |
 | **Memory issues** | Set `"reduce_memory": True` in parameters |
 | **Single CPU core usage** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports |
 

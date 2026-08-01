@@ -37,10 +37,10 @@ static void allocate_dct2_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    cudaMalloc(d_sin, sizeof(double) * N);
-    cudaMalloc(d_cos, sizeof(double) * N);
-    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * N));
+    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * N));
+    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
 }
 
 static void allocate_dct3_lut(int N, double** d_sin, double** d_cos)
@@ -58,10 +58,10 @@ static void allocate_dct3_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    cudaMalloc(d_sin, sizeof(double) * (half + 1));
-    cudaMalloc(d_cos, sizeof(double) * (half + 1));
-    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice);
-    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice);
+    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * (half + 1)));
+    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * (half + 1)));
+    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
 }
 
 static void allocate_dct4_lut(int N, double** d_sin, double** d_cos)
@@ -78,10 +78,10 @@ static void allocate_dct4_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    cudaMalloc(d_sin, sizeof(double) * N);
-    cudaMalloc(d_cos, sizeof(double) * N);
-    cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
+    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * N));
+    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * N));
+    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
 }
 
 //==============================================================================
@@ -3509,13 +3509,13 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
 
     // Allocate buffers
     if (z2z) {
-        cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize);
-        cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize));
+        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize));
     } else {
         int workSize = fftSize;
         int complexSize = fftSize / 2 + 1;
-        cudaMalloc(&d_work_, sizeof(double) * workSize);
-        cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * workSize));
+        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize));
     }
 
     // Create FFT plan
@@ -3618,8 +3618,8 @@ void CudaRealTransform1D::execute(double* d_data)
             int nT = pow2roundup(N / 2);
 
             // Copy input to work buffer and zero-pad
-            cudaMemcpyAsync(d_work_, d_data, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_);
-            cudaMemsetAsync(d_work_ + N + 1, 0, sizeof(double), stream_);
+            gpu_error_check(cudaMemcpyAsync(d_work_, d_data, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_));
+            gpu_error_check(cudaMemsetAsync(d_work_ + N + 1, 0, sizeof(double), stream_));
 
             // PreOp modifies work buffer in place
             kernel_dct1_preOp<<<1, nT, nT * sizeof(double), stream_>>>(d_work_, d_x1_, N, nT);
@@ -3631,7 +3631,7 @@ void CudaRealTransform1D::execute(double* d_data)
             kernel_dct1_postOp<<<1, N / 2 + 1, 0, stream_>>>(d_work_, d_x1_, N);
 
             // Copy result back
-            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DCT_2: {
@@ -3639,14 +3639,14 @@ void CudaRealTransform1D::execute(double* d_data)
             cufftExecZ2D(plan_, (cufftDoubleComplex*)d_data, d_work_);
             kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
-            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DCT_3: {
             kernel_dct3_preOp<<<1, nThread, 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
             cufftExecD2Z(plan_, d_data, (cufftDoubleComplex*)d_work_);
             kernel_dct3_postOp<<<1, nThread, sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
-            cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DCT_4: {
@@ -3669,8 +3669,8 @@ void CudaRealTransform1D::execute(double* d_data)
             int half = (M + 1) / 2;  // threads needed for loading
             int nT = std::max(half, M / 2 + 1);  // threads needed for both loading and computing
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0, 0]
-            cudaMemsetAsync(d_work_, 0, sizeof(double) * (M + 2), stream_);
-            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (M + 2), stream_));
+            gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp
             kernel_dst1_preOp<<<1, nT, M * sizeof(double), stream_>>>(d_work_, M);
             // Z2D FFT of size M
@@ -3678,14 +3678,14 @@ void CudaRealTransform1D::execute(double* d_data)
             // PostOp
             kernel_dst1_postOp<<<1, M / 2 + 1, 0, stream_>>>(d_work_, M);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DST_2: {
             // FCT/FST style (Makhoul 1980): input at buffer[1..N], output at buffer[1..N]
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0]
-            cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_);
-            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_));
+            gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads from buffer[1..N]) - needs N/2+1 threads
             kernel_dst2_preOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(d_work_, N_);
             // Z2D FFT of size N
@@ -3694,14 +3694,14 @@ void CudaRealTransform1D::execute(double* d_data)
             kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DST_3: {
             // FCT/FST style (Makhoul 1980): input at buffer[1..N] (buffer[0]=0), output at buffer[1..N]
             // Setup buffer: [0, x0, x1, ..., x_{N-1}, 0]
-            cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_);
-            cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_));
+            gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads buffer[0..N])
             kernel_dst3_preOp<<<1, N_ / 2 + 1, 0, stream_>>>(d_work_, N_, dct2_sin_, dct2_cos_);
             // D2Z FFT of size N
@@ -3709,7 +3709,7 @@ void CudaRealTransform1D::execute(double* d_data)
             // PostOp
             kernel_dst3_postOp<<<1, N_ / 2 + 1, (N_ + 2) * sizeof(double), stream_>>>(d_work_, N_);
             // Output mapping: result[0..N-1] = buffer[1..N]
-            cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_);
+            gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DST_4: {
@@ -3785,9 +3785,9 @@ void CudaRealTransform2D::init()
                                   : sizeof(cufftDoubleComplex) * Ny_ * (fftSize_x / 2 + 1);
 
     // Allocate buffers
-    cudaMalloc(&d_work_, std::max(work_size_y, work_size_x));
-    cudaMalloc(&d_temp_, sizeof(double) * M_);
-    cudaMalloc(&d_x1_, std::max(complex_size_y, complex_size_x));
+    gpu_error_check(cudaMalloc(&d_work_, std::max(work_size_y, work_size_x)));
+    gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
+    gpu_error_check(cudaMalloc(&d_x1_, std::max(complex_size_y, complex_size_x)));
 
     // Create FFT plans for Y dimension
     if (z2z_y) {
@@ -3814,9 +3814,9 @@ void CudaRealTransform2D::init()
         // DCT-1 2D
         M_padded_ = 2 * Nx_ * 2 * Ny_;
         cudaFree(d_work_);
-        cudaMalloc(&d_work_, sizeof(double) * M_padded_);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
         cudaFree(d_x1_);
-        cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * 2 * Nx_ * (Ny_ + 1));
+        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * 2 * Nx_ * (Ny_ + 1)));
         if (cufftPlan2d(&plan_y_, 2 * Nx_, 2 * Ny_, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DCT-1");
         }
@@ -3829,9 +3829,9 @@ void CudaRealTransform2D::init()
         int ext_Ny = 2 * (Ny_ + 1);
         M_padded_ = ext_Nx * ext_Ny;
         cudaFree(d_work_);
-        cudaMalloc(&d_work_, sizeof(double) * M_padded_);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
         cudaFree(d_x1_);
-        cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * ext_Nx * (Ny_ + 2));
+        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * ext_Nx * (Ny_ + 2)));
         if (cufftPlan2d(&plan_y_, ext_Nx, ext_Ny, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DST-1");
         }
@@ -4016,7 +4016,7 @@ void CudaRealTransform2D::executeY_DCT3(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = (total_postOp + blockSize - 1) / blockSize;
 
-    cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
+    gpu_error_check(cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_));
 
     kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, Nx_, Ny_, dct3_sin_y_, dct3_cos_y_);
@@ -4340,8 +4340,8 @@ void CudaRealTransform3D::init()
         int ext_size = 8 * Nx_ * Ny_ * Nz_;
         int freq_size = 2 * Nx_ * 2 * Ny_ * (Nz_ + 1);
 
-        cudaMalloc(&d_work_, sizeof(double) * ext_size);
-        cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * ext_size));
+        gpu_error_check(cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size));
         d_x1_ = nullptr;
 
         M_padded_ = ext_size;
@@ -4361,8 +4361,8 @@ void CudaRealTransform3D::init()
         int ext_size = 8 * (Nx_ + 1) * (Ny_ + 1) * (Nz_ + 1);
         int freq_size = 2 * (Nx_ + 1) * 2 * (Ny_ + 1) * (Nz_ + 2);
 
-        cudaMalloc(&d_work_, sizeof(double) * ext_size);
-        cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size);
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * ext_size));
+        gpu_error_check(cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size));
         d_x1_ = nullptr;
 
         M_padded_ = ext_size;
@@ -4407,9 +4407,9 @@ void CudaRealTransform3D::init()
     size_t max_complex = std::max({complex_size_z, complex_size_y, complex_size_x});
 
     // Allocate buffers
-    cudaMalloc(&d_work_, max_work);
-    cudaMalloc(&d_temp_, sizeof(double) * M_);
-    cudaMalloc(&d_x1_, max_complex);
+    gpu_error_check(cudaMalloc(&d_work_, max_work));
+    gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
+    gpu_error_check(cudaMalloc(&d_x1_, max_complex));
 
     // Create FFT plans for Z dimension (batch of Nx*Ny)
     int batch_z = Nx_ * Ny_;
@@ -4821,7 +4821,7 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
         cudaEventRecord(ev0, stream_);
     }
 
-    cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_);
+    gpu_error_check(cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_));
 
     if (dct3_sin_z_ && dct3_cos_z_)
         kernel_dct3_3d_preOp_z_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(

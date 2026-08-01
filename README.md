@@ -23,11 +23,11 @@ cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
 make -j8 && make install && ctest -L basic
 ```
 
-> **CPU Backend**: MKL is enabled by default. To use FFTW instead, add `-DPOLYMERFTS_USE_FFTW=ON` (GPL license).
+> **CPU Backend**: both CPU backends are OFF by default — enable at least one. `-DPOLYMERFTS_USE_MKL=ON` uses Intel MKL (included via conda); `-DPOLYMERFTS_USE_FFTW=ON` uses FFTW instead (GPL license).
 
 For detailed instructions, troubleshooting, and dependencies, see [Installation.md](docs/getting-started/Installation.md).
 

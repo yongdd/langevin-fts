@@ -1,3 +1,13 @@
+# Package version. The pip/conda metadata is authoritative when the package
+# was installed through pip (pyproject.toml); the fallback constant covers
+# the plain 'make install' path, which ships no dist metadata. Keep the
+# fallback in sync with CMakeLists.txt / pyproject.toml.
+try:
+    from importlib.metadata import version as _dist_version
+    __version__ = _dist_version("polymerfts")
+except Exception:
+    __version__ = "1.0.0"
+
 # Core C++ bindings (re-export all for user convenience)
 from ._core import *
 

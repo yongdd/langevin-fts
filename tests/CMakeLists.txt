@@ -106,7 +106,9 @@ FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     IF ((${TEST_NAME} MATCHES "Cuda") AND NOT CUDAToolkit_FOUND)
         CONTINUE()
-    ELSEIF((${TEST_NAME} MATCHES "Cpu") AND NOT BUILD_CPU_FFTW_LIB)
+    # "Cpu" tests are backend-agnostic (sources select FFTW/MKL via #ifdef),
+    # so they only need SOME CPU backend, not FFTW specifically.
+    ELSEIF((${TEST_NAME} MATCHES "Cpu") AND NOT BUILD_CPU_FFTW_LIB AND NOT BUILD_CPU_MKL_LIB)
         CONTINUE()
     ELSEIF((${TEST_NAME} MATCHES "Fftw") AND NOT BUILD_CPU_FFTW_LIB)
         CONTINUE()
@@ -119,10 +121,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
         factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
         $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
         common
         )
@@ -156,10 +155,7 @@ FOREACH(FILE_NAME ${BENCHMARK_LIST})
         factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
         $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
         common
         )
@@ -171,16 +167,26 @@ IF(CUDAToolkit_FOUND)
     FOREACH(FILE_NAME ${FILE_LIST})
         GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
 
+        # Several CUDA tests use FFTW as the CPU reference (#include <fftw3.h>
+        # without a USE_CPU_FFTW guard); they cannot build without it.
+        IF((${TEST_NAME} MATCHES "Fftw|CrysFFT|CudaDCT|CudaDST") AND NOT BUILD_CPU_FFTW_LIB)
+            CONTINUE()
+        ENDIF()
+
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
         TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-            factory cuda CUDA::cufft CUDA::cusparse CUDA::cusolver
+            factory cuda CUDA::cufft
             $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-            $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
             $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
             common)
 
-        SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)
-        ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
-        SET_TEST_LABELS(${TEST_NAME})
+        # Match the main cuda library's architecture list (OFF = nvcc default
+        # arch only, which breaks on GPUs newer than the toolkit default).
+        SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+        # Benchmarks (Test*Bench*.cu) build as executables but are not tests.
+        IF(NOT ${TEST_NAME} MATCHES "Bench")
+            ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
+            SET_TEST_LABELS(${TEST_NAME})
+        ENDIF()
     ENDFOREACH()
 ENDIF()

@@ -229,13 +229,19 @@ class PropagatorSolver:
                 )
             self.numerical_method = numerical_method
 
-        # Determine platform
+        # Determine platform (mirror scft.py: prefer CPU for 1D, CUDA for
+        # 2D/3D, but only among the platforms actually available in this build)
         if platform == "auto":
-            # Use CUDA for 2D/3D, CPU for 1D
-            if self.dim >= 2:
+            avail = _core.PlatformSelector.avail_platforms()
+            cpu_platforms = [p for p in avail if p.startswith("cpu")]
+            if self.dim == 1 and cpu_platforms:
+                platform = cpu_platforms[0]
+            elif "cuda" in avail:
                 platform = "cuda"
+            elif cpu_platforms:
+                platform = cpu_platforms[0]
             else:
-                platform = "cpu-mkl"
+                raise RuntimeError("No computational platform available in this build.")
         self.platform = platform
 
         # Pseudo-spectral non-periodic BC support (verified vs CPU to machine
@@ -666,7 +672,9 @@ class PropagatorSolver:
         Returns
         -------
         numpy.ndarray
-            Gaussian field normalized for use as initial propagator.
+            Gaussian field with unit peak amplitude (NOT normalized to unit
+            integral; divide by `np.sum(q) * solver.get_dv()` if a normalized
+            distribution is needed).
 
         Examples
         --------

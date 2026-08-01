@@ -6,14 +6,20 @@ on:
   pull_request:
     branches: [ main, devel ]
 
+# Cancel superseded runs of the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   OMP_STACKSIZE: 1G
   OMP_NUM_THREADS: 1
 
 jobs:
   build-cpu:
-    name: Build and Test (CPU-MKL)
+    name: Build and Test (CPU, MKL + FFTW)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
     - name: Checkout repository
@@ -24,7 +30,15 @@ jobs:
       with:
         activate-environment: polymerfts
         auto-activate-base: false
-        python-version: "3.11"
+        python-version: "3.12"
+        channels: conda-forge
+        conda-remove-defaults: "true"
+
+    - name: Cache conda packages
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/conda_pkgs_dir
+        key: conda-${{ runner.os }}-${{ hashFiles('.github/workflows/build-and-test.yml') }}
 
     - name: Install dependencies
       shell: bash -l {0}
@@ -34,16 +48,7 @@ jobs:
           numpy scipy pandas matplotlib spglib \
           make git pip pyyaml \
           jupyter networkx pygments plotly nbformat \
-          mkl mkl-devel mkl-include
-
-    - name: Debug installation
-      shell: bash -l {0}
-      run: |
-        echo "=== CONDA_PREFIX: $CONDA_PREFIX ==="
-        echo "=== MKL files ==="
-        ls -la $CONDA_PREFIX/lib/libmkl* 2>/dev/null | head -10 || echo "No libmkl files"
-        echo "=== MKL include ==="
-        ls -la $CONDA_PREFIX/include/mkl*.h 2>/dev/null | head -5 || echo "No mkl headers"
+          mkl mkl-devel mkl-include fftw
 
     - name: Configure CMake
       shell: bash -l {0}
@@ -53,7 +58,7 @@ jobs:
         export MKLROOT=$CONDA_PREFIX
         export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
         cmake .. -DCMAKE_BUILD_TYPE=Release \
-          -DPOLYMERFTS_USE_FFTW=OFF \
+          -DPOLYMERFTS_USE_FFTW=ON \
           -DPOLYMERFTS_USE_MKL=ON \
           -DPOLYMERFTS_USE_CUDA=OFF \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
@@ -73,28 +78,18 @@ jobs:
         cd build
         make install
 
-    - name: Run C++ Tests
+    - name: Run tests
       shell: bash -l {0}
       run: |
         cd build
         ulimit -s unlimited
         export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-        ctest --output-on-failure -j$(nproc)
-
-    - name: Run Python Tests
-      shell: bash -l {0}
-      run: |
-        ulimit -s unlimited
-        python tests/TestNumPyFFT1D.py
-        python tests/TestNumPyFFT1DComplex.py
-        python tests/TestNumPyFFT2D.py
-        python tests/TestNumPyFFT2DComplex.py
-        python tests/TestNumPyFFT3D.py
-        python tests/TestNumPyFFT3DComplex.py
+        ctest --output-on-failure -j$(nproc) --timeout 900
 
   lint:
     name: Code Quality Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - name: Checkout repository
@@ -103,7 +98,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: "3.12"
 
     - name: Install linting tools
       run: |
@@ -120,26 +115,49 @@ jobs:
   check-platform-consistency:
     name: Platform Consistency Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Check CPU and CUDA implementations match
+    - name: Check CPU and CUDA computation/solver classes match
       run: |
-        echo "Checking that CPU and CUDA implementations have matching interfaces..."
+        set -euo pipefail
+        # New computational features must exist on both platforms (CLAUDE.md).
+        # Compare the per-class file basenames of the Computation*/Solver*
+        # families after stripping the platform prefix. Intentional
+        # differences go in the allowlists below.
+        # CPU-only: CpuSolverPseudoBase (CPU pseudo solvers share a base
+        #           class; the CUDA solvers are standalone).
+        ALLOW_CPU_ONLY='^(SolverPseudoBase)$'
+        ALLOW_CUDA_ONLY='^$'
 
-        # Count template instantiations in CPU vs CUDA
-        CPU_COUNT=$(grep -r "template class" src/platforms/cpu/ --include="*.cpp" | wc -l)
-        CUDA_COUNT=$(grep -r "template class" src/platforms/cuda/ --include="*.cu" | wc -l)
+        cpu=$(ls src/platforms/cpu/ \
+          | grep -E '^Cpu(Computation|Solver)[A-Za-z0-9]*\.(h|cpp)$' \
+          | sed -E 's/^Cpu//; s/\.(h|cpp)$//' | sort -u)
+        cuda=$(ls src/platforms/cuda/ \
+          | grep -E '^Cuda(Computation|Solver)[A-Za-z0-9]*\.(h|cu)$' \
+          | sed -E 's/^Cuda//; s/\.(h|cu)$//' | sort -u)
 
-        echo "CPU template instantiations: $CPU_COUNT"
-        echo "CUDA template instantiations: $CUDA_COUNT"
+        echo "CPU classes (prefix stripped):"; echo "$cpu"; echo ""
+        echo "CUDA classes (prefix stripped):"; echo "$cuda"; echo ""
 
-        # Check for matching class names
-        echo ""
-        echo "CPU classes:"
-        grep -roh "template class [A-Za-z]*<" src/platforms/cpu/ --include="*.cpp" | sort -u
-        echo ""
-        echo "CUDA classes:"
-        grep -roh "template class [A-Za-z]*<" src/platforms/cuda/ --include="*.cu" | sort -u
+        missing_on_cuda=$(comm -23 <(echo "$cpu") <(echo "$cuda") \
+          | grep -vE "$ALLOW_CPU_ONLY" || true)
+        missing_on_cpu=$(comm -13 <(echo "$cpu") <(echo "$cuda") \
+          | grep -vE "$ALLOW_CUDA_ONLY" || true)
+
+        status=0
+        if [ -n "$missing_on_cuda" ]; then
+          echo "ERROR: CPU classes with no CUDA counterpart (extend ALLOW_CPU_ONLY if intentional):"
+          echo "$missing_on_cuda"
+          status=1
+        fi
+        if [ -n "$missing_on_cpu" ]; then
+          echo "ERROR: CUDA classes with no CPU counterpart (extend ALLOW_CUDA_ONLY if intentional):"
+          echo "$missing_on_cpu"
+          status=1
+        fi
+        [ "$status" -eq 0 ] && echo "Platform class lists are consistent."
+        exit $status

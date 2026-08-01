@@ -9,7 +9,7 @@
  * Implementation and Performance:
  *   - DCT-II, DCT-III, DCT-IV, DST-IV: MKL TT interface, O(N log N)
  *   - DCT-I, DST-I: FFT-based via symmetric/antisymmetric extension, O(N log N)
- *   - DST-II, DST-III: Direct computation, O(N²) [TODO: optimize to O(N log N)]
+ *   - DST-II, DST-III: FFT-based, O(N log N)
  *
  * MKL TT to FFTW mapping (empirically verified):
  *   - STAGGERED_COSINE backward × 2 = DCT-II
