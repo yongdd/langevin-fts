@@ -63,23 +63,45 @@ U(Ψ) at fixed Ψ values over time (update_freq=1000):
 
 **Observation**: U(Ψ) is still slowly increasing but has stabilized sufficiently for analysis. ~2M steps provides adequate sampling for comparing with deep-langevin-fts.
 
-### Free Energy F(Ψ)
+### Free Energy F(Ψ) — CORRECTED by the full analysis of 2026-08-01
 
-The free energy F(Ψ) computed from ∫(dH/dΨ)dΨ shows:
-- F(Ψ) decreases monotonically with increasing Ψ
-- Higher Ψ (more ordered lamellar) has lower free energy
-- This is consistent with the system being in the ordered phase (χN = 17.15 > χN_ODT)
+Converting the bias with the well-tempered relation F(Ψ) = −(1 + T/ΔT)·U(Ψ)
+= −1.2·U(Ψ) reveals a **double well**, not a monotonic decrease:
 
-### Effect of update_freq
+- Disordered basin at Ψ ≈ 1.62, lamellar basin at Ψ ≈ 3.26
+- Basin free-energy difference ΔF = F_dis − F_ord = +0.5 ± 0.6 kT across the
+  four runs — zero within run-to-run scatter: **the simulation sits at the ODT**
+- Barrier between the basins: 3.3–4.0 kT (measured from the ordered side)
+- Sampled range is Ψ ∈ [0.82, 4.3]; the 0–10 grid is mostly unvisited
+
+Extrapolating with the stored ⟨∂H/∂χ⟩(Ψ) = I₁/I₀ (≈ −685 in the disordered
+basin, −730 in the ordered one; slope difference ≈ 45 kT per unit χN):
+
+**χN_ODT ≈ 17.14 ± 0.02**  (f = 4/9, discrete N = 90, n̄ = 10⁴)
+
+Internal consistency: the bias-derived F (−1.2·U) and the histogram-derived F
+(−6·ln I₀) agree to ≲0.05 kT over the well-sampled region. The inner
+double-well region (1.3 < Ψ < 3.8) is converged to ~±0.5 kT from ~1.5M steps;
+only the steep outer walls are still filling, which does not affect the basin
+or barrier numbers.
+
+### Effect of update_freq — CORRECTED
 
 | update_freq | Observation |
 |-------------|-------------|
-| 100 | Faster bias accumulation, system trapped near Ψ~1.6 |
-| 200-1000 | Similar behavior, most visited Ψ~3.2 |
+| 100–1000 | F(Ψ) curves agree (rms spread ≈ 0.7 kT over the common range) |
 
-The update_freq=100 case shows different behavior, possibly due to:
-- Too frequent updates leading to over-biasing
-- Insufficient sampling between updates
+The earlier conclusion that update_freq=100 was "trapped near Ψ~1.6 due to
+over-biasing" was wrong: its F(Ψ) lies on top of the other runs. Its *global*
+minimum flips to the disordered basin only because the two wells differ by
+less than the run-to-run scatter. All four update frequencies are reliable.
+
+### Recommendation
+
+The remaining 3M steps are not the best use of compute: the ODT estimate's
+uncertainty is dominated by run-to-run scatter, so a few additional
+independent runs of the same length would tighten χN_ODT more efficiently
+than extending these runs.
 
 ## Output Files
 
@@ -112,8 +134,8 @@ data_wtmd/
 
 1. **WTMD Implementation**: Working correctly
    - Bias potential U(Ψ) builds up over time
-   - System explores full Ψ range (0-10)
-   - Free energy derivative dH/dΨ is computed
+   - System explores Ψ ∈ [0.82, 4.3] (both basins and the barrier)
+   - ⟨∂H/∂χ⟩(Ψ) = I₁/I₀ is accumulated and usable for χN extrapolation
 
 2. **Convergence**: Sufficient for analysis
    - ~2M steps provides adequate sampling

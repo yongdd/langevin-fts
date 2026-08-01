@@ -3,12 +3,15 @@ __pycache__
 build
 doc
 temp*
-# Ad-hoc scripts at the repository root only. Do NOT blanket-ignore *.sh:
-# it silently unversions live scripts under devel/, tests/, examples/.
-/*.sh
+# Ad-hoc shell scripts (personal SLURM launchers etc.) are not tracked.
+# Scripts intended for the repository go under scripts/ (exempted below);
+# note this blanket rule hides any new .sh elsewhere from git status.
+*.sh
+!scripts/*.sh
 *.dat
 *.out
 *.png
+!docs/figures/*.png
 !examples/clfts/dynamical_stabilization.png
 !docs/grafted_brush_validation.png
 !docs/convergence_plot.png

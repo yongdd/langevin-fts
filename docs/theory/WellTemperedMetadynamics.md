@@ -19,8 +19,9 @@ Well-tempered metadynamics (WTMD) is an enhanced sampling technique that overcom
 6. [Implementation](#6-implementation)
 7. [Parameters](#7-parameters)
 8. [Usage](#8-usage)
-9. [Limitations](#9-limitations)
-10. [References](#10-references)
+9. [Validation Example: Lamella at the ODT](#9-validation-example-lamella-at-the-odt)
+10. [Limitations](#10-limitations)
+11. [References](#11-references)
 
 ---
 
@@ -382,7 +383,43 @@ simulation.continue_run("fields_100000.mat")
 
 ---
 
-## 9. Limitations
+## 9. Validation Example: Lamella at the ODT
+
+Four WTMD runs of an AB diblock lamella (f = 4/9, discrete N = 90, 40³ grid,
+$\bar{N} = 10^4$, $\chi N = 17.149$, ~2M Langevin steps each), differing only
+in `update_freq` (100/200/500/1000). Converting the bias with
+$F(\Psi) = -1.2\,U(\Psi)$ reveals a double well — a disordered basin at
+$\Psi \approx 1.62$ and the lamellar basin at $\Psi \approx 3.26$ — separated
+by a 3.3–4.0 kT barrier:
+
+![WTMD free energy across update frequencies](../figures/wtmd_lamella_free_energy.png)
+
+Key results:
+
+- **All update frequencies agree** (rms spread ≈ 0.7 kT). Smaller
+  `update_freq` deposits equal-sized hills more often (the per-update
+  histogram is density-normalized), so the bias accumulates faster, but
+  well-tempering throttles the growth and every run converges to the same
+  $F(\Psi)$.
+- The basin free-energy difference is $\Delta F = +0.5 \pm 0.6$ kT — zero
+  within run-to-run scatter — so the simulation sits essentially **at the
+  ODT**. Extrapolating with the stored
+  $\langle \partial H/\partial \chi \rangle_\Psi = I_1/I_0$ gives
+  $\chi N_{\mathrm{ODT}} \approx 17.14 \pm 0.02$.
+- The bias-derived $F$ and the histogram-derived $F = -6 \ln I_0$ agree to
+  ≲0.05 kT over the well-sampled region.
+
+The inner double-well region converges to ~±0.5 kT after ~1.5M steps; only
+the steep outer walls are still being filled, which does not affect basin or
+barrier values:
+
+![WTMD convergence with simulation time](../figures/wtmd_lamella_convergence.png)
+
+Data and details: `devel/wtmd/RESULTS.md`.
+
+---
+
+## 10. Limitations
 
 ### 9.1 Order Parameter Sensitivity
 
@@ -413,7 +450,7 @@ A single order parameter may not distinguish all these phases.
 
 ---
 
-## 10. References
+## 11. References
 
 1. **Original WTMD method:**
    A. Barducci, G. Bussi, and M. Parrinello, "Well-tempered metadynamics: A smoothly converging and tunable free-energy method," *Phys. Rev. Lett.* **100**, 020603 (2008).
