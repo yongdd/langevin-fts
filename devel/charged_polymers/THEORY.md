@@ -4,68 +4,81 @@
 > codebase's multi-monomer field theory, following the smeared-charge model of
 > Wang [1] and Villet–Delaney–Fredrickson [2,3], written in the conventions of
 > *Macromolecules* **2025**, 58, 816 (the neutral multi-monomer theory this
-> library implements).
+> library implements). **Compressible (finite $\zeta N$) model with
+> per-species density smearing** — the fully UV-regularized formulation.
 
 ## 1. Model
 
 Species $i = 1, \dots, S$ (here: polymer P, solvent S, counter-ion C, salt
 ions SP/SM). Each species is a (possibly very short) bead-spring chain of the
-discrete or continuous model already implemented. Two interaction channels on
-top of the neutral theory:
+discrete or continuous model already implemented.
 
-1. **Flory–Huggins** $\chi_{ij}$ among a subset of species (the
-   `chi_monomers`; here P and S). Species outside this subset (the small
-   ions) have $\chi = 0$ with everything.
-2. **Coulomb**, between smeared charge densities. Segment of species $i$
-   carries valence $z_i$ (per segment), distributed as a normalized Gaussian
-   $$h_i(\mathbf r) = \frac{1}{(2\pi a_i^2)^{3/2}} e^{-r^2/2a_i^2},
-     \qquad \hat h_i(\mathbf k) = e^{-a_i^2 k^2/2},$$
-   with smearing radius $a_i$ (params `radiuses`, in $R_0$ units after
-   nondimensionalization). Smearing regularizes the Coulomb self-energy and
-   makes the field theory UV-convergent [1,2]; the point-charge limit
-   $a_i \to 0$ is singular and must not be taken on the grid.
+**Smeared densities.** Every species carries a normalized Gaussian shape
+function
+$$h_i(\mathbf r) = \frac{1}{(2\pi a_i^2)^{3/2}} e^{-r^2/2a_i^2},
+  \qquad \hat h_i(\mathbf k) = e^{-a_i^2 k^2/2},$$
+of radius $a_i$ (params `radiuses`, in $R_0$ units). $a_i$ is the
+**smearing length** (Fredrickson school: width of the "shape function" or
+form factor of the species [2,3]); for charged species Wang [1] identifies
+it with the ion's **Born radius**, since the Gaussian self-energy
+$u_{\rm self} = z_i^2 l_B/(2\sqrt{\pi}\, a_i)$ is the Born solvation
+energy of an ion of that size. ALL interactions are written in terms of the
+smeared volume fractions
+$$\bar\phi_i \equiv h_i * \phi_i .$$
+Smearing regularizes both the contact (excluded-volume/χ) and the Coulomb
+self-interactions, making the fluctuating field theory UV-convergent
+[1,2,3]. The point-particle limit $a_i \to 0$ is singular for a compressible
+fluctuating model and must not be taken. ($a_i = $ `None` ⇒ $h_i = \delta$;
+acceptable only for testing or in mean-field.)
 
-The microscopic charge density is
-$$\hat\rho_c(\mathbf r) = \sum_i z_i \,(h_i * \hat\rho_i)(\mathbf r),$$
-with $\hat\rho_i$ the microscopic segment density of species $i$. The Coulomb
-energy is
-$$\beta U_C = \frac{l_B}{2} \int\!\!\int
-   \frac{\hat\rho_c(\mathbf r)\,\hat\rho_c(\mathbf r')}{|\mathbf r-\mathbf r'|}
-   \, d\mathbf r\, d\mathbf r',
-   \qquad l_B = \frac{e^2}{4\pi \varepsilon k_B T}$$
-(Bjerrum length; a uniform dielectric $\varepsilon$ is assumed — no
-dielectric contrast in this first version).
+Three interaction channels:
 
-**Incompressibility**: $\sum_i \hat\phi_i(\mathbf r) = 1$ as in the neutral
-theory (or compressible with $\zeta N$).
+1. **Flory–Huggins**: $\chi N_{ij}$ pairs (here only P,S — all pairs
+   involving ions are zero). No separate `chi_monomers` machinery is needed
+   in the compressible model: the $\chi N$ matrix is simply $S \times S$
+   with zero rows/columns for the ions (see §3).
+2. **Compressibility (Helfand)**: instead of the incompressibility
+   constraint, a finite penalty
+   $$\beta U_{\zeta} = \frac{\rho_0 \zeta N}{2 N} \int
+     \Big( \sum_i \bar\phi_i(\mathbf r) - 1 \Big)^2 d\mathbf r$$
+   with the code's existing `zeta_n` parameter. The incompressible theory is
+   the $\zeta N \to \infty$ limit. In a fluctuating simulation the smeared
+   $\bar\phi_i$ (not raw $\phi_i$) must enter here, or the contact penalty
+   is UV-divergent.
+3. **Coulomb**: segment of species $i$ carries per-segment valence $z_i$;
+   the smeared charge density is
+   $$c(\mathbf r) = \sum_i z_i\, \bar\phi_i(\mathbf r)
+     \qquad (\text{same } h_i \text{ as above}),$$
+   and
+   $$\beta U_C = \frac{l_B \rho_0^2}{2} \int\!\!\int
+      \frac{c(\mathbf r)\, c(\mathbf r')}{|\mathbf r-\mathbf r'|}
+      \, d\mathbf r\, d\mathbf r',
+      \qquad l_B = \frac{e^2}{4\pi \varepsilon k_B T}$$
+   (Bjerrum length; uniform dielectric $\varepsilon$, no dielectric
+   contrast in this first version).
 
-**Global electroneutrality** is required. With per-segment valences $z_i$
-and equal segment volumes the charge density is $\rho_0 \sum_i z_i \phi_i$, so
-the constraint is
-$$\sum_i z_i\, \bar\phi_i = 0$$
-where $\bar\phi_i$ is the overall segment volume fraction (NO division by
-chain length — that would be per-chain counting, wrong for per-segment
-valences). The counter-ion fraction
-is therefore NOT a free parameter: for P with $z_P = +1$ and fraction
+**Global electroneutrality** is still required (compressibility does not fix
+charge). With per-segment valences $z_i$ and equal segment volumes:
+$$\sum_i z_i\, \bar\phi_i^{\,\rm tot} = 0$$
+over overall volume fractions (NO division by chain length — that would be
+per-chain counting, wrong for per-segment valences). The counter-ion
+fraction is NOT a free parameter: for P with $z_P = +1$ and fraction
 $\phi_P$, one needs $\phi_C = \phi_P z_P/|z_C|$ (plus balanced salt
 $z_{SP}\phi_{SP} + z_{SM}\phi_{SM} = 0$). *The current `Lamella.py`
-placeholder sets $\phi_C = 0$ with charged P — that configuration is not
-electroneutral and the $k=0$ Coulomb mode would diverge; the driver must
-compute $\phi_C$ from $\phi_P$.*
+placeholder sets $\phi_C = 0$ with charged P — not electroneutral; the
+$k=0$ Coulomb mode diverges. The driver must compute $\phi_C$ from
+$\phi_P$.*
 
 ## 2. Units and code conventions
 
 Same as the neutral theory: lengths in $R_0 = a_{\rm Ref} N_{\rm Ref}^{1/2}$,
 fields per **reference chain** ($w_{\rm code} = N\,w_{\rm per\,segment}$),
-densities in $\rho_0$. Define the chain number density
-$C = \rho_0 R_0^3 / N = \sqrt{\bar N}$ (as in L-FTS).
+densities in $\rho_0$. Chain number density
+$C = \rho_0 R_0^3 / N = \sqrt{\bar N}$.
 
-Nondimensionalize with $\mathbf x = \mathbf r/R_0$ and the dimensionless
-smeared charge density per segment
-$c(\mathbf x) = \sum_i z_i (h_i * \phi_i)(\mathbf x)$ ($h_i$ Gaussian of
-width $a_i$ in $R_0$ units, $\phi_i$ volume fractions). The total Coulomb
-energy in $k_BT$ is then (note the $C^2$ — Coulomb is quadratic in
-$\rho_0$, unlike the χ block where $\chi N \propto \rho_0$ leaves one $C$):
+Nondimensionalize with $\mathbf x = \mathbf r/R_0$. The Coulomb energy in
+$k_BT$ becomes (note the $C^2$ — Coulomb is quadratic in $\rho_0$, unlike
+the χ/ζ block where $\chi N, \zeta N \propto \rho_0$ leave one $C$):
 $$\beta U_C = \frac{C^2 E_0}{8\pi}\int\!\!\int
    \frac{c(\mathbf x)\,c(\mathbf x')}{|\mathbf x-\mathbf x'|}\,
    d\mathbf x\, d\mathbf x'
@@ -83,72 +96,104 @@ internally from `nbar`).
 
 ## 3. Field theory: Hubbard–Stratonovich structure
 
-The identity-resolution and HS transforms factor into three independent
-blocks:
+Two independent HS blocks (the compressible model has NO separate pressure
+constraint):
 
-**(a) χ block — unchanged.** The $\chi_{ij}$ quadratic form over the
-`chi_monomers` subset is diagonalized exactly as in the existing
-`SymmetricPolymerTheory` (projected $\chi N$ matrix, eigenvalues
-$\lambda_k$, exchange fields real for $\lambda_k<0$, imaginary for
-$\lambda_k>0$). Species outside the subset simply do not appear in this
-block. Dimension: $S_\chi \times S_\chi$ with $S_\chi = $ len(chi_monomers)
-(2 here).
+**(a) χ+ζ block — the existing compressible SPT, over ALL $S$ species.**
+The quadratic form of channels 1+2 is
+$$\tfrac12\, \bar{\boldsymbol\phi}^{\mathsf T}
+  \big( \zeta N\, \mathbf J + \boldsymbol\chi N \big) \bar{\boldsymbol\phi}
+  \;-\; \zeta N\, \mathbf 1^{\mathsf T}\bar{\boldsymbol\phi} + \tfrac12 \zeta N,$$
+with $\mathbf J$ the all-ones matrix — exactly the matrix
+$u = \zeta N\,\mathbf J + \chi N$ that `SymmetricPolymerTheory`'s
+compressible branch (`zeta_n` set) already diagonalizes, including the
+linear term (its `vector_large_s`). Ion rows of $\chi N$ are zero. Spectrum
+for the 5-species example:
+- one large positive eigenvalue $\approx S\zeta N$ (the "pressure-like"
+  mode) — imaginary-type;
+- the χ-split P–S pair: one negative (exchange, **real** Langevin field),
+  one positive (imaginary-type);
+- pure ion-composition modes orthogonal to $\mathbf 1$ with no χ:
+  eigenvalue **0** — ideal mixing in those channels; the corresponding
+  auxiliary fields are identically zero and SPT's existing zero-eigenvalue
+  handling (Gram–Schmidt + warning) applies. This is physical, not an
+  error: those composition fluctuations are free.
 
-**(b) Pressure block — unchanged.** Incompressibility over ALL $S$ species
-gives the pressure field $w_+$ (imaginary type), seen identically by every
-species.
+Because $\zeta N\,\mathbf J$ lifts the would-be singularity of the χ-only
+matrix, **the full $S$-species SPT can be used directly** — the
+chi-subset wrapper of the incompressible draft is no longer needed.
 
-**(c) Coulomb block — new.** HS on the positive-definite Coulomb quadratic
+**(b) Coulomb block — new.** HS on the positive-definite Coulomb quadratic
 form introduces the electrostatic potential $\psi(\mathbf x)$:
 $$e^{-\beta U_C} = \int \mathcal D\psi\;
   \exp\!\left[ - C \int d\mathbf x\, \frac{|\nabla\psi|^2}{2E}
                \;+\; i\, C \int d\mathbf x\; c(\mathbf x)\,\psi(\mathbf x) \right]
   \Big/ \mathcal N,$$
 which reproduces $\exp[-\tfrac{C^2E_0}{2}\sum_k |\hat c_k|^2/k^2]$ exactly
-because $E = CE_0$ (Gaussian integral over $\psi$; this is why the
-density-dependent $E$ of §2 is the natural coupling here). $\psi$ is the
-per-reference-chain potential $N\beta e\varphi_{\rm phys}$ — the factor $N$
-is absorbed into $\psi$ as for all code fields. Because it couples with
-$+i$ to a real density, $\psi$ is an **imaginary-type field** (the Coulomb
-kernel $4\pi l_B/k^2$ is positive definite, exactly analogous to
-$\lambda > 0$ eigenvalues): it lands with the $w_+$ family — see §5.
+because $E = CE_0$ (Gaussian integral over $\psi$). $\psi$ is the
+per-reference-chain potential $N\beta e\varphi_{\rm phys}$. Coupling with
+$+i$ to a real density and a positive-definite kernel ($4\pi l_B/k^2$,
+analogous to $\lambda > 0$): $\psi$ is an **imaginary-type field**,
+partial-saddled like the positive-eigenvalue SPT fields — see §5.
 
 ## 4. Hamiltonian and single-chain problem
 
-Collecting (a)–(c), the per-chain effective Hamiltonian is
-$$\frac{H[\{w_k\}, w_+, \psi]}{C\,k_BT V/R_0^3}
- = \underbrace{h_{\rm const} + \sum_k \left[ A_k \langle w_k\rangle + B_k \langle w_k^2\rangle\right]}_{\text{neutral (existing)}}
+The per-chain effective Hamiltonian is
+$$\frac{H[\{w_k\}, \psi]}{C\,k_BT V/R_0^3}
+ = \underbrace{h_{\rm const} + \sum_k \left[ A_k \langle w_k\rangle + B_k \langle w_k^2\rangle\right]}_{\text{neutral compressible (existing SPT coefficients)}}
  \;+\; \frac{1}{V}\int \frac{|\nabla \psi|^2}{2E} d\mathbf x
  \;-\; \sum_p \frac{\bar\phi_p}{\alpha_p} \ln Q_p[\{W_i\}]$$
-with the same $h$-coefficients as the neutral theory. The only change to the
-single-chain problem is the **one-body potential of each species**:
-$$\boxed{\;W_i(\mathbf x) \;=\; W_i^{\chi}(\mathbf x) \;+\; i\,w_+(\mathbf x)
-   \;+\; i\, z_i\, (h_i * \psi)(\mathbf x)\;}$$
-where $W_i^{\chi}$ is the usual `matrix_a` mapping of the exchange fields
-(zero for species outside `chi_monomers`). No explicit $N$ multiplies the
-electrostatic term: $\psi$ is already per-reference-chain and $z_i$ is
-per-segment — the code's $w = N w_{\rm seg}$ convention is carried entirely
-by $\psi$. The smearing appears as a
-convolution of $\psi$, NOT of the propagator — cheap in k-space:
-$\widehat{h_i * \psi} = \hat h_i(k)\hat\psi(k)$.
+with the $h$-coefficients of the existing compressible SPT. The one-body
+potential of each species picks up the smearing convolution on EVERY term
+(the interactions couple to $\bar\phi_i = h_i*\phi_i$, so the functional
+derivative w.r.t. $\phi_i$ convolves back with $h_i$):
+$$\boxed{\;W_i(\mathbf x) \;=\; h_i * \Big[ W_i^{\rm SPT}
+   \;+\; i\, z_i\, \psi \Big](\mathbf x)\;}$$
+where $W_i^{\rm SPT}$ is the usual `matrix_a` mapping of the auxiliary
+fields (now including the pressure-like ζ mode; ion rows couple only to
+that mode and to $\psi$). No explicit $N$ multiplies the electrostatic
+term: $\psi$ is already per-reference-chain and $z_i$ is per-segment — the
+code's $w = N w_{\rm seg}$ convention is carried entirely by $\psi$. The
+smearing is a k-space multiplication
+$\hat h_i(k)\,[\widehat{W^{\rm SPT}_i} + i z_i \hat\psi](k)$ — cheap, per
+species, applied once per saddle iteration; the propagator solvers are
+untouched.
 
-Concentrations: standard $\phi_i$ from propagators; the **smeared** charge
-density that sources the Poisson equation is
-$c = \sum_i z_i\, h_i * \phi_i$ (a second convolution, again diagonal in k).
+**Rotated contour / stored real field.** As with the positive-eigenvalue
+SPT modes, the code stores the REAL array $\psi_s = -i\psi$ (the saddle
+lies on the imaginary $\psi$ axis). Under this substitution the one-body
+term becomes $+z_i \psi_s$ (the $i$ disappears — this is what the code
+adds to $W_i^{\rm SPT}$), and the explicit quadratic term flips sign:
+$$\frac{1}{V}\int \frac{|\nabla\psi|^2}{2E}\, d\mathbf x
+  \;\longrightarrow\;
+  -\frac{1}{V}\int \frac{|\nabla\psi_s|^2}{2E}\, d\mathbf x
+  \;=\; -\frac{1}{2V}\int c\,\psi_s\, d\mathbf x$$
+(the last equality at the Poisson-consistent $\psi_s$). This mirrors the
+negated $B_k$ coefficients of the imaginary SPT fields. Note the
+$+c\psi_s$ coupling itself lives inside $-\ln Q$ via $W_i$; the explicit
+term recorded in $H$ is only the (negative) gradient piece.
+
+Concentrations: standard $\phi_i$ from propagators; the smeared densities
+that enter all interaction terms and the Poisson source are
+$\bar\phi_i = h_i * \phi_i$, $c = \sum_i z_i \bar\phi_i$ (again diagonal
+in k).
 
 ## 5. Forces and saddle conditions
 
-Functional derivatives (per the code's normalization):
-
-- Exchange/pressure fields: unchanged from the neutral theory.
+- SPT auxiliary fields: unchanged from the neutral compressible theory —
+  functional derivatives evaluated with the SMEARED densities
+  $\bar\phi_i$ in place of $\phi_i$. Negative-eigenvalue (exchange) fields
+  receive Langevin noise; positive-eigenvalue fields are partial-saddled by
+  the existing compressor loop; zero-eigenvalue fields stay zero.
 - Electrostatic field:
 $$\frac{1}{C}\frac{\delta H}{\delta \psi(\mathbf x)}
   = -\frac{\nabla^2 \psi}{E} \;-\; c(\mathbf x)
   \qquad\Longrightarrow\qquad
-  \text{saddle: } -\nabla^2\psi^* = E\, c(\mathbf x)$$
-i.e. the (smeared) **Poisson equation**; with the ideal-gas ions responding
-through their Boltzmann factors this is the fluctuating-field generalization
-of Poisson–Boltzmann. In k-space the saddle solve is diagonal:
+  \text{saddle: } -\nabla^2\psi^* = E\, c(\mathbf x),$$
+the (smeared) **Poisson equation**; with the ideal-gas ions responding
+through their Boltzmann factors this is the fluctuating-field
+generalization of Poisson–Boltzmann. In k-space the solve is diagonal and
+exact:
 $$\hat\psi^*(\mathbf k) = \frac{E\,\hat c(\mathbf k)}{k^2}, \qquad k \ne 0,$$
 and the $k=0$ mode is fixed by electroneutrality ($\hat c(0) = 0$ holds
 exactly per configuration in the canonical ensemble once §1's constraint
@@ -159,89 +204,194 @@ $\kappa^2 R_0^2 = E\,\bar\phi_{\rm ion}/N = 4\pi l_B \rho_0
 \bar\phi_{\rm ion} R_0^2$ — the physical Debye constant. Any factor error
 in $E$ or $W_i$ shows up here first; keep this as a unit test.
 
-**Field classification for L-FTS** (recommended first implementation):
-treat $\psi$ like $w_+$ — a *partial-saddle* field solved to tolerance at
-every Langevin step, while only the real exchange field(s) receive Langevin
-noise. This is the standard approach in charged L-FTS [3] and requires no
-new stochastic machinery: the compressor loop gains a second, *linear* solve
-(the Poisson equation above), which unlike the $w_+$ iteration is exact in
-one k-space division per iteration of the outer loop.
+**CL-FTS (the real implementation): $\psi$ fluctuates.** L-FTS holds
+imaginary-type fields at partial saddle, so it can never capture $\psi$
+fluctuations — the charged theory belongs in CL-FTS, where $\psi$ evolves
+with complex Langevin dynamics exactly like the pressure field $W_+$
+(rotated storage, imaginary-direction noise, "+$\Lambda$" drift):
+$$\psi \;\leftarrow\; \psi + \left(\frac{\nabla^2\psi}{E} + c\right)
+  \Delta t\, s_\psi \;+\; i\,\mathcal N(0,\sigma)\sqrt{s_\psi},$$
+whose drift fixed point is the Poisson equation. Two discrete-stability
+facts (both found the hard way):
+- The $\nabla^2/E$ part is stiff at high $k$ ($k^2\Delta t/E$ exceeds the
+  explicit-Euler limit), so it is integrated SEMI-IMPLICITLY in k-space:
+  $(1 + k^2\Delta t\,s_\psi/E)\,\hat\psi_{\rm new} = [\psi + \Delta t\,
+  s_\psi\, c + \eta]^{\wedge}$; the $c[\psi]$ screening stays explicit
+  (per-step rate $\le \sum_i z_i^2\bar\phi_i\,\Delta t$). The $k=0$ mode
+  is gauged to zero every step.
+- The EXCHANGE field's explicit mass is $\sim 1/\chi N$, so small-$\chi$
+  systems (e.g. the pure-salt validation) need $\Delta t < \chi N$;
+  violating this diverges regardless of the charge sector.
 
-Convergence detail: $\psi$ and $w_+$ couple through the densities, so the
-practical scheme is: within the existing saddle iteration, after each
-propagator solve, (i) update $\psi$ exactly from the current $c(\mathbf x)$,
-(ii) take the usual Anderson-mixing step on $w_+$. Both residuals go into
-the stopping criterion.
+At $E=0$ the $\psi$ stiffness is infinite: $\psi$ stays pinned at zero.
+
+**L-FTS prototype (mean-field $\psi$): scheme per saddle iteration** —
+after each propagator solve, (i) build $\bar\phi_i$, $c$ (k-space
+$\hat h_i$ multiplications), (ii) update $\psi$ toward the Poisson
+solution (below), (iii) take the usual Anderson-mixing step on the
+imaginary SPT fields. Both residuals enter the stopping criterion. $\psi$
+stays OUT of `aux_fields_imag_idx` and the AM compressor state.
+
+**Stabilized $\psi$ update (important).** Replacing $\psi$ by the bare
+solution $E\hat c/k^2$ every iteration is an undamped fixed-point sweep
+whose linearized gain is
+$$g(k) \;=\; \frac{E}{k^2}\sum_i z_i^2\,\bar\phi_i\,\hat h_i^2(k),$$
+which exceeds 1 at long wavelengths for realistic $E$ (e.g. $E=25$,
+$k_{\min}=2\pi/L$) — the joint saddle loop then diverges. Use instead the
+preconditioned Newton update with the ideal (local) screening estimate
+$S_{\rm scr}(k) = \sum_i z_i^2 \bar\phi_i \hat h_i^2(k)$:
+$$\hat\psi \;\leftarrow\; \hat\psi
+  \;+\; \frac{E\,\hat c - k^2\,\hat\psi}{\,k^2 + E\,S_{\rm scr}(k)\,},
+  \qquad \hat\psi(0)=0 .$$
+The fixed point is unchanged ($-\nabla^2\psi = E c$, monitored via the
+residual $-\nabla^2\psi/E - c$), but the screening term in the denominator
+damps exactly the modes the bare sweep amplifies; for ideal 1-segment ions
+the update is a true Newton step. $S_{\rm scr}$ only sets the convergence
+rate, so the segment-fraction estimate suffices for polymeric charges.
 
 ## 6. Discretization notes
 
-- All new operations are diagonal in k-space: $\hat h_i(k) = e^{-a_i^2k^2/2}$
-  multiplications and the $E/k^2$ Poisson solve. Use the same FFT objects and
-  the deformation-vector $|\mathbf k|^2$ tables (`Pseudo`) already present —
-  the periodic-BC $k^2$ including the reciprocal metric is available; oblique
-  cells therefore work automatically.
-- The Gaussian smearing widths must satisfy $a_i \gtrsim dx/2$; below that
-  the smearing is under-resolved and the self-energy regularization is grid
-  dependent (same class of issue as the bond-function study in
-  `devel/spring_bead_bond/`).
-- Structure function / observables: the charge–charge structure factor
-  $S_{cc}(k)$ comes for free from $\hat c(k)$; worth recording alongside the
-  existing $S(k)$.
-- Stress (box optimization) with electrostatics: the Maxwell-stress term
-  $\partial/\partial L\, \int |\nabla\psi|^2/2E$ must be added if
-  `box_is_altering` is ever used — defer; raise for now.
+- All new operations are diagonal in k-space: $\hat h_i(k)$ multiplications
+  and the $E/k^2$ Poisson solve. Use the existing FFT objects and the
+  deformation-vector $|\mathbf k|^2$ tables (`Pseudo`) — oblique cells work
+  automatically.
+- **No real-space $\nabla\psi$ is ever needed.** The electrostatic energy
+  is evaluated by Parseval, and at the saddle the substitution
+  $\hat\psi = E\hat c/k^2$ eliminates the gradient entirely:
+  $$\frac{1}{2E}\int |\nabla\psi|^2 d\mathbf x
+    = \frac{E}{2}\,\frac{V}{M^2}\sum_{\mathbf k \ne 0} w_t\,
+      \frac{|\hat c_{\mathbf k}|^2}{k^2}
+    = \frac12 \int c\,\psi\, d\mathbf x$$
+  (unnormalized `rfftn`; $w_t$ = 2 interior / 1 edge modes, as in
+  `wtmd.py`). Only $h_i * \psi$ requires an inverse transform. A real-space
+  gradient (component-wise $ik_\alpha \hat\psi$) first becomes necessary
+  for the deferred Maxwell-stress term. The identity above gives the
+  MAGNITUDE; on the rotated contour the term entering the recorded $H$ is
+  $-\tfrac{1}{2V}\int c\,\psi_s$ (see §4) — the code evaluates it as
+  `-0.5*mean(c*psi)`.
+- Smearing widths must satisfy $a_i \gtrsim dx/2$ **per species** — the
+  binding constraint is $\min_i a_i$; below that the regularization becomes
+  grid-dependent (same issue class as the bond-function study). With finite
+  $\zeta N$ this applies to ALL species, not just charged ones.
+- Per-species radii compose automatically: the effective $i$–$j$ pair
+  kernel is $\hat h_i(k)\hat h_j(k) = e^{-(a_i^2+a_j^2)k^2/2}$, i.e. an
+  effective pair smearing width $\sqrt{a_i^2+a_j^2}$ — Gaussian widths add
+  in quadrature, so mixed radii (small ions, fat polymer segments) need no
+  special treatment. Consequence for validation: with unequal radii the
+  RPA/Debye–Hückel comparison must keep the per-species $\hat h_i^2$
+  factors separate (they only factor out as a common $\hat h^2$ when all
+  radii are equal); the $k \to 0$ Debye limit is radius-independent
+  ($\hat h_i(0) = 1$), which is why it is the safe unit test.
+- Charge–charge structure factor $S_{cc}(k)$ from $\hat c(k)$: record
+  alongside the existing $S(k)$.
+- Stress with electrostatics (Maxwell term from
+  $\partial_L \int |\nabla\psi|^2/2E$) and with the $\hat h_i(k)$ cell
+  dependence: defer; raise on `box_is_altering=True`.
 
 ## 7. Parameter dictionary (target)
 
 ```python
-"chi_monomers": ["P", "S"],          # species entering the chi block
+"zeta_n": 100.0,                     # compressible Helfand penalty (existing param)
 "charges":  {"P": 1.0, "S": None, "C": -1.0, "SP": +1, "SM": -1.0},
-"radiuses": {"P": 0.025, "S": None, "C": 0.025, "SP": 0.025, "SM": 0.025},
-"bjerrum_e": 10000.0,                # E = 4 pi l_B N^2 / R0   (NEW - was missing)
+"radiuses": {"P": 0.025, "S": 0.025, "C": 0.025, "SP": 0.025, "SM": 0.025},
+"bjerrum_e": 10000.0,                # E = 4 pi l_B rho_0 N R0^2   (NEW)
+"chi_n": {"P,S": 50},                # full-matrix SPT; ion rows zero
+# NO "chi_monomers" needed; NO incompressibility constraint
 # molecules: counter-ion fraction computed from electroneutrality, not free
 ```
 
-`None` charge = neutral species (no $\psi$ coupling, no smearing needed).
+`None` charge = neutral species (no $\psi$ coupling). `radiuses` now apply
+to ALL interactions (χ, ζ, Coulomb) of that species — in the compressible
+fluctuating model neutral species need smearing too.
 
-## 8. Implementation plan (on CURRENT mainline, not the Feb fork)
+## 8. Implementation (devel-only; CL-FTS is the primary implementation)
 
-The Jan–Feb fork predates PropagatorSolver/validation; rebase the ideas, not
-the code:
+**Where the code lives (2026-08-02)**: entirely in THIS folder — mainline
+`src/` is untouched.
+- `electrostatics.py`: per-species smearing kernels (real AND complex
+  fields), coupling $E$, electrostatic Hamiltonian, electroneutrality
+  check, plus the $\psi$ Newton update used by the L-FTS prototype.
+- `clfts_charged.py` — **the primary implementation**:
+  `ChargedCLFTS(polymerfts.clfts.CLFTS)` with $\psi$ as a fully
+  fluctuating CL field (§5): overrides `compute_concentrations` (complex
+  $W_i = h_i*(W^{\rm SPT}_i + z_i\psi)$) and `run` (co-evolves $\psi$
+  semi-implicitly, adds $-\tfrac12\langle c\psi\rangle$ to $H$, saves
+  $\psi$ in checkpoints). $\psi$ noise uses a separate PCG64 stream
+  (seed+1) so the neutral reduction stays bit-exact.
+- `lfts_charged.py` — mean-field-$\psi$ PROTOTYPE kept for validation
+  only: its deterministic saddle makes the sampling-free Debye–Hückel
+  linear-response test possible (`test_debye_huckel.py`), which pins the
+  $E$ normalization/kernels shared with the CL class.
 
-1. `polymer_field_theory.py`: keep `SymmetricPolymerTheory` neutral and
-   untouched; add a `ChargedPolymerTheory` wrapper that owns
-   (chi-subset SPT) + charges/radii/E and produces per-species $W_i$ from
-   (exchange fields, $w_+$, $\psi$). NOTE this is more than a thin wrapper:
-   running the FULL 5-species matrix through SPT would produce zero
-   eigenvalues and a singular `matrix_a` (χ only couples P,S), so the
-   wrapper must own the $W_i$ assembly for non-χ species (pressure + ψ
-   only), which touches how `lfts.py` builds per-monomer fields.
-2. `lfts.py`: accept the new params; inside the saddle loop add the exact
-   k-space $\psi$ update (§5) and include the electrostatic energy term in
-   $H$; electroneutrality validated at init (ValidationError). Keep $\psi$
-   OUT of `aux_fields_imag_idx` and the Anderson-mixing compressor state
-   (the AM object is sized to the imaginary-field count at construction) —
-   $\psi$ has its own exact solve and needs no mixing.
-   **Collision warning**: a global `Smearing` class already exists
-   (`src/python/smearing.py`, the `"smearing"` param) that Gaussian-filters
-   ALL fields; the per-species $h_i$ here is a different object — do not
-   route it through that class, and forbid combining both params.
+L-FTS samples only the REAL exchange fields and holds imaginary-type
+fields at partial saddle, so $\psi$ there is mean-field
+(Poisson–Boltzmann level) — that is why CL-FTS is the real home of the
+theory. The compressible choice simplifies everything versus the
+incompressible draft:
+
+1. `polymer_field_theory.py`: **unchanged** — the compressible branch
+   (`zeta_n`) over the full $S$-species matrix already produces the right
+   eigen-system, including the zero-eigenvalue ion modes (existing
+   handling).
+2. Relation to the existing global `Smearing` class: that class implements
+   the SPECIAL CASE of one common radius applied to all fields — the
+   prototype bypasses it (adapter), never applying both to the same field.
 3. Ions as short chains work today (`length=0.01` ⇒ 1 discrete segment);
-   no C++ changes required for the first version — everything new lives in
-   Python/k-space on fields the C++ solvers never see internally.
+   no C++ changes — everything new is k-space Python.
 4. Validation ladder:
-   a. $E \to 0$ reduces exactly to the neutral multi-monomer run.
-   b. Salt-only (no polymer): compare $S_{cc}(k)$ against the
-      Debye–Hückel/RPA result with smeared charges,
+   a. $E \to 0$, uniform $a_i$: must reproduce the existing neutral
+      compressible run with global smearing exactly.
+   b. $\zeta N \to \infty$, $E \to 0$: approach the incompressible neutral
+      results.
+   c. Salt-only (no polymer): $S_{cc}(k)$ against smeared Debye–Hückel/RPA,
       $S_{cc}^{-1} = [S_{cc}^{\rm ideal}]^{-1} + E/k^2$ where
       $S_{cc}^{\rm ideal}$ is the ideal structure factor of the SMEARED
-      charge density (it contains the $\hat h_i^2$ factors — with a bare
-      ideal $S$ one must write $\hat h^2 S/(1 + (E/k^2)\hat h^2 S)$; the
+      charge density (contains the $\hat h_i^2$ factors — with a bare ideal
+      $S$ one must write $\hat h^2 S/(1 + (E/k^2)\hat h^2 S)$; the
       $\hat h^2$ cannot be dropped). $k \to 0$ recovers the Debye
       $\kappa^2$ of §5.
-   c. Uncharged-P limit vs existing L-FTS Lamella.
-   d. Literature anchor: polyelectrolyte solution structure factor of
-      Refs. [2,3].
+   d. Literature anchor: polyelectrolyte solution structure of Refs. [2,3]
+      (mind the $E_0$ vs $E$ and $R_g$ vs $R_0$ conversions of §2).
+
+**Validation status (2026-08-02)**:
+- (a) Neutral reduction PASSED bit-exactly for BOTH classes
+  (`test_neutral_reduction.py` for `ChargedLFTS`,
+  `test_neutral_reduction_clfts.py` for `ChargedCLFTS`): $z=0$ with
+  uniform $a_i$ reproduces the neutral run with global smearing to the
+  last bit over 10 Langevin steps.
+- (c) Debye–Hückel PASSED. Deterministic linear response
+  (`test_debye_huckel.py`, via the L-FTS prototype's saddle): perturbing
+  $w_-$ by $\varepsilon\cos(k_0x)$ reproduces
+  $|\hat c| = \varepsilon\hat h^2/(1+E\hat h^2/k_0^2)$ and
+  $\hat\psi = E\hat c/k_0^2$ to $10^{-6}$ for
+  $E \in \lbrace 0, 6.25, 25\rbrace$ over six $k_0$ — pins the $E$
+  normalization, $\hat h^2$ pair kernel and $W_i$ assembly without any
+  sampling.
+- Stochastic $S_{cc}$: with the exact single-mode Gaussian model (orig
+  variables: $H_k = Bw^2 + \kappa\psi_o^2 - u_2(w+i\psi_o)^2$,
+  $B = 1/\chi N$, $u_2 = \hat h^2/2$, $\kappa = k^2/2E$), the
+  parameter-free predictions match: L-FTS
+  $r(k) = \kappa^2(B-u_2)/[(\kappa+u_2)(B\kappa+Bu_2-u_2\kappa-2u_2^2)]$
+  agrees with 20k-step runs to 1–3% except the lowest-$k$ shell; CL-FTS
+  with the ANALYTIC estimator $\langle c_k c_{-k}\rangle$ (NOT
+  $\langle|c_k|^2\rangle$, which is not an observable in CL) follows
+  $r(k) = (\kappa-B)(B-u_2)/[(B-u_2)(\kappa+u_2)+u_2^2]$ including its
+  characteristic sign flip at $k = \sqrt{2EB}$; the strongest-signal
+  shells agree to a few % ($E=25$, $k_{\min}$: $-3.08$ vs $-3.07$).
+  Residual deviations were pinned down quantitatively: (i) a finite-$dt$
+  integrator bias — a synthetic single-mode replica of the exact discrete
+  scheme reproduces the $dt{=}0.2$ run values and converges to the
+  continuum prediction as $dt \to 0$, and real $dt{=}0.05$ runs move onto
+  the synthetic curve (e.g. $k{=}4.71$: run $-2.164$ vs synthetic
+  $-2.172$, continuum $-2.31$); (ii) shells where the Gaussian signal
+  crosses zero are dominated by a nonlinear (beyond-Gaussian) background
+  that does not shrink with statistics — they are not usable for this
+  comparison.
+- Pitfalls recorded the hard way: $\chi N = 2$ IS the mean-field spinodal
+  of the symmetric 1-segment salt (RPA breaks); cosine amplitudes on the
+  cell-centered grid carry an $e^{ik\,dx/2}$ phase — compare $|\hat c|$;
+  the exchange field's explicit mass $1/\chi N$ caps the CL time step at
+  $\Delta t < \chi N$.
 
 ## References
 
@@ -249,10 +399,10 @@ the code:
    electrolytes, self-energy and smearing.
 2. M. V. Villet, G. H. Fredrickson, *J. Chem. Phys.* **141**, 224115 (2014) —
    CL-FTS with Gaussian-regularized (UV-convergent) models.
-2b. R. A. Riggleman, R. Kumar, G. H. Fredrickson, *J. Chem. Phys.* **136**,
+3. R. A. Riggleman, R. Kumar, G. H. Fredrickson, *J. Chem. Phys.* **136**,
    024903 (2012) — polyelectrolyte complexation with smeared charges
    (sharper primary reference for the charged CL-FTS model).
-3. K. T. Delaney, G. H. Fredrickson, *J. Phys. Chem. B* **120**, 7615 (2016) —
-   recent developments in fully fluctuating polyelectrolyte FTS.
-4. *Macromolecules* **2025**, 58, 816 — the neutral multi-monomer framework
+4. K. T. Delaney, G. H. Fredrickson, *J. Phys. Chem. B* **120**, 7615 (2016) —
+   perspective on fully fluctuating polyelectrolyte FTS.
+5. *Macromolecules* **2025**, 58, 816 — the neutral multi-monomer framework
    (this library).
