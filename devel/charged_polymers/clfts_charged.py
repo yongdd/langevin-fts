@@ -193,6 +193,22 @@ class ChargedCLFTS(clfts.CLFTS):
         else:
             self._random_psi = np.random.Generator(np.random.PCG64(random_seed + 1))
 
+        # Zero-eigenvalue (non-interacting) aux modes appear in neither
+        # aux_fields_real_idx nor aux_fields_imag_idx (e.g. the exchange
+        # mode of a chi=0 polycation/polyanion mixture, whose composition
+        # fluctuations enter only through psi). The HS transform introduces
+        # no auxiliary field for them, so they must stay identically zero.
+        M = len(self.monomer_types)
+        self._active_aux = [i for i in range(M)
+                            if i in self.mpt.aux_fields_real_idx
+                            or i in self.mpt.aux_fields_imag_idx]
+        self._frozen_aux = [i for i in range(M) if i not in self._active_aux]
+        # The parent __init__ computes dt_scaling = |eig|/max|eig[:M-1]|,
+        # which is 0/0 = NaN when a zero mode dominates the slice; frozen
+        # modes are never stepped, so give them a defined mobility of 0.
+        for i in self._frozen_aux:
+            self.dt_scaling[i] = 0.0
+
         # savemat cannot store None values
         self.params = _drop_none_values(self.params)
 
@@ -271,6 +287,17 @@ class ChargedCLFTS(clfts.CLFTS):
                       for m in self.monomer_types])
         w_aux = self.mpt.to_aux_fields(w)
 
+        # Project out zero-eigenvalue modes: they carry no auxiliary field
+        # (see __init__) and must be identically zero throughout the run.
+        active = self._active_aux
+        for i in self._frozen_aux:
+            proj = float(np.max(np.abs(w_aux[i])))
+            if proj > 1e-10:
+                print(f"Warning: initial fields have a nonzero projection "
+                      f"({proj:.3e}) onto the zero-eigenvalue aux mode {i}; "
+                      f"projecting it out.")
+            w_aux[i] = 0.0
+
         H_history = []
         dH_history = {key: [] for key in self.chi_n}
 
@@ -293,10 +320,16 @@ class ChargedCLFTS(clfts.CLFTS):
             phi, _ = self.compute_concentrations(w_aux=w_aux)
             phi_for_force = self.smearing.apply_to_dict(phi)
 
-            w_lambda = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
+            # Forces only for the active modes; frozen (zero-eigenvalue)
+            # modes stay at zero. (Pre-patch failure: the parent __init__'s
+            # dt_scaling is 0/0 = NaN for a zero mode, poisoning the first
+            # w_aux update; compute_func_deriv itself is finite for them.)
+            w_lambda = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
+            w_lambda[active] = self.mpt.compute_func_deriv(
+                w_aux, phi_for_force, active)
 
             if self.alpha_ds > 0:
-                for i in range(M):
+                for i in active:
                     if i in self.mpt.aux_fields_real_idx:
                         w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
 
@@ -311,7 +344,7 @@ class ChargedCLFTS(clfts.CLFTS):
             # ---- update w_aux (identical to mainline CLFTS) ----
             normal_noise_current = self.random.normal(
                 0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
-            for i in range(M):
+            for i in active:
                 scaling = self.dt_scaling[i]
                 if i in self.mpt.aux_fields_real_idx:
                     noise_factor = 1.0
@@ -349,7 +382,9 @@ class ChargedCLFTS(clfts.CLFTS):
             # (k^2/E -> inf) and stays pinned at zero.
 
             # ---- monitoring ----
-            h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
+            h_deriv = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
+            h_deriv[active] = self.mpt.compute_func_deriv(
+                w_aux, phi_for_force, active)
             error_level_array = np.std(h_deriv, axis=1)
             psi_error = float(np.std(psi_lambda))
 
@@ -401,6 +436,11 @@ class ChargedCLFTS(clfts.CLFTS):
                     ) / self.cb.get_total_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(M - 1):
+                        # w/lambda is undefined for a zero-eigenvalue mode
+                        # (w_aux[k] is identically zero anyway) — skip it
+                        # instead of writing 0/0 = NaN into every S(k).
+                        if k in self._frozen_aux:
+                            continue
                         mu_fourier[key] += (
                             np.fft.fftn(np.reshape(w_aux[k], self.cb.get_nx())) *
                             self.mpt.matrix_a_inv[k, i] / self.mpt.eigenvalues[k] / self.cb.get_total_grid())
