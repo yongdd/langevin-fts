@@ -6,15 +6,18 @@ unlike the L-FTS prototype (lfts_charged.py), psi is NOT partial-saddled —
 it is an imaginary-type field evolving with complex Langevin dynamics like
 the pressure field W+:
 
-    psi(t+dt) = psi(t) + lambda_psi * dt * s_psi + i * N(0, sigma) * sqrt(s_psi)
-    lambda_psi = dH/dpsi = lap(psi)/E + c,   c = sum_i z_i (h_i * phi_i)
+    dpsi/dtau = lap(psi)/E + c + i eta,   c = sum_i z_i (h_i * phi_i)
 
 (rotated-contour stored field: the saddle of psi is real, noise is applied
-in the imaginary direction, exactly the W+ convention of CLFTS.run — the
-"+lambda" sign mirrors W+'s "+Lambda+" update and is linearly stable:
-d(delta)/dt = -(k^2/E + S_scr) delta). The drift's fixed point is the
-Poisson equation -lap(psi) = E c; the explicit Hamiltonian term is
--(1/2V) int c psi (see THEORY.md section 4).
+in the imaginary direction, exactly the W+ convention of CLFTS.run). The
+drift's fixed point is the Poisson equation -lap(psi) = E c. The stiff
+linear part (rate gamma_k = k^2/E) is integrated by ETD (exact
+Ornstein-Uhlenbeck step per k-mode with variance-exact noise scaling) —
+explicit Euler is unstable at high k and semi-implicit Euler suppresses
+the stationary variance by 1/(1+2 kappa dt) per mode, which wrecks
+fluctuation thermodynamics. The explicit Hamiltonian term is the analytic
++(1/2E V) int psi lap(psi) (= -(1/2) mean(c psi) only at the Poisson
+saddle); see THEORY.md sections 4-5.
 
 Propagator inputs (complex): W_i = h_i * (W_i^SPT + z_i psi).
 
@@ -164,7 +167,24 @@ class ChargedCLFTS(clfts.CLFTS):
         n_grid = self.cb.get_total_grid()
         self.psi = np.zeros(n_grid, dtype=np.complex128)
         self.psi_dt_scaling = float(params.get("psi_dt_scaling", 1.0))
-        self._psi_noise_prev = np.zeros(n_grid, dtype=np.float64)
+
+        # ETD (exact-OU) coefficients for the linear part of the psi
+        # update (see run()): decay a, drift (1-a)E/k^2, and the per-mode
+        # noise amplitude that reproduces the exact stationary variance.
+        if e_coupling > 0.0:
+            dt = float(params["langevin"]["dt"])
+            s = self.psi_dt_scaling
+            gamma = self.electro.k_sq / e_coupling
+            a_dec = np.exp(-gamma * dt * s)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                drift = (1.0 - a_dec) * e_coupling / self.electro.k_sq
+                namp = np.sqrt((1.0 - a_dec**2) / (2.0 * gamma * dt))
+            zero = tuple([0] * self.electro.dim)
+            drift[zero] = dt * s
+            namp[zero] = np.sqrt(s)
+            self._psi_decay = a_dec
+            self._psi_drift = drift
+            self._psi_namp = namp
 
         # Separate noise stream for psi keeps the main field-noise sequence
         # identical to plain CLFTS (bit-exact neutral reduction).
@@ -221,7 +241,6 @@ class ChargedCLFTS(clfts.CLFTS):
         data = loadmat(path, squeeze_me=False)
         data["psi_real"] = np.real(self.psi)
         data["psi_imag"] = np.imag(self.psi)
-        data["psi_noise_prev"] = self._psi_noise_prev
         savemat(path, data, long_field_names=True, do_compression=True)
 
     def continue_run(self, file_name):
@@ -230,7 +249,6 @@ class ChargedCLFTS(clfts.CLFTS):
         if "psi_real" in data:
             self.psi = np.asarray(data["psi_real"]).reshape(-1) \
                 + 1j * np.asarray(data["psi_imag"]).reshape(-1)
-            self._psi_noise_prev = np.asarray(data["psi_noise_prev"]).reshape(-1).astype(np.float64)
         else:
             print("Note: checkpoint has no psi field; psi restarts from zero.")
         super().continue_run(file_name)
@@ -284,6 +302,11 @@ class ChargedCLFTS(clfts.CLFTS):
 
             # psi force with the CURRENT phi (same time slice as w_lambda)
             psi_lambda, charge_c = self._psi_force(phi)
+            # Explicit electrostatic Hamiltonian term at THIS time slice
+            # (pre-update psi, consistent with phi/Q): (1/2E V) int psi
+            # lap(psi) = (1/2) mean(psi (lambda_psi - c)); reduces to
+            # -(1/2) mean(c psi) at the Poisson saddle.
+            h_elec = 0.5 * np.mean(self.psi * (psi_lambda - charge_c))
 
             # ---- update w_aux (identical to mainline CLFTS) ----
             normal_noise_current = self.random.normal(
@@ -299,23 +322,28 @@ class ChargedCLFTS(clfts.CLFTS):
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
             # ---- update psi (imaginary-type: +lambda drift, i-noise) ----
-            # The lap(psi)/E part is stiff at high k (k^2 dt/E can exceed
-            # the explicit-Euler stability limit), so it is treated
-            # SEMI-IMPLICITLY in k-space:
-            #   (1 + k^2 dt s/E) psi_hat_new = [psi + dt s c + eta]_hat
-            # The c[psi] screening part of the drift stays explicit (its
-            # per-step rate is <= sum z^2 phibar * dt, well within limits).
+            # The linear lap(psi)/E part (rate gamma_k = k^2/E) is stiff at
+            # high k, and both explicit Euler (unstable) and semi-implicit
+            # Euler (stationary variance suppressed by 1/(1+2 kappa dt) per
+            # mode — ruins fluctuation thermodynamics) fail. Use ETD
+            # (exact OU integration) per k-mode:
+            #   psi_hat' = a psi_hat + (1-a) E c_hat/k^2 + i amp_k xi_hat,
+            #   a = exp(-gamma_k dt s),
+            #   amp_k = sigma sqrt((1-a^2)/(2 gamma_k dt))  (-> sigma
+            #   sqrt(s) as gamma -> 0),
+            # which reproduces the exact per-mode stationary variance of
+            # the linear part for ANY dt. The c[psi] screening part of the
+            # drift stays explicit (per-step rate <= sum z^2 phibar dt).
             if self.electro.e_coupling > 0.0:
-                s_psi = self.psi_dt_scaling
-                psi_noise_current = self._random_psi.normal(
+                xi = self._random_psi.normal(
                     0.0, self.langevin["sigma"], self.cb.get_total_grid())
-                rhs = (self.psi + charge_c * self.langevin["dt"] * s_psi +
-                       0.5j * (self._psi_noise_prev + psi_noise_current) * np.sqrt(s_psi))
-                self._psi_noise_prev = psi_noise_current
-                denom = 1.0 + self.electro.k_sq * (self.langevin["dt"] * s_psi
-                                                   / self.electro.e_coupling)
-                psi_hat = np.fft.fftn(np.reshape(rhs, self.electro.nx)) / denom
-                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0 mode
+                psi_hat = np.fft.fftn(np.reshape(self.psi, self.electro.nx))
+                c_hat = np.fft.fftn(np.reshape(charge_c, self.electro.nx))
+                xi_hat = np.fft.fftn(np.reshape(xi, self.electro.nx))
+                psi_hat = (self._psi_decay * psi_hat
+                           + self._psi_drift * c_hat
+                           + 1j * self._psi_namp * xi_hat)
+                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
                 self.psi = np.ascontiguousarray(np.fft.ifftn(psi_hat).reshape(-1))
             # E = 0: no Coulomb interaction — psi has infinite stiffness
             # (k^2/E -> inf) and stays pinned at zero.
@@ -329,8 +357,7 @@ class ChargedCLFTS(clfts.CLFTS):
                                 for p in range(self.molecules.get_n_polymer_types())]
             hamiltonian = self.mpt.compute_hamiltonian(
                 self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
-            # explicit electrostatic term (rotated contour): -(1/2V) int c psi
-            hamiltonian += -0.5 * np.mean(charge_c * self.psi)
+            hamiltonian += h_elec
 
             if self.verbose_level >= 1:
                 mass_error = self.cb.mean(h_deriv[M - 1])

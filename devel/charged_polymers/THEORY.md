@@ -211,17 +211,28 @@ with complex Langevin dynamics exactly like the pressure field $W_+$
 (rotated storage, imaginary-direction noise, "+$\Lambda$" drift):
 $$\psi \;\leftarrow\; \psi + \left(\frac{\nabla^2\psi}{E} + c\right)
   \Delta t\, s_\psi \;+\; i\,\mathcal N(0,\sigma)\sqrt{s_\psi},$$
-whose drift fixed point is the Poisson equation. Two discrete-stability
-facts (both found the hard way):
-- The $\nabla^2/E$ part is stiff at high $k$ ($k^2\Delta t/E$ exceeds the
-  explicit-Euler limit), so it is integrated SEMI-IMPLICITLY in k-space:
-  $(1 + k^2\Delta t\,s_\psi/E)\,\hat\psi_{\rm new} = [\psi + \Delta t\,
-  s_\psi\, c + \eta]^{\wedge}$; the $c[\psi]$ screening stays explicit
+whose drift fixed point is the Poisson equation. Three discrete-scheme
+facts (all found the hard way):
+- The $\nabla^2/E$ part is stiff at high $k$: explicit Euler is UNSTABLE
+  ($k^2\Delta t/E$ exceeds the stability limit), and semi-implicit Euler,
+  while stable, SUPPRESSES the stationary variance by $1/(1+2\kappa\Delta
+  t)$ per mode — this silently wrecks fluctuation thermodynamics (the
+  one-loop $\langle\partial H/\partial E\rangle$ came out $2$–$4\times$
+  too small). The correct treatment is **ETD (exact Ornstein–Uhlenbeck
+  integration per k-mode)**:
+  $$\hat\psi' = a_k\hat\psi + (1-a_k)\frac{E\hat c}{k^2}
+    + i\,\sigma\sqrt{\frac{1-a_k^2}{2\gamma_k\Delta t}}\;\hat\xi,
+    \qquad a_k = e^{-\gamma_k \Delta t s_\psi},\;\; \gamma_k = k^2/E,$$
+  which reproduces the exact per-mode stationary variance of the linear
+  part for ANY $\Delta t$; the $c[\psi]$ screening stays explicit
   (per-step rate $\le \sum_i z_i^2\bar\phi_i\,\Delta t$). The $k=0$ mode
   is gauged to zero every step.
 - The EXCHANGE field's explicit mass is $\sim 1/\chi N$, so small-$\chi$
   systems (e.g. the pure-salt validation) need $\Delta t < \chi N$;
   violating this diverges regardless of the charge sector.
+- The explicit Hamiltonian term must be evaluated ANALYTICALLY off the
+  saddle: $+(1/2EV)\int \psi\nabla^2\psi$ (equal to
+  $-\tfrac12\langle c\psi\rangle$ only when Poisson holds).
 
 At $E=0$ the $\psi$ stiffness is infinite: $\psi$ stays pinned at zero.
 
@@ -387,11 +398,22 @@ incompressible draft:
   crosses zero are dominated by a nonlinear (beyond-Gaussian) background
   that does not shrink with statistics — they are not usable for this
   comparison.
+- **One-loop DH thermodynamics PASSED (the CL-only validation)**: the
+  analytic observable $\langle\partial H/\partial E\rangle = -\langle
+  H_{\rm exp}\rangle/E$ measured over $E \in \lbrace 2.5, 6.25, 12.5,
+  25, 50\rbrace$ (two $\Delta t$, linearly extrapolated) matches the
+  exact-lattice Gaussian prediction $-(1/2\sqrt{\bar n}V)\sum_{k\ne0}
+  (\kappa/E)(B-u_2)/\det(k)$ — the smeared generalization of the
+  Debye–Hückel limiting law $-\kappa_D^3/12\pi$ — to $\le 0.1\%$ at every
+  coupling (ratios 0.999–1.001). This free energy comes entirely from
+  $\psi$ FLUCTUATIONS and is identically zero in the partial-saddle
+  L-FTS. (Script: dh_salt_runs/test_oneloop_dh.py.)
 - Pitfalls recorded the hard way: $\chi N = 2$ IS the mean-field spinodal
   of the symmetric 1-segment salt (RPA breaks); cosine amplitudes on the
   cell-centered grid carry an $e^{ik\,dx/2}$ phase — compare $|\hat c|$;
   the exchange field's explicit mass $1/\chi N$ caps the CL time step at
-  $\Delta t < \chi N$.
+  $\Delta t < \chi N$; semi-implicit $\psi$ integration biases per-mode
+  variances (use ETD, above).
 
 ## References
 
