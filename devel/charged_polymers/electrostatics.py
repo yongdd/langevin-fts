@@ -64,11 +64,8 @@ class Electrostatics:
         self.charges = {t: float(charges.get(t) or 0.0) for t in monomer_types}
         self.radiuses = {t: radiuses.get(t) for t in monomer_types}
 
-        # k grids (full complex-FFT layout, same convention as Smearing)
-        k_vectors = [2.0 * np.pi * np.fft.fftfreq(nx[i], d=lx[i] / nx[i])
-                     for i in range(self.dim)]
-        mesh = np.meshgrid(*k_vectors, indexing="ij")
-        self.k_sq = sum(k * k for k in mesh)
+        # k grids (transform-dependent; overridable for non-periodic BCs)
+        self.k_sq = self._build_k_sq()
 
         # Per-species Gaussian shape functions h_i(k) = exp(-a_i^2 k^2 / 2)
         self.h_hat = {}
@@ -104,6 +101,27 @@ class Electrostatics:
         self.psi = np.zeros(self.n_grid, dtype=np.float64)
 
     # ------------------------------------------------------------------ #
+    # Spectral transform hooks. The base class implements the periodic box
+    # (plain FFT); ElectrostaticsReflecting overrides these three methods
+    # with the DCT-II basis for all-reflecting (Neumann-wall) boxes. Every
+    # k-space operation below (smearing, Poisson solve, Laplacian) is
+    # diagonal in whichever basis these define.
+    def _build_k_sq(self):
+        k_vectors = [2.0 * np.pi * np.fft.fftfreq(self.nx[i],
+                                                  d=self.lx[i] / self.nx[i])
+                     for i in range(self.dim)]
+        mesh = np.meshgrid(*k_vectors, indexing="ij")
+        return sum(k * k for k in mesh)
+
+    def _t(self, field_grid):
+        """Forward spectral transform of a grid-shaped array."""
+        return np.fft.fftn(field_grid)
+
+    def _it(self, coef_grid):
+        """Inverse spectral transform."""
+        return np.fft.ifftn(coef_grid)
+
+    # ------------------------------------------------------------------ #
     def smear(self, monomer_type, field):
         """h_i * field for the given species (k-space multiplication).
 
@@ -117,7 +135,7 @@ class Electrostatics:
         if h is None:
             return np.ascontiguousarray(arr.astype(dtype).reshape(-1))
         f = np.reshape(arr.astype(dtype), self.nx)
-        out = np.fft.ifftn(np.fft.fftn(f) * h)
+        out = self._it(self._t(f) * h)
         if not is_complex:
             out = out.real
         # .real is a strided view into the complex buffer; force a contiguous
@@ -162,13 +180,13 @@ class Electrostatics:
         the screening term in the denominator keeps the outer saddle loop
         stable at strong coupling. Updates and returns self.psi.
         """
-        c_hat = np.fft.fftn(np.reshape(c, self.nx))
-        psi_hat = np.fft.fftn(np.reshape(self.psi, self.nx))
+        c_hat = self._t(np.reshape(c, self.nx))
+        psi_hat = self._t(np.reshape(self.psi, self.nx))
         rhs = self.e_coupling * c_hat - self.k_sq * psi_hat
         psi_hat = psi_hat + rhs / self.jacobian
         psi_hat[tuple([0] * self.dim)] = 0.0
         self.psi = np.ascontiguousarray(
-            np.fft.ifftn(psi_hat).real.reshape(-1))
+            np.real(self._it(psi_hat)).reshape(-1))
         return self.psi
 
     def residual(self, c):
@@ -178,9 +196,9 @@ class Electrostatics:
         (hence c) has moved in the outer saddle iteration. Feed its std into
         the saddle stopping criterion.
         """
-        psi_hat = np.fft.fftn(np.reshape(self.psi, self.nx))
+        psi_hat = self._t(np.reshape(self.psi, self.nx))
         lap = np.ascontiguousarray(
-            np.fft.ifftn(-self.k_sq * psi_hat).real.reshape(-1))
+            np.real(self._it(-self.k_sq * psi_hat)).reshape(-1))
         return -lap / self.e_coupling - c
 
     def hamiltonian_per_chain(self, c):
@@ -229,3 +247,36 @@ class Electrostatics:
                 "The counter-ion volume fraction is not a free parameter - "
                 "compute it from the polymer charge (see the charged-polymer "
                 "theory notes).")
+
+
+class ElectrostaticsReflecting(Electrostatics):
+    """Wall-box (all-reflecting / Neumann) variant of Electrostatics.
+
+    Basis: DCT-II standing waves cos(k_d (x_d + dx_d/2)), k_d = pi n_d / L_d,
+    on the cell-centered grid — the spectral basis matching the propagator
+    solvers' 'reflecting' boundary condition on every face. Physically the
+    walls are neutral, non-polarizable mirrors: zero normal electric field
+    (Neumann for psi) and mirror-image Gaussian smearing (charge cannot leak
+    through a wall). All operators (Laplacian, smearing, Poisson) remain
+    diagonal in this basis, so every method of the base class works
+    unchanged through the _t/_it/_build_k_sq hooks.
+
+    The k = 0 mode is the global-neutrality gauge mode, exactly as in the
+    periodic case. Requires even grid sizes only on CUDA (FCT algorithm);
+    scipy's DCT used here has no such restriction, but keep grids even for
+    consistency with the C++ propagator side.
+    """
+
+    def _build_k_sq(self):
+        k_vectors = [np.pi * np.arange(self.nx[i]) / self.lx[i]
+                     for i in range(self.dim)]
+        mesh = np.meshgrid(*k_vectors, indexing="ij")
+        return sum(k * k for k in mesh)
+
+    def _t(self, field_grid):
+        import scipy.fft
+        return scipy.fft.dctn(field_grid, type=2)
+
+    def _it(self, coef_grid):
+        import scipy.fft
+        return scipy.fft.idctn(coef_grid, type=2)
