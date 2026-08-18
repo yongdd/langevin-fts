@@ -188,7 +188,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 
         // For periodic BC, coefficient array is actually complex (interleaved real/imag)
         // so allocate extra space
-        int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
 
         // Temporary arrays
         std::vector<T> q_out1(M_full), q_out2(M_full);

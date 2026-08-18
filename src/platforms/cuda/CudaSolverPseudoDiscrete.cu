@@ -225,8 +225,14 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
             // Real-valued buffers for non-periodic BC stress calculation (DCT/DST)
-            gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*M_COMPLEX));
+            // For complex fields the DCT/DST coefficients of the real and
+            // imaginary parts are stored interleaved (complex pairs).
+            {
+                const int rk_size = std::is_same<T, std::complex<double>>::value
+                                    ? 2 * M_COMPLEX : M_COMPLEX;
+                gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*rk_size));
+                gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*rk_size));
+            }
         }
 
         for(int i=0; i<n_streams; i++)
@@ -923,8 +929,12 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
             // fft_in is preserved. Uses the default stream throughout, matching CudaFFT.
             fft_[STREAM]->forward(reinterpret_cast<T*>(fft_in), d_rk_in_1_one[STREAM]);
 
-            // Multiply bond Boltzmann factor (real DCT/DST coefficients)
-            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            // Multiply bond Boltzmann factor (real factor; coefficients are
+            // real for real fields, interleaved complex pairs for complex)
+            if constexpr (std::is_same<T, double>::value)
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            else
+                ker_multi_complex_real<<<N_BLOCKS, N_THREADS>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM]), _d_boltz_bond, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
 
             fft_[STREAM]->backward(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out));
@@ -1073,7 +1083,10 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             // Non-periodic BC (reflecting/absorbing): CudaFFT (DCT/DST), real
             // coefficients, default stream. backward() includes normalization (no 1/M).
             fft_[STREAM]->forward(reinterpret_cast<T*>(fft_in), d_rk_in_1_one[STREAM]);
-            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            if constexpr (std::is_same<T, double>::value)
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            else
+                ker_multi_complex_real<<<N_BLOCKS, N_THREADS>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM]), _d_boltz_bond_half, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             fft_[STREAM]->backward(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out));
         }
@@ -1098,6 +1111,13 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
     std::string monomer_type, bool is_half_bond_length)
 {
     try{
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            if (!this->is_periodic_)
+                throw_with_line_number(
+                    "Stress computation for complex fields with non-periodic "
+                    "boundary conditions is not implemented.");
+        }
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 

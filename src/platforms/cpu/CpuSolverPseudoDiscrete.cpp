@@ -182,7 +182,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
         // Use local buffer for thread safety (called from OpenMP parallel regions)
-        int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
         // Get Boltzmann factors for the correct ds_index
@@ -310,7 +310,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
         // Use local buffer for thread safety (called from OpenMP parallel regions)
-        int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
         // Discrete chains always use ds_index=0 (global ds)

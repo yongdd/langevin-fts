@@ -1065,7 +1065,14 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         }
 
         // Allocate Fourier coefficient arrays
-        int coeff_size = is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            if (!is_periodic_)
+                throw_with_line_number(
+                    "Stress computation for complex fields with non-periodic "
+                    "boundary conditions is not implemented.");
+        }
+        int coeff_size = complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> qk_1(coeff_size);
         std::vector<double> qk_2(coeff_size);
 

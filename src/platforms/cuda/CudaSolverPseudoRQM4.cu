@@ -94,6 +94,15 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             }
         }
 
+
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            if (!is_periodic_)
+                throw_with_line_number(
+                    "Complex fields with non-periodic boundary conditions are "
+                    "not yet ported to this CUDA solver; use the discrete "
+                    "chain model or a CPU platform.");
+        }
         // Pseudo expects ONE boundary condition per dimension; the computation
         // box stores two (low/high face). Squeeze before passing, otherwise
         // per-axis mixed BCs (e.g. reflecting-x, absorbing-y) build the
@@ -1168,6 +1177,13 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
     std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try{
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            if (!this->is_periodic_)
+                throw_with_line_number(
+                    "Stress computation for complex fields with non-periodic "
+                    "boundary conditions is not implemented.");
+        }
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 

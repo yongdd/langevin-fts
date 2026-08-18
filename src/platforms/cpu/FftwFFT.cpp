@@ -545,25 +545,42 @@ void FftwFFT<T, DIM>::forward(T *rdata, double *cdata)
             temp.resize(total_grid_);
         }
 
-        // Copy input to work buffer
-        if constexpr (std::is_same<T, double>::value)
+        // Real-linear transforms: for complex fields (CL-FTS) transform
+        // the real and imaginary parts independently and store the
+        // coefficients interleaved as complex pairs (matching the
+        // periodic complex layout used by the solvers).
+        const int n_parts = std::is_same<T, double>::value ? 1 : 2;
+        for (int part = 0; part < n_parts; ++part)
         {
-            std::memcpy(work.data(), rdata, total_grid_ * sizeof(double));
-        }
-        else
-        {
-            for (int i = 0; i < total_grid_; ++i)
-                work[i] = std::real(rdata[i]);
-        }
+            // Copy input component to work buffer
+            if constexpr (std::is_same<T, double>::value)
+            {
+                std::memcpy(work.data(), rdata, total_grid_ * sizeof(double));
+            }
+            else
+            {
+                for (int i = 0; i < total_grid_; ++i)
+                    work[i] = (part == 0) ? std::real(rdata[i])
+                                          : std::imag(rdata[i]);
+            }
 
-        // Apply transforms dimension by dimension
-        for (int dim = 0; dim < DIM; ++dim)
-        {
-            applyForward1D(work.data(), temp.data(), dim);
-        }
+            // Apply transforms dimension by dimension
+            for (int dim = 0; dim < DIM; ++dim)
+            {
+                applyForward1D(work.data(), temp.data(), dim);
+            }
 
-        // Copy to output
-        std::memcpy(cdata, work.data(), total_complex_grid_ * sizeof(double));
+            // Copy to output (interleaved for complex fields)
+            if constexpr (std::is_same<T, double>::value)
+            {
+                std::memcpy(cdata, work.data(), total_complex_grid_ * sizeof(double));
+            }
+            else
+            {
+                for (int i = 0; i < total_complex_grid_; ++i)
+                    cdata[2 * i + part] = work[i];
+            }
+        }
     }
 }
 
@@ -628,24 +645,39 @@ void FftwFFT<T, DIM>::backward(double *cdata, T *rdata)
             temp.resize(total_grid_);
         }
 
-        // Copy input to work buffer
-        std::memcpy(work.data(), cdata, total_complex_grid_ * sizeof(double));
+        // Complex fields: coefficients arrive interleaved (see forward);
+        // inverse-transform the real and imaginary parts independently.
+        const int n_parts = std::is_same<T, double>::value ? 1 : 2;
+        for (int part = 0; part < n_parts; ++part)
+        {
+            // Copy input component to work buffer
+            if constexpr (std::is_same<T, double>::value)
+            {
+                std::memcpy(work.data(), cdata, total_complex_grid_ * sizeof(double));
+            }
+            else
+            {
+                for (int i = 0; i < total_complex_grid_; ++i)
+                    work[i] = cdata[2 * i + part];
+            }
 
-        // Apply inverse transforms dimension by dimension (reverse order)
-        for (int dim = DIM - 1; dim >= 0; --dim)
-        {
-            applyBackward1D(work.data(), temp.data(), dim);
-        }
+            // Apply inverse transforms dimension by dimension (reverse order)
+            for (int dim = DIM - 1; dim >= 0; --dim)
+            {
+                applyBackward1D(work.data(), temp.data(), dim);
+            }
 
-        // Copy to output
-        if constexpr (std::is_same<T, double>::value)
-        {
-            std::memcpy(rdata, work.data(), total_grid_ * sizeof(double));
-        }
-        else
-        {
-            for (int i = 0; i < total_grid_; ++i)
-                rdata[i] = T(work[i], 0.0);
+            // Copy to output component
+            if constexpr (std::is_same<T, double>::value)
+            {
+                std::memcpy(rdata, work.data(), total_grid_ * sizeof(double));
+            }
+            else
+            {
+                double* out = reinterpret_cast<double*>(rdata);
+                for (int i = 0; i < total_grid_; ++i)
+                    out[2 * i + part] = work[i];
+            }
         }
     }
 }

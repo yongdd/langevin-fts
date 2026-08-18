@@ -187,6 +187,22 @@ protected:
     void transform_backward(double* cdata, T* rdata) { fft_->backward(cdata, rdata); }
 
     /**
+     * @brief Whether spectral coefficients are stored as complex pairs.
+     *
+     * Periodic BCs always use complex coefficients. For complex fields
+     * (CL-FTS) the DCT/DST coefficients of the real and imaginary parts
+     * are stored interleaved as complex pairs as well — the transforms
+     * are real-linear, so each part transforms independently.
+     */
+    bool complex_coeffs() const
+    {
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+            return true;
+        else
+            return is_periodic_;
+    }
+
+    /**
      * @brief Multiply Fourier coefficients by a factor array.
      *
      * Handles both periodic BC (complex coefficients) and non-periodic BC
@@ -198,7 +214,7 @@ protected:
      */
     void multiply_fourier_coeffs(double* k_data, const double* factor, int n_complex)
     {
-        if (is_periodic_)
+        if (complex_coeffs())
         {
             std::complex<double>* k_complex = reinterpret_cast<std::complex<double>*>(k_data);
             for (int i = 0; i < n_complex; ++i)
@@ -220,7 +236,7 @@ protected:
         double* k_out, const double* a, const double* k_in1,
         const double* b, const double* k_in2, int n_complex)
     {
-        if (is_periodic_)
+        if (complex_coeffs())
         {
             std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
             const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);
@@ -245,7 +261,7 @@ protected:
         const double* b, const double* k_in2,
         const double* c, const double* k_in3, int n_complex)
     {
-        if (is_periodic_)
+        if (complex_coeffs())
         {
             std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
             const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);
@@ -270,7 +286,7 @@ protected:
         double* k_out, const double* a,
         const double* k_in1, const double* k_in2, int n_complex)
     {
-        if (is_periodic_)
+        if (complex_coeffs())
         {
             std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
             const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);

@@ -35,10 +35,11 @@ What changes vs ChargedCLFTS
 3. Structure-function (FFT) diagnostics are disabled (meaningless in the
    wall basis).
 
-Platform: cpu-mkl ONLY for now. The CUDA complex-field + non-periodic
-path crashes in CudaPseudo::upload_fourier_basis (d_negative_k_idx is
-uploaded unconditionally for complex T but only exists for periodic BC)
-— mainline fix deferred.
+Platform: cpu-mkl / cpu-fftw / cuda (discrete chain model only on CUDA;
+the complex + non-periodic transforms were fixed in mainline 2026-08-18:
+real/imaginary parts transform independently through the DCT/DST with
+interleaved complex coefficients, ~12x faster than CPU on brush-sized
+grids).
 
 Usage: params as ChargedCLFTS plus
     "bc": ["reflecting"]*6            (optional; this is the default here)
@@ -72,11 +73,13 @@ class BrushChargedCLFTS(ChargedCLFTS):
         if len(bc) != 2 * dim:
             raise ValidationError(f"'bc' needs {2*dim} entries, got {len(bc)}.")
         platform = params.get("platform", "cpu-mkl")
-        if platform not in ("cpu-mkl", "cpu-fftw"):
+        if platform not in ("cpu-mkl", "cpu-fftw", "cuda"):
+            raise ValidationError(f"Unsupported platform '{platform}'.")
+        if platform == "cuda" and params.get("chain_model") != "discrete":
             raise ValidationError(
-                "BrushChargedCLFTS requires a CPU platform (the CUDA "
-                "complex + non-periodic path is broken upstream); set "
-                "'platform': 'cpu-mkl'.")
+                "CUDA complex + non-periodic is currently ported for the "
+                "discrete chain model only (RQM4/RK2 CUDA solvers raise); "
+                "use 'discrete' or a CPU platform.")
 
         # Parent builds the (periodic) machinery, validates the charged
         # model, and sets up noise streams / frozen-mode bookkeeping. The

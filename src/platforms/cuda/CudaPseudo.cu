@@ -48,6 +48,7 @@ CudaPseudo<T>::CudaPseudo(
     std::array<double, 9> recip_vec)
         : Pseudo<T>(bond_lengths, bc, nx, dx, recip_metric, recip_vec)
 {
+    d_negative_k_idx = nullptr;
     try
     {
         const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
@@ -67,7 +68,12 @@ CudaPseudo<T>::CudaPseudo(
 
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
-            gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
+            // Mirror the host convention: the mapping exists only for
+            // periodic BCs; leave the device pointer nullptr otherwise so
+            // get_negative_frequency_mapping() returns nullptr on both
+            // sides for non-periodic boxes.
+            if (Pseudo<T>::get_negative_frequency_mapping() != nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
         }
 
         // Upload Fourier basis to GPU
@@ -101,7 +107,8 @@ CudaPseudo<T>::~CudaPseudo()
     cudaFree(d_fourier_basis_yz);
 
     if constexpr (std::is_same<T, std::complex<double>>::value)
-        cudaFree(d_negative_k_idx);
+        if (d_negative_k_idx != nullptr)
+            cudaFree(d_negative_k_idx);
 }
 
 //----------------- Upload Boltzmann factors to GPU -----------------------------
@@ -158,9 +165,13 @@ void CudaPseudo<T>::upload_fourier_basis()
     // negative_k_idx for complex fields with periodic BC
     if constexpr (std::is_same<T, std::complex<double>>::value)
     {
+        // The negative-frequency mapping exists only for periodic BCs
+        // (conjugate symmetry of the full complex FFT); for non-periodic
+        // boxes the host pointer is nullptr and there is nothing to upload.
         const int* negative_k_idx = Pseudo<T>::get_negative_frequency_mapping();
-        gpu_error_check(cudaMemcpy(d_negative_k_idx, negative_k_idx,
-                                   sizeof(int) * M_COMPLEX, cudaMemcpyHostToDevice));
+        if (negative_k_idx != nullptr)
+            gpu_error_check(cudaMemcpy(d_negative_k_idx, negative_k_idx,
+                                       sizeof(int) * M_COMPLEX, cudaMemcpyHostToDevice));
     }
 }
 
