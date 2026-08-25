@@ -57,11 +57,179 @@ dt = 0.005, n̄ = 1e4, AM warm start, re-gauge shifts, Gaussian graft):
   *swelling* (+1e-4); at u₃ ≈ 1.6 kT the correlation attraction
   dominates and the sign flips to *contraction*, 200× larger — the
   crossover into the PRL's physics.
-- E-causality control in flight: z₊ = 3 at E = 2.5×10⁴ (u₃/4) should
-  show a correspondingly reduced contraction
-  (`clfig1_z3_E25k.json`).
+- **E-causality control (completed)**: z₊ = 3 at E = 2.5×10⁴ (u₃ =
+  0.4 kT, coupling ÷4) gives Δh₁ = −0.0062 and ΔΓ = −0.0182 — the
+  contraction shrinks 3.6× and the condensation 2.8× (vs the 4×
+  coupling reduction; single seed). Together with the z₊² valence ratio
+  and the null neutral control, all three causality legs point to the
+  ion-correlation mechanism (`pb2_z3_E25k.json`,
+  `clfig1_z3_E25k.json`).
 
 ![Fig-1-style reproduction](fig1_reproduction.png)
+
+## 3b. Second rung: u₃ = 6.5 kT (2026-08-17)
+
+N = 25, a_ion = 0.025, E = 5×10⁴ (16×16×144 box, Lxy = 0.8, Lz = 2.5;
+`pb3_*`/`clstrong_*`): MF h₁ = 0.433 (neutral) / 0.988 (z₊=1) /
+0.671 (z₊=3), all converged with positive profiles.
+
+| observable | z₊ = 1 | z₊ = 3 |
+|---|---:|---:|
+| Δh₁ (CL − MF) | −0.009 | **−0.0755 ± 0.0010** (11% contraction) |
+| Γ: MF → CL | 0.586 → 0.526 | 0.233 → **0.119** |
+| lateral rel. std of column density | 0.12 | **0.17** (neutral: 0.015) |
+
+Ladder so far (z₊ = 3): u₃ = 0.4 / 1.6 / 6.5 kT →
+Δh₁ = −0.006 / −0.022 / −0.076 (≈3.5× per 4× coupling, mildly
+sublinear); Γ has been driven halfway to overcharging. The lateral
+inhomogeneity indicator jumps to ~10× the neutral baseline for charged
+brushes (z₊ = 3 strongest) — a fluctuating-lateral-structure precursor
+of their Fig. 4 (snapshot run `snap_z3_cols.json` records instantaneous
+column-density maps for direct inspection). Below-neutral collapse
+(gap 0.24) is not yet reached at this rung; the remaining paths are a
+further coupling increase (a_ion → 0.0125, heavier grid) and/or the
+paper's own Θ-solvent (χ ≈ 0.5 per monomer), which softens the neutral
+reference and lowers the collapse threshold — the latter requires
+extending the mean-field solver to saddle the real exchange field.
+
+## 3c. CORRECTED results after the complex/non-periodic transform fix (2026-08-18)
+
+Mainline commit c0ab6e0c revealed and fixed a solver bug that had
+real-projected the complex propagator on every bond convolution
+(imaginary part silently zeroed in the DCT/DST path on all platforms) —
+all §3/§3b CL numbers were therefore approximations. Full GPU reruns of
+the u₃ = 6.5 kT rung with the corrected solver (`clfix_*`; the CUDA port
+gives ~12× at the solver level, though end-to-end step times on shared
+nodes were comparable):
+
+| observable (z₊=3, 3 seeds) | Im-projected (§3b) | **corrected CL** |
+|---|---:|---:|
+| h₁ (MF 0.671) | 0.596 | **0.581 ± 0.007** (Δh₁ = −0.091) |
+| Γ_eff (MF 0.233) | 0.119 | **0.094 ± 0.007** (ΔΓ = −0.139) |
+| lateral rel. std | 0.17 | **0.52** |
+| max\|ψ\| during run | ~1000–6100 | ~2000–6000 (finite, 3 seeds coherent) |
+
+z₊ = 1: Δh₁ = −0.013, ΔΓ = −0.083; neutral control: +0.003 (≪ the z₊=3
+signal). **Every conclusion survives and strengthens**: the projection
+was damping the fluctuations (and with them the correlation physics) —
+the corrected contraction is 20% larger, Γ is now **60% of the way to
+overcharging** (0.233 → 0.094), and the valence selectivity
+(z₃/z₁ ≈ 7) persists. Lateral fluctuations triple, consistent with the
+correct CL sampling of the full complex measure. The §3 first-rung and
+E-control numbers remain projected-solver values pending rerun; the
+qualitative claims they support (z² ordering, E-causality) are
+re-established at this rung by the corrected data.
+
+## 3d. Θ-solvent campaign and the coupling saturation (2026-08-19)
+
+Adding the paper's Θ solvent (χN = 12.5 = 0.5·N) with the corrected
+solver, quasi-saddle (n̄ = 1e9) references replacing the AM solver for
+χ ≠ 0 (`theta_*`, `final_*`; all warm-started from the χ = 0 AM saddles
+`pb3_*`/`pb4_*` at nz = 144/288):
+
+| rung | u₃ | Δh₁(z₊=3) | Γ(z₊=3): MF → CL | h₁(CL) vs neutral CL |
+|---|---:|---:|---:|---:|
+| good solvent, E=5e4 | 6.5 kT | −0.091 | 0.233 → 0.094 | 0.581 vs 0.437 |
+| Θ, E=5e4 | 6.5 kT | −0.122 | 0.207 → 0.082 | 0.508 vs 0.346 |
+| Θ, E=1e5, nz=288 | 13 kT | −0.137 | 0.206 → 0.081 | 0.493 vs 0.344 |
+
+Θ amplifies the contraction by ~34% at fixed coupling (softer neutral
+reference, as in the PRL). But doubling E (u₃ 6.5 → 13 kT) barely moves
+either observable: **the correlation effect saturates in E at fixed
+a_ion and salt**. Two mechanisms, both consistent with the PRL
+literature: (i) the screening length κ⁻¹ has reached a_ion, so the
+smeared interaction ĥ² cuts off the correlation-peak modes (the same
+cutoff physics quantified in RESULTS_LPF2008.md — more E buys nothing
+without smaller a); (ii) counterion condensation at u₃ ≫ kT is already
+nearly complete at this salt point (Γ pinned at ~0.08), and the
+paper's overcharging (Γ < 0) lives in a specific BULK-correlation
+window of ρb (their Fig. 3), not at arbitrary coupling at fixed salt.
+Below-neutral collapse and Γ < 0 are therefore NOT yet reached
+(remaining gap 0.149 at 90σ resolution).
+
+Next probes: a salt scan at this rung (`scan_s*` — simultaneously the
+h(ρb) axis of their Fig. 2, hunting the collapse valley/overcharging
+window), and, orthogonally, a_ion → 0.0125 with nxy = 32 (8× grid; the
+cutoff lever).
+
+## 3e. Salt scan: the nonmonotonic h(ρb) of their Fig. 2 (2026-08-20)
+
+Seven-point salt scan (cation vf 0.001–0.04, z₊ = 3, Θ, E = 1e5,
+nz = 288; `pb5_*`/`scan_*` + the s = 0.02 rung), each point warm-started
+from its own mean-field saddle:
+
+| salt | h₁(MF) | h₁(CL) | Γ(CL) |
+|---:|---:|---:|---:|
+| 0.001 | 0.847 | 0.472 | +0.006(3) |
+| 0.002 | 0.824 | 0.463 | +0.005(3) |
+| 0.003 | 0.803 | **0.453** (valley) | +0.008(4) |
+| 0.005 | 0.767 | 0.457 | +0.010(3) |
+| 0.010 | 0.703 | 0.489 | +0.026(6) |
+| 0.020 | 0.630 | **0.493** (reexpanded) | +0.081(7) |
+| 0.040 | 0.559 | 0.473 | +0.132(13) |
+
+(`fig2_reproduction.png`.) Findings:
+
+1. **Nonmonotonic h(ρb) — the PRL's headline collapse-and-reexpansion —
+   is reproduced in CL**: valley at s ≈ 0.003, reexpansion to s ≈ 0.02,
+   then the salted-regime decrease; the valley-to-peak amplitude 0.040
+   is ~5–10σ against seed/block errors. The mean-field curve is
+   MONOTONIC over the same range (0.85 → 0.56) — the nonmonotonicity is
+   purely a correlation effect, exactly their claim.
+2. **Γ_eff plateaus at 0⁺ over the whole low-salt window**
+   (0.005–0.010 with residual downward equilibration drift; second-half
+   block averages reach +0.003–0.005): condensation saturates at
+   complete neutralization but does NOT cross into overcharging at this
+   smearing (a_ion = 0.025). Their Γ < 0 requires the bulk-correlation
+   drive that our ĥ² cutoff caps — the a_ion → 0.0125 lever.
+3. The collapse plateau (h ≈ 0.45–0.47) stays ABOVE the neutral brush
+   (0.344): the condensed-ion-laden brush is bulkier than the bare
+   neutral chain at this coupling. Below-neutral collapse needs the
+   same stronger-correlation lever.
+4. s = 0.08 diverged as predicted by the resolution rule
+   (κ⁻¹ = 0.015 < 2Δz); the scan boundary is a numerics limit, not
+   physics. Lateral inhomogeneity grows toward low salt (0.9 at
+   s = 0.001), consistent with their Fig. 4 living at ~mM salt.
+
+## 3f. The a_ion = 0.0125 ladder: stability matrix and the overcharging frontier (2026-08-23)
+
+Halving the ion smearing radius (a_ion = 0.0125, 32×32×288 grid,
+lateral dx = 2a) to release the ĥ² cutoff exposed a NEW stability
+boundary — and its cure:
+
+| attempt | knobs | outcome |
+|---|---|---|
+| a2 | u₃ = 26 kT (E=1e5), n̄=1e4, dt=0.005, s_ψ=20 | diverged |
+| a2b | u₃ = 13 kT (E=5e4) | diverged |
+| a2c | n̄ = 1e5 (10× weaker noise) | diverged |
+| a2c | dt = 0.0025 | diverged |
+| neutral control | same a_ion, uncharged polymer | **stable** |
+| **a2d** | **psi_dt_scaling 20 → 1** | **stable** |
+
+The destabilizer was the ψ acceleration factor: at small a_ion the
+ions respond to high-k ψ roughness, and s_ψ = 20 (introduced to speed
+ψ sampling at large E) drives the condensed-layer/ψ feedback into
+runaway — independent of noise amplitude, timestep, and coupling.
+**Rule: small ion radii require s_ψ = 1** (at the cost of longer ψ
+correlation times).
+
+Physics at the valley point (s = 0.003, u₃ = 13 kT): the single-seed
+150k run showed Γ = −0.019 ± 0.021, but the **confirmation campaign
+(3 additional seeds × 300k steps, a2e_*) settles it**: pooled
+SECOND-HALF (equilibrated) Γ = **+0.0200 ± 0.0032** (four seeds agree
+at +0.011…+0.026; the early negative excursion was an equilibration
+transient). VERDICT: **no overcharging within the CL-stable envelope**
+— correlations drive the brush to essentially complete neutralization
+(Γ: 0.21 mean-field → ~0.02, a regime the PRL notes is impossible at
+mean field) but not beyond it. h₁ = 0.444 ± 0.010 (4 seeds) stays
+above the neutral 0.347: below-neutral collapse is likewise not
+reached. The envelope is bounded on one side by the ĥ² cutoff
+(a ≥ 0.025 saturates the coupling) and on the other by ψ-sector
+stability (a = 0.0125 requires s_ψ = 1 and still carries slow
+collective modes); reaching the PRL's Γ < 0 / below-neutral regime
+within CL-FTS likely needs either the grand-canonical analytic-ion
+formulation (their Eq. S24) or a dedicated strong-coupling
+stabilization for the ψ sector — recorded as future work.
 
 ## 4. What is and is not reproduced
 
