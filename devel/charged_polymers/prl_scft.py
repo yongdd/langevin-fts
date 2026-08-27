@@ -80,6 +80,13 @@ class PRLBrushSCFT:
         self.aplus = aplus if aplus is not None else aion
         # canonical monovalent counterions (their semicanonical ensemble)
         self.with_counterions = counterions
+        # GC MONOVALENT background c1 (physical form of the counterion
+        # reservoir: residual/buffer 1:1 salt at fixed bulk concentration).
+        # Only APPROXIMATELY equivalent to the canonical cloud with
+        # c1 ~ n_C/L_eff: Donnan retention and the c1 feedback into
+        # kappa_b make the measured onset response superlinear in c1
+        # (RESULTS 3m). Box-independent, so L stays kappa-limited/small.
+        self.c1 = 0.0          # nm^-3; set via set_c1()
         self.L, self.Nz = L, Nz
         self.dz = L / Nz
         self.z = (np.arange(Nz) + 0.5) * self.dz
@@ -119,12 +126,16 @@ class PRLBrushSCFT:
         self.um = np.zeros(Nz)
         self.W = np.zeros(Nz)          # per-chain field N * V_P
 
+    def set_c1(self, c1_molar):
+        self.c1 = c1_molar * 0.6022
+        self.set_bulk(self.rho_b)      # refresh kappa_b with c1
+
     def set_bulk(self, rho_b):
         """Re-point the bulk reservoir (salt continuation for their Fig. 2/3
         sweeps). rho_b = bulk MULTIVALENT-cation number density in nm^-3
-        (their x-axis variable); anion bulk density is z+ * rho_b."""
+        (their x-axis variable); anion bulk density is z+ rho_b + c1."""
         self.rho_b = float(rho_b)
-        Ib = 0.5 * (self.zp * (self.zp + 1.0)) * self.rho_b
+        Ib = 0.5 * (self.zp * (self.zp + 1.0)) * self.rho_b + self.c1
         self.kappa_b = np.sqrt(8.0 * np.pi * self.lB * Ib) if Ib > 0 else 0.0
 
     # ---------------- self-energy (LDA, their Eq. S33) ----------------
@@ -136,6 +147,8 @@ class PRLBrushSCFT:
         if not self.corr:
             zz = np.zeros(self.Nz)
             return zz, zz, zz
+        if getattr(self, "selfenergy", "lda") == "nonlocal":
+            return self._self_energies_nonlocal(rhoP, rhoC, rhop, rhom)
         # include_polymer_I0=False drops the polymer charge from the LDA
         # screening (crude bound on their nonlocal chain-connectivity
         # correction Iex, SI Eq. S25: connected charges do not screen
@@ -159,6 +172,119 @@ class PRLBrushSCFT:
         du = lambda a, zq: (zq ** 2) * self.lB / (2.0 * a) * \
             (self._u_fn(a * kap) - self._u_fn(a * self.kappa_b))
         return du(self.aP, self.zP), du(self.aplus, self.zp), du(self.aion, 1.0)
+
+    # -------- nonlocal G_s self-energy (their S25, without Iex) --------
+    def _nonlocal_setup(self, nq=64, qmax_fac=6.0):
+        """Transverse-wavenumber grid and Gaussian-spread weights for the
+        planar-symmetry solution of S25's LOCAL part:
+        [ (q^2 - d2/dz2)/(4 pi lB) + 2 I0(z) ] G_q(z,z') = delta(z-z').
+        The Gaussian charge spread is fixed ANALYTICALLY by their S33
+        signature u(x) = 1 - x e^{x^2/pi} erfc(x/sqrt(pi)):
+        |h(k)|^2 = e^{-k^2 a^2/pi}  (matches the kappa=0 Born energy
+        lB/2a exactly), i.e. transverse weight e^{-q^2 a^2/pi} and
+        z-smearing Gaussian of variance a^2/pi per propagator argument."""
+        a_min = min(self.aion, self.aplus, self.aP)
+        qmax = qmax_fac * np.sqrt(np.pi) / a_min
+        # log grid resolving both kappa_b (small q) and the spread cutoff
+        q = np.geomspace(1e-4, qmax, nq)
+        wq = np.gradient(q) * q / (2.0 * np.pi)     # q dq / 2pi
+        self._nl_q, self._nl_wq = q, wq
+        # z-smearing stencils per distinct radius
+        self._nl_H = {}
+        for a in {self.aP, self.aplus, self.aion}:
+            sig = a / np.sqrt(np.pi)
+            wH = max(1, int(np.ceil(3.0 * sig / self.dz)))
+            x = np.arange(-wH, wH + 1) * self.dz
+            h = np.exp(-0.5 * (x / sig) ** 2)
+            self._nl_H[a] = h / h.sum()
+
+    def _nl_band_inverse(self, I0):
+        """For every q: banded part of A_q^{-1} via half-line Green
+        recursions (continued fractions; overflow-free, O(Nz) per q).
+        Returns diag D[q,z] and ratio R[q,z] with
+        (A^{-1})_{j,j+m} = D_j * prod_{t=j}^{j+m-1} R_t."""
+        q, Nz, dz = self._nl_q, self.Nz, self.dz
+        fourpi_lB = 4.0 * np.pi * self.lB
+        b = -1.0 / (fourpi_lB * dz * dz)             # off-diagonal (scalar)
+        a_bulkdiag = (2.0 / (fourpi_lB * dz * dz))
+        A = (a_bulkdiag + (q ** 2)[:, None] / fourpi_lB
+             + 2.0 * I0[None, :])                    # (nq, Nz) interior diag
+        # Neumann ends: one neighbor missing
+        A[:, 0] -= 1.0 / (fourpi_lB * dz * dz)
+        A[:, -1] -= 1.0 / (fourpi_lB * dz * dz)
+        b2 = b * b
+        gL = np.empty_like(A)
+        gL[:, 0] = 1.0 / A[:, 0]
+        for i in range(1, Nz):
+            gL[:, i] = 1.0 / (A[:, i] - b2 * gL[:, i - 1])
+        gR = np.empty_like(A)
+        gR[:, -1] = 1.0 / A[:, -1]
+        for i in range(Nz - 2, -1, -1):
+            gR[:, i] = 1.0 / (A[:, i] - b2 * gR[:, i + 1])
+        D = np.empty_like(A)
+        D[:, 0] = 1.0 / (A[:, 0] - b2 * gR[:, 1])
+        D[:, -1] = 1.0 / (A[:, -1] - b2 * gL[:, -2])
+        D[:, 1:-1] = 1.0 / (A[:, 1:-1] - b2 * gL[:, :-2] - b2 * gR[:, 2:])
+        R = np.empty_like(A)                          # ratio to the right
+        R[:, :-1] = -b * gR[:, 1:]
+        R[:, -1] = 0.0
+        return D, R
+
+    def _nonlocal_U(self, I0, I0_bulk):
+        """U_a(z) = (1/2) sum_q wq e^{-q^2 a^2/pi} [S_q(z) - S_q^bulk],
+        S = z-smeared coincident G_q; per distinct Born radius a.
+        Returns dict a -> U_a(z) (multiply by z_K^2 for species K)."""
+        if not hasattr(self, "_nl_q"):
+            self._nonlocal_setup()
+        D, R = self._nl_band_inverse(I0)
+        Db, Rb = self._nl_band_inverse(np.full(self.Nz, I0_bulk))
+        out = {}
+        ic = self.Nz // 2
+        for a, h in self._nl_H.items():
+            wH = (len(h) - 1) // 2
+            tw = self._nl_wq * np.exp(-(self._nl_q * a) ** 2 / np.pi)
+
+            def smear_diag(Dm, Rm):
+                # S(i) = sum_{j,k in band} h_j h_k (A^-1)_{i+j, i+k}
+                nq, Nz = Dm.shape
+                S = np.zeros((nq, Nz))
+                # precompute cumulative ratio products P[:, i, m] lazily
+                for dj in range(-wH, wH + 1):
+                    for dk in range(dj, wH + 1):
+                        w2 = h[dj + wH] * h[dk + wH] * (1 if dj == dk else 2)
+                        j = np.clip(np.arange(Nz) + dj, 0, Nz - 1)
+                        k = np.clip(np.arange(Nz) + dk, 0, Nz - 1)
+                        entry = Dm[:, j].copy()
+                        for t in range(dk - dj):
+                            entry *= Rm[:, np.clip(j + t, 0, Nz - 1)]
+                        S += w2 * entry
+                return S
+
+            S = smear_diag(D, R)
+            Sb = smear_diag(Db, Rb)[:, ic]            # (nq,)
+            # discrete delta normalization: G(z_j, z_k) = (A^-1)_{jk}/dz
+            out[a] = 0.5 / self.dz * np.einsum(
+                "q,qz->z", tw, S - Sb[:, None] * np.ones((1, self.Nz)))
+        return out
+
+    def _self_energies_nonlocal(self, rhoP, rhoC, rhop, rhom):
+        """Nonlocal G_s (S25 without Iex): exact inhomogeneous screening
+        of the LOCAL part; no Born smoothing of I0 needed (the charge
+        spread is exact). KNOWN APPROXIMATIONS beyond the S25-local
+        truncation: (i) Neumann walls on G leave an unsubtracted
+        same-sign image contribution ~ z^2 lB e^{-2 kappa z}/(4z) within
+        ~1-2 nm of the grafting wall (the mid-box bulk subtraction does
+        not remove it); (ii) the smearing stencil is clip-folded at the
+        boundaries. Validated against S33 in the homogeneous mid-box
+        limit only."""
+        wP = 1.0 if getattr(self, "include_polymer_I0", True) else 0.0
+        I0 = 0.5 * (wP * self.zP ** 2 * rhoP
+                    + self.zp ** 2 * rhop + rhoC + rhom)
+        Ib = 0.5 * (self.zp * (self.zp + 1.0)) * self.rho_b + self.c1
+        U = self._nonlocal_U(I0, Ib)
+        return (self.zP ** 2 * U[self.aP],
+                self.zp ** 2 * U[self.aplus],
+                1.0 * U[self.aion])
 
     # ---------------- chain density ----------------
     # Two backends:
@@ -251,9 +377,12 @@ class PRLBrushSCFT:
         input-sensitive and poisoned every outer solver; PB is convex, so
         guarded Newton converges globally.)
 
-        rhoC: CANONICAL MONOVALENT counterions (their semicanonical
-        ensemble, SI: n_C fixed, z_C=+1) with total per-area
-        |zP| sigma N, enabled by self.with_counterions. Their self-energy
+        Returned rhoC BUNDLES all monovalent cations: the GC background
+        c1 (see set_c1; nonzero whenever c1 > 0, regardless of
+        with_counterions) plus, when self.with_counterions, the CANONICAL
+        counterion cloud (their semicanonical ensemble, SI: n_C fixed,
+        z_C=+1, total per-area |zP| sigma N). The anion bulk is
+        zp rho_b + c1. Their self-energy
         equals um (same valence and radius as the anion). At rho_b >>
         alpha rho_P they are displaced by the multivalent cations (their
         S34 regime, where the GC-only model used before is equivalent);
@@ -272,19 +401,29 @@ class PRLBrushSCFT:
         def residual(p):
             bp = np.exp(-np.clip(self.zp * p + self.up, -300, 300))
             bm = np.exp(-np.clip(-p + self.um, -300, 300))
+            b1 = np.exp(-np.clip(p + self.um, -300, 300))
             rhop = self.rho_b * bp
-            rhom = self.zp * self.rho_b * bm
+            rho1 = self.c1 * b1                        # GC monovalent bg
+            rhom = (self.zp * self.rho_b + self.c1) * bm
             if nC_total > 0.0:
                 bC = np.exp(-np.clip(p + self.um, -300, 300))
-                rhoC = nC_total * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+                # virtual far reservoir (self.reservoir, nm): beyond the
+                # box the solution is flat bulk (psi=0, u_C=0, weight 1),
+                # so a huge box enters ONLY through this one number --
+                # analytically equivalent to L_eff = L + reservoir at no
+                # grid cost (the semicanonical onset scales with n_C/L_eff)
+                Vres = getattr(self, "reservoir", 0.0)
+                rhoC = nC_total * bC / max(
+                    np.trapz(bC, dx=self.dz) + Vres, 1e-280)
             else:
                 rhoC = 0.0
-            rho_e = self.zP * rhoP + rhoC + self.zp * rhop - rhom
+            rho_e = self.zP * rhoP + rhoC + rho1 + self.zp * rhop - rhom
             lap = np.empty_like(p)
             lap[1:-1] = (p[2:] - 2 * p[1:-1] + p[:-2]) / dz2
             lap[0] = (p[1] - p[0]) / dz2
             lap[-1] = (p[-2] - p[-1]) / dz2
-            return lap + 4.0 * np.pi * self.lB * rho_e, rhoC, rhop, rhom
+            return (lap + 4.0 * np.pi * self.lB * rho_e,
+                    rhoC + rho1, rhop, rhom)
 
         F, rhoC, rhop, rhom = residual(psi)
         fn = np.linalg.norm(F)
@@ -297,7 +436,7 @@ class PRLBrushSCFT:
             # local part of the Jacobian (the canonical-normalization
             # rank-1 term is omitted; the line search absorbs it)
             diagm = 4.0 * np.pi * self.lB * (self.zp ** 2 * rhop + rhom
-                                             + rhoC)
+                                             + rhoC)   # rhoC incl. c1 bg
             ab = np.zeros((3, self.Nz))
             ab[0, 1:] = 1.0 / dz2
             ab[2, :-1] = 1.0 / dz2
@@ -366,12 +505,14 @@ class PRLBrushSCFT:
                 bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
                 rhop = self.rho_b * bp
                 rhom = self.zp * self.rho_b * bm
+                b1 = np.exp(-np.clip(self.psi + self.um, -300, 300))
+                rhom = (self.zp * self.rho_b + self.c1) * bm
+                rhoC = self.c1 * b1
                 if getattr(self, "with_counterions", False):
-                    bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
                     nC = abs(self.zP) * self.sigma * self.N
-                    rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
-                else:
-                    rhoC = np.zeros(self.Nz)
+                    rhoC = rhoC + nC * b1 / max(
+                        np.trapz(b1, dx=self.dz)
+                        + getattr(self, "reservoir", 0.0), 1e-280)
 
             phiP = np.clip(self.v * rhoP, 0.0, 0.999)
             xi = -np.log(1.0 - phiP) - self.chi * phiP
@@ -403,7 +544,14 @@ class PRLBrushSCFT:
 
             rhoP = self._chain_density(self.W / self.N)
 
-            uP_new, up_new, um_new = self._self_energies(rhoP, rhoC, rhop, rhom)
+            # their m_G trick (SI Sec. II): the self-energy targets vary
+            # slowly, so recompute them only every u_every iterations
+            # (u_every=1 default = exact; the nonlocal-G backend benefits
+            # ~10x from u_every ~ 10 with no observable change)
+            nGu = getattr(self, "u_every", 1)
+            if it % nGu == 0 or not hasattr(self, "_u_targets"):
+                self._u_targets = self._self_energies(rhoP, rhoC, rhop, rhom)
+            uP_new, up_new, um_new = self._u_targets
             self.uP = (1 - lam_u) * self.uP + lam_u * uP_new
             self.up = (1 - lam_u) * self.up + lam_u * up_new
             self.um = (1 - lam_u) * self.um + lam_u * um_new
@@ -507,14 +655,15 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
+        b1 = np.exp(-np.clip(self.psi + self.um, -300, 300))
+        self.rhoC = self.c1 * b1          # GC monovalent background
         if getattr(self, "with_counterions", False):
-            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
             nC = abs(self.zP) * self.sigma * self.N
-            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
-        else:
-            self.rhoC = np.zeros(self.Nz)
+            self.rhoC = self.rhoC + nC * b1 / max(
+                np.trapz(b1, dx=self.dz)
+                + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
-        self.rhom = self.zp * self.rho_b * bm
+        self.rhom = (self.zp * self.rho_b + self.c1) * bm
         self.n_iter, self.err = it[0], float(np.abs(r).max() / self.N)
         return self.rhoP
 
@@ -571,14 +720,15 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
+        b1 = np.exp(-np.clip(self.psi + self.um, -300, 300))
+        self.rhoC = self.c1 * b1          # GC monovalent background
         if getattr(self, "with_counterions", False):
-            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
             nC = abs(self.zP) * self.sigma * self.N
-            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
-        else:
-            self.rhoC = np.zeros(self.Nz)
+            self.rhoC = self.rhoC + nC * b1 / max(
+                np.trapz(b1, dx=self.dz)
+                + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
-        self.rhom = self.zp * self.rho_b * bm
+        self.rhom = (self.zp * self.rho_b + self.c1) * bm
         self.n_iter = evals[0]
         self.err = float(np.abs(r).max() / self.N)
         return self.rhoP
@@ -651,14 +801,15 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
+        b1 = np.exp(-np.clip(self.psi + self.um, -300, 300))
+        self.rhoC = self.c1 * b1          # GC monovalent background
         if getattr(self, "with_counterions", False):
-            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
             nC = abs(self.zP) * self.sigma * self.N
-            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
-        else:
-            self.rhoC = np.zeros(self.Nz)
+            self.rhoC = self.rhoC + nC * b1 / max(
+                np.trapz(b1, dx=self.dz)
+                + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
-        self.rhom = self.zp * self.rho_b * bm
+        self.rhom = (self.zp * self.rho_b + self.c1) * bm
         self.n_iter = evals[0]
         self.err = float(np.abs(r).max() / self.N)
         return self.rhoP

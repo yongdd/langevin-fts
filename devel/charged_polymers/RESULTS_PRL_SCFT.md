@@ -489,6 +489,103 @@ point) with PRL-matched axis limits. Key facts:
   All three treatments recorded (`fig4cdC_*`, `fig4cdC10_*`,
   `fig4abC_*`).
 
+## 3l. The onset-lag mystery SOLVED: it is the box, not the theory
+(2026-08-28)
+
+Two decisive experiments after implementing the nonlocal G_s:
+
+1. **Stage A (exact inhomogeneous G_s, S25 local part)**: implemented as
+   `selfenergy="nonlocal"` — per transverse wavenumber q, the exact 1D
+   Green function of [(q^2-d2/dz2)/4 pi lB + 2 I0(z)] via half-line
+   continued-fraction recursions (O(Nz) per q, overflow-free), Gaussian
+   spread fixed analytically (|h(k)|^2 = e^{-k^2 a^2/pi}, derived from
+   their u(x) signature; homogeneous limit reproduces S33 to ~1% at
+   dz=0.125 — built-in validation; one bug found: discrete-delta
+   normalization G = A^{-1}/dz). VERDICT: the z2 sweep with exact G_s
+   overlaps the LDA curve (neutral crossing 6.7e-3 vs 8.4e-3 M, valley
+   identical): **the LDA is an excellent approximation here; stage A
+   moves the onset by only ~0.1 decade** (`prl_scft_stageA_z2.png`).
+   Their m_G lazy-update trick (SI: update G every m_G iterations;
+   ours: u_every=10) adopted for the slow-mixing fallback, ~10x.
+2. **Box-length contrast (L = 400/800/1600 nm, z2 LDA semicanonical)**:
+   neutral crossing = 1.77e-2 / 8.5e-3 / 3.9e-3 M — **exactly
+   proportional to 1/L** (c* L ~ 0.4 n_C). The canonical monovalent
+   counterion cloud dilutes into the reservoir volume, so the 1:z
+   ion-exchange threshold is set by the counterion reservoir
+   concentration n_C/L, NOT by bulk thermodynamics. Extrapolation: their
+   z2 crossing (~1e-3 M) corresponds to L ~ 6-7 um.
+
+CONCLUSION: the "~1-decade onset lag" attributed in 3j to the G_s-LDA
+truncation is in fact an ENSEMBLE-GEOMETRY effect — the semicanonical
+onset position is controlled by the unreported reservoir size. The
+paper and SI contain NO statement of box size, grid, or discretization
+(searched: box, Lz, system size, grid, lattice, domain, simulation
+cell, discretiz) — a genuine reproducibility gap uncovered by this
+reproduction. Corollaries: (i) the LDA is fully rehabilitated; (ii)
+Iex (stage B) is NOT implicated in the Fig-2 onset; (iii) our Fig-2
+curves can be brought onto theirs by the single knob L (a fit, not a
+derivation) — L ~ 6.5 um for z2 if desired.
+
+## 3m. Final graph-aligned Fig. 2/3: GC monovalent background c1
+(2026-08-28)
+
+Reformulation (user-driven): the canonical counterion cloud in a finite
+box is physically a MONOVALENT RESERVOIR; its transparent form is a GC
+1:1 background salt at concentration c1 (`set_c1`) — the experimental
+residual/buffer level. Consequences: (i) box-independence restored;
+(ii) L shrinks to the chain scale (L = 100 nm = 10 R0 validated: h
+shift 0.1% vs L=200, wall density 3e-9) since c1 >= 6 mM keeps
+kappa_b^-1 < 4 nm at ALL salts; (iii) the paper's full 8-decade range
+(1e-7..1 M) becomes reachable. Together with AM + per-point parallel
+warm starts (30-job chunks) a full 92-point sweep at tol 1e-6 runs in
+MINUTES (vs 6+ h serial).
+
+Calibration: the ion-exchange crossing responds as ~c1^1.2 (z2) and
+~c1^2.7 (z3) — no single c1 aligns both with the paper (their z2/z3
+crossing ratio 33 vs this theory tier's ~14; the ~0.4-decade residual
+is the irreducible signature of physics beyond G_s-LDA+background, e.g.
+their Iex). Graph-reproduction choice (user goal): per-valence c1,
+LABELED on the figure — z1: 10 mM (insensitive), z2: 6 mM (crossing
+9.2e-4 vs their ~1e-3), z3: 50 mM (crossing 2.1e-5 vs their ~3e-5).
+Valleys: z2 -0.42 (theirs -0.45), z3 -0.49 (theirs -0.58; the 50 mM
+background screening shallows it — documented trade-off). One recovery-
+branch spike at 0.22 M (z3) repaired by adiabatic recompute from its
+left neighbor. Figures `prl_scft_fig2.png` / `prl_scft_fig3.png` rebuilt
+on the paper's axes; data `fig2c1_z1_*`, `fig2c1f_z2_*`,
+`fig2c1g_z3_*.npz`.
+
+## 3n. Final-code rerun of the complete figure set (2026-08-28)
+
+At user request, ALL figure data was regenerated on the final code
+version (single code state: real-space hard wall, wall-centered graft,
+guarded PB, Born-regularized LDA, c1/counterion machinery present, AM,
+tol 1e-6), removing the code-era patchwork:
+- Fig 1 (`fig1F_z*.npz`): neutral 21.81; z1 36.52->32.19; z2
+  32.57->18.90; z3 30.28->14.46 — confirms the earlier v9 values
+  (differences < 0.3 nm from the tighter tolerance alone).
+- Fig 3 SCFT curves (`fig3F_z*_*.npz`): GC sweep rerun, all points
+  converged, observables via AA ion-sector re-equilibration.
+- Fig 2 (c1-aligned) and Fig 4 data were already final-code.
+- Fig 3 psi_S finding recorded: the paper's orange curve is their
+  Eq.-9 Donnan estimate by shape, but its amplitude (+2.5) is NOT
+  reproducible from their own plotted Gamma via Eq. 9 (would give +5);
+  our Eq.-9 (+3.9) and SCFT wall value (+0.9) bracket it. Their curve
+  originates in unpublished numerics — reproducibility gap alongside
+  the unreported box/discretization.
+Master builder: `dh_salt_runs/make_all_figs.py` regenerates all four
+figures from the canonical npz sets.
+
+FIG-4 DIFFERENCE STATEMENT (user-requested, recorded): the visual
+difference of Fig. 4(a,b) from the paper is DIMENSIONALITY — their
+hexagonal pinned-micelle lattice is a 3D calculation; ours is a 2D
+(x,z) pilot in which micelles can only appear as stripe cross-sections
+by construction. The lateral microphase separation itself (metastable
+uniform film; converged dome arrays phi~0.75, spacing 15-30 nm,
+near-bare gaps) is reproduced; the hexagonal arrangement requires a 3D
+extension (not undertaken). Fig. 4(c,d) matches in substance (layering
+at a+ = 1.5 A) and differs only in presentation (1D profiles vs their
+density renders).
+
 ## 4. Open items
 
 1. ~~Clean MF baselines, neutral, z1~~ (done, v6, §3d), ~~side-by-side
