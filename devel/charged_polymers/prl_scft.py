@@ -10,11 +10,17 @@ Model (SI Secs. 1.2, II, III):
 - Theta solvent (chi = 0.5 per monomer pair, v_P = v_S = v), ions with
   zero excluded volume; incompressibility rho_P v + rho_S v = 1 enforced
   by the pressure field xi.
-- Ions analytic (Boltzmann), ALL grand-canonical against a bulk z:1 salt
-  reservoir of ionic strength I_b > 0 (cations double as counterions;
-  a separate canonical counterion cloud is disabled — it produced
-  box-size artifacts. Salt-free I_b = 0 is NOT supported: the pure-
-  Neumann PB operator is singular without a screening reservoir).
+- Ions analytic (Boltzmann). Two ensembles:
+  * counterions=False (default): ALL ions grand-canonical against the
+    bulk z:1 salt reservoir (multivalent cations double as counterions;
+    == the fully-ion-exchanged limit, their S34 regime). I_b > 0
+    required (pure-Neumann PB is singular without a reservoir).
+  * counterions=True: their SEMICANONICAL ensemble — an additional
+    CANONICAL monovalent counterion cloud (n_C = |zP| sigma N per
+    area), needed for the Fig.-2 ion-exchange physics. CAVEAT: the
+    canonical cloud has a uniform far-field tail, so its brush
+    retention depends on the box length L (their finite-box numerics
+    share this); keep L fixed when comparing onsets.
 - Electrostatics: nonlinear Poisson for psi (in kT/e units),
   psi'' = -4 pi l_B sum_K z_K rho_K, Neumann at the wall, psi -> 0 in
   the bulk. Uniform dielectric (l_B = 0.7 nm for water/80).
@@ -54,19 +60,26 @@ class PRLBrushSCFT:
     exact-PB psi (`solve(..., psi_exact=True)`); `solve_lm` et al. are
     Newton-type alternatives kept for the record.
     Electrostatics: guarded-Newton nonlinear PB (analytic Boltzmann
-    ions, grand-canonical at finite salt; I_b > 0 required).
+    ions; GC salt + optional canonical monovalent counterions, see
+    module docstring). Production field update: AM-first with
+    simple-mixing fallback (see dh_salt_runs drivers).
     Correlations: LDA self-energies u_K = z^2 lB/(2a) [u(a kappa)-u(a kappa_b)]
     with kappa built from the Born-radius-smoothed local ionic strength.
     """
 
     def __init__(self, N=100, b=1.0, v=1.0, zP=-1.0, zplus=3, sigma=0.1,
                  Ib_molar=0.3, aP=0.25, aion=0.25, lB=0.7, chi=0.5,
-                 L=100.0, Nz=800, correlations=True):
+                 L=100.0, Nz=800, correlations=True, aplus=None,
+                 counterions=False):
         from polymerfts.propagator_solver import PropagatorSolver
         self.N, self.b, self.v = N, b, v
         self.zP, self.zp = zP, float(zplus)
         self.sigma = sigma
         self.aP, self.aion, self.lB, self.chi = aP, aion, lB, chi
+        # their Fig. 4(c,d) reduces only the CATION Born radius
+        self.aplus = aplus if aplus is not None else aion
+        # canonical monovalent counterions (their semicanonical ensemble)
+        self.with_counterions = counterions
         self.L, self.Nz = L, Nz
         self.dz = L / Nz
         self.z = (np.arange(Nz) + 0.5) * self.dz
@@ -123,7 +136,15 @@ class PRLBrushSCFT:
         if not self.corr:
             zz = np.zeros(self.Nz)
             return zz, zz, zz
-        I0 = 0.5 * (self.zP ** 2 * rhoP + self.zp ** 2 * (rhoC + rhop) + rhom)
+        # include_polymer_I0=False drops the polymer charge from the LDA
+        # screening (crude bound on their nonlocal chain-connectivity
+        # correction Iex, SI Eq. S25: connected charges do not screen
+        # like free ions; LDA-with-P over-screens, excluding-P
+        # under-screens -- the two bracket the full theory)
+        wP = 1.0 if getattr(self, "include_polymer_I0", True) else 0.0
+        # rhoC = MONOVALENT canonical counterions (z_C = +1)
+        I0 = 0.5 * (wP * self.zP ** 2 * rhoP
+                    + self.zp ** 2 * rhop + rhoC + rhom)
         # UV regularization of the LDA: an ion samples the ionic strength
         # within its Gaussian charge spread (Born radius a), so smooth I0
         # on that scale. Without this the pointwise LDA feedback loop
@@ -132,11 +153,12 @@ class PRLBrushSCFT:
         # (2*dz checkerboard). The paper's nonlocal G_s carries this
         # regularization intrinsically; smooth profiles are unaffected.
         from scipy.ndimage import gaussian_filter1d
-        I0 = gaussian_filter1d(I0, sigma=self.aion / self.dz, mode="reflect")
+        a_min = min(self.aion, self.aplus)
+        I0 = gaussian_filter1d(I0, sigma=a_min / self.dz, mode="reflect")
         kap = np.sqrt(np.maximum(8.0 * np.pi * self.lB * I0, 0.0))
         du = lambda a, zq: (zq ** 2) * self.lB / (2.0 * a) * \
             (self._u_fn(a * kap) - self._u_fn(a * self.kappa_b))
-        return du(self.aP, self.zP), du(self.aion, self.zp), du(self.aion, 1.0)
+        return du(self.aP, self.zP), du(self.aplus, self.zp), du(self.aion, 1.0)
 
     # ---------------- chain density ----------------
     # Two backends:
@@ -220,23 +242,28 @@ class PRLBrushSCFT:
         return phi
 
     # ---------------- nonlinear Poisson-Boltzmann (guarded Newton) ----------------
-    def _solve_pb(self, rhoP, nC_total, n_newton=200):
-        if getattr(self, "counterions_gc", True):
-            nC_total = 0.0
+    def _solve_pb(self, rhoP, nC_total=None, n_newton=200):
         """Given rho_P and the self-energy fields, solve
-        psi'' = -4 pi lB [zP rhoP + zp(rhoC(psi)+rhop(psi)) - rhom(psi)]
+        psi'' = -4 pi lB [zP rhoP + rhoC(psi) + zp rhop(psi) - rhom(psi)]
         with Neumann walls, GUARDED Newton: backtracking line search on the
-        residual 2-norm + a residual-based convergence test. (The previous
-        blind damping step=min(1, 2/|dpsi|max) capped at 60 iterations could
-        exit UNCONVERGED; a non-converged Newton iterate is a chaotically
-        input-sensitive quantity -- measured O(1) response to 1e-6 field
-        perturbations -- which poisoned every outer solver: FD Jacobians
-        were garbage, mixing saw noise kicks. PB is convex, so guarded
-        Newton converges globally.)"""
+        residual 2-norm + a residual-based convergence test. (An
+        iteration-capped unconverged Newton output is chaotically
+        input-sensitive and poisoned every outer solver; PB is convex, so
+        guarded Newton converges globally.)
+
+        rhoC: CANONICAL MONOVALENT counterions (their semicanonical
+        ensemble, SI: n_C fixed, z_C=+1) with total per-area
+        |zP| sigma N, enabled by self.with_counterions. Their self-energy
+        equals um (same valence and radius as the anion). At rho_b >>
+        alpha rho_P they are displaced by the multivalent cations (their
+        S34 regime, where the GC-only model used before is equivalent);
+        at low salt they neutralize the brush with only z^2=1
+        correlations -- this ion-exchange threshold IS the Fig.-2
+        collapse onset rho*_b."""
         from scipy.linalg import solve_banded
-        if self.rho_b <= 0.0:
-            # pure-Neumann PB without a salt reservoir is singular
-            # (solve_banded would return garbage psi, not crash)
+        with_C = getattr(self, "with_counterions", False)
+        nC_total = (abs(self.zP) * self.sigma * self.N) if with_C else 0.0
+        if self.rho_b <= 0.0 and not with_C:
             raise ValueError("PRLBrushSCFT requires I_b > 0 (GC salt "
                              "reservoir); salt-free PB is singular here.")
         dz2 = self.dz ** 2
@@ -247,21 +274,30 @@ class PRLBrushSCFT:
             bm = np.exp(-np.clip(-p + self.um, -300, 300))
             rhop = self.rho_b * bp
             rhom = self.zp * self.rho_b * bm
-            rho_e = self.zP * rhoP + self.zp * rhop - rhom
+            if nC_total > 0.0:
+                bC = np.exp(-np.clip(p + self.um, -300, 300))
+                rhoC = nC_total * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+            else:
+                rhoC = 0.0
+            rho_e = self.zP * rhoP + rhoC + self.zp * rhop - rhom
             lap = np.empty_like(p)
             lap[1:-1] = (p[2:] - 2 * p[1:-1] + p[:-2]) / dz2
             lap[0] = (p[1] - p[0]) / dz2
             lap[-1] = (p[-2] - p[-1]) / dz2
-            return lap + 4.0 * np.pi * self.lB * rho_e, rhop, rhom
+            return lap + 4.0 * np.pi * self.lB * rho_e, rhoC, rhop, rhom
 
-        F, rhop, rhom = residual(psi)
+        F, rhoC, rhop, rhom = residual(psi)
         fn = np.linalg.norm(F)
         f_tol = 1e-9 * max(1.0, 4.0 * np.pi * self.lB
-                           * float(np.abs(rhoP).max() + self.zp * self.rho_b))
+                           * float(np.abs(rhoP).max() + self.zp * self.rho_b
+                                   + (nC_total / self.L)))
         for _ in range(n_newton):
             if np.abs(F).max() < f_tol:
                 break
-            diagm = 4.0 * np.pi * self.lB * (self.zp ** 2 * rhop + rhom)
+            # local part of the Jacobian (the canonical-normalization
+            # rank-1 term is omitted; the line search absorbs it)
+            diagm = 4.0 * np.pi * self.lB * (self.zp ** 2 * rhop + rhom
+                                             + rhoC)
             ab = np.zeros((3, self.Nz))
             ab[0, 1:] = 1.0 / dz2
             ab[2, :-1] = 1.0 / dz2
@@ -271,19 +307,21 @@ class PRLBrushSCFT:
             dpsi = solve_banded((1, 1), ab, -F)
             t = 1.0
             while True:
-                F_try, rhop_t, rhom_t = residual(psi + t * dpsi)
+                F_try, rhoC_t, rhop_t, rhom_t = residual(psi + t * dpsi)
                 fn_try = np.linalg.norm(F_try)
                 if fn_try < fn or t < 1e-8:
                     psi = psi + t * dpsi
-                    F, rhop, rhom, fn = F_try, rhop_t, rhom_t, fn_try
+                    F, rhoC, rhop, rhom, fn = F_try, rhoC_t, rhop_t, rhom_t, fn_try
                     break
                 t *= 0.5
-        psi -= psi[-1]        # bulk gauge
+        if not with_C:
+            psi -= psi[-1]        # bulk gauge (with canonical C the far
+                                  # field fixes the gauge through the salt)
         self.psi = psi
-        bp = np.exp(-np.clip(self.zp * psi + self.up, -300, 300))
-        bm = np.exp(-np.clip(-psi + self.um, -300, 300))
-        rhoC = nC_total * bp / max(np.trapz(bp, dx=self.dz), 1e-280)
-        return rhoC, self.rho_b * bp, self.zp * self.rho_b * bm
+        _F, rhoC, rhop, rhom = residual(psi)
+        if np.isscalar(rhoC):
+            rhoC = np.zeros(self.Nz)
+        return rhoC, rhop, rhom
 
     # ---------------- main SCF loop ----------------
     def solve(self, max_iter=3000, tol=1e-7, lam_u=0.02, lam_psi=0.02,
@@ -322,11 +360,18 @@ class PRLBrushSCFT:
                 if mx * lam_psi > cap:
                     dpsi *= cap / (mx * lam_psi)
                 self.psi = psi_prev + lam_psi * dpsi
-            bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
-            bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
-            rhoC = np.zeros(self.Nz)
-            rhop = self.rho_b * bp
-            rhom = self.zp * self.rho_b * bm
+            if not psi_exact:
+                # re-evaluate densities at the relaxed psi
+                bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
+                bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
+                rhop = self.rho_b * bp
+                rhom = self.zp * self.rho_b * bm
+                if getattr(self, "with_counterions", False):
+                    bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
+                    nC = abs(self.zP) * self.sigma * self.N
+                    rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+                else:
+                    rhoC = np.zeros(self.Nz)
 
             phiP = np.clip(self.v * rhoP, 0.0, 0.999)
             xi = -np.log(1.0 - phiP) - self.chi * phiP
@@ -462,7 +507,12 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
-        self.rhoC = np.zeros(self.Nz)
+        if getattr(self, "with_counterions", False):
+            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
+            nC = abs(self.zP) * self.sigma * self.N
+            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+        else:
+            self.rhoC = np.zeros(self.Nz)
         self.rhop = self.rho_b * bp
         self.rhom = self.zp * self.rho_b * bm
         self.n_iter, self.err = it[0], float(np.abs(r).max() / self.N)
@@ -521,7 +571,12 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
-        self.rhoC = np.zeros(self.Nz)
+        if getattr(self, "with_counterions", False):
+            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
+            nC = abs(self.zP) * self.sigma * self.N
+            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+        else:
+            self.rhoC = np.zeros(self.Nz)
         self.rhop = self.rho_b * bp
         self.rhom = self.zp * self.rho_b * bm
         self.n_iter = evals[0]
@@ -596,7 +651,12 @@ class PRLBrushSCFT:
         self.rhoP = self._last_rhoP
         bp = np.exp(-np.clip(self.zp * self.psi + self.up, -300, 300))
         bm = np.exp(-np.clip(-self.psi + self.um, -300, 300))
-        self.rhoC = np.zeros(self.Nz)
+        if getattr(self, "with_counterions", False):
+            bC = np.exp(-np.clip(self.psi + self.um, -300, 300))
+            nC = abs(self.zP) * self.sigma * self.N
+            self.rhoC = nC * bC / max(np.trapz(bC, dx=self.dz), 1e-280)
+        else:
+            self.rhoC = np.zeros(self.Nz)
         self.rhop = self.rho_b * bp
         self.rhom = self.zp * self.rho_b * bm
         self.n_iter = evals[0]

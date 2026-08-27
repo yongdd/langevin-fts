@@ -330,6 +330,165 @@ Paper agreement unchanged (z2 ~19b, z3 ~14b). Salt sweeps rerun on the
 v9 states: `fig23v9_z{1,2,3}.npz` (submitted 2026-08-26; the quoted §3f
 v7-sweep structure is expected to carry over with ~0.2 nm shifts).
 
+## 3i. Full-figure campaign: their Figs. 2, 3, 4 (2026-08-26/27)
+
+**Fig. 2** (`prl_scft_fig2.png`; up-branch `fig2low_z*.npz` L=800 nm from
+low-salt swollen starts + the v9 anchored sweeps): with their
+normalization (h0 = common osmotic height; empirically their neutral
+line at log(h/h0) = -0.38 with our neutral 21.8 gives h0 = 52, and our
+z1 osmotic height IS 51.2), the **valley depths and locations match
+quantitatively**: z2 valley -0.445 @ 0.053 M (theirs -0.45), z3 valley
+-0.573 @ 1.3e-4 M (theirs -0.58); z1 monotone salted decrease, no
+valley (theirs too); high-salt recovery to the neutral line for z2/z3.
+NOT matched: the low-salt collapse ONSET — their z2 stays swollen to
+~1e-4..1e-3 M while ours is already collapsed at 5e-6 M (z3: theirs
+~1e-6..1e-5, ours < 3e-6): our G_s-LDA implementation over-binds at low
+bulk salt (the u(a kappa_b) -> 1 reference makes the brush interior a
+deep self-energy trap regardless of bulk dilution). No hysteresis: the
+swollen-start correlation ramp converges smoothly into the same
+collapsed states as the down-sweep at every reachable salt.
+
+CAUSE IDENTIFIED (SI Eq. S25): their numerics solve the FULL nonlocal
+Green-function equation
+  -div[eps grad G] + 2 I0(r) G + int dr'' 2 Iex(r,r'') G(r'',r') = delta,
+iterating G itself in their mixing loop (their SI numerical section
+lists G among the updated fields). Iex is the NONLOCAL chain-
+connectivity contribution of the polymer charges. Our implementation is
+the S33 LDA of the LOCAL part only: it counts polymer charges in I0 as
+if they were free screening ions, overestimating kappa_local and hence
+the self-energy trap depth -- ion over-binding and premature collapse
+at low bulk salt, exactly the observed direction. Where bulk salt
+dominates the screening (0.3 M Fig. 1, the Fig. 2 valley/reexpansion,
+Fig. 4 layering) the LDA is valid and agreement is quantitative; their
+own scaling results are likewise restricted to rho_b >> alpha rho_P
+(S34). Full agreement at low salt would require implementing the
+nonlocal S25 solver (contour-pair kernel Iex included) -- a
+substantially larger project, noted as the natural next step.
+
+**Fig. 3** (`prl_scft_fig3.png`, panels formatted as theirs): their
+plotted Gamma curves are reproduced by our algebraic Eq.-7 evaluation —
+z3 minimum -1.27 @ 0.2 M vs their ~-1.3 @ ~0.15 M, z2 minimum -0.20
+(theirs ~-0.25), z1 positive throughout with the shallow dip; the
+full-SCFT local Gamma tracks the same shapes at reduced amplitude.
+psi_S (normalized by sigma N v / h): positive bump ONLY for z+=3, z1/z2
+negative approaching zero — their central asymmetry. Amplitude of the
+z3 psi_S bump is smaller in our SCFT wall value (+0.4 normalized) than
+their curve (+2.5, which follows their Donnan estimate Eq. 9).
+
+**Fig. 4(c,d)** (`prl_scft_fig4cd.png`; 1D, z+=3, rho_b = 1 mM,
+sigma = 0.1): reducing ONLY the cation Born radius (new `aplus` param)
+a+ = 2.5 -> 2.0 -> 1.5 A gives smooth collapsed layers (phi = 0.76,
+0.80) for the first two and, at 1.5 A, **stationary oscillatory layers
+through the collapsed film — period ~1.1 nm ~ b, amplitude ±0.06,
+converged to 5e-4** — their predicted normal-direction microphase
+separation, obtained as a genuine converged solution. (Retrospective:
+the §3e grid-scale UV instability was this physical layering mode below
+threshold; at a+ = 1.5 A it is supercritical with a wavelength safely
+above the Born-smoothing scale.)
+
+**Fig. 4(a,b)** (`prl_scft_fig4ab.png`; NEW 2D code `prl_scft2d.py` —
+x-periodic × z-hard-wall, same physics promoted to 2D, sparse-LU
+guarded-Newton PB). Two-stage story:
+- First runs used effectively ANNEALED grafting (global-mass
+  normalization only) and showed dramatic lateral dewetting with
+  phi > 1 — an artifact. Fixed by the quenched-grafting division of
+  SI Eq. S30 (q~(r;1) = src/q_dagger(r;1)), which pins the lateral
+  graft distribution to uniform sigma; verified rho_bead1 ∝ src exactly.
+- With quenched grafting at their conditions (sigma = 0.03, z+=3,
+  1 mM): the uniform collapsed film is LINEARLY stable (noise decays at
+  all correlation strengths), but finite-amplitude stripe seeds at 15,
+  20, 30 nm spacing ALL converge (err 1e-3) to laterally structured
+  states with contrast 1.5-1.8: **an array of pinned dense domes
+  (phi ~ 0.75, height ~8 nm, width ~13 nm, near-bare gaps) — the 2D
+  cross-section of their pinned micelles**, coexisting with the
+  metastable uniform film (first-order lateral transition with a
+  nucleation barrier). Spacing selection among 15-30 nm is nearly
+  degenerate in this pilot; picking the equilibrium spacing needs a
+  free-energy evaluator (not in the 2D pilot) — future work, as is the
+  3D hexagonal arrangement.
+
+## 3j. Fig. 2 SOLVED: canonical monovalent counterions + Anderson mixing
+(2026-08-27)
+
+The remaining Fig.-2 discrepancy (no swollen plateau, collapse at all
+reachable low salt) had a MODEL cause, not (primarily) the LDA: their
+ensemble is SEMICANONICAL with a separate species of MONOVALENT
+counterions (SI: n_C fixed, z_C = +1) — our GC-only implementation let
+the multivalent salt cations neutralize the brush at any dilution, so
+z^2-strong correlations collapsed it everywhere. Physically, their
+collapse onset rho*_b is the 1:z ION-EXCHANGE threshold: at low salt
+the entropic cost of importing multivalent ions from a dilute reservoir
+keeps the brush neutralized by its own monovalent counterions (weak
+z^2=1 correlations -> osmotic swollen); their S34 ("counterions
+negligible at rho_b >> alpha rho_P") delimits exactly where our old
+model was valid — matching our old high-salt agreement.
+
+Implementation: `counterions=True` — canonical monovalent cloud (total
+|zP| sigma N per area) inside the guarded-Newton PB (canonical
+normalization rank-1 Jacobian term left to the line search), u_C = u_m
+(same valence/radius), valence-corrected I0. Control experiment: the
+polymer-exclusion I0 bracket (`include_polymer_I0=False`) does NOT
+restore the swollen branch — the counterion species is the dominant
+factor.
+
+Also: with the smooth real-space map, the repo ANDERSON MIXING now
+works (it was abandoned during the spectral-junk era and never retried
+— user's catch): benchmark 270 vs 12560 iterations (46x), 36 vs 296 s
+for identical states. The AM-first driver finished the z2/z3 campaigns
+in 4-9 min each vs hours.
+
+Final Fig. 2 (`prl_scft_fig2.png`, counterion curves spliced with the
+v9 high-salt tails where counterions are negligible): common osmotic
+h0 = 51-52 nm (matches their implied common h0 ~ 52); z1 plateau +
+monotone salted decrease; z2 S-collapse crossing neutral at ~8e-3 M,
+valley -0.448 @ 0.1-0.2 M (theirs -0.45); z3 crossing ~6e-4 M, valley
+-0.559 (theirs -0.58), recovery to neutral. Nested ordering identical
+to theirs. Residual gap: multivalent onsets ~1 decade above theirs
+(G_s-LDA truncation; their nonlocal G with Iex is the remaining
+refinement).
+
+CONSISTENCY CHECK (Fig-1 conditions with counterions, `fig1_ccheck.py`):
+z2 gives h = 23.6, Gamma = +0.11 (GC-only: 18.65 / -0.056; paper: ~19b
+with overcharging); z3 gives h = 17.2 (GC-only 14.46; paper ~14). So at
+0.3 M our counterion model has the 1:z ion exchange only PARTLY
+completed, while the paper's states there are fully exchanged. This is
+the SAME ~1-decade lag as the Fig.-2 onsets — one root cause: the
+G_s-LDA truncation under-favors multivalent condensation relative to
+their nonlocal G by about a decade in rho_b. Unified picture:
+- GC-only calculation == the fully-exchanged limit == their high-salt
+  states -> quantitative Fig. 1/3/4 agreement (kept as the Fig. 1
+  comparison of record);
+- counterion model reproduces the exchange transition itself (Fig. 2's
+  full S-structure) with the onset lag;
+- the single remaining refinement (nonlocal S25 G_s with Iex) should
+  reconcile both simultaneously.
+
+## 3k. Final figure set at tol = 1e-6 (2026-08-27, user-requested)
+
+All production figures regenerated at W-residual tolerance 1e-6
+(user instruction; the AM solver reaches it in O(100) iterations per
+point) with PRL-matched axis limits. Key facts:
+
+- **Fig. 2** (`fig2fine4_z{1,2,3}.npz`, 72/77/80 points, 10-20
+  pts/decade, single semicanonical model — the earlier kinks came from
+  (i) splicing GC-only high-salt tails onto counterion curves and
+  (ii) AM stopping-scatter at tol 5e-4 exciting the soft height mode;
+  both eliminated): max|d2 log h| = 0.0025 (z1). Full S-curves;
+  valleys z2 -0.43, z3 -0.56; recovery to neutral; onsets ~1 decade
+  above theirs (documented LDA lag).
+- **Fig. 3** rebuilt from the same runs (Gamma_loc, Eq.-7 Gamma, psi_S
+  saved per point after AA ion-sector equilibration).
+- **Fig. 4 model choice**: the paper-facing comparison uses GC-only
+  (= fully-exchanged limit) at their face-value rho_b = 1 mM, rerun at
+  tol 1e-6 (`fig4gc_a*.npz`); the semicanonical model at face-value
+  1 mM sits pre-exchange (no layers/micelles — consistent with the
+  lag), and at lag-corrected 10 mM restores collapse/micelles
+  (2D contrast 1.5, spacing 20 nm) but weakens the (c,d) layering
+  because shifting rho_b also shifts the reference screening kappa_b —
+  the lag-correction is exchange-faithful but not layering-faithful.
+  All three treatments recorded (`fig4cdC_*`, `fig4cdC10_*`,
+  `fig4abC_*`).
+
 ## 4. Open items
 
 1. ~~Clean MF baselines, neutral, z1~~ (done, v6, §3d), ~~side-by-side
