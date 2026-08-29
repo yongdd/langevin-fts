@@ -60,18 +60,29 @@ from electrostatics import ElectrostaticsReflecting
 
 
 class BrushChargedCLFTS(ChargedCLFTS):
-    """Charged CL-FTS with reflecting walls and grafted chains."""
+    """Charged CL-FTS with wall boxes (reflecting or absorbing-z
+    hard wall) and grafted chains."""
 
     def __init__(self, params, random_seed=None):
         dim = len(params["nx"])
         bc = params.get("bc", ["reflecting"] * (2 * dim))
-        if any(b != "reflecting" for b in bc):
-            raise ValidationError(
-                "BrushChargedCLFTS supports all-'reflecting' boxes only "
-                f"(got {bc}); pseudo-spectral solvers cannot mix periodic "
-                "and non-periodic axes.")
+        # reflecting/absorbing may be mixed ACROSS axes (repo-supported;
+        # cf. TestStressNonPeriodic a/a+r/r); periodic may not be mixed
+        # with non-periodic, and both faces of one axis must match.
+        # Chain z-absorbing + Neumann psi (ElectrostaticsReflecting is
+        # independent of the box bc) = the hard-wall brush convention:
+        # entropic depletion layer at the grafting wall, as in the PRL
+        # and the reimplemented SCFT (RESULTS_PRL_SCFT.md 3g).
         if len(bc) != 2 * dim:
             raise ValidationError(f"'bc' needs {2*dim} entries, got {len(bc)}.")
+        if any(b not in ("reflecting", "absorbing") for b in bc):
+            raise ValidationError(
+                f"BrushChargedCLFTS: bc must be reflecting/absorbing (got {bc}).")
+        for ax in range(dim):
+            if bc[2 * ax] != bc[2 * ax + 1]:
+                raise ValidationError(
+                    f"BrushChargedCLFTS: both faces of axis {ax} must share "
+                    f"one BC (got {bc[2*ax]}/{bc[2*ax+1]}).")
         platform = params.get("platform", "cpu-mkl")
         if platform not in ("cpu-mkl", "cpu-fftw", "cuda"):
             raise ValidationError(f"Unsupported platform '{platform}'.")
@@ -119,8 +130,11 @@ class BrushChargedCLFTS(ChargedCLFTS):
         nx = params["nx"]
         dz = params["lx"][-1] / nx[-1]
         width = float(params.get("graft_width", 0.2))
+        center = float(params.get("graft_center", 0.0))
+        # with absorbing z (hard wall) the sheet must sit OFF the wall
+        # (a wall-centered sheet is annihilated by the q=0 face)
         zc = (np.arange(nx[-1]) + 0.5) * dz
-        prof = np.exp(-0.5 * (zc / width) ** 2)
+        prof = np.exp(-0.5 * ((zc - center) / width) ** 2)
         prof /= prof.sum() * dz
         q_init_sheet = np.zeros(nx, dtype=np.complex128)
         q_init_sheet[...] = prof[(None,) * (len(nx) - 1)]
@@ -181,7 +195,7 @@ class BrushChargedCLFTS(ChargedCLFTS):
             self._psi_drift = drift
             self._psi_namp = namp
 
-        print("Brush charged CL-FTS: bc = all-reflecting, "
+        print(f"Brush charged CL-FTS: bc = {bc}, "
               f"graft labels = {sorted(set(graft_labels))}, platform = {platform}")
 
     # ------------------------------------------------------------------ #

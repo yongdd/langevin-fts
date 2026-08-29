@@ -231,6 +231,75 @@ within CL-FTS likely needs either the grand-canonical analytic-ion
 formulation (their Eq. S24) or a dedicated strong-coupling
 stabilization for the ψ sector — recorded as future work.
 
+## 3g. Verdict on their theory: LDA vs exact CL at matched parameters
+(2026-08-28)
+
+With the PRL correlation SCFT reimplemented and validated
+(RESULTS_PRL_SCFT.md), THEIR theory was applied to THIS campaign's
+microscopic system (Theta rungs; unit mapping lB = E/(4 pi N^2
+sqrt(nbar)), Born radii a_B = sqrt(pi) a_smear, sigma N v = phi_P Lz,
+rho_b = s rho0, reflecting chain wall, CL graft sheet width 0.2 R0;
+driver `dh_salt_runs/cl_compare.py`). Mean-field cross-validation:
+3-9% absolute agreement (residual = zeta_N=20 compressibility and the
+closed-box canonical ions vs GC — model-tier, cancels in differences).
+
+Differential verdict (z+=3, corr - MF, per the fixed-grid differential
+protocol):
+
+| u3      | LDA dh1 | CL dh1 (3 seeds) | ratio | LDA dGamma | CL dGamma |
+|---------|--------:|-----------------:|------:|-----------:|----------:|
+| 6.5 kT  | -0.227  | -0.126           | 1.8x  | -0.22      | -0.125    |
+| 13 kT   | -0.376  | -0.137 +/- 0.002 | 2.7x  | -0.39 (Gamma=-0.22, overcharged) | -0.126 (Gamma=+0.08) |
+
+**The variational-Gaussian LDA lacks the coupling saturation of the
+exact system**: doubling u3 doubles the LDA response but barely moves
+the CL one (the h^2-cutoff saturation of 3d). Its overshoot grows
+~linearly with coupling (1.8x -> 2.7x), and at u3 = 13 kT it predicts
+strong overcharging where three independent CL seeds pin Gamma > 0.
+Figure: `cl_vs_scft_fig1.png`. This completes the user-ordered final
+step (CL-FTS vs the reimplemented SCFT) at the Fig-1 level: the paper's
+theory is directionally right and quantitatively reliable only at weak
+coupling (u <~ few kT); its strong-coupling amplitudes (deep collapse,
+overcharging) are artifacts of the Gaussian approximation relative to
+the exact sampling of the same model.
+
+## 3h. Hard-wall correction and the final verdict (2026-08-28/29)
+
+User-caught: the campaign's reflecting boxes lack the wall depletion
+layer (profiles peaked AT the wall — unphysical for a grafted brush and
+unlike the PRL). Fixed: `brush_clfts.py` now supports absorbing-z
+(hard-wall) chains + off-wall graft sheet (`--wall hard`, sheet at 1 b);
+psi stays Neumann (independent Electrostatics). Verified: neutral MF
+profile now phi(wall)=0.0002 rising to its max at 0.47 R0. The full
+E=5e4 and E=1e5 rungs were rerun hard-wall (hw5_*/hw_*, MF quasi-saddle
++ 1-3 CL seeds each); MF cross-validation vs the mapped PRL-SCFT: 1-6%.
+
+Hard-wall verdict (z+=3, differentials):
+
+| u3     | LDA dh1        | CL dh1 (3 seeds)  | LDA Gamma | CL Gamma |
+|--------|----------------|-------------------|-----------|----------|
+| 6.5 kT | -0.190 (2.0x)  | -0.095 +/- 0.011  | -0.060 (overcharged) | +0.089 +/- 0.011 |
+| 12 kT  | -0.291 (2.3x)  | -0.129 +/- 0.026  | -0.248 | +0.092 +/- 0.005 |
+| 13 kT  | NO SOLUTION (electrolyte runaway) | -0.131 +/- 0.023 | runaway | +0.088 +/- 0.010 |
+
+The LDA runaway threshold was located by a deterministic u3 scan
+(`lda_threshold.py`): physical solutions up to u3 = 12 kT, runaway
+between 12 and 13 (u3* ~ 12.5). The u3 = 12 kT matched CL campaign
+(E = 9.28e4, `u12_*`) pins the verdict at the strongest physical-LDA
+point: exact contraction saturates (-0.095 -> -0.129 -> -0.131 across
+6.5/12/13 kT) while the LDA deepens toward its fold (-0.190 -> -0.291
+-> no solution), and the LDA's overcharging (Gamma to -0.25) is
+contradicted by three-seed-robust CL positives throughout.
+
+With the physical wall the Gaussian LDA fails EARLIER than with
+reflecting walls: at u3 = 6.5 kT it already predicts overcharging where
+the exact ensemble is robustly positive, and at 13 kT its electrolyte
+sector has no physical solution at all (the saturated-condensation
+runaway of RESULTS_PRL_SCFT.md 3b becomes the only branch), while CL
+remains well-behaved and saturating. Figure `cl_vs_scft_fig1.png`
+(hard-wall data). The differential CL verdict is wall-robust
+(reflecting: -0.126/-0.137; hard: -0.095/-0.131).
+
 ## 4. What is and is not reproduced
 
 Reproduced (this work): correlation-induced, valence-selective brush
@@ -254,3 +323,177 @@ bounded independent of u₃.
 `devel/charged_polymers/fig1_reproduction.png`. Drivers:
 `test_brush_pb.py`, `test_brush_cl.py` (with `--a_ion`,
 `--psi_dt_scaling`, lateral warm-start broadcast).
+
+## 3i. Hard-wall salt scan: Fig. 2/3 rerun (2026-08-29)
+
+The §3e/3f reflecting-wall campaigns rerun with the corrected hard-wall
+box (`--wall hard`: absorbing z faces + graft sheet at 1b), same grid
+convention as the §3h verdict campaign (16×16×288, lxy = 0.8, lz = 2.5,
+E = 1e5, u₃ ≈ 13 kT, a_ion = 0.025, 3 seeds/point, 60k steps;
+`hs_*` + the existing `hw_*` s = 0.02 rung):
+
+| salt | h₁(MF) | h₁(CL, 3 seeds) | Γ(CL) |
+|---:|---:|---:|---:|
+| 0.001 | 0.954 | 0.637 ± 0.016 | +0.008(9) |
+| 0.002 | 0.938 | 0.674 ± 0.011 | +0.011(10) |
+| 0.003 | 0.924 | 0.634 ± 0.011 | +0.012(9) |
+| 0.005 | 0.900 | 0.665 ± 0.035 | +0.025(12) |
+| 0.010 | 0.856 | 0.681 ± 0.036 | +0.050(14) |
+| 0.020 | 0.803 | 0.672 ± 0.032 | +0.088(16) |
+| 0.040 | 0.751 | 0.692 ± 0.013 | +0.144(27) |
+
+Hard-wall neutral CL reference: h₁ = 0.623. Findings (honest update of
+the §3e claims):
+
+1. **The correlation collapse vs mean field is large and robust**
+   (Δh₁ = −0.32 at s = 0.001, shrinking to −0.06 at 0.04); the MF curve
+   stays monotone-decreasing while CL is already collapsed at low salt.
+2. **The reflecting-era "5–10σ nonmonotonic valley" does NOT survive
+   the wall fix at this statistics.** The CL curve is nearly flat:
+   valley 0.634 ± 0.011 at s = 0.003 vs reexpanded 0.692 ± 0.013 at
+   0.04 is only ~3σ, and the s = 0.002 point (0.674 ± 0.011) breaks a
+   smooth descent. Verdict downgraded: weak/marginal nonmonotonicity,
+   not the deep collapse-and-reexpansion of their Fig. 2.
+3. **The collapsed brush now sits AT the neutral height** (valley
+   0.634 ± 0.011 vs neutral 0.623) — closer to the PRL picture than
+   the reflecting-era "plateau far above neutral", but still never
+   below it.
+4. **Γ rises monotonically with salt and stays positive everywhere**
+   (+0.008 → +0.144); the low-salt plateau is complete neutralization
+   (Γ = 0⁺), no overcharging — consistent with §3h at matched coupling.
+5. Lateral inhomogeneity persists at low salt (instantaneous column
+   rel. std 0.36–0.44; box-scale single cluster in 0.8 R₀ boxes) —
+   the Fig. 4 precursor survives the hard wall
+   (`lateral_snapshots_z3.png`, 6 snapshots/run via `--snaps`).
+
+Data: `dh_salt_runs/hs_*` (+ `launch_hs.sh`); figures
+`fig2_reproduction.png`, `lateral_snapshots_z3.png` (both now
+hard-wall). The a_ion = 0.0125 rung (`ha2_*`, Fig. 3 orange curve) —
+results appended below when complete.
+
+### 3i-b. 150k-step extension: the valley does not exist (2026-08-29)
+
+The 60k campaign's ~3σ ambiguity resolved by rerunning all 7 salt
+points at the OLD campaign's statistics (150k steps, production 120k,
+24000 samples, 3 seeds; `hsl_*`):
+
+| salt | h₁(CL, 150k) | Γ(CL, 150k) |
+|---:|---:|---:|
+| 0.001 | 0.640 ± 0.016 | +0.009(2) |
+| 0.002 | 0.642 ± 0.006 | +0.006(3) |
+| 0.003 | 0.643 ± 0.012 | +0.010(2) |
+| 0.005 | 0.660 ± 0.005 | +0.017(4) |
+| 0.010 | 0.662 ± 0.015 | +0.041(7) |
+| 0.020 | 0.674 ± 0.003 | +0.070(6) |
+| 0.040 | 0.683 ± 0.006* | +0.137(6)* |
+
+(*2 seeds: seed 12347 hit a late-time ψ excursion after 120k steps —
+the s = 0.04 point sits at the κ⁻¹ ≈ 2Δz resolution boundary, same
+mechanism that killed s = 0.08 in the reflecting era; the two
+surviving seeds agree to 0.0003.)
+
+**Verdict, final:** the hard-wall exact ensemble has NO valley and NO
+salted decrease — h₁(s) is monotone nondecreasing: a low-salt plateau
+at 0.640–0.643 (the neutral floor + ~0.02) followed by smooth
+reexpansion. The 60k zigzag (s = 0.002 at 0.674) was seed noise, and
+the reflecting-era "5–10σ valley at s = 0.003" was an artifact of the
+unphysical wall convention, not of statistics. Γ is monotone positive
+(+0.006 → +0.137), low-salt complete-neutralization plateau confirmed
+at 4× statistics. The PRL Fig. 2 nonmonotonic h(ρb) is therefore NOT
+reproduced by the exact ensemble at matched coupling in this window —
+only the collapse-to-neutral-floor and reexpansion halves survive.
+
+### 3i-c. Their theory on our system, salt axis: the Fig. 2 shape is the LDA (2026-08-29)
+
+To attribute the Fig. 2 disagreement, THEIR Gaussian-LDA theory (Part I
+implementation, hard wall, mapped parameters) was run over the same
+salt window at u₃ = 12 kT (`lda_salt_scan.py`, `lda_*/ldb_*`):
+
+| salt | LDA h₁ | LDA Γ | exact CL h₁ (150k) |
+|---:|---:|---:|---:|
+| 0.001 | RUNAWAY | — | 0.640 |
+| 0.002 | **0.401** (below neutral 0.589) | −0.109 | 0.642 |
+| 0.003 | RUNAWAY | — | 0.643 |
+| 0.005 | RUNAWAY | — | 0.660 |
+| 0.010 | 0.471 | −0.228 | 0.662 |
+| 0.020 | 0.502 | −0.248 | 0.674 |
+| 0.040 | 0.554 | −0.224 | 0.683 |
+
+**On the same microscopic system and window, the LDA reproduces the
+paper's Fig. 2 structure** — deep below-neutral collapse, salt-driven
+reexpansion, overcharging (Γ < 0 everywhere it converges) — and has NO
+solution over most of the low-salt regime (electrolyte runaway; the
+salt-axis face of the u₃* ≈ 12.5 kT fold of §3h; convergence near the
+fold is fragile — s = 0.002 holds a marginal solution while 0.003/0.005
+run away even under a 120k-iteration adiabatic ramp). The exact
+ensemble on the same system shows none of this. Conclusion: the
+difference between our Part II Fig. 2 and the paper's is not a
+reproduction failure but the Gaussian-approximation error itself.
+Figure: `fig2_reproduction.png` (three-curve overlay).
+
+### 3i-d. CORRECTION: the §3e/3i scans were the wrong axis for Fig. 2 (2026-08-30)
+
+All previous salt scans (reflecting AND hard-wall) had the brush
+counterions THEMSELVES trivalent (`charges["C"] = zp`), so the brush is
+multivalent-collapsed already at s → 0 and added salt can only screen:
+a monotone axis BY CONSTRUCTION. The PRL Fig. 2 axis is different —
+monovalent counterions + 1:1 background salt, with multivalent ions
+arriving ONLY via the added salt: extended (osmotic, low salt) →
+collapse (multivalent condensation) → reexpansion (salted). The §3i-b
+"no valley — refuted" verdict therefore over-reached: it refutes the
+valley on OUR axis (where their LDA also shows no valley in-window),
+but does not test the paper's axis. New campaign `f2_*`
+(--z_counter 1 --salt_bg 0.005, trivalent salt vf 1e-4 … 2e-2,
+6 pts × MF + 3 seeds, hard wall, E = 1e5): results below.
+
+### 3i-e. Hard-wall a_ion = 0.0125 rung (Fig. 3 orange, 2026-08-30)
+
+Halved ion smearing (32×32×288, psi_dt_scaling = 1, E = 5e4, 150k
+steps, 2 seeds; `ha2_*`):
+
+| salt | Γ(MF) | Γ(CL) | h₁(CL) |
+|---:|---:|---:|---:|
+| 0.003 | +0.281 | **−0.017 ± 0.017** | 0.63–0.70 |
+| 0.020 | +0.238 | +0.043 ± 0.019 | 0.66–0.68 |
+
+At doubled per-ion coupling the low-salt point sits AT zero
+(−0.017 ± 0.017): complete neutralization, and at most MARGINAL
+overcharging — a sign flip within 1σ, vs the LDA's robust −0.25 at
+comparable coupling. The reflecting-era +0.020(3) moves down slightly
+under the hard wall. More seeds would be needed to resolve a genuine
+sub-zero dip; the exact ensemble clearly saturates at neutrality
+rather than overshooting into the LDA's deep overcharging.
+
+### 3i-d results: the true axis reproduces the Fig. 2 mechanism (2026-08-30)
+
+`f2_*` campaign (monovalent counterions, salt_bg = 0.005, trivalent
+salt scanned; hard wall 3D 16×16×288, E = 1e5, 60k steps, 3 seeds;
+Γ recomputed charge-weighted — the JSON gamma_eff is wrong for
+z_counter ≠ zp):
+
+| s_tri | h₁(MF) | h₁(CL) | Γ_cw(CL) |
+|---:|---:|---:|---:|
+| 0.0001 | 1.098 | 1.071 ± 0.012 | +0.53 |
+| 0.0003 | 1.093 | 1.078 ± 0.013 | +0.54 |
+| 0.001 | 1.077 | 1.050 ± 0.009 | +0.49 |
+| 0.003 | 1.036 | 0.990 ± 0.008 | +0.41 |
+| 0.01 | 0.927 | 0.828 ± 0.013 | +0.22 |
+| 0.02 | 0.843 | 0.745 ± 0.005 | **+0.17 (min)** |
+| 0.04 | 0.769 | 0.709 ± 0.010 | +0.19 |
+| 0.06 | 0.737 | 0.701 ± 0.009 | +0.22 |
+
+Findings:
+1. **The Fig. 2 mechanism IS reproduced by exact CL on the correct
+   axis**: extended osmotic brush (1.07) → trivalent collapse → valley
+   floor 0.70 (slope → 0 between 0.04 and 0.06: −0.008 ± 0.013).
+   Collapse depth 35% (paper: ~64%). CL sits below MF at every point
+   (correlation-enhanced collapse), gap growing to 0.10.
+2. **Γ is nonmonotonic with a positive minimum** at s ≈ 0.02
+   (+0.17) — the paper's Fig. 3 valley SHAPE, without the sign flip.
+3. The reexpansion upturn lies just past the model's ionic-resolution
+   boundary (κ⁻¹ ≲ 2Δz beyond s ≈ 0.06); within the stable window we
+   resolve the collapse and the valley floor.
+4. The valley floor (0.70) stays ABOVE the neutral brush (0.623) —
+   the paper's below-neutral undershoot remains exclusive to the
+   Gaussian LDA (§3i-c overlay `lda_overlay.png`).
+Figure: `fig2_reproduction.png` (h₁ + Γ panels).

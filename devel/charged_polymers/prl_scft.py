@@ -326,10 +326,20 @@ class PRLBrushSCFT:
         is the exact discrete-chain impenetrable-wall rule and produces
         the ~1-2 b entropic depletion layer of their Fig. 1 (a 'reflect'
         mirror has no such entropy loss -- wall density was wrongly
-        maximal). Far wall: even mirror (nothing reaches it)."""
+        maximal). Far wall: even mirror (nothing reaches it).
+        chain_wall='reflect' switches the z=0 side to the even mirror
+        too -- matching the CL-FTS box (DCT reflecting walls, no
+        depletion) for like-for-like comparisons."""
         k = self._bond_kernel()
         H = (len(k) - 1) // 2
-        qp = np.concatenate([np.zeros(H), q, q[-1:-H - 1:-1]])
+        if H > len(q):
+            raise ValueError(f"bond kernel half-width {H} exceeds grid "
+                             f"{len(q)}; box too short for the bond length")
+        if getattr(self, "chain_wall", "hard") == "reflect":
+            left = q[H - 1::-1]
+        else:
+            left = np.zeros(H)
+        qp = np.concatenate([left, q, q[-1:-H - 1:-1]])
         return np.convolve(qp, k, mode="valid")
 
     def _chain_density_rs(self, VP):
