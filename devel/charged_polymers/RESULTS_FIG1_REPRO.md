@@ -497,3 +497,42 @@ Findings:
    the paper's below-neutral undershoot remains exclusive to the
    Gaussian LDA (§3i-c overlay `lda_overlay.png`).
 Figure: `fig2_reproduction.png` (h₁ + Γ panels).
+
+### 3i-f. Valence series + their theory on the true axis: final Fig. 2 (2026-08-30)
+
+Full valence series on the true axis (hard wall, 3D, E = 1e5; z₊=2:
+`f2z2_*` 2 seeds, z₊=1 control: `f2z1_*`; low-salt x-extension to
+vf 1e-6). All valences share one extended plateau within ±2%
+(h₀ = 1.068 = mean over all valences' points at s ≤ 1e-4):
+
+| s | z₊=1 CL | z₊=2 CL | z₊=3 CL |
+|---:|---:|---:|---:|
+| 1e-6…1e-4 | 1.059 | 1.042–1.065 | 1.071–1.081 |
+| 0.003 | 1.059 | 1.026 | 0.990 |
+| 0.02 | 1.009 | 0.870 | 0.745 |
+| 0.06 | 0.914 | 0.773 | 0.701 |
+
+Valence-ordered collapse (z₊=3 > 2 > 1; z₊=1 tracks MF = pure
+screening, no correlation collapse) — the paper's central mechanism,
+in the exact ensemble.
+
+Their theory on THIS system, same axis (`lf2_u12/u13_*`, mapped
+PRLBrushSCFT — note its counterion sector is GC-reservoir vs our
+canonical cloud; MF cross-validation on this axis is 6–12%, worse
+than the old axis's 1–6%):
+
+- u₃ = 12: NO solution (runaway) for s ≤ 0.003 — the 6 sampled points
+  spanning 3.5 decades of the low-salt window; solutions at 0.01–0.06
+  sit at log(h/h₀) = −0.32 … −0.23 (below its neutral, marginally so
+  at the 0.06 endpoint) with Γ = −0.17 … −0.25.
+- u₃ = 13 (the CL campaign's coupling): loses s = 0.01 as well.
+
+Final Fig. 2 verdict (figure `fig2_reproduction.png`, paper axes):
+exact CL reproduces the mechanism (plateau → ordered collapse →
+floor, nonmonotonic Γ) at depth −0.18, above neutral; their theory on
+the same system overshoots to −0.32/below-neutral/Γ<0 where it exists
+and has no solution at all over most of the paper's own x-range. The
+paper's −0.58 deep valley is unreachable for the exact ensemble and
+unreachable for their own theory on our system — it lives in their
+stronger-brush regime (N=100) where only their approximation has been
+evaluated.
