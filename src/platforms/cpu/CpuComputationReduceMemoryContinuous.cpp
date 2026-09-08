@@ -1578,23 +1578,15 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
         }
     }
 
-    // Find minimum and maximum of total_partitions
-    std::cout<< "Polymer id: maximum,  minimum, and difference of total partitions" << std::endl;
-    for(size_t p=0;p<total_partitions.size();p++)
+    // A uniform field shift can make Q arbitrarily small. Check the
+    // relative complex error against the Q actually used to normalize phi.
+    std::cout << "Polymer id: relative contour partition error" << std::endl;
+    for (size_t p = 0; p < total_partitions.size(); ++p)
     {
-        double max_partition = -1e20;
-        double min_partition =  1e20;
-        for(size_t n=0;n<total_partitions[p].size();n++)
-        {
-            if (std::abs(total_partitions[p][n]) > max_partition)
-                max_partition = std::abs(total_partitions[p][n]);
-            if (std::abs(total_partitions[p][n]) < min_partition)
-                min_partition = std::abs(total_partitions[p][n]);
-        }
-        double diff_partition = std::abs(max_partition - min_partition);
-
-        std::cout<< "\t" << p << ": " << max_partition << ", " << min_partition << ", " << diff_partition << std::endl;
-        if (diff_partition > PARTITION_TOLERANCE)
+        const double error = relative_partition_error(
+            total_partitions[p], this->single_polymer_partitions[p]);
+        std::cout << "\t" << p << ": " << error << std::endl;
+        if (!std::isfinite(error) || error > PARTITION_TOLERANCE)
             return false;
     }
     return true;

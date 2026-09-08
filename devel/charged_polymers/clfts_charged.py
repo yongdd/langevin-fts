@@ -33,15 +33,16 @@ Activated params (same as the L-FTS prototype): "charges", "zeta_n",
 "radiuses", "bjerrum_e" (= E) or "bjerrum_length" (= l_B/R0). Optional:
 "psi_dt_scaling" (mobility scaling of the psi update, default 1.0).
 
-Known limitations: no random copolymers; no Maxwell stress; restarting
-from a checkpoint restores psi if present (older checkpoints start it at
-zero and let it re-equilibrate).
+Known limitations: no random copolymers; no Maxwell stress. Checkpoints
+store both noise streams; old checkpoints lacking the psi RNG cannot
+resume the same stochastic trajectory.
 """
 import os
 import time
 import pathlib
 import itertools
 import logging
+import json
 
 import numpy as np
 from scipy.io import savemat, loadmat
@@ -61,6 +62,14 @@ def _drop_none_values(obj):
     if isinstance(obj, (list, tuple)):
         return [_drop_none_values(v) for v in obj if v is not None]
     return obj
+
+
+def _json_numpy(value):
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"Cannot serialize {type(value).__name__} to checkpoint JSON.")
 
 
 class _PerSpeciesSmearing:
@@ -143,6 +152,8 @@ class ChargedCLFTS(clfts.CLFTS):
             raise ValidationError(
                 "Charged-polymer mode requires 'bjerrum_e' (= E) or "
                 "'bjerrum_length' (= l_B/R0).")
+        if not np.isfinite(e_coupling) or e_coupling < 0:
+            raise ValidationError("Coulomb coupling E must be finite and nonnegative.")
 
         # Electroneutrality (per-segment fractions); also gives the psi
         # preconditioner data (unused in CL but kept for diagnostics).
@@ -167,6 +178,8 @@ class ChargedCLFTS(clfts.CLFTS):
         n_grid = self.cb.get_total_grid()
         self.psi = np.zeros(n_grid, dtype=np.complex128)
         self.psi_dt_scaling = float(params.get("psi_dt_scaling", 1.0))
+        if not np.isfinite(self.psi_dt_scaling) or self.psi_dt_scaling <= 0:
+            raise ValidationError("psi_dt_scaling must be finite and positive.")
 
         # ETD (exact-OU) coefficients for the linear part of the psi
         # update (see run()): decay a, drift (1-a)E/k^2, and the per-mode
@@ -177,8 +190,8 @@ class ChargedCLFTS(clfts.CLFTS):
             gamma = self.electro.k_sq / e_coupling
             a_dec = np.exp(-gamma * dt * s)
             with np.errstate(divide="ignore", invalid="ignore"):
-                drift = (1.0 - a_dec) * e_coupling / self.electro.k_sq
-                namp = np.sqrt((1.0 - a_dec**2) / (2.0 * gamma * dt))
+                drift = -np.expm1(-gamma * dt * s) / gamma
+                namp = np.sqrt(-np.expm1(-2.0 * gamma * dt * s) / (2.0 * gamma * dt))
             zero = tuple([0] * self.electro.dim)
             drift[zero] = dt * s
             namp[zero] = np.sqrt(s)
@@ -219,6 +232,8 @@ class ChargedCLFTS(clfts.CLFTS):
     def _psi_force(self, phi):
         """lambda_psi = dH/dpsi = lap(psi)/E + c (complex), and c itself."""
         c = self.electro.charge_density(phi)
+        if self.electro.e_coupling == 0:
+            return np.zeros_like(c), c
         psi_hat = np.fft.fftn(np.reshape(self.psi, self.electro.nx))
         lap = np.fft.ifftn(-self.electro.k_sq * psi_hat).reshape(-1)
         return lap / self.electro.e_coupling + c, c
@@ -226,6 +241,8 @@ class ChargedCLFTS(clfts.CLFTS):
     # ------------------------------------------------------------------ #
     def compute_concentrations(self, w_aux):
         """Charged version: complex propagator inputs W_i = h_i*(W_SPT + z_i psi)."""
+        if self.electro.e_coupling == 0:
+            self.psi.fill(0.)
         M = len(self.monomer_types)
         elapsed_time = {}
 
@@ -252,20 +269,47 @@ class ChargedCLFTS(clfts.CLFTS):
 
     # ------------------------------------------------------------------ #
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
-        """Mainline checkpoint plus the psi field and its LM noise."""
+        """Mainline checkpoint plus the independent electrostatic RNG."""
         super().save_simulation_data(path, w, phi, langevin_step, normal_noise_prev)
         data = loadmat(path, squeeze_me=False)
+        # Empty MATLAB structs (e.g. integer-key graft maps) do not roundtrip
+        # through scipy's structured arrays. Reuse the original clean params.
+        data["initial_params"] = self.params
+        # MATLAB field names cannot represent integer graft vertices.
+        data["initial_params_json"] = json.dumps(self.params, default=_json_numpy)
         data["psi_real"] = np.real(self.psi)
         data["psi_imag"] = np.imag(self.psi)
+        data["psi_rng_state_json"] = json.dumps(self._random_psi.bit_generator.state)
+        if hasattr(self.solver, "get_log_partition"):
+            logq = np.array([self.solver.get_log_partition(p)
+                             for p in range(len(self.distinct_polymers))])
+            data["chain_log_partition_real"] = logq.real
+            data["chain_log_partition_imag"] = logq.imag
+        if hasattr(self, "w_shifts"):
+            data["w_shifts_json"] = json.dumps(self.w_shifts, sort_keys=True)
+            data["brush_chain_model_json"] = json.dumps({k: self.params.get(k) for k in
+                ("chain_backend", "grafting", "bond_boundaries", "graft_width", "graft_center", "bc")},
+                sort_keys=True)
         savemat(path, data, long_field_names=True, do_compression=True)
 
     def continue_run(self, file_name):
         """Continue from a checkpoint, restoring psi if present."""
         data = loadmat(file_name, squeeze_me=True)
+        if "w_shifts_json" in data and json.loads(str(data["w_shifts_json"])) != getattr(self, "w_shifts", None):
+            raise ValidationError("Checkpoint w_shifts differ from the requested brush model.")
+        if "brush_chain_model_json" in data:
+            saved = json.loads(str(data["brush_chain_model_json"]))
+            if saved != {k: self.params.get(k) for k in saved}:
+                raise ValidationError("Checkpoint grafting/bond model differs from requested model.")
+        if "psi_rng_state_json" in data:
+            self._random_psi.bit_generator.state = json.loads(str(data["psi_rng_state_json"]))
+        else:
+            logger.warning("Checkpoint lacks psi RNG state; continuation is not trajectory-exact.")
         if "psi_real" in data:
             self.psi = np.asarray(data["psi_real"]).reshape(-1) \
                 + 1j * np.asarray(data["psi_imag"]).reshape(-1)
         else:
+            self.psi.fill(0.)
             print("Note: checkpoint has no psi field; psi restarts from zero.")
         super().continue_run(file_name)
 
@@ -274,7 +318,7 @@ class ChargedCLFTS(clfts.CLFTS):
         """CL loop with the psi field co-evolved (copy of CLFTS.run + psi).
 
         The psi update is inserted right after the w_aux update; the
-        Hamiltonian gains the explicit -(1/2V) int c psi term; the printed
+        Hamiltonian gains the explicit (1/2EV) int psi lap(psi) term; the printed
         error block gains std(lambda_psi) as the Poisson-residual monitor.
         """
         print("---------- Run (charged CL-FTS) ----------")
@@ -339,47 +383,8 @@ class ChargedCLFTS(clfts.CLFTS):
             # (pre-update psi, consistent with phi/Q): (1/2E V) int psi
             # lap(psi) = (1/2) mean(psi (lambda_psi - c)); reduces to
             # -(1/2) mean(c psi) at the Poisson saddle.
-            h_elec = 0.5 * np.mean(self.psi * (psi_lambda - charge_c))
-
-            # ---- update w_aux (identical to mainline CLFTS) ----
-            normal_noise_current = self.random.normal(
-                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
-            for i in active:
-                scaling = self.dt_scaling[i]
-                if i in self.mpt.aux_fields_real_idx:
-                    noise_factor = 1.0
-                else:
-                    noise_factor = 1j
-                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
-                             0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
-            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
-
-            # ---- update psi (imaginary-type: +lambda drift, i-noise) ----
-            # The linear lap(psi)/E part (rate gamma_k = k^2/E) is stiff at
-            # high k, and both explicit Euler (unstable) and semi-implicit
-            # Euler (stationary variance suppressed by 1/(1+2 kappa dt) per
-            # mode — ruins fluctuation thermodynamics) fail. Use ETD
-            # (exact OU integration) per k-mode:
-            #   psi_hat' = a psi_hat + (1-a) E c_hat/k^2 + i amp_k xi_hat,
-            #   a = exp(-gamma_k dt s),
-            #   amp_k = sigma sqrt((1-a^2)/(2 gamma_k dt))  (-> sigma
-            #   sqrt(s) as gamma -> 0),
-            # which reproduces the exact per-mode stationary variance of
-            # the linear part for ANY dt. The c[psi] screening part of the
-            # drift stays explicit (per-step rate <= sum z^2 phibar dt).
-            if self.electro.e_coupling > 0.0:
-                xi = self._random_psi.normal(
-                    0.0, self.langevin["sigma"], self.cb.get_total_grid())
-                psi_hat = np.fft.fftn(np.reshape(self.psi, self.electro.nx))
-                c_hat = np.fft.fftn(np.reshape(charge_c, self.electro.nx))
-                xi_hat = np.fft.fftn(np.reshape(xi, self.electro.nx))
-                psi_hat = (self._psi_decay * psi_hat
-                           + self._psi_drift * c_hat
-                           + 1j * self._psi_namp * xi_hat)
-                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
-                self.psi = np.ascontiguousarray(np.fft.ifftn(psi_hat).reshape(-1))
-            # E = 0: no Coulomb interaction — psi has infinite stiffness
-            # (k^2/E -> inf) and stays pinned at zero.
+            h_elec = (0.5 * np.mean(self.psi * (psi_lambda - charge_c))
+                      if self.electro.e_coupling > 0 else 0.0)
 
             # ---- monitoring ----
             h_deriv = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
@@ -469,8 +474,50 @@ class ChargedCLFTS(clfts.CLFTS):
                 for key in sf_average:
                     sf_average[key][:] = 0.0
 
+            # Advance only after sampling the consistent pre-update state.
+            # ---- update w_aux (identical to mainline CLFTS) ----
+            normal_noise_current = self.random.normal(
+                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
+            for i in active:
+                scaling = self.dt_scaling[i]
+                if i in self.mpt.aux_fields_real_idx:
+                    noise_factor = 1.0
+                else:
+                    noise_factor = 1j
+                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
+                             0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
+            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+
+            # ---- update psi (imaginary-type: +lambda drift, i-noise) ----
+            # The linear lap(psi)/E part (rate gamma_k = k^2/E) is stiff at
+            # high k, and both explicit Euler (unstable) and semi-implicit
+            # Euler (stationary variance suppressed by 1/(1+2 kappa dt) per
+            # mode — ruins fluctuation thermodynamics) fail. Use ETD
+            # (exact OU integration) per k-mode:
+            #   psi_hat' = a psi_hat + (1-a) E c_hat/k^2 + i amp_k xi_hat,
+            #   a = exp(-gamma_k dt s),
+            #   amp_k = sigma sqrt((1-a^2)/(2 gamma_k dt))  (-> sigma
+            #   sqrt(s) as gamma -> 0),
+            # which reproduces the exact per-mode stationary variance of
+            # the linear part for ANY dt. The c[psi] screening part of the
+            # drift stays explicit (per-step rate <= sum z^2 phibar dt).
+            if self.electro.e_coupling > 0.0:
+                xi = self._random_psi.normal(
+                    0.0, self.langevin["sigma"], self.cb.get_total_grid())
+                psi_hat = np.fft.fftn(np.reshape(self.psi, self.electro.nx))
+                c_hat = np.fft.fftn(np.reshape(charge_c, self.electro.nx))
+                xi_hat = np.fft.fftn(np.reshape(xi, self.electro.nx))
+                psi_hat = (self._psi_decay * psi_hat
+                           + self._psi_drift * c_hat
+                           + 1j * self._psi_namp * xi_hat)
+                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
+                self.psi = np.ascontiguousarray(np.fft.ifftn(psi_hat).reshape(-1))
+            # E = 0: no Coulomb interaction — psi has infinite stiffness
+            # (k^2/E -> inf) and stays pinned at zero.
+
             if langevin_step % self.recording["recording_period"] == 0:
                 w = self.mpt.to_monomer_fields(w_aux)
+                phi, _ = self.compute_concentrations(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
                     w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)

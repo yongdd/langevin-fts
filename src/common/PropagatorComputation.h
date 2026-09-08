@@ -75,8 +75,9 @@
 #include "PropagatorComputationOptimizer.h"
 #include "SpaceGroup.h"
 #include "Exception.h"
+#include "PartitionFunctionCheck.h"
 
-/// Tolerance for partition function consistency check in check_total_partition()
+/// Relative tolerance for contour partition consistency (including complex phase).
 constexpr double PARTITION_TOLERANCE = 1e-7;
 
 /**

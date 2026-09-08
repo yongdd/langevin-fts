@@ -1,4 +1,4 @@
-"""Grafted-brush charged CL-FTS in an all-reflecting (wall) box.
+"""Grafted-brush charged CL-FTS in a wall box.
 
 Stage 2 of the PRL-2025 reproduction plan (Duan/Agrawal/Wang, PRL 134,
 048101 — references/2025_prl_duan.pdf): inhomogeneous polyelectrolyte
@@ -12,8 +12,8 @@ All six faces 'reflecting' (the pseudo-spectral solvers reject mixing
 periodic with non-periodic axes). The wall carrying the brush is the
 z=0 face (last axis); the opposite face at z=Lz acts as a mirror, so the
 far region doubles as a bulk salt reservoir when Lz is large enough.
-Lateral reflecting faces are mirrors too — harmless for z-resolved
-profiles; lateral structure (pinned micelles) is only mildly pinned.
+Lateral reflecting faces are mirrors too; lateral structure and finite-size
+effects must be checked before comparison with a periodic or infinite brush.
 
 What changes vs ChargedCLFTS
 ----------------------------
@@ -22,10 +22,11 @@ What changes vs ChargedCLFTS
    for every graft label a wall-attached GAUSSIAN sheet (width
    "graft_width", default 0.2; normalized to unit line integral) is
    passed as q_init — a one-cell delta rings on the pseudo-spectral
-   propagator at strong coupling. Grafting is laterally annealed
-   (uniform source sheet), matching the quenched average of SI Eq. S31
-   of the PRL for laterally uniform grafting. NOTE: checkpoints do not
-   record w_shifts; restarts must pass the same "w_shifts" params.
+   propagator at strong coupling. The legacy spectral source is laterally
+   annealed. It is NOT the quenched ensemble of SI Eq. S31 in fluctuating
+   lateral fields. Select chain_backend='direct', grafting='quenched' for
+   the scaled direct Gaussian reference backend (CPU or CuPy CUDA).
+   A graft_width of zero pins each anchor to the nearest cell.
 2. psi sector: ElectrostaticsReflecting (DCT-II basis, k_d = pi n_d/L_d,
    Neumann walls = neutral non-polarizable mirrors). The ETD
    (exact-OU-per-mode) integrator carries over verbatim — the linear
@@ -60,19 +61,28 @@ from electrostatics import ElectrostaticsReflecting
 
 
 class BrushChargedCLFTS(ChargedCLFTS):
-    """Charged CL-FTS with wall boxes (reflecting or absorbing-z
-    hard wall) and grafted chains."""
+    """Charged CL-FTS with reflecting/Dirichlet chain walls and grafted chains.
+
+    The direct backend also supports explicitly truncated Gaussian bonds.
+    """
 
     def __init__(self, params, random_seed=None):
+        backend = params.get("chain_backend", "spectral")
+        grafting = params.get("grafting", "annealed")
+        if backend not in ("spectral", "direct"):
+            raise ValidationError("chain_backend must be 'spectral' or 'direct'.")
+        if grafting not in ("annealed", "quenched"):
+            raise ValidationError("grafting must be 'annealed' or 'quenched'.")
+        if backend != "direct" and (grafting != "annealed" or "bond_boundaries" in params):
+            raise ValidationError("Quenched grafting/custom bond boundaries require chain_backend='direct'.")
         dim = len(params["nx"])
         bc = params.get("bc", ["reflecting"] * (2 * dim))
         # reflecting/absorbing may be mixed ACROSS axes (repo-supported;
         # cf. TestStressNonPeriodic a/a+r/r); periodic may not be mixed
         # with non-periodic, and both faces of one axis must match.
-        # Chain z-absorbing + Neumann psi (ElectrostaticsReflecting is
-        # independent of the box bc) = the hard-wall brush convention:
-        # entropic depletion layer at the grafting wall, as in the PRL
-        # and the reimplemented SCFT (RESULTS_PRL_SCFT.md 3g).
+        # ElectrostaticsReflecting is independent of the chain box BC.
+        # Absorbing DST uses a Dirichlet image kernel. The discrete truncated
+        # Gaussian wall in prl_scft requires direct + hard-reflecting instead.
         if len(bc) != 2 * dim:
             raise ValidationError(f"'bc' needs {2*dim} entries, got {len(bc)}.")
         if any(b not in ("reflecting", "absorbing") for b in bc):
@@ -134,12 +144,22 @@ class BrushChargedCLFTS(ChargedCLFTS):
         # with absorbing z (hard wall) the sheet must sit OFF the wall
         # (a wall-centered sheet is annihilated by the q=0 face)
         zc = (np.arange(nx[-1]) + 0.5) * dz
-        prof = np.exp(-0.5 * ((zc - center) / width) ** 2)
+        if not np.isfinite(width) or width < 0 or not 0 <= center < params["lx"][-1]:
+            raise ValidationError("Require graft_width >= 0 and graft_center inside the box.")
+        if width == 0:
+            prof = np.zeros(nx[-1])
+            prof[np.argmin(abs(zc-center))] = 1.
+        else:
+            exponent = -0.5 * ((zc - center) / width) ** 2
+            prof = np.exp(exponent-exponent.max())
         prof /= prof.sum() * dz
         q_init_sheet = np.zeros(nx, dtype=np.complex128)
         q_init_sheet[...] = prof[(None,) * (len(nx) - 1)]
         q_init_sheet = np.ascontiguousarray(q_init_sheet.reshape(-1))
         self.q_init = {label: q_init_sheet for label in set(graft_labels)}
+        if backend == "direct":
+            from stable_grafted_chain import StableBrushSolver
+            self.solver = StableBrushSolver(params, self.distinct_polymers, self.segment_lengths)
 
         # ---- frozen per-species re-gauge shifts (from the SCFT saddle) ----
         # Canonical densities are invariant under W_t -> W_t - s_t; the
@@ -186,8 +206,8 @@ class BrushChargedCLFTS(ChargedCLFTS):
             gamma = self.electro.k_sq / e_coupling
             a_dec = np.exp(-gamma * dt * s)
             with np.errstate(divide="ignore", invalid="ignore"):
-                drift = (1.0 - a_dec) * e_coupling / self.electro.k_sq
-                namp = np.sqrt((1.0 - a_dec**2) / (2.0 * gamma * dt))
+                drift = -np.expm1(-gamma * dt * s) / gamma
+                namp = np.sqrt(-np.expm1(-2.0 * gamma * dt * s) / (2.0 * gamma * dt))
             zero = tuple([0] * self.electro.dim)
             drift[zero] = dt * s
             namp[zero] = np.sqrt(s)
@@ -196,12 +216,15 @@ class BrushChargedCLFTS(ChargedCLFTS):
             self._psi_namp = namp
 
         print(f"Brush charged CL-FTS: bc = {bc}, "
-              f"graft labels = {sorted(set(graft_labels))}, platform = {platform}")
+              f"graft labels = {sorted(set(graft_labels))}, platform = {platform}, "
+              f"chain_backend = {backend}, grafting = {grafting}")
 
     # ------------------------------------------------------------------ #
     def _psi_force(self, phi):
         """dH/dpsi = lap(psi)/E + c in the wall (DCT) basis."""
         c = self.electro.charge_density(phi)
+        if self.electro.e_coupling == 0:
+            return np.zeros_like(c), c
         psi_hat = self.electro._t(np.reshape(self.psi, self.electro.nx))
         lap = self.electro._it(-self.electro.k_sq * psi_hat).reshape(-1)
         return lap / self.electro.e_coupling + c, c
@@ -209,6 +232,8 @@ class BrushChargedCLFTS(ChargedCLFTS):
     # ------------------------------------------------------------------ #
     def compute_concentrations(self, w_aux):
         """Parent's charged propagator inputs + grafted q_init sources."""
+        if self.electro.e_coupling == 0:
+            self.psi.fill(0.)
         M = len(self.monomer_types)
         elapsed_time = {}
 
@@ -225,6 +250,8 @@ class BrushChargedCLFTS(ChargedCLFTS):
         self.solver.compute_propagators(
             w_input_for_propagator,
             q_init=self.q_init if self.q_init else None)
+        if not self.solver.check_total_partition():
+            raise FloatingPointError("Brush propagators failed relative complex partition consistency.")
         elapsed_time["solver"] = time.time() - time_solver_start
 
         time_phi_start = time.time()
@@ -235,6 +262,19 @@ class BrushChargedCLFTS(ChargedCLFTS):
         elapsed_time["phi"] = time.time() - time_phi_start
 
         return phi, elapsed_time
+
+    def _chain_hamiltonian(self, w_aux, total_partitions):
+        """Use log partitions directly when the reference solver scales Q."""
+        if not hasattr(self.solver, "get_log_partition"):
+            return self.mpt.compute_hamiltonian(
+                self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+        h = self.mpt.compute_hamiltonian(
+            self.molecules, w_aux, [1.]*len(self.distinct_polymers), self.cb,
+            include_const_term=True)
+        for p, polymer in enumerate(self.distinct_polymers):
+            alpha = sum(b["length"] for b in polymer["blocks"])
+            h -= polymer["volume_fraction"]/alpha * self.solver.get_log_partition(p)
+        return h
 
     # ------------------------------------------------------------------ #
     def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
@@ -283,34 +323,8 @@ class BrushChargedCLFTS(ChargedCLFTS):
                         w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
 
             psi_lambda, charge_c = self._psi_force(phi)
-            h_elec = 0.5 * np.mean(self.psi * (psi_lambda - charge_c))
-
-            # ---- update w_aux (identical to mainline CLFTS) ----
-            normal_noise_current = self.random.normal(
-                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
-            for i in active:
-                scaling = self.dt_scaling[i]
-                if i in self.mpt.aux_fields_real_idx:
-                    noise_factor = 1.0
-                else:
-                    noise_factor = 1j
-                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
-                             0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
-            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
-
-            # ---- update psi: ETD per DCT mode (same scheme, wall basis) ----
-            if self.electro.e_coupling > 0.0:
-                xi = self._random_psi.normal(
-                    0.0, self.langevin["sigma"], self.cb.get_total_grid())
-                psi_hat = self.electro._t(np.reshape(self.psi, self.electro.nx))
-                c_hat = self.electro._t(np.reshape(charge_c, self.electro.nx))
-                xi_hat = self.electro._t(np.reshape(xi, self.electro.nx))
-                psi_hat = (self._psi_decay * psi_hat
-                           + self._psi_drift * c_hat
-                           + 1j * self._psi_namp * xi_hat)
-                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
-                self.psi = np.ascontiguousarray(
-                    self.electro._it(psi_hat).reshape(-1))
+            h_elec = (0.5 * np.mean(self.psi * (psi_lambda - charge_c))
+                      if self.electro.e_coupling > 0 else 0.0)
 
             # ---- monitoring ----
             h_deriv = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
@@ -321,8 +335,7 @@ class BrushChargedCLFTS(ChargedCLFTS):
 
             total_partitions = [self.solver.get_total_partition(p)
                                 for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(
-                self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+            hamiltonian = self._chain_hamiltonian(w_aux, total_partitions)
             hamiltonian += h_elec + self._h_shift_correction
 
             if self.verbose_level >= 1:
@@ -360,8 +373,37 @@ class BrushChargedCLFTS(ChargedCLFTS):
             # NOTE: FFT structure-function diagnostics of the periodic code
             # are meaningless in the wall basis and are omitted.
 
+            # Advance only after sampling the consistent pre-update state.
+            # ---- update w_aux (identical to mainline CLFTS) ----
+            normal_noise_current = self.random.normal(
+                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
+            for i in active:
+                scaling = self.dt_scaling[i]
+                if i in self.mpt.aux_fields_real_idx:
+                    noise_factor = 1.0
+                else:
+                    noise_factor = 1j
+                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
+                             0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
+            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+
+            # ---- update psi: ETD per DCT mode (same scheme, wall basis) ----
+            if self.electro.e_coupling > 0.0:
+                xi = self._random_psi.normal(
+                    0.0, self.langevin["sigma"], self.cb.get_total_grid())
+                psi_hat = self.electro._t(np.reshape(self.psi, self.electro.nx))
+                c_hat = self.electro._t(np.reshape(charge_c, self.electro.nx))
+                xi_hat = self.electro._t(np.reshape(xi, self.electro.nx))
+                psi_hat = (self._psi_decay * psi_hat
+                           + self._psi_drift * c_hat
+                           + 1j * self._psi_namp * xi_hat)
+                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
+                self.psi = np.ascontiguousarray(
+                    self.electro._it(psi_hat).reshape(-1))
+
             if langevin_step % self.recording["recording_period"] == 0:
                 w = self.mpt.to_monomer_fields(w_aux)
+                phi, _ = self.compute_concentrations(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
                     w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)

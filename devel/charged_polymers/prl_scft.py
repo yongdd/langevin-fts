@@ -1,8 +1,9 @@
-"""Reproduction of Duan, Agrawal & Wang, PRL 134, 048101 (2025):
+"""Approximate comparison to Duan, Agrawal & Wang, PRL 134, 048101 (2025):
 electrostatic-correlation-augmented SCFT for polyelectrolyte brushes.
 
-Direct implementation of THEIR deterministic theory (paper + SI), in
-physical units, 1D in z — independent of this codebase's FTS machinery.
+Deterministic theory in physical units, 1D in z. The default smoothed LDA
+self-energy is not the complete nonlocal variational theory in the SI.
+See VALIDATION_STATUS.md for checked results and remaining model differences.
 
 Model (SI Secs. 1.2, II, III):
 - Discrete Gaussian chain, N beads, bond length b; z-resolved propagators
@@ -41,7 +42,7 @@ Model (SI Secs. 1.2, II, III):
   each iteration (psi_exact=True), plain slow mixing on W with a trust
   region, alpha- and correlation-strength continuation.
 
-Observables: rho_P(z) profiles (Fig 1), Gibbs-dividing-surface height h
+Observables: rho_P(z) profiles (Fig 1), moment height h = 2 <z>
 (Fig 2), effective charge Gamma and surface potential psi_S (Fig 3).
 """
 import numpy as np
@@ -113,7 +114,7 @@ class PRLBrushSCFT:
         # density peak inside the depletion zone and shows up as a small
         # interior bump on the dilute MF plateau (0.5b: slight, b: +0.07).
         src = np.exp(-0.5 * (self.z / (0.5 * b)) ** 2)
-        src /= np.trapz(src, dx=self.dz / self.R0)
+        src /= np.sum(src) * self.dz / self.R0
         self.q_init = {"G": np.ascontiguousarray(src)}
 
         # repo Anderson mixing on the per-chain field W (Nz variables)
@@ -300,15 +301,34 @@ class PRLBrushSCFT:
     #    transport is local, no spectral floor, values beyond reach decay
     #    to true exponential smallness. Used by default.
     def _chain_density(self, VP_per_monomer):
-        if getattr(self, "chain_backend", "realspace") == "spectral":
+        backend = getattr(self, "chain_backend", "realspace")
+        if backend == "direct":
+            from stable_grafted_chain import ScaledGraftedChain
+            wall = "reflecting" if getattr(self, "chain_wall", "hard") == "reflect" else "hard-reflecting"
+            key = (self.Nz, self.L, self.N, self.b, wall)
+            if getattr(self, "_direct_key", None) != key:
+                self._direct_chain = ScaledGraftedChain([self.Nz], [self.L], self.N,
+                                                       self.b, [wall])
+                self._direct_key = key
+            phi = self._direct_chain.compute(VP_per_monomer, self.q_init["G"]).real
+            self.log_partition = self._direct_chain.log_partition.real
+        elif backend == "spectral":
             W = np.ascontiguousarray(self.N * VP_per_monomer)
             self.ps.compute_propagators({"P": W}, q_init=self.q_init)
+            if not self.ps.check_total_partition():
+                raise FloatingPointError("PRL spectral chain failed partition consistency.")
             self.ps.compute_concentrations()
             phi = np.array(self.ps.get_concentration("P"), dtype=float)
-        else:
+        elif backend == "realspace":
             phi = self._chain_density_rs(VP_per_monomer)
-        phi = np.maximum(phi, 0.0)
-        norm = np.trapz(phi, dx=self.dz)          # in nm
+        else:
+            raise ValueError(f"Unknown PRL chain backend: {backend}")
+        # Spectral tails can have roundoff-size negative values. Preserve
+        # them instead of clipping; reject a resolved negative density.
+        roundoff = 64*np.finfo(float).eps*np.max(abs(phi))
+        if not np.all(np.isfinite(phi)) or np.min(phi) < -roundoff or phi.sum() <= 0:
+            raise FloatingPointError("Invalid real mean-field chain density.")
+        norm = np.sum(phi) * self.dz          # cell-centred volume quadrature
         rho = phi * (self.sigma * self.N / max(norm, 1e-280))
         return rho
 
@@ -373,7 +393,7 @@ class PRLBrushSCFT:
         iew = 1.0 / np.maximum(ew, 1e-300)
         for n in range(N):
             sl = qf[n] * qb[N - 1 - n] * iew
-            m = np.trapz(sl, dx=self.dz)
+            m = np.sum(sl) * self.dz
             phi += sl / max(m, 1e-300)
         return phi
 
@@ -424,7 +444,7 @@ class PRLBrushSCFT:
                 # grid cost (the semicanonical onset scales with n_C/L_eff)
                 Vres = getattr(self, "reservoir", 0.0)
                 rhoC = nC_total * bC / max(
-                    np.trapz(bC, dx=self.dz) + Vres, 1e-280)
+                    np.sum(bC) * self.dz + Vres, 1e-280)
             else:
                 rhoC = 0.0
             rho_e = self.zP * rhoP + rhoC + rho1 + self.zp * rhop - rhom
@@ -463,9 +483,10 @@ class PRLBrushSCFT:
                     F, rhoC, rhop, rhom, fn = F_try, rhoC_t, rhop_t, rhom_t, fn_try
                     break
                 t *= 0.5
-        if not with_C:
-            psi -= psi[-1]        # bulk gauge (with canonical C the far
-                                  # field fixes the gauge through the salt)
+        # Fixed salt fugacities set the Donnan potential: a constant shift
+        # changes the ion densities and is NOT a gauge transformation.
+        if np.max(np.abs(F)) >= f_tol:
+            raise RuntimeError(f"Poisson-Boltzmann solve did not converge: residual {np.max(np.abs(F)):.3e}")
         self.psi = psi
         _F, rhoC, rhop, rhom = residual(psi)
         if np.isscalar(rhoC):
@@ -521,7 +542,7 @@ class PRLBrushSCFT:
                 if getattr(self, "with_counterions", False):
                     nC = abs(self.zP) * self.sigma * self.N
                     rhoC = rhoC + nC * b1 / max(
-                        np.trapz(b1, dx=self.dz)
+                        np.sum(b1) * self.dz
                         + getattr(self, "reservoir", 0.0), 1e-280)
 
             phiP = np.clip(self.v * rhoP, 0.0, 0.999)
@@ -541,7 +562,16 @@ class PRLBrushSCFT:
             if verbose and it % 100 == 0:
                 print(f"  it {it:5d}: err={err:.3e} h={self.height(rhoP):.2f}")
             if err < tol and it > 10:
-                break
+                # A small W residual alone can hide stale correlation fields
+                # or an under-relaxed electrostatic potential.
+                target = self._self_energies(rhoP, rhoC, rhop, rhom)
+                u_err = max(float(np.max(abs(a-b))) for a,b in
+                            zip(target, (self.uP, self.up, self.um)))
+                charge = self.zP*rhoP+rhoC+self.zp*rhop-rhom
+                lap = np.diff(np.pad(self.psi, 1, mode="edge"), 2)/self.dz**2
+                pb_err = float(np.max(abs(lap+4*np.pi*self.lB*charge)))
+                if max(u_err, pb_err) < tol:
+                    break
             if use_am:
                 self.W = np.reshape(self.am.calculate_new_fields(
                     self.W, W_new - self.W, old_err, err), self.Nz)
@@ -566,8 +596,28 @@ class PRLBrushSCFT:
             self.up = (1 - lam_u) * self.up + lam_u * up_new
             self.um = (1 - lam_u) * self.um + lam_u * um_new
 
+        # Re-evaluate all diagnostics at the returned fields. In particular,
+        # reaching max_iter with a small W residual is not convergence of u.
+        b1 = np.exp(-np.clip(self.psi+self.um, -300, 300))
+        rhoC = self.c1*b1
+        if self.with_counterions:
+            rhoC = rhoC + abs(self.zP)*self.sigma*self.N*b1/(
+                b1.sum()*self.dz+getattr(self, "reservoir", 0.0))
+        rhop = self.rho_b*np.exp(-np.clip(self.zp*self.psi+self.up, -300, 300))
+        rhom = (self.zp*self.rho_b+self.c1)*np.exp(-np.clip(-self.psi+self.um, -300, 300))
+        targets = self._self_energies(rhoP, rhoC, rhop, rhom)
+        phiP = np.clip(self.v*rhoP, 0., .999)
+        VP = self.chi*(1-2*phiP)-np.log1p(-phiP)+self.zP*self.psi+self.uP
+        lap = np.diff(np.pad(self.psi, 1, mode="edge"), 2)/self.dz**2
+        self.residuals = dict(
+            w=float(np.max(abs(VP-self.W/self.N))),
+            self_energy=max(float(np.max(abs(a-b))) for a,b in
+                            zip(targets, (self.uP, self.up, self.um))),
+            poisson=float(np.max(abs(lap+4*np.pi*self.lB*(self.zP*rhoP+rhoC+self.zp*rhop-rhom)))),
+            volume_excess=float(max(0., np.max(self.v*rhoP)-1)))
         self.rhoP, self.rhoC, self.rhop, self.rhom = rhoP, rhoC, rhop, rhom
-        self.n_iter, self.err = it + 1, err
+        self.n_iter, self.err = it + 1, max(self.residuals.values())
+        self.converged = self.err < tol
         return rhoP
 
     # ---------------- Newton-Krylov outer solver ----------------
@@ -670,7 +720,7 @@ class PRLBrushSCFT:
         if getattr(self, "with_counterions", False):
             nC = abs(self.zP) * self.sigma * self.N
             self.rhoC = self.rhoC + nC * b1 / max(
-                np.trapz(b1, dx=self.dz)
+                np.sum(b1) * self.dz
                 + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
         self.rhom = (self.zp * self.rho_b + self.c1) * bm
@@ -735,7 +785,7 @@ class PRLBrushSCFT:
         if getattr(self, "with_counterions", False):
             nC = abs(self.zP) * self.sigma * self.N
             self.rhoC = self.rhoC + nC * b1 / max(
-                np.trapz(b1, dx=self.dz)
+                np.sum(b1) * self.dz
                 + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
         self.rhom = (self.zp * self.rho_b + self.c1) * bm
@@ -816,7 +866,7 @@ class PRLBrushSCFT:
         if getattr(self, "with_counterions", False):
             nC = abs(self.zP) * self.sigma * self.N
             self.rhoC = self.rhoC + nC * b1 / max(
-                np.trapz(b1, dx=self.dz)
+                np.sum(b1) * self.dz
                 + getattr(self, "reservoir", 0.0), 1e-280)
         self.rhop = self.rho_b * bp
         self.rhom = (self.zp * self.rho_b + self.c1) * bm
@@ -826,15 +876,14 @@ class PRLBrushSCFT:
 
     # ---------------- observables ----------------
     def height(self, rhoP=None):
-        """Gibbs dividing surface: h = int z rho / int rho * 2? — the GDS of
-        a step profile equals first-moment*2 for a box; use the standard
-        h = 2 * int z rho dz / int rho dz? No: GDS h satisfies
-        int_0^inf rho dz = rho(0+) * h for a step; for general profiles the
-        common choice (their Ref [52]) is h = 2 <z>."""
+        """Moment estimator 2 <z>; equals slab thickness for a uniform slab.
+
+        This does not establish equivalence to the paper's height estimator.
+        """
         if rhoP is None:
             rhoP = self.rhoP
-        m0 = np.trapz(rhoP, dx=self.dz)
-        m1 = np.trapz(self.z * rhoP, dx=self.dz)
+        m0 = np.sum(rhoP) * self.dz
+        m1 = np.sum(self.z * rhoP) * self.dz
         return 2.0 * m1 / max(m0, 1e-280)
 
     def gamma_eff(self, core_frac=0.5):

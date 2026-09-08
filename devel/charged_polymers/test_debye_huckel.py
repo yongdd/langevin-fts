@@ -88,3 +88,4 @@ for E in (0.0, 6.25, 25.0):
               f"g={g:7.3f}  {'OK' if ok else 'FAIL'}")
 
 print("DEBYE-HUCKEL TEST", "PASSED" if all_ok else "FAILED")
+assert all_ok, "Debye-Huckel validation failed (see cases above)."

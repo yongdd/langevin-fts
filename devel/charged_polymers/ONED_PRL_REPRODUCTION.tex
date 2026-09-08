@@ -1,0 +1,288 @@
+% Editable LaTeX source. Build with Tectonic (XeTeX); see the companion .md.
+\documentclass[a4paper,10pt]{article}
+\usepackage[top=17mm,bottom=18mm,left=17mm,right=17mm]{geometry}
+\usepackage{fontspec}
+\input{prl_comparison_figs/oned_prl_20260907/density_rows.tex}
+\input{prl_comparison_figs/oned_prl_20260907/height_rows.tex}
+\input{prl_comparison_figs/oned_prl_20260907/prl_rows.tex}
+\input{prl_comparison_figs/oned_prl_20260907/closure_rows.tex}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx,booktabs,tabularx,array}
+\usepackage[table]{xcolor}
+\usepackage{pdflscape,fancyhdr}
+\usepackage{pdfpages,eso-pic}
+\usepackage[unicode,colorlinks=true,urlcolor=blue!55!black,linkcolor=blue!55!black]{hyperref}
+\graphicspath{{prl_comparison_figs/oned_prl_20260907/}}
+\definecolor{heading}{HTML}{12304A}
+\definecolor{muted}{HTML}{52606D}
+\definecolor{panel}{HTML}{EAF2F6}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlength{\emergencystretch}{1em}
+\renewcommand{\arraystretch}{1.24}
+\linespread{1.1}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[L]{\scriptsize\color{muted}Validation update \enspace|\enspace 2026-09-07}
+\fancyfoot[R]{\scriptsize\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.3pt}
+\newcommand{\pagetitle}[2]{\pdfbookmark[0]{#1}{#2}%
+  {\sffamily\bfseries\color{heading}\fontsize{21}{27}\selectfont #1\par}\vspace{5pt}}
+\newcommand{\subhead}[1]{\par\vspace{5pt}{\sffamily\bfseries\large\color{heading}#1\par}\vspace{2pt}}
+\newcommand{\smallnote}[1]{{\small\color{muted}#1\par}}
+\newcommand{\gridmean}[1]{\overline{#1}}
+\newcommand{\units}[1]{\,\mathrm{#1}}
+\hypersetup{pdftitle={1D sampling and PRL SCFT validation},
+  pdfauthor={langevin-fts research notes},pdfsubject={Validation update, 2026-09-07}}
+
+\begin{document}
+\input{SAMPLING_SCFT_COMPARISON.tex}
+\clearpage
+\input{POSITIVE_BRUSH_SAMPLING.tex}
+\clearpage
+\pagetitle{Earlier checks: small systems and SCFT}{verdict}
+\smallnote{Validation update: 2026-09-07\quad /\quad \texttt{devel/charged\_polymers}}
+
+\begingroup\setlength{\fboxsep}{9pt}
+\colorbox{panel}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
+\textbf{Earlier validation verdict}\par
+The real-field/particle sampler for a small finite 1D system is consistent with reference values.
+PRL Figs.~1--3 were recalculated, but quantitative discrepancies remain.}}
+\endgroup
+
+\subhead{Models and scope of validation}
+The 1D sampling in this section checks the existing finite 9-bead action. The PRL calculations use a separate
+SCFT with $N=100$ chains, point ions, and incompressible P/S. These results do not validate the accuracy
+of the existing complex Langevin (CL) dynamics or establish full PRL reproduction.
+
+After exactly integrating the repulsive auxiliary field and electrostatic field $\psi$, a Gibbs sampler
+retains particle positions and the real field in the attractive channel. Fields and positions are drawn
+from their conditional distributions; integrating the field recovers the original particle action.
+The next page gives this relation and the conditional mean and covariance.
+
+\subhead{Controls for the same four-cell model}
+Polymer density $\phi_{\mathrm P}$ in cell~1 for $M=4$, $E=25$.
+Values following $\pm$ are standard errors (SE), accounting for blocking and autocorrelation.
+
+\begin{tabularx}{\linewidth}{@{}Xr@{}}
+\toprule
+\rowcolor{panel}\textbf{Calculation} & \textbf{Mean $\pm$ SE} \\
+\midrule
+\DensityRows
+\bottomrule
+\end{tabularx}
+
+\smallnote{The exact result sums $4^8=65{,}536$ particle configurations of the same action.
+Historical CL values are stored results at $\Delta t=0.01$; the four-cell CL
+$\Delta t\to0$ limit was not newly investigated here.}
+
+\subhead{Completed calculations and the historical report}
+There are 21 completed 1D sampling runs and 25 converged PRL Fig.~1 results. The Fig.~2--3
+salt scans and unit/grid checks are appended below. Records of three initial failed Fig.~1
+iterations are preserved; subsequent Newton/continuation runs converged for the same target equations.
+
+\textbf{The original report appended to the combined PDF is historical.} Its claims of ``complete quantitative
+reproduction,'' ``exact'' CL, and discrepancies due solely to LDA are superseded by the current validation
+status. Production FFT and CL drift were unchanged during these checks.
+
+\newpage
+\pagetitle{Real-field integration and sampling}{equations}
+Let $\bm R$ denote particle configurations and $\bm x$ a real field on $M$ cells.
+$\bm\ell(\bm R)$ is the attractive-channel combination of smeared densities with its uniform mode removed.
+Define the spatial mean and uniform-mode projection by
+\begin{equation}
+ \gridmean{f}=\frac{1}{M}\sum_{i=1}^{M}f_i,
+ \qquad \gridmean{x}=\gridmean{\ell}=0,
+ \qquad \Pi=I_M-\frac{\bm 1\bm 1^{\mathsf T}}{M}.
+\end{equation}
+Here $\bm 1$ is the all-ones vector and $\Pi$ projects onto the zero-mean subspace.
+$a>0$ is the Gaussian coefficient of the attractive auxiliary field; $C>0$ is the action prefactor.
+The $a$ on this page is distinct from the PRL Born radius.
+
+\subhead{A joint distribution preserving the original particle weight}
+Writing the original particle energy as $U_{\mathrm{particle}}(\bm R)$
+and the chain bond weight as $B(\bm R)$ gives
+\begin{align}
+ U_{\mathrm{rep}}(\bm R)
+ &= U_{\mathrm{particle}}(\bm R)
+    +\frac{C}{4a}\,\gridmean{\ell(\bm R)^2}, \\
+ P(\bm R,\bm x)
+ &\propto B(\bm R)\,
+    \exp\!\left[-U_{\mathrm{rep}}(\bm R)
+    -C\,\gridmean{a x^2+\ell(\bm R)x}\right].
+\end{align}
+Completing the square,
+\begin{equation}
+ a x_i^2+\ell_i x_i
+ =a\left(x_i+\frac{\ell_i}{2a}\right)^2-\frac{\ell_i^2}{4a}.
+\end{equation}
+integrating over $\mathcal X=\{\bm x:\bm 1^{\mathsf T}\bm x=0\}$ therefore gives,
+up to a normalization independent of $\bm R$,
+\begin{equation}
+ \int_{\mathcal X}P(\bm R,\bm x)\,\mathrm d\bm x
+ \propto B(\bm R)\exp[-U_{\mathrm{particle}}(\bm R)].
+\end{equation}
+The added quadratic term cancels exactly. This identity represents the same finite action;
+it does not guarantee exact averages from a finite Monte Carlo trajectory.
+
+\subhead{Field and particle updates}
+For a fixed particle configuration, the Gaussian conditional distribution has
+\begin{equation}
+ \mathbb E[\bm x\mid\bm R]=-\frac{\bm\ell(\bm R)}{2a},
+ \qquad
+ \operatorname{Cov}(\bm x\mid\bm R)=\frac{M}{2Ca}\,\Pi.
+\end{equation}
+In practice, draw $\bm\eta\sim\mathcal N(\bm0,I_M)$ and set
+$\bm x=-\bm\ell/(2a)+\sqrt{M/(2Ca)}\,\Pi\bm\eta$.
+At fixed field, the conditional probability for a free particle at candidate position $r$ is
+\begin{equation}
+ P(R_j=r\mid\bm R_{-j},\bm x)
+ =\frac{B(\bm R^{j\to r})\exp[-H(\bm R^{j\to r},\bm x)]}
+ {\displaystyle\sum_{s=1}^{M}B(\bm R^{j\to s})\exp[-H(\bm R^{j\to s},\bm x)]},
+ \qquad H=U_{\mathrm{rep}}+C\gridmean{a x^2+\ell x}.
+\end{equation}
+\smallnote{Each update sums only $M$ candidate positions, including all interactions and self terms,
+neighboring bead bond weights, and the fixed first bead. Sampling requires no enumeration of all
+$M^8$ configurations. The particle-only Gibbs control also integrates out the attractive field.}
+
+\newpage
+\pagetitle{Larger 1D grids and reference checks}{oned}
+Parameters: $N_{\mathrm{ref}}=4$, 9 beads in total, $L=1$, $\chi N=2$, $\zeta N=4$,
+and smearing radius $0.1$. The first bead is fixed in the first cell; bonds are reflecting.
+Each run uses $2\times10^6$ sweeps, discards the first $2\times10^5$,
+and stores every 10 sweeps, yielding $1.8\times10^5$ samples.
+
+\begin{center}
+\includegraphics[width=.96\linewidth]{positive_1d_comparison.pdf}
+\end{center}
+
+\subhead{Mean height $\langle z\rangle/L$ at $E=100$}
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l*{3}{>{\raggedleft\arraybackslash}X}@{}}
+\toprule
+\rowcolor{panel}Cells & Field/particle 1101 & Field/particle 1201 & Particle-only 2101 \\
+\midrule
+\HeightRows
+\bottomrule
+\end{tabularx}}
+
+The exact four-cell height is $0.36049837$. In all nine $M=4$ runs, every measured quantity was
+within $2.781\,\mathrm{SE}$ of its exact value. The largest difference between the two samplers across all runs
+was $3.049$ combined SE. These are descriptive statistics over many correlated positions and observables,
+not a claim that every individual $2\,\mathrm{SE}$ check passed.
+
+\textbf{No exhaustive reference is available at $M=16,32$.} The two positive-probability samplers were compared.
+The $16\to32$-cell height change exceeds statistical errors, so continuum convergence remains unverified.
+The spatial representation of the first-cell anchor also changes with the grid.
+
+\smallnote{Independent checks: Gaussian-integration energy identity error
+$\le1.25\times10^{-14}$; conditional probability error for fields with standard deviation 5
+$\le7.78\times10^{-16}$; species mass conserved in every sample. Local conditional field moments and
+the sampled first cosine mode's mean and square were also checked. These small 9-bead results
+do not validate performance for an actual $N=100$ brush.}
+
+\newpage
+\pagetitle{PRL Fig. 1: recalculated curves}{prl}
+Paper parameters: $N=100$, $b=1\units{nm}$, $v=1\units{nm^3}$,
+$\sigma=0.1\units{nm^{-2}}$, $a=0.25\units{nm}$,
+$\ell_{\mathrm B}=0.7\units{nm}$, $\chi=0.5$, and $I_{\mathrm b}=0.3\units{M}$.
+Primary runs use canonical monovalent counterions, GC salt, and $L=200\units{nm}$.
+The graft is Gaussian with width $0.5b$; bonds use a truncated bottom and reflecting top.
+
+\begin{center}
+\includegraphics[width=\linewidth]{prl_fig1_checked.pdf}
+\end{center}
+
+\subhead{Polymer volume fraction $\phi_{\mathrm P}$ at $z/b=5$}
+{\small
+\begin{tabularx}{\linewidth}{@{}Xrr@{}}
+\toprule
+\rowcolor{panel}Curve & Paper (approx.) & This calculation, $N_z=3200$ \\
+\midrule
+\PrlRows
+\bottomrule
+\end{tabularx}}
+
+Markers were read from the original PDF raster at $z/b=2,5,8,10,12$.
+Estimated digitization uncertainty is about $\pm0.004$ in $\phi$, \textbf{not a statistical error}.
+These are neither the authors' raw data nor an error assessment of the entire curves.
+
+The maximum differences at the five interior positions for the three LDA curves are
+$0.0300$, $0.0298$, and $0.0192$. At those positions, changes from $N_z=1600\to3200$
+are at most $1.98\times10^{-5}$ in every case. The neutral curve and multivalent collapse trend agree,
+but the observed grid error does not explain the discrepancies in the correlated curves.
+
+\smallnote{Equal Born radii give $u_K=z_K^2U$, enabling coupled Newton equations for
+$V=W/N$ and $U$. Convergence requires every residual of
+$W$, Poisson, self-energy, and volume constraints to be below $10^{-7}$.
+Independent chain density difference $\le5.67\times10^{-15}$;
+contour partition error $\le4.96\times10^{-14}$.
+The numerical graft/wall representation is not assumed identical to the paper's $\delta$ graft.}
+
+\begin{landscape}
+\thispagestyle{empty}
+\pagetitle{Effects of correlation closure and ensemble}{closure}
+\smallnote{Controls use the same Fig.~1 parameters. Neither LDA nor the current nonlocal backend
+has been validated as an implementation of the full SI theory.}
+\begin{center}
+\includegraphics[width=.94\linewidth]{prl_closure_comparison.pdf}
+\end{center}
+\vspace{-6pt}
+\begin{minipage}[t]{.48\linewidth}
+\raggedright
+\textbf{Maximum $|\Delta\phi|$ from the paper: five interior positions}
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l*{3}{>{\raggedleft\arraybackslash}X}@{}}
+\toprule
+\rowcolor{panel}$z_+$ & LDA + C & LDA GC-only & nonlocal + C \\
+\midrule
+\ClosureRows
+\bottomrule
+\end{tabularx}}
+
+\smallnote{C denotes canonical monovalent counterions. GC-only mean field agrees to within
+$0.0027$ at the same positions.
+For $L=200\to400\units{nm}$, the LDA height $2\langle z\rangle$ changes by
+$30.9787\to31.3638\units{nm}$ at $z_+=1$ and
+$14.3395\to14.3667\units{nm}$ at $z_+=3$.
+This moment height is not the Gibbs height of Fig.~2.}
+\end{minipage}\hfill
+\begin{minipage}[t]{.48\linewidth}
+\raggedright
+\textbf{Remaining discrepancies and reproduction scope}
+
+\small
+Trivalent nonlocal SCFT converged after continuation, with residuals below $4.61\times10^{-9}$.
+Omitted $I_{\mathrm{ex}}$, Green-function boundary and smearing approximations,
+and quadrature/grid validation remain unresolved. Quantitative reproduction for all three valences is incomplete.
+
+\smallnote{This page checks Fig.~1. New Fig.~2--3 calculations follow;
+Fig.~4 was not recalculated in this work.
+Details: \texttt{ONED\_PRL\_REPRODUCTION.md}. Raw data are in
+\texttt{\textasciitilde/polymer/dh\_salt\_runs/oned\_prl\_20260907/}:
+\texttt{comparison.json}, \texttt{prl\_comparison.csv}, run scripts, and SLURM logs.
+Paper: \href{https://doi.org/10.1103/PhysRevLett.134.048101}{Duan et al., PRL 134, 048101 (2025)}.}
+\end{minipage}
+\vfill
+{\scriptsize\color{muted}\hrule\vspace{5pt}
+Validation update \enspace|\enspace 2026-09-07\hfill\thepage\par}
+\end{landscape}
+
+\input{FIG23_PRL_REPRODUCTION.tex}
+
+% The combined report compiles this same source, then appends the archive.
+% This preserves the landscape page at full size and keeps one editable body.
+\ifdefined\IncludeHistoricalReport
+\clearpage
+\hypersetup{pdftitle={PRL comparison with current validation update}}
+\newcommand{\HistoricalBanner}{%
+  \AddToShipoutPictureFG*{\AtPageUpperLeft{%
+    \put(24,-18){\makebox[0pt][l]{\fontsize{7.2}{9}\selectfont\color{red!65!black}%
+      HISTORICAL REPORT --- superseded validation status; see the update at the start of this PDF.}}}}}
+\includepdf[pages=-,fitpaper=true,pagecommand={\thispagestyle{empty}\HistoricalBanner},
+  addtotoc={1,section,1,{Original comparison report: historical record},historical}]
+  {prl_comparison_figs/archive/PRL_COMPARISON_before_20260907_update.pdf}
+\fi
+\end{document}

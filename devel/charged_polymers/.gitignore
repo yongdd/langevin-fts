@@ -1,0 +1,4 @@
+# Local LaTeX build products; keep editable sources and report PDFs.
+*.aux
+*.log
+*.synctex.gz
