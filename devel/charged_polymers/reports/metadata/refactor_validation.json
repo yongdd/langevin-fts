@@ -1,0 +1,900 @@
+{
+  "baseline": "d395ed1a",
+  "functions_identical_after_documented_renames": [
+    "run_prl_fig1_checked.py:coupled_newton",
+    "run_prl_fig1_checked.py:run_fig1",
+    "run_prl_fig23_checked.py:extended_chain",
+    "run_prl_fig23_checked.py:log_chain_reference",
+    "run_prl_fig23_checked.py:canonical_pb_newton",
+    "run_prl_fig23_checked.py:analytic_curves",
+    "run_prl_fig23_checked.py:observables",
+    "run_prl_fig23_checked.py:run_salt",
+    "validate_prl_meanfield.py:run_meanfield",
+    "validate_clfts.py:parameters",
+    "validate_clfts.py:strong_field",
+    "validate_clfts.py:forces_and_grafts",
+    "validate_clfts.py:checkpoint_and_monitoring",
+    "validate_clfts.py:donnan_check",
+    "validate_clfts.py:check_implementation",
+    "validate_brush_sampling.py:saddle",
+    "validate_brush_sampling.py:observables",
+    "validate_brush_sampling.py:run_brush",
+    "check_clfts_exact_checkpoint.py:check_checkpoints",
+    "check_clfts_field_integral.py:integrate",
+    "check_clfts_field_integral.py:check_field_integral",
+    "check_clfts_poles.py:check_poles",
+    "analyze_clfts_identities.py:generators",
+    "analyze_clfts_identities.py:block_summary",
+    "analyze_clfts_identities.py:check_identities",
+    "analyze_clfts_exact.py:statistics",
+    "analyze_clfts_exact.py:analyze_exact",
+    "analyze_clfts_diagnosis.py:analyze_reduced",
+    "summarize_validation.py:correlation_time",
+    "summarize_validation.py:analyze_brush",
+    "summarize_clfts_pole_resolution.py:analyze_marginal",
+    "analyze_prl_fig23.py:gather",
+    "analyze_prl_fig23.py:checked_scan",
+    "analyze_prl_fig23.py:pick",
+    "analyze_prl_fig23.py:save_plot",
+    "analyze_prl_fig23.py:clusters",
+    "analyze_prl_fig23.py:digitize_fig23",
+    "analyze_prl_fig23.py:analyze_scan",
+    "compare_oned_prl.py:digitize_fig1",
+    "compare_oned_prl.py:analyze_fig1_finite",
+    "compare_sampling_scft.py:checked_matched",
+    "compare_sampling_scft.py:mc_profile",
+    "compare_sampling_scft.py:scft_profile",
+    "compare_sampling_scft.py:build_data",
+    "compare_sampling_scft.py:save",
+    "compare_sampling_scft.py:plot_all",
+    "compare_sampling_scft.py:analyze_matched",
+    "run_positive_brush.py:observe",
+    "run_positive_brush.py:save_state",
+    "run_positive_brush.py:calibrate",
+    "check_positive_brush.py:log_weight",
+    "check_positive_brush.py:exact_two_cells",
+    "check_positive_brush.py:deterministic_checks",
+    "check_positive_brush.py:check",
+    "validate_clfts_exact.py:parameters",
+    "validate_clfts_exact.py:cosine_operator",
+    "validate_clfts_exact.py:enumerate_particles",
+    "validate_clfts_exact.py:input_fields",
+    "validate_clfts_exact.py:partition_cancellation",
+    "validate_clfts_exact.py:deterministic_checks",
+    "validate_clfts_exact.py:run",
+    "diagnose_clfts_reduced.py:densities",
+    "diagnose_clfts_reduced.py:drift",
+    "diagnose_clfts_reduced.py:step",
+    "diagnose_clfts_reduced.py:trajectory",
+    "diagnose_clfts_reduced.py:adaptive_trajectory",
+    "diagnose_clfts_reduced.py:setup",
+    "diagnose_clfts_reduced.py:field_reference",
+    "diagnose_clfts_reduced.py:checks",
+    "diagnose_clfts_reduced.py:run",
+    "sample_positive_1d.py:setup",
+    "sample_positive_1d.py:particle_energy",
+    "sample_positive_1d.py:conditional",
+    "sample_positive_1d.py:sample",
+    "sample_positive_1d.py:deterministic_checks",
+    "sample_positive_1d.py:run",
+    "validate_clfts_positive_marginal.py:marginal_setup",
+    "validate_clfts_positive_marginal.py:evaluate",
+    "validate_clfts_positive_marginal.py:log_density",
+    "validate_clfts_positive_marginal.py:deterministic_checks",
+    "validate_clfts_positive_marginal.py:trajectory",
+    "validate_clfts_positive_marginal.py:run",
+    "analyze_positive_brush.py:derived",
+    "analyze_positive_brush.py:one_run",
+    "analyze_positive_brush.py:split_rhat",
+    "analyze_positive_brush.py:analyze",
+    "analyze_positive_brush.py:plots"
+  ],
+  "reviewed_non_numerical_differences": [
+    "analyze_prl_fig23.py:write_report",
+    "analyze_prl_fig23.py:analyze",
+    "compare_sampling_scft.py:report",
+    "run_positive_brush.py:run",
+    "analyze_positive_brush.py:run_analysis"
+  ],
+  "protected_model_hashes": {
+    "prl_scft.py": "e18df724f19ff950fedc10166a3423060ab9f81c5a954eac30deafa0c7248e21",
+    "prl_scft2d.py": "a3837d221c57a679dbd178c0e32defd57a3e3717489199415b5b1cdf00689d87",
+    "positive_brush_1d.py": "68c38b029c5e50c63a56983b6d287af154d2c306c95bfe64c000e5d5f0108d1f",
+    "clfts_charged.py": "c2b51de7fba5993287bf3f16e97c9df6243579c99d04b0c7283b230cf8af9ec7",
+    "brush_clfts.py": "b9e52dc5d999408b56554b5e9647161be510b19dcde46d1956b9f7f7cc015bd5",
+    "stable_grafted_chain.py": "d20934ead9a0bf229f2beadb86287aca82db939051a0f96e01037c9076b93499",
+    "electrostatics.py": "81d785bf97bf92b8fec655703f9e15efc3104d2ae66c77fcbf23fb0cdc96ce16",
+    "lfts_charged.py": "ba2d8d09354bb7e8321851a65acae05520f7214198b7f7ab38b95c1b5651b8db",
+    "brush_scft_charged.py": "db22f605594f1067db925841b8cb2a912ae6ef933db7589d7846b0a719af83c2",
+    "test_debye_huckel.py": "d5b922159a55c1d1305d749da99b104b5efbb026a751978a3202911662fe328b",
+    "test_neutral_reduction.py": "1d14454f7e768b40813722589e3e48b8c7932401c6060916ac8940b2ed5d09c3",
+    "test_neutral_reduction_clfts.py": "c4950c9b985c4aea26562241f2c56581cc1934237387d8c9f443c7aebdd063c5",
+    "fig2_reproduction.png": "980d6ff49fb8d2658043e419327a402af1de52b2a9a7c25761707c3cd1f13e7a"
+  },
+  "before_after_runs": {
+    "mc/samples.npz": {
+      "trace": {
+        "shape": [
+          400,
+          10
+        ],
+        "bitwise_equal": true
+      },
+      "burn_trace": {
+        "shape": [
+          40,
+          11
+        ],
+        "bitwise_equal": true
+      },
+      "counts": {
+        "shape": [
+          40,
+          4,
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "psi": {
+        "shape": [
+          40,
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "profile_steps": {
+        "shape": [
+          40
+        ],
+        "bitwise_equal": true
+      },
+      "z": {
+        "shape": [
+          2
+        ],
+        "bitwise_equal": true
+      }
+    },
+    "mc/checkpoint.npz": {
+      "chain": {
+        "shape": [
+          1,
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "counts": {
+        "shape": [
+          4,
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "q": {
+        "shape": [
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "x": {
+        "shape": [
+          2
+        ],
+        "bitwise_equal": true
+      },
+      "params": {
+        "shape": [],
+        "bitwise_equal": true
+      },
+      "rng": {
+        "shape": [],
+        "bitwise_equal": true
+      }
+    },
+    "scft/profiles.npz": {
+      "z": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "rhoP": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "phiP": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "rhoC": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "rhop": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "rhom": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "W": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "psi": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "uP": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "up": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "um": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      },
+      "rhoP_direct": {
+        "shape": [
+          1600
+        ],
+        "bitwise_equal": true
+      }
+    },
+    "mc/summary_identical_keys": [
+      "statistics",
+      "half_statistics",
+      "profile_mean_nm3",
+      "acceptance_counters",
+      "max_incremental_charge_error",
+      "params"
+    ],
+    "scft/summary_identical_keys": [
+      "status"
+    ]
+  },
+  "deterministic_results": {
+    "implementation.json": {
+      "cpu-mkl": {
+        "strong_field": {
+          "log_q_real": -62.931918454135946,
+          "height": 3.076019223900511,
+          "mass_error": 1.3322676295501878e-15,
+          "large_uniform_shift_density_error": 7.998663858622491e-15
+        },
+        "forces": {
+          "species_mass_error": 2.823925224926892e-17,
+          "anchor_column_error": 2.2728195040653134e-16,
+          "derivative_errors": [
+            2.05026817781196e-11,
+            2.847059258095136e-11,
+            3.448578832711772e-11,
+            9.98691707527529e-11
+          ],
+          "annealed_anchor_cv": 1.0839115620839752
+        },
+        "checkpoint": {
+          "restart_max_error": 5.329070518200751e-15,
+          "saved_density_error": 2.3479724158959924e-16,
+          "h_time_level_error": 0.0,
+          "zero_coupling_finite": true
+        }
+      },
+      "cuda": {
+        "strong_field": {
+          "log_q_real": -62.931918454135946,
+          "height": 3.0760192239005133,
+          "mass_error": 5.551115123125783e-15,
+          "large_uniform_shift_density_error": 5.329247933841118e-14
+        },
+        "forces": {
+          "species_mass_error": 1.1107649934270853e-16,
+          "anchor_column_error": 2.554024371047887e-16,
+          "derivative_errors": [
+            2.050261982988435e-11,
+            2.8470485213857226e-11,
+            4.1014331123957805e-11,
+            9.98691707527529e-11
+          ],
+          "annealed_anchor_cv": 1.0839115620839754
+        },
+        "checkpoint": {
+          "restart_max_error": 5.329070518200751e-15,
+          "saved_density_error": 5.581450880838209e-16,
+          "h_time_level_error": 0.0,
+          "zero_coupling_finite": true
+        }
+      },
+      "cpu_cuda_phi_error": 5.613217783960923e-16,
+      "donnan": {
+        "max_charge_error": 1.3877787807814457e-17,
+        "donnan_potential": -0.21616411040972275,
+        "stale_self_energy_rejected": true
+      }
+    },
+    "positive_brush.json": {
+      "deterministic": {
+        "energy_delta": 4.263256414560601e-14,
+        "polymer_balance": 4.440892098500626e-14,
+        "joint_balance": 1.2878587085651816e-13,
+        "ion_balance": 4.263256414560601e-14,
+        "salt_balance": 2.9753977059954195e-14,
+        "global_salt_balance": 6.394884621840902e-14,
+        "gaussian_identity": 0.0,
+        "large_grid_energy_scaled_error": 4.310049777283516e-15
+      },
+      "exact": {
+        "1": {
+          "labels": [
+            "height_nm",
+            "salt_units",
+            "electrostatic_energy",
+            "psi_wall",
+            "P_cell0",
+            "C_cell0",
+            "plus_cell0",
+            "minus_cell0",
+            "x_cell0",
+            "x_cell0_squared"
+          ],
+          "mean": [
+            1.3518992562480825,
+            0.19171292719919827,
+            0.34013289722669976,
+            -0.48171772268443264,
+            1.648100743751915,
+            1.4821094703754547,
+            0.12406790037522852,
+            0.06764502682396986,
+            0.3240503718759592,
+            0.4194510422346682
+          ],
+          "variance": [
+            0.2577695948868892,
+            0.17456065807447535,
+            0.6367690572026801,
+            2.7599132669322324,
+            0.25776959488689233,
+            0.32422175429560873,
+            0.11517101064934433,
+            0.06542355148877593,
+            0.31444239872172075,
+            0.3081001470789203
+          ],
+          "relative_partition_tail_bound": 2.9638280598569115e-40,
+          "states": 21420,
+          "log_partition": -1.059816099376005
+        },
+        "2": {
+          "labels": [
+            "height_nm",
+            "salt_units",
+            "electrostatic_energy",
+            "psi_wall",
+            "P_cell0",
+            "C_cell0",
+            "plus_cell0",
+            "minus_cell0",
+            "x_cell0",
+            "x_cell0_squared"
+          ],
+          "mean": [
+            1.347702237507055,
+            0.14741802843492238,
+            0.342612482753286,
+            -0.4621556554155758,
+            1.6522977624929436,
+            1.4625152450948966,
+            0.10820181775062346,
+            0.131740056538487,
+            0.32614888124646985,
+            0.42054838582947546
+          ],
+          "variance": [
+            0.2567011723646109,
+            0.13014651994968188,
+            0.6407921753790617,
+            2.8001889549358747,
+            0.25670117236459866,
+            0.3476809101973486,
+            0.09770677890596789,
+            0.16879844491608648,
+            0.31417529309115155,
+            0.3090987303778042
+          ],
+          "relative_partition_tail_bound": 2.59885739235781e-59,
+          "states": 41004,
+          "log_partition": -1.1039931590164551
+        },
+        "3": {
+          "labels": [
+            "height_nm",
+            "salt_units",
+            "electrostatic_energy",
+            "psi_wall",
+            "P_cell0",
+            "C_cell0",
+            "plus_cell0",
+            "minus_cell0",
+            "x_cell0",
+            "x_cell0_squared"
+          ],
+          "mean": [
+            1.3458830896398966,
+            0.12219586606586494,
+            0.34583568171143864,
+            -0.449546289510855,
+            1.6541169103601019,
+            1.4540223611391125,
+            0.09637382045640328,
+            0.19127780571006453,
+            0.3270584551800507,
+            0.4210240163622909
+          ],
+          "variance": [
+            0.256227133030128,
+            0.10849059720091869,
+            0.6459589486369539,
+            2.8400376772258715,
+            0.2562271330301167,
+            0.3624601097624547,
+            0.08729317361263972,
+            0.3505371540677553,
+            0.31405678325752967,
+            0.309530806280175
+          ],
+          "relative_partition_tail_bound": 2.584730063644544e-78,
+          "states": 60588,
+          "log_partition": -1.1312438654679844
+        }
+      }
+    },
+    "native_exact/summary.json": {
+      "params": {
+        "nx": [
+          2
+        ],
+        "lx": [
+          1.0
+        ],
+        "ds": 0.25,
+        "chain_model": "discrete",
+        "segment_lengths": {
+          "P": 1.0,
+          "C": 1.0,
+          "SP": 1.0,
+          "SM": 1.0,
+          "S": 1.0
+        },
+        "chi_n": {
+          "P,S": 2.0
+        },
+        "zeta_n": 4.0,
+        "distinct_polymers": [
+          {
+            "volume_fraction": 0.4444444444444444,
+            "blocks": [
+              {
+                "type": "P",
+                "length": 1.0
+              }
+            ],
+            "grafting_points": {
+              "0": "G"
+            }
+          },
+          {
+            "volume_fraction": 0.2222222222222222,
+            "blocks": [
+              {
+                "type": "C",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "SP",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "SM",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "S",
+                "length": 0.25
+              }
+            ]
+          }
+        ],
+        "charges": {
+          "P": -1.0,
+          "C": 1.0,
+          "SP": 3.0,
+          "SM": -1.0,
+          "S": 0.0
+        },
+        "radiuses": {
+          "P": 0.1,
+          "C": 0.1,
+          "SP": 0.1,
+          "SM": 0.1,
+          "S": 0.1
+        },
+        "bjerrum_e": 100.0,
+        "bc": [
+          "reflecting",
+          "reflecting"
+        ],
+        "graft_width": 0.0,
+        "graft_center": 0.0,
+        "chain_backend": "spectral",
+        "langevin": {
+          "dt": 0.01,
+          "nbar": 5.0625,
+          "max_step": 200000
+        },
+        "alpha_ds": 0.0,
+        "recording": {
+          "dir": "/home/yongdd/polymer/dh_salt_runs/cleanup_20260908/native_exact",
+          "recording_period": 200000,
+          "sf_computing_period": 1000000000,
+          "sf_recording_period": 1000000000
+        },
+        "platform": "cpu-mkl",
+        "verbose_level": 0
+      },
+      "species": [
+        "P",
+        "C",
+        "SP",
+        "SM",
+        "S"
+      ],
+      "configurations": 256,
+      "exact_profiles": [
+        [
+          0.625500569020821,
+          0.2633883198680692
+        ],
+        [
+          0.2071891100482146,
+          0.2372553343962301
+        ],
+        [
+          0.15387259089847372,
+          0.06834963132374841
+        ],
+        [
+          0.08261199013063528,
+          0.1396102320915869
+        ],
+        [
+          0.08694872512327922,
+          0.13527349709894312
+        ]
+      ],
+      "exact_height": 0.39815592992578874,
+      "note": "Finite canonical lattice benchmark; not PRL or continuum validation.",
+      "deterministic_checks": {
+        "fixed_complex_field_density_error": 5.013613917139062e-16,
+        "gaussian_elimination_error": 1.9984014443252818e-15
+      },
+      "status": "completed",
+      "wall_seconds": 0.11362620443105698
+    },
+    "reduced/summary.json": {
+      "status": "completed",
+      "params": {
+        "nx": [
+          2
+        ],
+        "lx": [
+          1.0
+        ],
+        "ds": 0.25,
+        "chain_model": "discrete",
+        "segment_lengths": {
+          "P": 1.0,
+          "C": 1.0,
+          "SP": 1.0,
+          "SM": 1.0,
+          "S": 1.0
+        },
+        "chi_n": {
+          "P,S": 2.0
+        },
+        "zeta_n": 4.0,
+        "distinct_polymers": [
+          {
+            "volume_fraction": 0.4444444444444444,
+            "blocks": [
+              {
+                "type": "P",
+                "length": 1.0
+              }
+            ],
+            "grafting_points": {
+              "0": "G"
+            }
+          },
+          {
+            "volume_fraction": 0.2222222222222222,
+            "blocks": [
+              {
+                "type": "C",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "SP",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "SM",
+                "length": 0.25
+              }
+            ]
+          },
+          {
+            "volume_fraction": 0.1111111111111111,
+            "blocks": [
+              {
+                "type": "S",
+                "length": 0.25
+              }
+            ]
+          }
+        ],
+        "charges": {
+          "P": -1.0,
+          "C": 1.0,
+          "SP": 3.0,
+          "SM": -1.0,
+          "S": 0.0
+        },
+        "radiuses": {
+          "P": 0.1,
+          "C": 0.1,
+          "SP": 0.1,
+          "SM": 0.1,
+          "S": 0.1
+        },
+        "bjerrum_e": 100.0,
+        "bc": [
+          "reflecting",
+          "reflecting"
+        ],
+        "graft_width": 0.0,
+        "graft_center": 0.0,
+        "chain_backend": "spectral",
+        "langevin": {
+          "dt": 0.0025,
+          "nbar": 5.0625,
+          "max_step": 4000000
+        },
+        "alpha_ds": 0.0,
+        "recording": {
+          "dir": "/home/yongdd/polymer/dh_salt_runs/cleanup_20260908/reduced",
+          "recording_period": 4000000,
+          "sf_computing_period": 1000000000,
+          "sf_recording_period": 1000000000
+        },
+        "platform": "cpu-mkl",
+        "verbose_level": 0,
+        "psi_dt_scaling": 1.0
+      },
+      "species": [
+        "P",
+        "C",
+        "SP",
+        "SM",
+        "S"
+      ],
+      "exact_profiles": [
+        [
+          0.625500569020821,
+          0.2633883198680692
+        ],
+        [
+          0.2071891100482146,
+          0.2372553343962301
+        ],
+        [
+          0.15387259089847372,
+          0.06834963132374841
+        ],
+        [
+          0.08261199013063528,
+          0.1396102320915869
+        ],
+        [
+          0.08694872512327922,
+          0.13527349709894312
+        ]
+      ],
+      "exact_height": 0.39815592992578874,
+      "exact_field_moments": {
+        "mean": [
+          -0.12354209259331679,
+          -0.04049090703196364,
+          0.6569901267527491,
+          -0.37907396281427663
+        ],
+        "second": [
+          0.22504515315192947,
+          -0.09571007347945183,
+          -0.08956629267243499,
+          -0.5545276016282257
+        ]
+      },
+      "deterministic_checks": {
+        "density": 4.803148672817498e-14,
+        "drift": 7.357554448900048e-14,
+        "cancellation": 9.992007221626409e-16,
+        "projected_noise_variance": 0.0,
+        "native_full_step": 4.965068306494546e-15
+      },
+      "saddle_residual": 3.1730174043786974e-13,
+      "seed": 301,
+      "method": "heun",
+      "duration": 10000.0,
+      "equil": 1000.0,
+      "adaptive_drift_target": null,
+      "note": "Unchanged two-cell action; uniform Gaussian modes analytically decoupled.",
+      "wall_seconds": 2.792393170297146
+    }
+  },
+  "evidence_root": "/home/yongdd/polymer/dh_salt_runs/cleanup_20260908",
+  "successful_slurm_jobs": {
+    "native_exact": 336178,
+    "reduced": 336179,
+    "positive_brush": 336180,
+    "mc_equivalence": 336183,
+    "scft_equivalence": 336184
+  },
+  "implementation_platforms": "cpu-mkl and CUDA GPU 1 on login host; short deterministic check",
+  "failed_launches": {
+    "336173-336176": "conda deactivate hook incompatible with nounset before activation",
+    "336177": "CUDA not allocated on CPU compute node",
+    "336181-336182": "node-local /tmp backup unavailable on compute node"
+  },
+  "command_help_passed": [
+    "prl fig1",
+    "prl salt",
+    "prl meanfield",
+    "cl brush",
+    "cl exact",
+    "cl reduced",
+    "sample brush",
+    "sample finite",
+    "sample marginal",
+    "check implementation",
+    "check brush",
+    "check checkpoints",
+    "check field-integral",
+    "check poles",
+    "check identities",
+    "analyze cl-exact",
+    "analyze cl-reduced",
+    "analyze cl-brush",
+    "analyze marginal",
+    "analyze fig1-finite",
+    "analyze prl-scan",
+    "analyze matched",
+    "analyze brush"
+  ],
+  "legacy_dispatch_help_passed": 23,
+  "protected_source_audits": {
+    "fig23": {
+      "moved_sources": [
+        {
+          "original": "devel/charged_polymers/run_prl_fig1_checked.py",
+          "baseline": "d395ed1a",
+          "original_sha256": "0e91e3edcbcd24366a76e4008ae7f3c6afc661066bbdeeeb3ef68cca4ea4392a",
+          "current": "devel/charged_polymers/studies/prl_runs.py",
+          "current_sha256": "2bb772855c502be340da38bd591c1fccae199d4c590c943d30d3817f5c4f062d"
+        }
+      ],
+      "unverified_sources": []
+    },
+    "matched": {
+      "moved_sources": [
+        {
+          "original": "devel/charged_polymers/sample_positive_1d.py",
+          "baseline": "d395ed1a",
+          "original_sha256": "d0360d516af9448a8ca32af9340e03a00b8f4f1ab9ce50e7d2d3f9e0681f3994",
+          "current": "devel/charged_polymers/studies/finite_sampling.py",
+          "current_sha256": "918ee52f6ca07861ec4d1e16e0dc7740a5dcf173367666da5a036eabf2c66a29"
+        },
+        {
+          "original": "devel/charged_polymers/run_prl_fig23_checked.py",
+          "baseline": "d395ed1a",
+          "original_sha256": "9a227ffda7c594df086cb8f4f480e4c773b8f43ea385c0adbbd9876da3605a9e",
+          "current": "devel/charged_polymers/studies/prl_runs.py",
+          "current_sha256": "2bb772855c502be340da38bd591c1fccae199d4c590c943d30d3817f5c4f062d"
+        },
+        {
+          "original": "devel/charged_polymers/run_positive_brush.py",
+          "baseline": "d395ed1a",
+          "original_sha256": "e7544dd3861d51de415e4386df4e75c35a0f4bb56bca1ec895e67c0138956381",
+          "current": "devel/charged_polymers/studies/brush_sampling.py",
+          "current_sha256": "885ee3b5b65542a5021c1ff96105d9afddbe0d6fc66e69204230a5cfbb228f56"
+        },
+        {
+          "original": "devel/charged_polymers/run_prl_fig1_checked.py",
+          "baseline": "d395ed1a",
+          "original_sha256": "0e91e3edcbcd24366a76e4008ae7f3c6afc661066bbdeeeb3ef68cca4ea4392a",
+          "current": "devel/charged_polymers/studies/prl_runs.py",
+          "current_sha256": "2bb772855c502be340da38bd591c1fccae199d4c590c943d30d3817f5c4f062d"
+        }
+      ],
+      "unverified_sources": []
+    }
+  },
+  "python_compilation": "All remaining source files compile",
+  "broken_relative_document_links": [],
+  "pdf_build": {
+    "PRL_REPRODUCTION": {
+      "pages": 19,
+      "source_sha256": "1abfd4ae68d2c7c3c2b6923fa358f450242edcab88efef27e3b65d0ba1303e35",
+      "pdf_sha256": "1f5b7c86a3e4c9de653651729f8125d5a67a2ad3af98b358e47e8080440f0ff8",
+      "missing_glyphs": 0,
+      "overfull_boxes": 0
+    },
+    "CLFTS_VALIDATION": {
+      "pages": 38,
+      "source_sha256": "8a32f589cb5ca163f9128a17e85adea6d450a5b6f94bea7c17351e2880cc5c0e",
+      "pdf_sha256": "608f4e276283d96997e31a3e97cced5b3f58414cb2b402b33c74faec4a5644e3",
+      "missing_glyphs": 0,
+      "overfull_boxes": 0
+    }
+  },
+  "document_review": "All pages reviewed in rendered overview; representative protocol, equation and table pages checked at higher resolution. Final build has no missing glyphs, overflowing boxes or broken relative document links."
+}

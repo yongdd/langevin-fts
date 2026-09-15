@@ -1,0 +1,94 @@
+{
+  "run_prl_fig1_checked.py": {
+    "module": "studies.prl_runs",
+    "function": "run_fig1"
+  },
+  "run_prl_fig23_checked.py": {
+    "module": "studies.prl_runs",
+    "function": "run_salt"
+  },
+  "validate_prl_meanfield.py": {
+    "module": "studies.prl_runs",
+    "function": "run_meanfield"
+  },
+  "validate_clfts.py": {
+    "module": "studies.validation",
+    "function": "check_implementation"
+  },
+  "validate_brush_sampling.py": {
+    "module": "studies.validation",
+    "function": "run_brush"
+  },
+  "check_clfts_exact_checkpoint.py": {
+    "module": "studies.cl_diagnostics",
+    "function": "check_checkpoints"
+  },
+  "check_clfts_field_integral.py": {
+    "module": "studies.cl_diagnostics",
+    "function": "check_field_integral"
+  },
+  "check_clfts_poles.py": {
+    "module": "studies.cl_diagnostics",
+    "function": "check_poles"
+  },
+  "analyze_clfts_identities.py": {
+    "module": "studies.cl_diagnostics",
+    "function": "check_identities"
+  },
+  "analyze_clfts_exact.py": {
+    "module": "studies.cl_analysis",
+    "function": "analyze_exact"
+  },
+  "analyze_clfts_diagnosis.py": {
+    "module": "studies.cl_analysis",
+    "function": "analyze_reduced"
+  },
+  "summarize_validation.py": {
+    "module": "studies.cl_analysis",
+    "function": "analyze_brush"
+  },
+  "summarize_clfts_pole_resolution.py": {
+    "module": "studies.cl_analysis",
+    "function": "analyze_marginal"
+  },
+  "analyze_prl_fig23.py": {
+    "module": "studies.prl_analysis",
+    "function": "analyze_scan"
+  },
+  "compare_oned_prl.py": {
+    "module": "studies.prl_analysis",
+    "function": "analyze_fig1_finite"
+  },
+  "compare_sampling_scft.py": {
+    "module": "studies.prl_analysis",
+    "function": "analyze_matched"
+  },
+  "run_positive_brush.py": {
+    "module": "studies.brush_sampling",
+    "function": "run"
+  },
+  "check_positive_brush.py": {
+    "module": "studies.brush_sampling",
+    "function": "check"
+  },
+  "validate_clfts_exact.py": {
+    "module": "studies.exact",
+    "function": "run"
+  },
+  "diagnose_clfts_reduced.py": {
+    "module": "studies.reduced",
+    "function": "run"
+  },
+  "sample_positive_1d.py": {
+    "module": "studies.finite_sampling",
+    "function": "run"
+  },
+  "validate_clfts_positive_marginal.py": {
+    "module": "studies.marginal_sampling",
+    "function": "run"
+  },
+  "analyze_positive_brush.py": {
+    "module": "studies.brush_analysis",
+    "function": "run_analysis"
+  }
+}

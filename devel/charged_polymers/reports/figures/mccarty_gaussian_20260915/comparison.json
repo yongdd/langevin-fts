@@ -1,0 +1,479 @@
+{
+  "campaign": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023",
+  "completed": 83,
+  "analysis_source_sha256": "17d28242448591c2e8903aea95d96f6d95b5a8f6c249da85c71d0f1d302c4510",
+  "critical": [
+    {
+      "sequence": "sv10",
+      "closure": "coupled-rpa",
+      "bjerrum": 0.28571041219678933,
+      "temperature": 3.500047451232642,
+      "rho": 0.5125723709841633,
+      "scaled_curvature": 3.556685300333285e-18,
+      "scaled_third_derivative": 1.382283150878182e-12
+    },
+    {
+      "sequence": "sv10",
+      "closure": "electrostatic",
+      "bjerrum": 0.28657281609961166,
+      "temperature": 3.4895145101704403,
+      "rho": 0.5079713628017921,
+      "scaled_curvature": 0.0,
+      "scaled_third_derivative": 1.449957824870574e-10
+    },
+    {
+      "sequence": "sv10",
+      "closure": "paper-rpa",
+      "bjerrum": 0.2857143997643514,
+      "temperature": 3.4999986028872527,
+      "rho": 0.512584073752719,
+      "scaled_curvature": 3.556766504602675e-18,
+      "scaled_third_derivative": -1.6265535709723328e-10
+    },
+    {
+      "sequence": "sv15",
+      "closure": "coupled-rpa",
+      "bjerrum": 0.19946792805576827,
+      "temperature": 5.013337280569811,
+      "rho": 0.27210671636318673,
+      "scaled_curvature": -1.1000184995751435e-14,
+      "scaled_third_derivative": 1.1843861269677376e-10
+    },
+    {
+      "sequence": "sv15",
+      "closure": "electrostatic",
+      "bjerrum": 0.19985155220097728,
+      "temperature": 5.003713951615283,
+      "rho": 0.26990128991746853,
+      "scaled_curvature": -2.4346613398445256e-16,
+      "scaled_third_derivative": 2.7609042269849677e-10
+    },
+    {
+      "sequence": "sv15",
+      "closure": "paper-rpa",
+      "bjerrum": 0.1994680322706364,
+      "temperature": 5.013334661281509,
+      "rho": 0.27210837202132043,
+      "scaled_curvature": -1.1000251927380334e-14,
+      "scaled_third_derivative": -1.6778207221115275e-12
+    },
+    {
+      "sequence": "sv20",
+      "closure": "coupled-rpa",
+      "bjerrum": 0.12496106357016246,
+      "temperature": 8.002492707966793,
+      "rho": 0.20089819147913066,
+      "scaled_curvature": -6.716346135821418e-15,
+      "scaled_third_derivative": -1.138857335922907e-10
+    },
+    {
+      "sequence": "sv20",
+      "closure": "electrostatic",
+      "bjerrum": 0.1251576928687431,
+      "temperature": 7.989920372283725,
+      "rho": 0.19960159977709796,
+      "scaled_curvature": -7.215924627536898e-15,
+      "scaled_third_derivative": 1.9564937961467777e-11
+    },
+    {
+      "sequence": "sv20",
+      "closure": "paper-rpa",
+      "bjerrum": 0.124969320065085,
+      "temperature": 8.001963997877176,
+      "rho": 0.20090991860696353,
+      "scaled_curvature": -6.73067911845529e-15,
+      "scaled_third_derivative": -1.1301160204058157e-10
+    },
+    {
+      "sequence": "sv25",
+      "closure": "coupled-rpa",
+      "bjerrum": 0.07078638666037246,
+      "temperature": 14.127010109979503,
+      "rho": 0.1735868951743158,
+      "scaled_curvature": -1.1322309857998484e-15,
+      "scaled_third_derivative": -1.287418638650314e-12
+    },
+    {
+      "sequence": "sv25",
+      "closure": "electrostatic",
+      "bjerrum": 0.07088878233645836,
+      "temperature": 14.10660427560619,
+      "rho": 0.17267245042437795,
+      "scaled_curvature": -1.243685734540092e-15,
+      "scaled_third_derivative": 4.205794945475996e-13
+    },
+    {
+      "sequence": "sv25",
+      "closure": "paper-rpa",
+      "bjerrum": 0.07079434984009854,
+      "temperature": 14.125421057735194,
+      "rho": 0.17361909381265894,
+      "scaled_curvature": -1.1468976970189457e-15,
+      "scaled_third_derivative": 1.5890004289047534e-10
+    },
+    {
+      "sequence": "sv30",
+      "closure": "coupled-rpa",
+      "bjerrum": 0.03801748214197603,
+      "temperature": 26.303688294388003,
+      "rho": 0.13848756148946179,
+      "scaled_curvature": -9.609504961862038e-17,
+      "scaled_third_derivative": 1.7043007972238146e-10
+    },
+    {
+      "sequence": "sv30",
+      "closure": "electrostatic",
+      "bjerrum": 0.03805919708565844,
+      "temperature": 26.27485802575752,
+      "rho": 0.1378348205675975,
+      "scaled_curvature": -1.0711917397245668e-16,
+      "scaled_third_derivative": -1.7079383504092082e-10
+    },
+    {
+      "sequence": "sv30",
+      "closure": "paper-rpa",
+      "bjerrum": 0.03801748214197603,
+      "temperature": 26.303688294388003,
+      "rho": 0.13848756148946179,
+      "scaled_curvature": -9.609504961862038e-17,
+      "scaled_third_derivative": 1.7043007972238146e-10
+    }
+  ],
+  "max_delta_mu_chain": 2.531308496145357e-13,
+  "max_delta_pressure": 6.998249568279484e-14,
+  "scope": "Computed bulk Gaussian curves; no sampled FTS/MD reproduction claim",
+  "records": [
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv10_coupled-rpa/summary.json",
+      "sha256": "090fba6b6906c20ca9bc0c61d4ba74595f4f68dc7a2d16457d0b4c9cd0b5845f"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv10_electrostatic/summary.json",
+      "sha256": "f24ec39d2682c4513c920301977c9703150656b0c8ed77d3b0995ee633a3d910"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv10_paper-rpa/summary.json",
+      "sha256": "9bdb6d5004fdb9b1bb45c4f55cf2b158fff1f4d2a233a9a0ce67d6b9cef871ce"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv15_coupled-rpa/summary.json",
+      "sha256": "ae13c6b08e5c6f4bf2db958de17380723c5847fd78cbf937a0d9ce8daae589d4"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv15_electrostatic/summary.json",
+      "sha256": "1bb96ec96420e4b5c3888a01cfffa74b5fcaa1e034b413c8a6a46be162ca5e4b"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv15_paper-rpa/summary.json",
+      "sha256": "098d9dc340dabdf4f0cc07509e23a7270058edf92f43b6b16cd4b5835ba4266d"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv20_coupled-rpa/summary.json",
+      "sha256": "03e4788a462fee2e4bd73941001772bfa057a5b7b8379a844f3e388484626b38"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv20_electrostatic/summary.json",
+      "sha256": "60c867d2092a91801cab5794b433d27e5009217a2016aedc905dd097be925fe3"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv20_paper-rpa/summary.json",
+      "sha256": "4e089b84f24897c0e1606e74ac5150d8974e2fe8f91f0fe59e74120c6b30610e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv25_coupled-rpa/summary.json",
+      "sha256": "f649daf17fba704c175537d28f7bcaab67f00f99e40492d1b4bd7a376e86ac97"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv25_electrostatic/summary.json",
+      "sha256": "0e213cd4c139fe392269e936d526362582feaa12faa77b12a49633f6410ca354"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv25_paper-rpa/summary.json",
+      "sha256": "767717e2e83d0345771dcdd4c859772a8d2881e55976136d51139ded039634a1"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv30_coupled-rpa/summary.json",
+      "sha256": "238eb6110a3aa7ad3d316148517681b5a0cd3764dfd6e123f392a2591588df1e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv30_electrostatic/summary.json",
+      "sha256": "26d522393dde7b9fda15c26565a97d304fc27af916f451a5df2294b467f093a6"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/critical_sv30_paper-rpa/summary.json",
+      "sha256": "30ce091c71ce84a43b242156b7e06e368d1a25bd4212027bbedb4af967029c4e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv20_electrostatic_0.033/summary.json",
+      "sha256": "64e16412b5b1027de02cfbfcbb2af02682e5fea4230a2544bb84fa4dd58ca1f3"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv20_electrostatic_0.33/summary.json",
+      "sha256": "31ca7b4cc7563d56ed36c6e5d3c6dd6ccd522d80069df1216083809983f879ac"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv20_paper-rpa_0.033/summary.json",
+      "sha256": "26f122a371807cbf922b17a943b16089794893277388c38035277b945bb2c104"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv20_paper-rpa_0.33/summary.json",
+      "sha256": "94db2db2356d0c92ca47a834c2d79e9d2fb0e185ef8f62dfd9078110b5aa4563"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv30_electrostatic_0.033/summary.json",
+      "sha256": "21f934acb24d4c6b2cc7a387b64750145cf4a68a73cb312edc14b15643b43ecc"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv30_electrostatic_0.33/summary.json",
+      "sha256": "d1fe99916b94ccc6314e3eb6926bd40007c350c60309421193ddf3d94563d18a"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv30_paper-rpa_0.033/summary.json",
+      "sha256": "62e17fbfc1a47c2262764eb53d1017b8c4e92e583e50b9137de46e4cc0f0524b"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/eos_sv30_paper-rpa_0.33/summary.json",
+      "sha256": "4960542f7829a7404815d1a3281a27dfb7be9e22e021831747280b53a2864a38"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_1.05/summary.json",
+      "sha256": "39cdac32822ab50ab0d7afd6b5b79bd90a324adf8512cb18c92891251ef59ac1"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_1.15/summary.json",
+      "sha256": "4cc6f3d76753d2b475cb0d966e8823a82c5689a37cead93c0ae748ce9857116f"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_1.35/summary.json",
+      "sha256": "1ea679e1a1f76ab237b4c6fe46f3554603d334bda2874b5fc1eb00b6763b324d"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_1.7/summary.json",
+      "sha256": "51302903c989b00e33465a70096a8ce8b8fe4d0183a1e93b5489d0140d1c0f14"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_2.2/summary.json",
+      "sha256": "ab0a4c6e9eb7fedd5c62217b84bc865388e16b460a6b94726cbf4a4b58203bc5"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_electrostatic_3/summary.json",
+      "sha256": "8f42e44077e1f74d22206020087ef5503d6402cc5fcc7677904867276d39d1bc"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_1.05/summary.json",
+      "sha256": "f6c3b6a03004a1a1d597ba53b054e074f1a5ae4b59ec80db3fc6adbbdc5e010c"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_1.15/summary.json",
+      "sha256": "54be8037fb18921ec9ed5a6f8f06424f1ebab218c6de76c0f39aeb9feb494f8f"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_1.35/summary.json",
+      "sha256": "ef1b38e07be50448b3084307fa8e8987aff4d7c74cc7ef9920a6f2264e64cc11"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_1.7/summary.json",
+      "sha256": "406ed2b24abd689dc186d1c2dc0fa3dacf546a158529bcaf80c7b60cd3484bb3"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_2.2/summary.json",
+      "sha256": "76339c36397438e38938dcf0cbd5cb3f8dc38950883e51f96a4f7464959d5fb4"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv10_paper-rpa_3/summary.json",
+      "sha256": "2d09a518d0e198c933fef90868e91383f70ba1eb343b5072fc19c7c3694abc2e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_1.05/summary.json",
+      "sha256": "487b85ebe39a3a4228c2b4f002e5fe24c8de2fffc04a28d5207a4550ab171eb2"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_1.15/summary.json",
+      "sha256": "22651e16bef85f96990bfae506fb601925d8de5c186147f440a04958bf226830"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_1.35/summary.json",
+      "sha256": "ef1d11607e872068494ef5c4af10d2de3f5c128fb6c225b13f6a3228e78db83b"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_1.7/summary.json",
+      "sha256": "1ee4143314cf4149dab8408255768544341ce8a19fe1c5dbcb93f3a1c788f1e2"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_2.2/summary.json",
+      "sha256": "e817fcee54561a1fdd9b5463390c4e882c32c432e3eb0c3586b79239fb5e4fb1"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_electrostatic_3/summary.json",
+      "sha256": "3f9b6515daeb7fd7779a317375fc533a7780811f04b9cd464f0f1129e115bf8e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_1.05/summary.json",
+      "sha256": "f50ef1f96477559e503b8550d001843a09260c595b02b9216a71843bef50a02b"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_1.15/summary.json",
+      "sha256": "835018570027faa15bfd465bac09a90218717cd2ac322aabebba2f542ff006ef"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_1.35/summary.json",
+      "sha256": "a3e31ea4da0d06b0de52cab17e0fa4bea58cad4708ba4388e2cf16fb0cb342c8"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_1.7/summary.json",
+      "sha256": "0269983d761b8511e513faae2b2ebb39bb8d906a9278a249fb752bcbfa055580"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_2.2/summary.json",
+      "sha256": "f12ecb944afb3ef62928098afb75ed75106c126724dc2de6f680968ec33fc3b6"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv15_paper-rpa_3/summary.json",
+      "sha256": "82c0f9627f9e8c2f353d857a0cc8a0c6b500b4299066c9172e9359549feaa3f8"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_1.05/summary.json",
+      "sha256": "a0b7bd821288e654239f2288065d05913c816bfb0dee5d0137767f8fd0141b59"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_1.15/summary.json",
+      "sha256": "5da3216056b653a19ba0f1a65bd62e10be04cfa93f23965139d31ec4a9b7c908"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_1.35/summary.json",
+      "sha256": "02794b4ed7982463126c560a5ccb688b49f5617639341fc04fd691381f2d025e"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_1.7/summary.json",
+      "sha256": "b858409aabd0945791939d717dae9b43554b88bb3b21c489707e3abb5863b6b3"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_2.2/summary.json",
+      "sha256": "f105bcb571fa2cba4c1e9a0cf7e27da9b6a28e8e4ccc18b9ebbb50887728fd44"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_electrostatic_3/summary.json",
+      "sha256": "5d539b4a1d3a7bc86dc8a7a7007eb9a3030cf2d04ac6d866179e76ae054c426f"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_1.05/summary.json",
+      "sha256": "19d9e01f4215116c6028882ed0364835695601d317b6dd58b53f09a3ad083e51"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_1.15/summary.json",
+      "sha256": "fc8b365285e91416445fa9ba0a76f9a8a5bbbc368d86b4ae80b1cd71338496cf"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_1.35/summary.json",
+      "sha256": "5b9c512cbcb6fcf47958aecf1b909381eb4a7f41053c4d7e43ac270690dfb519"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_1.7/summary.json",
+      "sha256": "e633a6856e727c1ef7484a326a43ca72a81a88eea18f4cca5e3cf61249065f89"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_2.2/summary.json",
+      "sha256": "da983c4e2cae3f919b72204b7c1cc27afa25152076e6c7235db25dff67efdf45"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv20_paper-rpa_3/summary.json",
+      "sha256": "cbdcd08b421ec267c0d389574933bb8f5bda60c88b210ecfb0337c29bb212c56"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_1.05/summary.json",
+      "sha256": "d03b37add0571536bfa7a2d0d41babb7472b3788f2663f1d2df5e1e7d2bc5ede"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_1.15/summary.json",
+      "sha256": "cb3311360aa97ad3c6a335ef8529280e692ec010689a74996a27a0cdf8c4e89a"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_1.35/summary.json",
+      "sha256": "1bbc1e2f30c796c77a0542cc3a13d3e17b99fff501fa2bcb0f0f360d0eec27f7"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_1.7/summary.json",
+      "sha256": "9801697fa9763d4515dfca28275d0d3233566914dddebb738ca34a1cfdb0d45d"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_2.2/summary.json",
+      "sha256": "c8c34a5af3034cb3bb29956dbf798bdf7a5226b4d91fa57844457acc75c2d2d4"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_electrostatic_3/summary.json",
+      "sha256": "f10a01f844174a27759218e9fa8a561c3685f12aacae04bd7b283325877af931"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_1.05/summary.json",
+      "sha256": "51078920a400fdd560a40d8ab68ef669a5a5168984e8928849bf720d94e47e55"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_1.15/summary.json",
+      "sha256": "18e14a1d9014b2979dea9ddd1a5569437db5a1c9e116981feaa1535ada88622a"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_1.35/summary.json",
+      "sha256": "5495bae0ae5344c14ffb0144fa13e87d9c2b1e5d1b6616a9b0f956d0f90ddec5"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_1.7/summary.json",
+      "sha256": "a27fef61cb28d14074b9b2320cf9c11be727b9d8ee84d7e745046c6a3b2498dc"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_2.2/summary.json",
+      "sha256": "726f3fd792af0f96efa5b7b92f6066862d08a15338e271444c1695e83db6ea1a"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv25_paper-rpa_3/summary.json",
+      "sha256": "c347fb84790e132b54d9c6da69364996f43a2105c1d648bed51428fafac23934"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_1.05/summary.json",
+      "sha256": "a95750605d77497cdb87d8c22e35440e73ea83c4fcf2b77a4c3fcd44461d4d64"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_1.15/summary.json",
+      "sha256": "db7b642213a9704843a34383a73c7406ac2820f2156e36c48b4341a56dd22c60"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_1.35/summary.json",
+      "sha256": "747a8bf6ba2f3ed453e9ef8f5bdfc23a489709e344ef6f072ce871dd4fe51d4c"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_1.7/summary.json",
+      "sha256": "8fa327cf4cd57f5b1de7f3f5b29041afd101a993e1cdd19ab02bc1072c573524"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_2.2/summary.json",
+      "sha256": "c1a9ec4db74b32c1dd69e8fbd13194ebb74fecb87858901bd28d14fb9b74eca7"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_electrostatic_3/summary.json",
+      "sha256": "89497b30f320b6c3d44820a5a05a1a3fc6d4dbafb22e2dca6b3472dbbf8e79b9"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_1.05/summary.json",
+      "sha256": "68ab4a320ba2ebb46ed5d192ba6bc9bcffd8159eefeaff04fb6bef21aa448a8c"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_1.15/summary.json",
+      "sha256": "e2ea5dda9c5ab63be8b109f504d2017414bc36b276b3905a7baac54e48ec5cb9"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_1.35/summary.json",
+      "sha256": "74927736829bbd9cd8acd32a0eae27e1fe8be59edc144dd1c0413c5660e24371"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_1.7/summary.json",
+      "sha256": "4ca731439557a3b7918918310a8152a1280e85b07c31bef9b6a31ed119c7c88f"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_2.2/summary.json",
+      "sha256": "db808db97c8912f0626df77c30f9dccc0913c6a2c4cbc23546d683b5ebb45540"
+    },
+    {
+      "path": "/home/yongdd/polymer/dh_salt_runs/mccarty_gaussian_20260915_045023/phase_sv30_paper-rpa_3/summary.json",
+      "sha256": "8328b80de14d09a6c06309c982c049530e9b78fc30cec458db71745e0210bc9b"
+    }
+  ]
+}

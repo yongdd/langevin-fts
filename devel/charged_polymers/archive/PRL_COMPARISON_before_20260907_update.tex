@@ -1,0 +1,434 @@
+\documentclass[10pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue]{hyperref}
+\graphicspath{{figures/}{prl_comparison_figs/}}
+
+\newcommand{\ok}{\textcolor{green!55!black}{\textbf{reproduced}}}
+\newcommand{\partialok}{\textcolor{orange!85!black}{\textbf{partial}}}
+\newcommand{\notok}{\textcolor{red!75!black}{\textbf{not reached}}}
+
+\title{Side-by-side comparison: Duan, Agrawal \& Wang, PRL \textbf{134}, 048101 (2025)\\
+vs.\ this codebase: (i) their SCFT reimplemented, (ii) charged CL-FTS}
+\author{Internal research note (devel/charged\_polymers) --- figures from the cited paper\\
+are reproduced here for private scholarly comparison only}
+\date{2026-08-26}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Panel-by-panel comparison of the polyelectrolyte-brush results of
+Duan, Agrawal \& Wang [PRL \textbf{134}, 048101 (2025)] --- obtained
+with their electrostatic-correlation-augmented SCFT --- against our
+independent reproduction with fully fluctuating charged complex-Langevin
+FTS (smeared-charge compressible model, wall boxes, discrete chains).
+Left panels: the paper's figures. Right panels: our measurements at the
+strongest coupling inside our CL-stable envelope
+($z_+{=}3$ ion correlation $u_3 \approx 13\,k_BT$, $\Theta$ solvent,
+$\alpha = 1$ fully charged backbone, $N=25$, $\bar N = 10^4$).
+Full provenance: \texttt{RESULTS\_FIG1\_REPRO.md} \S3--3f; all numbers
+audited against the run data.
+\end{abstract}
+
+\section*{Part I --- their own theory, our implementation (correlation SCFT)}
+
+Direct reimplementation of their variational/self-energy SCFT
+(\texttt{prl\_scft.py}): repo discrete-chain propagator on a real-space
+bond-convolution backend, guarded-Newton nonlinear PB with analytic
+grand-canonical ions, LDA self-energies (SI Eq.~S33), exact $\xi$
+elimination, $\alpha$- and correlation-strength continuation. All at
+their exact Fig.~1 parameters.
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.50\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig1}
+  \caption{PRL Fig.~1.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \includegraphics[width=\linewidth]{prl_scft_fig1}
+  \caption{Same theory, our implementation.}
+\end{subfigure}
+\end{figure}
+
+\noindent\textbf{Verdict: \ok\ (quantitative).}
+Curve-for-curve agreement, all states converged to $5\times10^{-4}$,
+including the near-wall entropic depletion layer (hard-wall truncated
+bond integral; graft source a Gaussian of width $0.5b$ centered on the wall
+(half-Gaussian, the smooth analog of their $\delta(z)$; finite in the
+discrete hard-wall formulation)): mean-field dashed family ($\phi\approx0.31$--$0.40$, extent
+45--52\,nm, nearly valence-blind; theirs $0.32$--$0.38$, 45--50$b$);
+neutral ($h=21.8$\,nm, plateau 0.51, edge $\sim$28$b$; theirs
+$\sim$0.51, $\sim$28$b$); $z_+{=}2$ collapsed plateau $\phi=0.58$ to
+18.7\,nm (theirs $\sim$0.59 to $\sim$19$b$) with $\Gamma=-0.056$ (their
+algebraic Eq.~7 value: $-0.048$) and $\psi_S<0$; $z_+{=}3$ plateau
+$\phi=0.72$--$0.73$, $h=14.5$\,nm (theirs $\sim$0.74 to $\sim$14$b$)
+with $\Gamma=-0.32$ and $\psi_S=+0.66$ (charge inversion); $z_+{=}1$
+slightly compacted, no overcharging. The Fig.~3 sign structure
+($z_+{=}2$: overcharging without $\psi_S$ inversion; $z_+{=}3$: both)
+is reproduced exactly. One physics note: the pointwise LDA self-energy
+has no wavelength cutoff and goes grid-scale-unstable at $z_+{=}3$ full
+coupling; smoothing the local ionic strength over the Born radius $a$
+(the regularization their nonlocal $G_s$ carries intrinsically) restores
+clean convergence and leaves $z_+{=}1,2$ untouched. Full account:
+\texttt{RESULTS\_PRL\_SCFT.md}.
+
+\subsection*{Their Figs.~2--4 with the reimplemented SCFT}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig2}
+  \caption{PRL Fig.~2.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_scft_fig2}
+  \caption{Ours, semicanonical with a GC monovalent background $c_1$
+  (the physical form of the counterion reservoir; the onset position is
+  reservoir-controlled --- shown by the $1/L$ box scaling --- and the
+  paper reports neither box nor background). $c_1$ per valence aligns
+  the ion-exchange crossings ($z_+{=}2$: $9.2\times10^{-4}$ vs their
+  $\sim10^{-3}$\,M; $z_+{=}3$: $2.1\times10^{-5}$ vs their
+  $\sim3\times10^{-5}$\,M); valleys $-0.42/-0.49$ (theirs
+  $-0.45/-0.58$; the $z_+{=}3$ background screening shallows it). A
+  single $c_1$ cannot align both (their crossing ratio 33 vs this
+  tier's $\sim$14 --- the $I_{ex}$ signature).}
+\end{subfigure}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig3}
+  \caption{PRL Fig.~3.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_scft_fig3}
+  \caption{Ours. Thick blue: their Eq.~7 ($z_+{=}3$ min $-1.27$ vs
+  their $-1.3$); thick orange: their Eq.~9 (their orange curve is this
+  Donnan estimate, not a wall potential --- verified by shape). The
+  $z_+{=}3$ peak: Eq.~9 with our $\Gamma$ gives $+3.9$, the true SCFT
+  wall value $+0.9$; their $+2.5$ lies between and is NOT reproducible
+  from their own published $\Gamma$ + Eq.~9 (which would give $+5$) ---
+  an internal inconsistency traceable only to their unpublished
+  numerics.}
+\end{subfigure}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig4}
+  \caption{PRL Fig.~4.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.49\textwidth}
+  \includegraphics[width=\linewidth]{prl_scft_fig4cd}
+  \caption{Ours, their (c,d): $a_+ = 2.5, 2.0$\,\AA{} give smooth
+  collapsed films; $a_+=1.5$\,\AA{} gives converged stationary
+  oscillatory layers (period $\sim b$) --- the same physics as their
+  panels, drawn as 1D profiles rather than density renders. Their
+  (a,b): \textbf{the visual difference is dimensionality} --- their
+  hexagonal pinned-micelle lattice is a 3D result, while our
+  calculation (\texttt{prl\_scft2d.py}) is a 2D $(x,z)$ pilot in which
+  micelles can only appear as stripe cross-sections by construction.
+  The 2D pilot reproduces the lateral microphase separation itself:
+  the uniform film is metastable and seeded runs converge to arrays of
+  pinned dense domes ($\phi\sim0.75$, spacing 15--30\,nm, near-bare
+  gaps; next figure). A full 3D extension would be required for the
+  hexagonal arrangement.}
+\end{subfigure}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.9\textwidth]{prl_scft_fig4ab}
+\caption*{Converged laterally structured state of the quenched 2D pilot
+at their Fig.~4(a,b) conditions ($\sigma=0.03$\,nm$^{-2}$, $z_+{=}3$,
+$\rho_b=1$\,mM): an array of pinned dense domes ($\phi\sim0.75$,
+height $\sim$8\,nm, spacing 20\,nm, near-bare gaps), coexisting with
+the metastable uniform film (first-order lateral microphase
+separation).}
+\end{figure}
+
+\section*{Part II --- fully fluctuating charged CL-FTS vs the paper}
+
+\textbf{Final (2026-08-29): three-way judgment at matched parameters,
+hard-wall boxes on both sides.}
+Their correlation SCFT (Part I implementation) applied to the CL
+campaign's own system ($\Theta$, $N{=}25$, matched Born radii, matched
+graft): mean fields agree to 1--6\%; the correlation DIFFERENTIALS show
+the exact effect SATURATING
+($\Delta h_1 = -0.095 \to -0.129 \to -0.131$ at $u_3 = 6.5/12/13\,k_BT$)
+while the Gaussian LDA deepens toward its own fold
+($-0.190 \to -0.291 \to$ no solution): overshoot $2.0\times$ at
+$6.5\,k_BT$, $2.3\times$ at $12\,k_BT$, and beyond the runaway
+threshold $u_3^* \approx 12.5\,k_BT$ the LDA electrolyte sector has no
+physical solution (saturated-condensation branch) while CL remains
+well-behaved. The LDA's overcharging ($\Gamma$ to $-0.25$) is
+contradicted by three-seed-robust CL positives ($\Gamma \approx +0.09$)
+at every tested coupling.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.85\textwidth]{cl_vs_scft_fig1}
+\caption*{LDA (red, deterministic scan $u_3 = 6.5$--$12\,k_BT$) vs
+exact CL-FTS (blue, 3 seeds), same hard-wall microscopic system.
+Dotted line: LDA runaway threshold ($u_3^* \approx 12.5\,k_BT$),
+beyond which their theory has no physical solution.}
+\end{figure}
+
+
+\section*{Fig.~1 --- density profiles: valence-selective correlation collapse}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.50\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig1}
+  \caption{PRL Fig.~1: with correlations (solid), the $z_+{=}3$ brush
+  collapses \emph{below the neutral profile}; mean field (dashed) is
+  swollen and nearly $z_+$-insensitive. ($N{=}100$, $b{=}1$\,nm,
+  $a{=}2.5$\,\AA, $I_b{=}0.3$\,M.)}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.46\textwidth}
+  \includegraphics[width=\linewidth]{fig1_reproduction}
+  \caption{Ours, HARD-WALL rerun ($\Theta$, $u_3{=}12\,k_BT$, 3 seeds;
+  dashed: quasi-saddle mean field, solid: CL): profiles now show the
+  correct wall depletion layer ($\phi(0){\approx}2{\times}10^{-4}$).
+  Correlations collapse the $z_+{=}3$ brush ($h_1$: $0.80 \to 0.67$)
+  while $z_+{=}1$ barely moves; the collapsed brush remains
+  \emph{above} our neutral reference ($h_1{=}0.62$).}
+\end{subfigure}
+\end{figure}
+
+\noindent\textbf{Verdict: \ok\ (mechanism).} The defining structure ---
+correlation-induced, $z_+$-selective collapse invisible at mean field ---
+appears identically. The causality was pinned three ways
+(\S3, reflecting-wall era; mechanism unchanged by the wall fix): the
+contraction scales as $z_+^2$ (ratio $8.7 \approx 9$), vanishes in the
+neutral control, and tracks the Coulomb coupling $E$.
+\textbf{Difference, resolved in \S3h:} the paper's collapse undershoots
+the neutral height; ours saturates well above it. The matched-parameter
+comparison shows this is not a limitation of our envelope --- the exact
+effect saturates while their Gaussian LDA keeps deepening ---
+so the below-neutral amplitude is an artifact of their approximation.
+
+\section*{Fig.~2 --- nonmonotonic $h(\rho_b)$: collapse and reexpansion}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.50\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig2}
+  \caption{PRL Fig.~2: $\log(h/h_0)$ vs $\rho_b$. For $z_+{=}2,3$ the
+  height is nonmonotonic --- collapse below the neutral line, then
+  reexpansion --- matching the Tirrell-group experiments (symbols).}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.46\textwidth}
+  \includegraphics[width=\linewidth]{fig2_reproduction}
+  \caption{Ours, on THEIR axis and axes (monovalent counterions + 1:1
+  background salt, multivalent SALT scanned; hard wall, 3D; x = the
+  MEASURED reservoir concentration of the canonical box,
+  $b \equiv 1$\,nm): exact CL valence series --- common extended
+  plateau, valence-ordered collapse $z_+{=}3 > 2 > 1$ ($z_+{=}1$
+  tracks mean field), floor above the neutral brush (dashed),
+  nonmonotonic $\Gamma$ (\S3i-d,g).}
+\end{subfigure}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.8\textwidth]{fig2_threeway}
+\caption*{Fig.~2-1 (FINAL) --- the $z_+{=}3$ three-way judgment at
+identical parameters ($N{=}50$ brush, $\sigma{=}30$, tall box,
+$u_3 = 12.9\,k_BT$; 8 salt points, 2 seeds). Mean field (gray):
+monotone. Their PRL SCFT (orange): dives to $-0.44$ at
+${\sim}10^{-2}$\,M --- essentially its neutral line --- with
+overcharging and reexpansion. Exact FTS (green): smooth collapse to
+$-0.30$, sitting BETWEEN mean field and their theory at every
+measurable point (the exact correlation deepening is $40$--$50$\% of
+their prediction), staying $0.17$ above the exact neutral brush
+(dotted, $-0.47$) with $\Gamma > 0$ throughout ($+0.67 \to +0.11$).
+Left-arrows: onset-region points whose bulk trivalent is fully
+depleted by the brush (canonical box; reservoir concentration below
+detection). The $N{=}25$ version is in \S3i-g.}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.78\textwidth]{fig2_cfamily}
+\caption*{Fig.~2-2 --- interpolating their correction, $F = F_{\rm MF}
++ c\,F_{\rm 1loop}$: the exact ensemble (green) lies on the
+$c{=}0.5$ member of the family across the whole collapse region.
+At $u_3 = 12.9\,k_BT$ the non-Gaussian terms cancel HALF of the
+Gaussian correlation free energy: no physical parameter maps their
+theory onto exact sampling --- only the truncation weight $c \approx
+0.5$ does (\S3i-i).}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.62\textwidth]{cstar_vs_u3}
+\caption*{Fig.~2-3 --- two-observable $c^*(u_3)$: the fraction of
+their Gaussian correction confirmed by exact sampling, extracted
+independently from brush height ($c^*_h$, purple) and condensation
+($c^*_\Gamma$, brown) at five coupling rungs (fixed $s{=}0.02$).
+Nowhere is the full correction ($c^*{=}1$) supported. At weak coupling
+both observables give the same $c^* \approx 0.6$ (a genuine effective
+theory); beyond $u_3 \sim 6\,k_BT$ they SPLIT ($0.46$ vs $0.24$ at
+$u_3{=}12$--$13$): no single rescaling fixes both observables --- the
+Gaussian truncation carries a form error, consistent with
+non-Gaussian ion-bridging attraction absent from any single-ion
+self-energy (\S3i-j).}
+\end{figure}
+
+\noindent\textbf{Verdict: \ok\ (mechanism, on the correct axis) ---
+amplitude gap attributed to the LDA (\S3i-b--3i-d).} An important
+correction: our earlier salt scans used trivalent brush COUNTERIONS, an
+axis on which the brush starts collapsed and no valley can exist by
+construction. On the paper's actual axis (monovalent counterions,
+trivalent ions arriving only via salt) the exact ensemble DOES
+reproduce the Fig.~2 phenomenology: extended $\to$ collapse (
+$h_1$: $1.07 \to 0.70$, CL below MF throughout, gap growing with salt)
+$\to$ valley floor, with nonmonotonic $\Gamma$. What does NOT appear
+exactly: the amplitude. Their collapse undershoots the neutral brush by
+${\sim}40$\%; our exact valley floor stays above ours. Attribution
+(\S3i-g, magenta curve above): their Gaussian LDA, run on our system
+at the matched measured ionic environment, gives the full deep valley
+--- onset one decade earlier, $1.75\times$ deeper, below neutral, with
+an overcharging window --- none of which survives exact sampling. (On
+the trivalent-counterion axis, figure below, the theory additionally
+loses its solution entirely at low screening.)
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.72\textwidth]{lda_overlay}
+\caption*{Attribution overlay (trivalent-counterion axis, hard wall,
+$u_3{=}12\,k_BT$): their LDA (red) dives below its neutral line and
+loses its solution (runaway $\times$); exact CL (blue) saturates at its
+neutral floor.}
+\end{figure}
+
+\section*{Fig.~3 --- effective brush charge $\Gamma$: neutralization vs overcharging}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.50\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig3}
+  \caption{PRL Fig.~3: for $z_+{=}2,3$, $\Gamma$ dips \emph{below zero}
+  in a salt window (overcharging), before recovering at high salt.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.46\textwidth}
+  \includegraphics[width=\linewidth]{fig3_reproduction}
+  \caption{Ours, HARD-WALL rerun: correlations drive $\Gamma$ from the
+  mean-field $0.24$--$0.30$ (dashed) to a $0^+$ plateau (complete
+  neutralization, $+0.006$--$0.010$ at 150k steps) across the low-salt window,
+  rising to $+0.14$ at high salt. No blue point crosses zero. Halving
+  the ion smearing (orange, hard-wall, 150k, 2 seeds) pushes the
+  low-salt point to $-0.017 \pm 0.017$ --- consistent with complete
+  neutralization, at most marginal overcharging at doubled per-ion
+  coupling.}
+\end{subfigure}
+\end{figure}
+
+\noindent\textbf{Verdict: \partialok, revised by the hard-wall reruns
+(\S3h--3i).} Correlation-driven condensation far beyond mean field is
+real and now hard-wall-confirmed: $\Gamma$ drops from the mean-field
+$0.24$--$0.30$ to a $0^+$ plateau ($+0.008$--$0.012$) in the low-salt
+window (\S3i), and at fixed $s{=}0.02$ the exact ensemble SATURATES at
+$\Gamma \approx +0.09$ across $u_3=6.5$--$13\,k_BT$ (\S3h). It never
+crosses zero. The paper's overcharging window ($\Gamma<0$) is
+where their Gaussian LDA is already overshooting ours by
+$2.0$--$2.3\times$ and heading into its runaway ($u_3^* \approx
+12.5\,k_BT$); we now attribute their $\Gamma<0$ amplitude to the
+Gaussian/LDA approximation rather than to physics our envelope
+``cannot yet reach.''
+
+\section*{Fig.~4 --- lateral microphase separation (precursor only)}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.46\textwidth}
+  \includegraphics[width=\linewidth]{prl_fig4}
+  \caption{PRL Fig.~4: pinned micelles in hexagonal arrangement at
+  moderate grafting density; oscillatory layers at high density.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.50\textwidth}
+  \includegraphics[width=\linewidth]{lateral_snapshots_z3}
+  \caption{Ours, HARD-WALL rerun ($s{=}0.001$, three seeds, two times
+  each): instantaneous $P$ column-density snapshots show box-scale
+  lateral clustering (relative std $0.36$--$0.44$, single cluster per
+  box) --- the precursor survives the wall fix --- but our lateral box
+  ($0.8\,R_0$) is smaller than the expected micelle spacing, so no
+  lattice can form. A $3$--$4\,R_0$ lateral box is the designed
+  follow-up.}
+\end{subfigure}
+\end{figure}
+
+\noindent\textbf{Verdict: precursor observed, geometry-limited.}
+The lateral-inhomogeneity indicator rises to $\sim$10$\times$ the neutral
+baseline for charged brushes, strongest at low salt (their Fig.~4 lives
+at $\rho_b \sim 1$\,mM), but a quantitative Fig.~4 comparison requires
+the wide-box campaign.
+
+\section*{Correspondence of models and scales}
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+ & PRL 134, 048101 & this work \\
+\midrule
+theory & variational Gaussian (self-energy) SCFT & full CL-FTS sampling \\
+fluctuations & one-loop, self-consistent & all orders (stochastic) \\
+chain & discrete, $N=100$, $\alpha=1$ & discrete, $N=25$, $\alpha=1$ \\
+solvent & $\Theta$ ($\chi = 0.5$) & $\Theta$ ($\chi N = 12.5$) \\
+ions & explicit, Born radius 2.5\,\AA, grand-canonical & explicit 1-segment, smeared
+ ($a_{\rm ion}=0.025$--$0.0125\,R_0$), canonical \\
+$z_+{=}3$ ion correlation & $\sim 7\,k_BT$ (near point-like) & $\leq 13\,k_BT$ nominal,
+ cutoff-limited \\
+geometry & 1D--3D wall, analytic-ion Poisson & 3D all-reflecting box, fluctuating $\psi$ (DCT/ETD) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Summary scoreboard}
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+PRL result & status & evidence \\
+\midrule
+\multicolumn{3}{l}{\emph{Part I: their SCFT, our implementation}} \\
+Fig.~1 all profiles (MF, corr, neutral) & \ok\ (quantitative) & curve-for-curve match \\
+Fig.~1--2 collapse below neutral & \ok & $z_+{=}2$: 18.7, $z_+{=}3$: 14.5 vs neutral 21.8\,nm \\
+Fig.~3 overcharging $\Gamma<0$ ($z_+{=}2,3$) & \ok & $-0.057$ / $-0.32$; Eq.~7: $-0.048$ / $-0.65$ \\
+Fig.~3 $\psi_S$ inversion only at $z_+{=}3$ & \ok & $\psi_S$: $-0.81$ / $-0.15$ / $+0.75$ \\
+\midrule
+\multicolumn{3}{l}{\emph{Part II: fully fluctuating CL-FTS (honest restatement, 2026-08-29;}} \\
+\multicolumn{3}{l}{\emph{\S3--3f were REFLECTING-wall runs, superseded by the hard-wall reruns of \S3h--3i)}} \\
+Fig.~1 contraction mechanism & \ok\ (mechanism only) & $z_+^2$ ratio, $E$-scaling, neutral null; small amplitude (\S3, 3c, 3h) \\
+Fig.~2 collapse mechanism (correct axis) & \ok & valence series $z_+{=}1/2/3$: common plateau, ordered collapse, valley floor + nonmonotonic $\Gamma$; CL $<$ MF throughout (\S3i-d,f) \\
+Fig.~2 below-neutral valley depth & \notok\ (attributed) & matched ionic env.: their theory collapses 1 decade earlier, $1.75\times$ deeper, below neutral, $\Gamma<0$; exact does none (\S3i-g) \\
+Fig.~3 strong condensation & \ok & hard-wall: $\Gamma$: MF $0.24$--$0.30 \to 0^+$ plateau at low salt; saturates $+0.09$ vs coupling (\S3h--3i) \\
+Fig.~3 overcharging ($\Gamma<0$) & \textcolor{red!75!black}{\textbf{refuted}} & exact ensemble stays positive at all tested couplings; LDA's $\Gamma<0$ is a Gaussian artifact (\S3h) \\
+Fig.~1--2 collapse below neutral & \textcolor{red!75!black}{\textbf{refuted at matched params}} & exact contraction saturates far above the paper's amplitudes (\S3h) \\
+Fig.~4 lateral micelles & \partialok & box-scale precursor survives hard wall (\S3i); dome arrays in 2D SCFT only \\
+Their theory vs exact sampling & --- & LDA overshoots $2.0$--$2.3\times$, runaway at $u_3^* \approx 12.5\,k_BT$ (\S3h) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent The amplitude gap traces to a single, well-characterized cause:
+our UV-regularized (smeared-charge) model caps the ion-correlation
+strength that their near-point-charge treatment attains, and shrinking the
+smearing collides with a CL stability boundary. Candidate paths beyond it
+--- their grand-canonical analytic-ion formulation (SI Eq.~S24) grafted
+onto our fluctuating-$\psi$ sector, or a dedicated strong-coupling
+$\psi$ stabilization --- are recorded as future work.
+
+\end{document}

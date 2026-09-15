@@ -1,0 +1,275 @@
+{
+  "date": "2026-09-14",
+  "scope": "Duplicate artifacts, shared helpers, current documentation and analysis-note maintenance; no new sampling campaign.",
+  "evidence_directory": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24",
+  "backup": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24/before",
+  "deleted_duplicate_figures": [
+    {
+      "removed": "archive/prl_comparison_figs/cl_diag_tails.png",
+      "kept": "archive/figures/cl_diag_tails.png",
+      "sha256": "feeb17dc89205a09ca3077bec5b2aff3869f3d6bea9434c590ebf91efd7eea62",
+      "bytes": 78236
+    },
+    {
+      "removed": "archive/prl_comparison_figs/cl_vs_scft_fig1.png",
+      "kept": "archive/figures/cl_vs_scft_fig1.png",
+      "sha256": "ca97d81991211f83e89e167719481b0ebccb547559020ac265eaeb02daba8c4f",
+      "bytes": 93171
+    },
+    {
+      "removed": "archive/prl_comparison_figs/cstar_vs_u3.png",
+      "kept": "archive/figures/cstar_vs_u3.png",
+      "sha256": "0a2a8a04d1813b96c875a1af46edde83c54e5414a511f48aad9111c8f0358a44",
+      "bytes": 73521
+    },
+    {
+      "removed": "archive/prl_comparison_figs/lda_overlay.png",
+      "kept": "archive/figures/lda_overlay.png",
+      "sha256": "b5375bd3c7b841968597ba33d8da1d3c97fadee0876b9ff13388b4ed8db55ec9",
+      "bytes": 77875
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig1.png",
+      "kept": "archive/figures/fig1_reproduction.png",
+      "sha256": "bc58bd6b374ff7255b543aa1b39708c4eb3209110107165684ed01fa1ae1ef2f",
+      "bytes": 111579
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig2.png",
+      "kept": "archive/figures/fig2_reproduction.png",
+      "sha256": "980d6ff49fb8d2658043e419327a402af1de52b2a9a7c25761707c3cd1f13e7a",
+      "bytes": 71074
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig2_cfamily.png",
+      "kept": "archive/figures/fig2_cfamily.png",
+      "sha256": "6f145c93c7859b4ba39385fa6cda47e33f100a3499d6ee89e65188da0c112602",
+      "bytes": 95563
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig2_threeway.png",
+      "kept": "archive/figures/fig2_threeway.png",
+      "sha256": "26256666ddf6008685322b2413b1feb96d8a9008962ff37d64e2c8766db661bd",
+      "bytes": 89024
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig3.png",
+      "kept": "archive/figures/fig3_reproduction.png",
+      "sha256": "c24ff19bdea2e28b9218612d7cccd7da3abe9639bad44f041d6ce97323ee6ac1",
+      "bytes": 61031
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_fig4.png",
+      "kept": "archive/figures/lateral_snapshots_z3.png",
+      "sha256": "e0eac29a7da808fc63a324a045409dbf9f422064abdadb09a10fb7fec11e019c",
+      "bytes": 39560
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig1.png",
+      "kept": "archive/figures/prl_scft_fig1.png",
+      "sha256": "3e3eb005e4cd1315d11dea54d64763dc5fbf337a7bbc06cccd1ac9bc9771dce8",
+      "bytes": 99756
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig2.png",
+      "kept": "archive/figures/prl_scft_fig2.png",
+      "sha256": "338132b82548c3f4431199dedfd331c23ddfd208f3c8b2357cbabd6f33d8af7f",
+      "bytes": 87225
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig23.png",
+      "kept": "archive/figures/prl_scft_fig23.png",
+      "sha256": "e741395d677693a64095f51da87eb82c15602dce6058bb16f6a7b12bf9fd89b8",
+      "bytes": 135708
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig3.png",
+      "kept": "archive/figures/prl_scft_fig3.png",
+      "sha256": "24daf9867bc32d2a7b9635ffc0190e6cdef6aed557e9e319a4612a005657994b",
+      "bytes": 83391
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig4ab.png",
+      "kept": "archive/figures/prl_scft_fig4ab.png",
+      "sha256": "3d10d90dc9d08f7dc083e48e1de2e37876630e66adc1472b72b6a6d9c65e9d66",
+      "bytes": 97594
+    },
+    {
+      "removed": "archive/prl_comparison_figs/ours_scft_fig4cd.png",
+      "kept": "archive/figures/prl_scft_fig4cd.png",
+      "sha256": "a04cd47842699c31735832a3db08908476304f1124a648ad18e3f610bbb6c1d9",
+      "bytes": 77119
+    }
+  ],
+  "deleted_generated_files": 71,
+  "deleted_generated_bytes": 6898900,
+  "changed_files": [
+    ".gitignore",
+    "README.md",
+    "archive/PRL_COMPARISON_before_20260907_update.tex",
+    "examples/Lamella.py",
+    "models/brush_clfts.py",
+    "models/brush_scft_charged.py",
+    "models/clfts_charged.py",
+    "models/lfts_charged.py",
+    "models/prl_scft2d.py",
+    "reports/CLFTS_VALIDATION.md",
+    "reports/CLFTS_VALIDATION.pdf",
+    "reports/PRL_REPRODUCTION.md",
+    "reports/PRL_REPRODUCTION.pdf",
+    "reports/__init__.py",
+    "reports/build_reports.py",
+    "reports/metadata/relocations.json",
+    "studies/__init__.py",
+    "studies/brush_analysis.py",
+    "studies/prl_analysis.py"
+  ],
+  "new_files": [
+    "models/common.py"
+  ],
+  "numerical_ast_preserved": [
+    "models/electrostatics.py",
+    "models/clfts_charged.py",
+    "models/positive_brush_1d.py",
+    "models/lfts_charged.py",
+    "models/brush_scft_charged.py",
+    "models/__init__.py",
+    "models/prl_scft.py",
+    "models/stable_grafted_chain.py",
+    "models/brush_clfts.py",
+    "models/prl_scft2d.py",
+    "tests/test_neutral_reduction.py",
+    "tests/__init__.py",
+    "tests/test_debye_huckel.py",
+    "tests/test_neutral_reduction_clfts.py",
+    "examples/__init__.py",
+    "examples/Lamella.py",
+    "studies/prl_analysis.py: numerical functions",
+    "studies/brush_analysis.py: numerical functions"
+  ],
+  "python_syntax": true,
+  "helpers_ast_identical": true,
+  "model_imports": [
+    "electrostatics",
+    "clfts_charged",
+    "positive_brush_1d",
+    "lfts_charged",
+    "brush_scft_charged",
+    "common",
+    "prl_scft",
+    "stable_grafted_chain",
+    "brush_clfts",
+    "prl_scft2d"
+  ],
+  "command_help_passed": [
+    "prl fig1",
+    "prl salt",
+    "prl meanfield",
+    "cl brush",
+    "cl exact",
+    "cl reduced",
+    "sample brush",
+    "sample finite",
+    "sample marginal",
+    "check implementation",
+    "check brush",
+    "check checkpoints",
+    "check field-integral",
+    "check poles",
+    "check identities",
+    "analyze cl-exact",
+    "analyze cl-reduced",
+    "analyze cl-brush",
+    "analyze marginal",
+    "analyze fig1-finite",
+    "analyze prl-scan",
+    "analyze matched",
+    "analyze brush",
+    "test neutral",
+    "test neutral-cl",
+    "test debye-huckel",
+    "example lamella"
+  ],
+  "legacy_help_passed": true,
+  "archived_graphic_references_verified": 22,
+  "changed_dependency_rejected": true,
+  "analysis_notes": {
+    "fig23_prl_20260907": {
+      "counts": {
+        "completed": 249,
+        "failed": 47,
+        "extended_checked": 215,
+        "primary": 57,
+        "paired": 57
+      },
+      "validation_maxima": {
+        "full_residual": 6.02194349941243e-08,
+        "chain_error": 2.333411242005923e-13,
+        "contour_error": 1.9791945859992666e-12,
+        "mass_error": 3.552713678800501e-15,
+        "counterion_mass_error": 3.552713678800501e-15
+      }
+    },
+    "sampling_scft_20260907": {
+      "numeric_rows_unchanged": 21
+    },
+    "positive_brush_20260907": {
+      "numeric_rows_unchanged": 24
+    }
+  },
+  "runtime_checks": {
+    "neutral": {
+      "exit_code": 0,
+      "seconds": 13.386490173637867,
+      "log": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24/neutral.console.log"
+    },
+    "neutral-cl": {
+      "exit_code": 0,
+      "seconds": 1.559769419953227,
+      "log": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24/neutral-cl.console.log"
+    },
+    "debye-huckel": {
+      "exit_code": 0,
+      "seconds": 2.3650745265185833,
+      "log": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24/debye-huckel.console.log"
+    },
+    "implementation": {
+      "exit_code": 0,
+      "seconds": 19.327243810519576,
+      "log": "/home/yongdd/polymer/dh_salt_runs/dedup_20260914_81vecp24/implementation.console.log"
+    }
+  },
+  "cpu_cuda_phi_error": 5.613217783960923e-16,
+  "source_audits_passed": true,
+  "protected_source_and_test_files_unchanged": 282,
+  "archived_notes_and_original_comparison_pdf_unchanged": true,
+  "packaged_report_figures_unchanged": true,
+  "pdf_build": {
+    "PRL_REPRODUCTION": {
+      "pages": 20,
+      "source_sha256": "5cf48562527638ccd2bda1bb9cf9e174b936ed38719336e60854a3364ae8357c",
+      "pdf_sha256": "c9a593a5d554c3fe554b6bfbbb72a63a9387bc31d8c4d75ad6f491dd8f14ff1c",
+      "missing_glyphs": 0,
+      "overfull_boxes": 0
+    },
+    "CLFTS_VALIDATION": {
+      "pages": 38,
+      "source_sha256": "885f28cbebbb79ffc6dedd842dc4d2757dfc8dbb9fc9cb071d49344249c8ddce",
+      "pdf_sha256": "deac9b14d76e8926f144b898c37f413e1d53691bea1869140865414847e5ffe3",
+      "missing_glyphs": 0,
+      "overfull_boxes": 0
+    }
+  },
+  "default_build_removes_intermediates": true,
+  "broken_relative_links": [],
+  "all_report_and_archive_assets_not_ignored": true,
+  "remaining_exact_duplicate_files": [],
+  "visually_reviewed_pdf_pages": {
+    "CLFTS_VALIDATION": [
+      7
+    ],
+    "PRL_REPRODUCTION": [
+      2
+    ]
+  }
+}
