@@ -225,7 +225,6 @@ void CpuComputationContinuous<T>::compute_propagators(
     {
         const int M = this->cb->get_total_grid();
         const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_reduced_basis() : M;
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
@@ -282,10 +281,6 @@ void CpuComputationContinuous<T>::compute_propagators(
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                // // Display job info
-                // #ifndef NDEBUG
-                // std::cout << job << " started" << std::endl;
-                // #endif
 
                 // Check key
                 #ifndef NDEBUG
@@ -348,7 +343,6 @@ void CpuComputationContinuous<T>::compute_propagators(
                         #ifndef NDEBUG
                         this->propagator_finished[key][0] = true;
                         #endif
-                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else if(key[0] == '(')
                     {
@@ -378,7 +372,6 @@ void CpuComputationContinuous<T>::compute_propagators(
                         #ifndef NDEBUG
                         this->propagator_finished[key][0] = true;
                         #endif
-                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                 }
         
@@ -418,38 +411,9 @@ void CpuComputationContinuous<T>::compute_propagators(
                     this->propagator_finished[key][n+1] = true;
                     #endif
                 }
-                // // Display job info
-                // #ifndef NDEBUG
-                // std::cout << job << " finished" << std::endl;
-                // #endif
             }
         }
 
-        // for(const auto& block: this->phi_block)
-        // {
-        //     int p                = std::get<0>(block.first);
-        //     std::string key_left    = std::get<1>(block.first);
-        //     std::string key_right    = std::get<2>(block.first);
-        //     int n_segment        = std::get<3>(block.first);
-
-        //     // Check keys
-        //     if (!this->propagator.contains(key_left))
-        //         throw_with_line_number("Could not find key_left key'" + key_left + "'. ");
-        //     if (!this->propagator.contains(key_right))
-        //         throw_with_line_number("Could not find key_right key'" + key_right + "'. ");
-
-        //     for(int i=0; i<=n_segment; i++)
-        //     {
-        //         if (!this->propagator_finished[key_left][i])
-        //             throw_with_line_number("unfinished, key_left, n'" + key_left + ", " + std::to_string(i) + "'. ");
-        //     }
-
-        //     for(int i=0; i<=n_segment; i++)
-        //     {
-        //         if (!this->propagator_finished[key_right][i])
-        //             throw_with_line_number("unfinished, key_right, n'" + key_right + ", " + std::to_string(i) + "'. ");
-        //     }
-        // }
 
         // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
@@ -634,8 +598,6 @@ void CpuComputationContinuous<T>::compute_stress()
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int M = this->cb->get_total_grid();
 
-        // Space group: propagators in reduced basis need expansion to full grid for FFT
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 

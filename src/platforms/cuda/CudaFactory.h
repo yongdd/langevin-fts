@@ -52,7 +52,6 @@
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
-#include "Array.h"
 
 /**
  * @class CudaFactory
@@ -90,12 +89,7 @@ public :
      */
     CudaFactory(bool reduce_memory);
 
-    // Array* create_array(
-    //     unsigned int size) override;
 
-    // Array* create_array(
-    //     double *data,
-    //     unsigned int size) override;
 
     /**
      * @brief Create a CUDA computation box.

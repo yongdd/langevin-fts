@@ -46,7 +46,6 @@
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
-#include "CudaArray.h"
 
 /**
  * @brief Construct CUDA factory with optional checkpointing.
@@ -59,18 +58,6 @@ CudaFactory<T>::CudaFactory(bool reduce_memory)
     this->reduce_memory = reduce_memory;
 }
 
-// Array* CudaFactory<T>::create_array(
-//     unsigned int size)
-// {
-//     return new CudaArray(size);
-// }
-
-// Array* CudaFactory<T>::create_array(
-//     double *data,
-//     unsigned int size)
-// {
-//     return new CudaArray(data, size);
-// }
 template <typename T>
 ComputationBox<T>* CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
@@ -159,7 +146,6 @@ void CudaFactory<T>::display_info()
 
     std::cout<< "========== CUDA Setting and Device Information ==========" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
-    // std::cout<< "N_GPUS (# of using GPUs): " << N_GPUS << std::endl;
 
     std::cout<< "DeviceCount (# of available GPUs): " << devices_count << std::endl;
     std::cout<< "Device " << device << ": \t\t\t\t" << prop.name << std::endl;

@@ -25,6 +25,10 @@ ctest -L basic  # Basic installation verification (~40 seconds)
 ### Required
 * **Anaconda**: https://www.anaconda.com/download
 * **C++ Compiler**: C++20 support (GCC 10+)
+* **spglib**: space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`)
+* **LAPACKE**: Anderson mixing SVD solver (`conda install -c conda-forge lapack`, or `apt install liblapacke-dev`)
+* **pybind11 2.13+**, **NumPy 2.0+**, **SciPy 1.14+**: Python bindings (all in `environment.yml`)
+* **At least one CPU FFT backend**: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`)
 
 ### Optional
 * **CUDA Toolkit 11.8+**: GPU backend (https://developer.nvidia.com/cuda-toolkit)
@@ -121,7 +125,7 @@ Two test modes are available:
 | **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
 | **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
-**Note**: Run `make install` before `ctest` so Python tests can import the installed module.
+**Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
 
 **Basic tests** (~40 tests):
 - FFT: CPU/CUDA, DCT, DST, mixed boundary conditions

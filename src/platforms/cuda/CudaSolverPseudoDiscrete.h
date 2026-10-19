@@ -42,6 +42,7 @@
 #include "ComputationBox.h"
 #include "Pseudo.h"
 #include "CudaSolver.h"
+#include "CudaSolverPseudoBase.h"
 #include "CudaCommon.h"
 #include "CudaFFT.h"
 #include "CudaCrysFFT.h"
@@ -65,23 +66,25 @@ class CudaCrysFFTBase;  // Forward declaration
  * - exp(-w*ds) is the full-segment Boltzmann factor
  */
 template <typename T>
-class CudaSolverPseudoDiscrete : public CudaSolver<T>
+class CudaSolverPseudoDiscrete : public CudaSolverPseudoBase<T>
 {
 private:
-    ComputationBox<T>* cb;       ///< Computation box
-    Molecules *molecules;         ///< Molecules container
-    Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities
-    std::string chain_model;      ///< Chain model ("discrete")
-    bool is_periodic_;            ///< True if all BCs are periodic
+    using Base = CudaSolverPseudoBase<T>;
+    using Base::cb; using Base::molecules; using Base::pseudo; using Base::chain_model;
+    using Base::n_streams; using Base::dim_; using Base::is_periodic_; using Base::streams;
+    using Base::temp_storage_bytes; using Base::d_temp_storage;
+    using Base::d_stress_sum; using Base::d_stress_sum_out; using Base::d_q_multi;
+    using Base::space_group_; using Base::d_reduced_basis_indices_; using Base::d_full_to_reduced_map_;
+    using Base::n_basis_; using Base::d_q_full_in_; using Base::d_q_full_out_;
+    using Base::use_crysfft_; using Base::crysfft_mode_; using Base::crysfft_identity_map_;
+    using Base::crysfft_physical_size_; using Base::crysfft_reduced_size_;
+    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
+    using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
 
-    int n_streams;                ///< Number of parallel streams
     FFT<T>* fft_[MAX_STREAMS];    ///< Spectral transform objects (per-stream, for non-periodic BC)
-
-    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams
 
     /// @name cuFFT Resources
     /// @{
-    T *d_q_unity;                                      ///< Unity array
     cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT
     cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT
     cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT
@@ -108,39 +111,15 @@ private:
 
     /// @name CUB Reduction Storage
     /// @{
-    size_t temp_storage_bytes[MAX_STREAMS];
-    CuDeviceData<T> *d_temp_storage[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
-    CuDeviceData<T> *d_q_multi[MAX_STREAMS];
     /// @}
 
     /// @name Space Group Support (reduced basis)
     /// @{
-    SpaceGroup* space_group_;                       ///< Space group pointer (nullptr if not used)
-    int* d_reduced_basis_indices_;                   ///< Device array: reduced → full index mapping
-    int* d_full_to_reduced_map_;                     ///< Device array: full → reduced index mapping
-    int n_basis_;                                    ///< Number of reduced basis points
-    CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
-    CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
     /// @}
 
     /// @name Crystallographic FFT support
     /// @{
-    bool use_crysfft_;
-    CudaCrysFFTMode crysfft_mode_;
-    bool crysfft_identity_map_;                      ///< True when reduced basis matches physical grid
-    int crysfft_physical_size_;
-    int crysfft_reduced_size_;
-    int* d_crysfft_phys_to_reduced_;
-    int* d_crysfft_reduced_to_phys_;
-    int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)
-    CudaCrysFFTBase* crysfft_[MAX_STREAMS];
-    double* d_crysfft_in_[MAX_STREAMS];
-    double* d_crysfft_out_[MAX_STREAMS];
     /// @}
-
-    void cleanup_crysfft();
 
 public:
     /**
@@ -160,18 +139,6 @@ public:
     ~CudaSolverPseudoDiscrete();
 
     /**
-     * @brief Set space group for reduced basis operations.
-     *
-     * When set, advance_propagator and advance_propagator_half_bond_step
-     * handle expand/reduce internally.
-     */
-    void set_space_group(
-        SpaceGroup* sg,
-        int* d_reduced_basis_indices,
-        int* d_full_to_reduced_map,
-        int n_basis) override;
-
-    /**
      * @brief True when d_exp_dw is stored in the reduced basis (size n_basis).
      *
      * In CrysFFT mode the solver keeps exp(-w*ds) in the reduced basis;
@@ -180,9 +147,6 @@ public:
      * this returns false.
      */
     bool exp_dw_stored_reduced() const { return use_crysfft_ && space_group_ != nullptr; }
-
-    /** @brief Update half-bond diffusion operators. */
-    void update_laplacian_operator() override;
 
     /** @brief Update Boltzmann factors. */
     void update_dw(std::string device, std::map<std::string, const T*> w_input) override;

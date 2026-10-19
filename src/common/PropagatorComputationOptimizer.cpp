@@ -177,7 +177,6 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
             std::string left_key = item.first;
             std::map<std::string, ComputationBlock> right_keys = item.second;
 
-            // std::cout << "left_key: " << left_key << std::endl;
 
             // Aggregate propagators for given left key
             std::map<std::string, ComputationBlock> set_I;
@@ -199,7 +198,6 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
 
             for(auto& item : set_I)
             {
-                //if(item.first[0] == '[')
                 if(item.first[0] == '[' && item.second.n_segment_right == item.second.n_segment_left)
                     aggregated_blocks[left_key].push_back(item.first);
             }
@@ -232,7 +230,6 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
             computation_blocks[key].n_segment_left = n_segment_left;
             computation_blocks[key].v_u = u_item.second.v_u;
             computation_blocks[key].n_repeated = n_repeated;
-            // std::cout << "computation_blocks[key].n_repeated: " << key_v << ", " << key_u  << ", " << computation_blocks[key].n_repeated << std::endl;
             bool is_junction_left = false;
             bool is_junction_right = false;
             if (PropagatorCode::get_height_from_key(key_v) > 0)
@@ -277,7 +274,6 @@ void PropagatorComputationOptimizer::substitute_right_keys(
     {
         auto& computation_block = computation_blocks_new_polymer[left_key][aggregated_key];
 
-        // std::cout << "aggregated_key: " << aggregated_key << std::endl;
         // For each v_u
         for(auto& v_u : computation_block.v_u)
         {
@@ -289,13 +285,11 @@ void PropagatorComputationOptimizer::substitute_right_keys(
             auto neighbor_nodes_v = pc.get_adjacent_nodes()[v];
             // Remove 'u' from 'neighbor_nodes_v'
             neighbor_nodes_v.erase(std::remove(neighbor_nodes_v.begin(), neighbor_nodes_v.end(), u), neighbor_nodes_v.end());
-            // std::cout << "(v_u): " << v <<  ", " << v << std::endl;
 
             // For each neighbor_node of v
             for(auto& j : neighbor_nodes_v)
             {
                 std::string dep_j = pc.get_propagator_key(j, v);
-                // std::cout << dep_j << ", " << pc.get_block(j,v).n_segment << std::endl;
 
                 // Make new key using code format for dep_codes
                 // Convert aggregated_key (DK+M format) to code format
@@ -350,7 +344,6 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 new_u_key += ")" + pc.get_block(j,v).monomer_type + "+" + std::to_string(ds_index);
 
                 // Remove 'v_u' from 'computation_blocks_new_polymer'
-                // std::cout << "v_u_to_right_key[std::make_tuple(j,v)]: " << v_u_to_right_key[std::make_tuple(j,v)] << std::endl; 
                 computation_blocks_new_polymer[dep_j].erase(v_u_to_right_key[std::make_tuple(j,v)]);
 
                 // Add new key
@@ -375,7 +368,6 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                     if(v0 == v)
                         computation_blocks_new_polymer[dep_j][new_u_key].n_repeated += computation_block.n_repeated;
                 }
-                // std::cout << "dep_j, new_u_key, n_segment_right, n_segment_left : " << dep_j << ", " << new_u_key << ", " << n_segment_right << ", " << n_segment_left << std::endl;
             }
         }
     }
@@ -634,7 +626,6 @@ void PropagatorComputationOptimizer::display_blocks() const
         }
         std::cout << std::endl;
     }
-    //std::cout << "------------------------------------" << std::endl;
 }
 
 /**
@@ -750,7 +741,6 @@ void PropagatorComputationOptimizer::display_propagators() const
     double percent = 100*(1.0 - static_cast<double>(reduced_mde_steps)/static_cast<double>(total_mde_steps_without_reduction));
     percent = std::round(percent*100)/100; //rounding
     std::cout << "Computational cost reduction (higher is better) : " << percent << " %" << std::endl;
-    //std::cout << "------------------------------------" << std::endl;
 }
 
 /**

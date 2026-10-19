@@ -11,7 +11,8 @@ This directory contains development and utility scripts that are not part of the
 | `benchmark_reduced_basis.py` | Benchmark reduced basis space group operations |
 | `benchmark_space_group_speed.py` | Benchmark space group symmetry performance |
 | `generate_phase_fields.py` | Generate initial field configurations for various phases |
-| `slurm_run.sh` | SLURM job submission template (not tracked in git) |
+| `reconverge_phase_fixtures.py` | Re-converge `tests/data/*.mat` under the current grid/symmetry convention and print the `expected_fe` values for `TestSpaceGroupPhases.py` |
+| `slurm_run.sh` | SLURM job submission template |
 
 ## Usage
 
@@ -30,6 +31,18 @@ sbatch scripts/slurm_run.sh
 
 # Or run directly
 python scripts/benchmark_space_group_speed.py
+```
+
+### Re-converge Test Fixtures
+
+`tests/TestSpaceGroupPhases.py` expects every fixture in `tests/data/` to be already
+converged (1-2 iterations). After a change of the discretization or the symmetry
+convention, re-converge them (one SLURM job per phase is fine) and paste the printed
+values into the test:
+
+```bash
+python scripts/reconverge_phase_fixtures.py --platform cuda        # all phases
+python scripts/reconverge_phase_fixtures.py --verify               # check: iterations and FE
 ```
 
 ### Generate Phase Fields

@@ -43,8 +43,6 @@ int main()
         double *xi, *w_plus, *w_minus;
         double *phi_a, *phi_b, *phi_tot;
 
-        std::streamsize default_precision = std::cout.precision();
-
         // -------------- Initialize ------------
         int max_scft_iter = 2000;
         double tolerance = 1e-9;
@@ -344,7 +342,6 @@ int main()
                         {
                             std::cout << "  Testing dF/dgamma..." << std::endl;
                             double dGamma = 0.001;  // Small angle change in degrees
-                            double gamma_rad = gamma * M_PI / 180.0;
 
                             cb->set_lattice_parameters(lx, {gamma + dGamma/2});
                             solver->update_laplacian_operator();

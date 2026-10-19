@@ -49,6 +49,7 @@
 #include "ComputationBox.h"
 #include "Pseudo.h"
 #include "CudaSolver.h"
+#include "CudaSolverPseudoBase.h"
 #include "CudaCommon.h"
 #include "CudaFFT.h"
 #include "CudaCrysFFT.h"
@@ -80,23 +81,23 @@ class CudaCrysFFTBase;  // Forward declaration
  * - d_qk_in_*: Fourier space buffers
  */
 template <typename T>
-class CudaSolverPseudoRQM4 : public CudaSolver<T>
+class CudaSolverPseudoRQM4 : public CudaSolverPseudoBase<T>
 {
 private:
-    ComputationBox<T>* cb;       ///< Computation box
-    Molecules *molecules;         ///< Molecules container
-    Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities
-    std::string chain_model;      ///< Chain model ("continuous")
-
-    int n_streams;                ///< Number of parallel streams
-    int dim_;                     ///< Number of dimensions (1, 2, or 3)
-    bool is_periodic_;            ///< True if all BCs are periodic
-
-    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy] per index
+    using Base = CudaSolverPseudoBase<T>;
+    using Base::cb; using Base::molecules; using Base::pseudo; using Base::chain_model;
+    using Base::n_streams; using Base::dim_; using Base::is_periodic_; using Base::streams;
+    using Base::temp_storage_bytes; using Base::d_temp_storage;
+    using Base::d_stress_sum; using Base::d_stress_sum_out; using Base::d_q_multi;
+    using Base::space_group_; using Base::d_reduced_basis_indices_; using Base::d_full_to_reduced_map_;
+    using Base::n_basis_; using Base::d_q_full_in_; using Base::d_q_full_out_;
+    using Base::use_crysfft_; using Base::crysfft_mode_; using Base::crysfft_identity_map_;
+    using Base::crysfft_physical_size_; using Base::crysfft_reduced_size_;
+    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
+    using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
 
     /// @name Spectral Transform Resources
     /// @{
-    CuDeviceData<T> *d_q_unity;                        ///< Unity array for initialization
     FFT<T>* fft_[MAX_STREAMS];                         ///< Spectral transform objects (per-stream, for non-periodic BC)
     cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT plans (periodic BC)
     cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT plans (periodic BC)
@@ -109,15 +110,12 @@ private:
     CuDeviceData<T> *d_q_step_1_one[MAX_STREAMS];      ///< Full step workspace 1
     CuDeviceData<T> *d_q_step_2_one[MAX_STREAMS];      ///< Full step workspace 2
     CuDeviceData<T> *d_q_step_1_two[MAX_STREAMS];      ///< Half step workspace 1
-    CuDeviceData<T> *d_q_step_2_two[MAX_STREAMS];      ///< Half step workspace 2
     /// @}
 
     /// @name Fourier Space Buffers (periodic BC - complex coefficients)
     /// @{
-    cuDoubleComplex *d_qk_in_1_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
-    cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
     /// @}
 
     /// @name Spectral Space Buffers (non-periodic BC - real coefficients)
@@ -128,39 +126,15 @@ private:
 
     /// @name CUB Reduction Storage (per stream)
     /// @{
-    size_t temp_storage_bytes[MAX_STREAMS];
-    CuDeviceData<T> *d_temp_storage[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
-    CuDeviceData<T> *d_q_multi[MAX_STREAMS];
     /// @}
 
     /// @name Space Group Support (reduced basis)
     /// @{
-    SpaceGroup* space_group_;                       ///< Space group pointer (nullptr if not used)
-    int* d_reduced_basis_indices_;                   ///< Device array: reduced → full index mapping
-    int* d_full_to_reduced_map_;                     ///< Device array: full → reduced index mapping
-    int n_basis_;                                    ///< Number of reduced basis points
-    CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];     ///< Work buffer: full grid input (per stream)
-    CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];    ///< Work buffer: full grid output (per stream)
     /// @}
 
     /// @name Crystallographic FFT support
     /// @{
-    bool use_crysfft_;
-    CudaCrysFFTMode crysfft_mode_;
-    bool crysfft_identity_map_;                      ///< True when reduced basis matches physical grid
-    int crysfft_physical_size_;
-    int crysfft_reduced_size_;
-    int* d_crysfft_phys_to_reduced_;
-    int* d_crysfft_reduced_to_phys_;
-    int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)
-    CudaCrysFFTBase* crysfft_[MAX_STREAMS];
-    double* d_crysfft_in_[MAX_STREAMS];
-    double* d_crysfft_out_[MAX_STREAMS];
     /// @}
-
-    void cleanup_crysfft();
 
 public:
     /**
@@ -178,20 +152,6 @@ public:
      * @brief Destructor. Frees GPU memory and cuFFT plans.
      */
     ~CudaSolverPseudoRQM4();
-
-    /**
-     * @brief Set space group for reduced basis operations.
-     *
-     * When set, advance_propagator handles expand/reduce internally.
-     */
-    void set_space_group(
-        SpaceGroup* sg,
-        int* d_reduced_basis_indices,
-        int* d_full_to_reduced_map,
-        int n_basis) override;
-
-    /** @brief Update Fourier-space operators for new box dimensions. */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Update Boltzmann factors.

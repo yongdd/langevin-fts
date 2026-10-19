@@ -35,7 +35,6 @@
 
 #include <fftw3.h>
 
-#include "CpuArray.h"
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationDiscrete.h"

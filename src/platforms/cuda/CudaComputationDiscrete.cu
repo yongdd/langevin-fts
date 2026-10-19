@@ -205,9 +205,6 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
             const int N_RIGHT = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             const int N_LEFT  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
-            // // If there is no segment
-            // if(N_RIGHT == 0)
-            //     continue;
 
             CuDeviceData<T> **d_q_1 = this->d_propagator[key_left];     // dependency v
             CuDeviceData<T> **d_q_2 = this->d_propagator[key_right];    // dependency u
@@ -477,29 +474,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
         auto& branch_schedule = this->sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // // display all jobs
-            // #ifndef NDEBUG
-            // std::cout << "jobs:" << std::endl;
-            // for(size_t job=0; job<parallel_job->size(); job++)
-            // {
-            //     auto& key = std::get<0>((*parallel_job)[job]);
-            //     int n_segment_from = std::get<1>((*parallel_job)[job]);
-            //     int n_segment_to = std::get<2>((*parallel_job)[job]);
-            //     std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
-            //     std::cout << "half_steps: ";
-            //     std::cout << "{";
-            //     for (auto it = d_propagator_half_steps[key].begin(); it != d_propagator_half_steps[key].end(); ++it)
-            //     {
-            //         std::cout << it->first+1;
-            //         if (std::next(it) != d_propagator_half_steps[key].end()) {
-            //             std::cout << ", ";
-            //         }
-            //     }
-            //     std::cout << "}, "<< std::endl;
-            // }
-            // auto start_time = std::chrono::duration_cast<std::chrono::microseconds>
-            //     (std::chrono::system_clock::now().time_since_epoch()).count();
-            // #endif
 
             // For each propagator
             #pragma omp parallel for num_threads(this->n_streams)
@@ -513,12 +487,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                // #ifndef NDEBUG
-                // #pragma omp critical
-                // std::cout << job << " started, stream: " << STREAM << ", " <<
-                //     std::chrono::duration_cast<std::chrono::microseconds>
-                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                // #endif
 
                 // Check key
                 #ifndef NDEBUG
@@ -536,12 +504,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                 // Calculate one block end
                 if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
                 {
-                    // #ifndef NDEBUG
-                    // #pragma omp critical
-                    // std::cout << job << " init 1, " << 
-                    //     std::chrono::duration_cast<std::chrono::microseconds>
-                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                    // #endif
 
                      // q_init
                     if (key[0] == '{')
@@ -663,12 +625,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         // -, |    : half bonds
                         // A, B, C : other full segments
 
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " init 3, " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
 
                         // Combine branches
                         // Initialize to one
@@ -759,12 +715,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
-                    // #ifndef NDEBUG
-                    // #pragma omp critical
-                    // std::cout << job << " q_s, " << n << ", " << 
-                    //     std::chrono::duration_cast<std::chrono::microseconds>
-                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                    // #endif
 
                     // Discrete chains always use ds_index=0 (global ds)
                     this->propagator_solver->advance_propagator(
@@ -783,12 +733,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                 {
                     if (d_propagator_half_steps[key][n+1] != nullptr)
                     {
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " q_s+1/2, " << n << ", " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
 
                         #ifndef NDEBUG
                         if (propagator_half_steps_finished[key][n+1])
@@ -1002,8 +946,6 @@ void CudaComputationDiscrete<T>::compute_stress()
     // We only need the real part of stress calculation.
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         // Non-periodic (DCT/DST) stress is supported for real fields; the
         // per-mode Parseval weights are folded into the fourier_basis tables
@@ -1061,9 +1003,6 @@ void CudaComputationDiscrete<T>::compute_stress()
                  << this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() << std::endl;
             #endif
 
-            // // If there is no segment
-            // if(N_RIGHT == 0)
-            //     continue;
 
             CuDeviceData<T> **d_q_1 = this->d_propagator[key_left];      // Propagator q
             CuDeviceData<T> **d_q_2 = this->d_propagator[key_right];     // Propagator q^dagger

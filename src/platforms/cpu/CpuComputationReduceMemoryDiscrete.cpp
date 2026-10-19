@@ -102,7 +102,6 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
         {
             std::string key = item.first;
             auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
-            int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
 
             // Allocate check point at segment 1 (first segment for discrete chains)
             if(this->propagator_at_check_point.find(std::make_tuple(key, 1)) == this->propagator_at_check_point.end())

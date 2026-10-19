@@ -13,16 +13,13 @@ import scipy.io
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import validate_scft_params, ValidationError
+from .validation import validate_system_params
+from .system_spec import parse_system
 from .config import load_config
 from .result import SCFTResult, IterationInfo
 from .utils import (
     create_monomer_color_dict,
     draw_polymer_architecture,
-    parse_chi_n,
-    validate_polymers,
-    process_polymer_blocks,
-    process_random_copolymer,
 )
 from .smearing import Smearing
 
@@ -548,103 +545,16 @@ class SCFT:
     - examples/scft/ABC_Triblock_Sphere3D.py - Spherical phase
     - examples/scft/phases/ - Various morphologies
     """
-    def __init__(self, params):
+    @staticmethod
+    def _apply_axis_ordering(params):
+        """Reorder nx/lx/angles in ``params`` from the user's axis ordering to [a, b, c].
 
-        # Validate input parameters
-        validate_scft_params(params)
-        params = copy.deepcopy(params)
-        params.pop("space_group_basis", None)
-
-        # Segment length
-        self.monomer_types = sorted(list(params["segment_lengths"].keys()))
-        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-        
-        if len(self.monomer_types) != len(set(self.monomer_types)):
-            raise ValidationError("There are duplicated monomer_types")
-
-        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
-        avail_platforms = _core.PlatformSelector.avail_platforms()
-        if "platform" in params:
-            platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
-        elif "cuda" in avail_platforms: # If cuda is available, use GPU
-            platform = "cuda"
-        else:
-            platform = avail_platforms[0]
-
-        # Get checkpointing option
-        reduce_memory = params.get("reduce_memory", False)
-
-        # Get boundary conditions
-        bc = params.get("bc", None)
-        if bc is None:
-            # Default to periodic boundaries
-            bc = ["periodic"] * (2 * len(params["nx"]))
-
-        # Flory-Huggins parameters, χN
-        self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
-
-        # Add missing monomer pair combinations with zero interaction
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            monomer_pair = list(monomer_pair)
-            monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-            if sorted_monomer_pair not in self.chi_n:
-                self.chi_n[sorted_monomer_pair] = 0.0
-        
-        # Multimonomer polymer field theory
-        self.zeta_n = params.get("zeta_n", None)
-        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
-
-        # Matrix for field residuals.
-        # See *J. Chem. Phys.* **2017**, 146, 244902
-        M = len(self.monomer_types)
-        matrix_chi = np.zeros((M,M))
-        for i in range(M):
-            for j in range(i+1,M):
-                key = self.monomer_types[i] + "," + self.monomer_types[j]
-                if key in self.chi_n:
-                    matrix_chi[i,j] = self.chi_n[key]
-                    matrix_chi[j,i] = self.chi_n[key]
-        
-        self.matrix_chi = matrix_chi
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-
-        # Validate polymer chain definitions
-        validate_polymers(self.distinct_polymers)
-
-        # Process polymer chain blocks
-        for polymer in self.distinct_polymers:
-            blocks_input = process_polymer_blocks(polymer)
-            polymer["blocks_input"] = blocks_input
-
-        # Process random copolymer chains
-        self.random_fraction = {}
-        for polymer in self.distinct_polymers:
-            result = process_random_copolymer(polymer, self.segment_lengths)
-            if result is not None:
-                random_type_string, statistical_segment_length, fraction_dict = result
-                polymer["block_monomer_types"] = [random_type_string]
-                self.segment_lengths[random_type_string] = statistical_segment_length
-                self.random_fraction[random_type_string] = fraction_dict
-
-        # Make a monomer color dictionary
-        dict_color = create_monomer_color_dict(self.segment_lengths)
-        logger.debug(f"Monomer color: {dict_color}")
-
-        # Draw polymer chain architectures
-        for idx, polymer in enumerate(self.distinct_polymers):
-            draw_polymer_architecture(polymer, idx, params["ds"], dict_color)
-
-        # Get angles if provided
-        angles = params.get("angles", None)
-
+        Returns ``(axis_ordering, axis_perm)``; both are None when no
+        ``axis_ordering`` was given. ``params`` is modified in place.
+        """
         # Handle axis ordering (convert user ordering to standard [a, b, c])
+        angles = params.get("angles", None)
         axis_ordering = params.get("axis_ordering", None)
-        self.axis_ordering = axis_ordering  # Store for reference
 
         if axis_ordering is not None:
             dim = len(params["nx"])
@@ -662,7 +572,7 @@ class SCFT:
             #   user[1] (a) goes to standard[0]
             #   user[2] (c) goes to standard[2]
             perm = [axis_ordering.index(label) for label in valid_labels]
-            self._axis_perm = perm  # perm[i] = index in user array for standard axis i
+            axis_perm = perm  # perm[i] = index in user array for standard axis i
 
             # Reorder nx and lx from user ordering to standard [a, b, c]
             nx_reordered = [params["nx"][perm[i]] for i in range(dim)]
@@ -710,10 +620,58 @@ class SCFT:
             if angles is not None:
                 print(f"  angles: {angles}")
         else:
-            self._axis_perm = None
+            axis_perm = None
 
-        # Get numerical method
-        numerical_method = params.get("numerical_method", "rqm4")
+        return axis_ordering, axis_perm
+
+    def __init__(self, params):
+
+        # Validate input parameters
+        validate_system_params(params)
+        params = copy.deepcopy(params)
+        params.pop("space_group_basis", None)
+
+        # Handle axis ordering (convert user ordering to standard [a, b, c]).
+        # This rewrites nx/lx/angles in `params` before the shared parser runs.
+        self.axis_ordering, self._axis_perm = self._apply_axis_ordering(params)
+
+        # Shared system definition: grid, chain model, monomers, chi N, polymers, platform
+        spec = parse_system(params, validate=False)   # validated above
+        self.spec = spec
+        self.monomer_types = list(spec.monomer_types)
+        self.segment_lengths = dict(spec.chain.segment_lengths)
+        self.distinct_polymers = list(spec.polymers)
+        self.random_fraction = dict(spec.random_fraction)
+        self.chi_n = dict(spec.chi_n)
+        self.zeta_n = spec.zeta_n
+        platform = spec.platform
+        angles = list(spec.grid.angles) if spec.grid.angles is not None else None
+
+        # Multimonomer polymer field theory
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
+
+        # Matrix for field residuals.
+        # See *J. Chem. Phys.* **2017**, 146, 244902
+        M = len(self.monomer_types)
+        matrix_chi = np.zeros((M,M))
+        for i in range(M):
+            for j in range(i+1,M):
+                key = self.monomer_types[i] + "," + self.monomer_types[j]
+                if key in self.chi_n:
+                    matrix_chi[i,j] = self.chi_n[key]
+                    matrix_chi[j,i] = self.chi_n[key]
+        
+        self.matrix_chi = matrix_chi
+        matrix_chi_inv = np.linalg.inv(matrix_chi)
+        self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+
+        # Make a monomer color dictionary
+        dict_color = create_monomer_color_dict(self.segment_lengths)
+        logger.debug(f"Monomer color: {dict_color}")
+
+        # Draw polymer chain architectures
+        for idx, polymer in enumerate(self.distinct_polymers):
+            draw_polymer_architecture(polymer, idx, spec.chain.ds, dict_color)
 
         # Create space group object early (before PropagatorSolver) if specified
         if "space_group" in params:
@@ -759,59 +717,14 @@ class SCFT:
         else:
             self.sg = None
 
-        # Create PropagatorSolver instance with space_group
-        self.prop_solver = PropagatorSolver(
-            nx=params["nx"],
-            lx=params["lx"],
-            ds=params["ds"],
-            bond_lengths=self.segment_lengths,
-            bc=bc,
-            chain_model=params["chain_model"],
-            numerical_method=numerical_method,
-            platform=platform,
-            reduce_memory=reduce_memory,
-            space_group=self.sg,
-        )
-
-        # Set angles if provided (after initialization, before adding polymers)
-        if angles is not None:
-            # Re-create with angles by accessing internal factory
-            self.prop_solver._computation_box = self.prop_solver._factory.create_computation_box(
-                params["nx"], params["lx"], angles=angles, bc=bc
-            )
-
-        # Add polymer chains
-        for polymer in self.distinct_polymers:
-            if "initial_conditions" in polymer:
-                self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"], polymer["initial_conditions"])
-            else:
-                self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
-
-        # Initialize the solver (creates propagator optimizer and propagator computation)
-        self.prop_solver._initialize_solver()
-
-        # Set aggregate_propagator_computation option
-        if "aggregate_propagator_computation" in params:
-            aggregate = params["aggregate_propagator_computation"]
-            # Recreate propagator optimizer with the specified option
-            self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
-                self.prop_solver._molecules, aggregate
-            )
-            # Recreate propagator computation with the new optimizer.
-            # Keep the space group: dropping it here would silently disable
-            # the reduced-basis computation configured above.
-            _sg = self.prop_solver._space_group
-            _cpp_sg = _sg._cpp_sg if hasattr(_sg, "_cpp_sg") else _sg
-            self.prop_solver._propagator_computation = self.prop_solver._factory.create_propagator_computation(
-                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer,
-                self.prop_solver.numerical_method, _cpp_sg
-            )
+        # Create the propagator solver from the validated system definition
+        self.prop_solver = PropagatorSolver.from_spec(spec, space_group=self.sg)
 
         # Display factory info
-        self.prop_solver._factory.display_info()
+        self.prop_solver.display_platform_info()
 
         # Expose computation box as public attribute (documented in class docstring)
-        self.cb = self.prop_solver._computation_box
+        self.cb = self.prop_solver.computation_box
 
         # Initialize smearing (must be after self.cb is set)
         if params.get("smearing", None) is not None and self.sg is not None:
@@ -961,7 +874,7 @@ class SCFT:
         # (the orthogonal-box stress fast path skips the V12/V13/V23 cross
         # terms) and the angles would never move away from 90 degrees.
         if len(self.angles_reduced_indices) > 0:
-            self.prop_solver._propagator_computation.set_force_off_diagonal_stress(True)
+            self.prop_solver.set_force_off_diagonal_stress(True)
 
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point
@@ -1016,8 +929,8 @@ class SCFT:
             print("zeta_n: %f" % self.zeta_n)
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        self.prop_solver._molecules.display_architectures()
-        self.prop_solver._propagator_optimizer.display_statistics()
+        self.prop_solver.display_architectures()
+        self.prop_solver.display_statistics()
 
         #  Save internal variables
         self.params = params
@@ -1042,8 +955,6 @@ class SCFT:
         # Default is off (mean=0 convention, F_dis=0 for disordered phase).
         self.fts_consistent_energy = params.get("fts_consistent_energy", False)
 
-        # For context manager
-        self._is_open = True
 
     # =========================================================================
     # Class Methods
@@ -1080,58 +991,6 @@ class SCFT:
         params.update(overrides)
         return cls(params)
 
-    # =========================================================================
-    # Context Manager Protocol
-    # =========================================================================
-
-    def __enter__(self) -> "SCFT":
-        """Enter context manager.
-
-        Returns
-        -------
-        SCFT
-            Self for use in with statement.
-
-        Examples
-        --------
-        >>> with SCFT(params) as calc:
-        ...     calc.run(initial_fields)
-        ...     # Resources automatically cleaned up on exit
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        """Exit context manager, cleaning up resources.
-
-        Parameters
-        ----------
-        exc_type : type or None
-            Exception type if an exception occurred.
-        exc_val : Exception or None
-            Exception value if an exception occurred.
-        exc_tb : traceback or None
-            Exception traceback if an exception occurred.
-
-        Returns
-        -------
-        bool
-            False to propagate any exceptions.
-        """
-        self.close()
-        return False
-
-    def close(self) -> None:
-        """Mark the instance closed (context-manager support).
-
-        C++ resources are freed by the garbage collector when the underlying
-        objects are released; this method currently only flips the open flag
-        and drops the solver reference so collection can happen promptly.
-        Safe to call multiple times.
-        """
-        if self._is_open:
-            if hasattr(self, 'prop_solver'):
-                del self.prop_solver
-            self._is_open = False
 
     def compute_concentrations(self, w, q_init=None):
         """Compute monomer concentration fields for given potential fields.
@@ -1713,7 +1572,7 @@ class SCFT:
             else:
                 w_aux_energy = w_aux
             energy_total = self.mpt.compute_hamiltonian(
-                self.prop_solver._molecules,
+                self.prop_solver.molecules,
                 w_aux_energy,
                 total_partitions,
                 self.cb,

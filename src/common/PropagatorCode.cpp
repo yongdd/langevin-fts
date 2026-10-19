@@ -133,12 +133,10 @@ std::string PropagatorCode::generate_edge_code(
         return memory[std::make_pair(in_node, out_node)];
 
     // Explore neighbor nodes
-    //std::cout << "[" + std::to_string(in_node) + ", " +  std::to_string(out_node) + "]:";
     for(size_t i=0; i<adjacent_nodes[in_node].size(); i++)
     {
         if (adjacent_nodes[in_node][i] != out_node)
         {
-            //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             auto v_u_pair = std::make_pair(adjacent_nodes[in_node][i], in_node);
             if (validation::contains(memory, v_u_pair))
                 sub_code = memory[v_u_pair];
@@ -182,16 +180,10 @@ std::string PropagatorCode::generate_edge_code(
             if (counts[i] > 1)
             {
                 code += ":" + std::to_string(counts[i]);
-                // if (i != unique_sub_codes.size()-1)
-                //     code += ",";
             }
         }
         code += ")";
 
-        // code += "(";
-        // for(size_t i=0; i<queue_sub_codes.size(); i++)
-        //     code += queue_sub_codes[i];
-        // code += ")";
     }
     // If in_node exists in chain_end_to_q_init
     else if (validation::contains(chain_end_to_q_init, in_node))
@@ -594,7 +586,6 @@ std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
                 }
             }
         }
-        // std::cout << "key.substr(1, species_idx): " << key.substr(1, species_idx-1) << std::endl;
         return key.substr(1, species_idx-1);
     }
 }
@@ -620,7 +611,6 @@ std::string PropagatorCode::get_monomer_type_from_key(std::string key)
     int pos_start = 0;
     for(int i=key.size()-1; i>=0;i--)
     {
-        //std::cout << key[i] << std::endl;
         if(key[i] == ')' || key[i] == ']' || key[i] == '}')
         {
             pos_start=i+1;
@@ -678,7 +668,6 @@ std::string PropagatorCode::get_q_input_idx_from_key(std::string key)
             break;
         }
     }
-    // std::cout << key.substr(1, pos_start-1) << std::endl;
     return key.substr(1, pos_start-1);
 }
 

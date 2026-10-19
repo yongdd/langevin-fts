@@ -44,8 +44,6 @@ int main()
         double *xi, *w_plus, *w_minus;
         double *phi_a, *phi_b;
 
-        std::streamsize default_precision = std::cout.precision();
-
         // -------------- Initialize ------------
         int max_scft_iter = 500;
         double tolerance = 1e-9;

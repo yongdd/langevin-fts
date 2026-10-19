@@ -66,44 +66,23 @@ References:
 
 import os
 import time
-import re
 import pathlib
 import copy
 import numpy as np
-from .validation import ValidationError
 import itertools
 
 from scipy.io import savemat, loadmat
 
-from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
+from .system_spec import parse_system
+from .propagator_solver import PropagatorSolver
+from .lfts import calculate_sigma
 
 # OpenMP environment variables
 os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
 
-
-def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
-    """Calculate the standard deviation of Langevin noise.
-
-    Parameters
-    ----------
-    langevin_nbar : float
-        Invariant polymerization index.
-    langevin_dt : float
-        Langevin time step.
-    n_grids : int
-        Total number of grid points.
-    volume : float
-        Box volume.
-
-    Returns
-    -------
-    float
-        Standard deviation of the Gaussian noise.
-    """
-    return np.sqrt(2 * langevin_dt * n_grids / (volume * np.sqrt(langevin_nbar)))
 
 
 class CLFTS:
@@ -188,67 +167,19 @@ class CLFTS:
     def __init__(self, params, random_seed=None):
         """Initialize the Complex Langevin FTS simulation."""
 
-        # Segment length
-        self.monomer_types = sorted(list(params["segment_lengths"].keys()))
-        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
+        # Shared system definition: grid, chain model, monomers, chi N, polymers, platform.
+        # parse_system validates the input exactly as SCFT and LFTS do.
+        spec = parse_system(params)
+        self.spec = spec
+        self.monomer_types = list(spec.monomer_types)
+        self.segment_lengths = dict(spec.chain.segment_lengths)
+        self.distinct_polymers = list(spec.polymers)
+        self.random_fraction = dict(spec.random_fraction)
+        self.chi_n = dict(spec.chi_n)
+        platform = spec.platform
 
-        assert len(self.monomer_types) == len(set(self.monomer_types)), \
-            "There are duplicated monomer_types"
-
-        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
-        avail_platforms = _core.PlatformSelector.avail_platforms()
-        if "platform" in params:
-            platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1:
-            platform = "cpu-mkl"
-        elif "cuda" in avail_platforms:
-            platform = "cuda"
-        else:
-            platform = avail_platforms[0]
-
-        # Get checkpointing option
-        reduce_memory = params.get("reduce_memory", False)
-
-        # (C++ class) Create a factory for given platform and chain_model
-        # Use "complex" type for complex Langevin
-        factory = _core.PlatformSelector.create_factory(platform, reduce_memory, "complex")
-        factory.display_info()
-
-        # (C++ class) Computation box
-        if "angles" in params:
-            self.cb = factory.create_computation_box(params["nx"], params["lx"], angles=params["angles"])
-        else:
-            self.cb = factory.create_computation_box(params["nx"], params["lx"])
-
-        # Flory-Huggins parameters, chi_n
-        self.chi_n = {}
-        for monomer_pair_str, chin_value in params["chi_n"].items():
-            monomer_pair = re.split(',| |_|/', monomer_pair_str)
-            assert monomer_pair[0] in self.segment_lengths, \
-                f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'."
-            assert monomer_pair[1] in self.segment_lengths, \
-                f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'."
-            assert monomer_pair[0] != monomer_pair[1], \
-                "Do not add self interaction parameter, " + monomer_pair_str + "."
-            monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-            assert sorted_monomer_pair not in self.chi_n, \
-                f"There are duplicated chi_n ({sorted_monomer_pair}) parameters."
-            self.chi_n[sorted_monomer_pair] = chin_value
-
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            monomer_pair = list(monomer_pair)
-            monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-            if sorted_monomer_pair not in self.chi_n:
-                self.chi_n[sorted_monomer_pair] = 0.0
-
-        # Compressibility parameter (zeta_n)
-        if "zeta_n" in params:
-            self.zeta_n = params["zeta_n"]
-        else:
-            self.zeta_n = 100.0  # Default high compressibility
+        # Compressibility parameter (zeta_n); default high compressibility
+        self.zeta_n = spec.zeta_n if spec.zeta_n is not None else 100.0
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, self.zeta_n)
@@ -258,86 +189,15 @@ class CLFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
-        # Total volume fraction (raise, not assert: asserts vanish under -O)
-        if len(self.distinct_polymers) < 1:
-            raise ValidationError("There is no polymer chain.")
+        # Complex-valued propagator solver (complex Langevin fields)
+        self.prop_solver = PropagatorSolver.from_spec(spec, field_type="complex")
+        self.prop_solver.display_platform_info()
 
-        total_volume_fraction = 0.0
-        for polymer in self.distinct_polymers:
-            total_volume_fraction += polymer["volume_fraction"]
-        if not np.isclose(total_volume_fraction, 1.0):
-            raise ValidationError("The sum of volume fractions must be equal to 1.")
-
-        # Polymer chains
-        for polymer_counter, polymer in enumerate(self.distinct_polymers):
-            blocks_input = []
-            alpha = 0.0  # total_relative_contour_length
-            has_node_number = "v" not in polymer["blocks"][0]
-            for block in polymer["blocks"]:
-                alpha += block["length"]
-                if has_node_number:
-                    assert "v" not in block, \
-                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer."
-                    assert "u" not in block, \
-                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer."
-                    blocks_input.append([block["type"], block["length"], len(blocks_input), len(blocks_input) + 1])
-                else:
-                    assert "v" in block, \
-                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer."
-                    assert "u" in block, \
-                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer."
-                    blocks_input.append([block["type"], block["length"], block["v"], block["u"]])
-            polymer.update({"blocks_input": blocks_input})
-
-        # Random copolymer chains
-        self.random_fraction = {}
-        for polymer in self.distinct_polymers:
-            is_random = False
-            for block in polymer["blocks"]:
-                if "fraction" in block:
-                    is_random = True
-            if not is_random:
-                continue
-
-            assert len(polymer["blocks"]) == 1, \
-                "Only single block random copolymer is allowed."
-
-            statistical_segment_length = 0
-            total_random_fraction = 0
-            for monomer_type in polymer["blocks"][0]["fraction"]:
-                statistical_segment_length += self.segment_lengths[monomer_type] ** 2 * polymer["blocks"][0]["fraction"][monomer_type]
-                total_random_fraction += polymer["blocks"][0]["fraction"][monomer_type]
-            statistical_segment_length = np.sqrt(statistical_segment_length)
-
-            assert np.isclose(total_random_fraction, 1.0), \
-                "The sum of volume fractions of random copolymer must be equal to 1."
-
-            random_type_string = polymer["blocks"][0]["type"]
-            assert random_type_string not in self.segment_lengths, \
-                f"The name of random copolymer '{random_type_string}' is already used as a type in 'segment_lengths' or other random copolymer"
-
-            # Add random copolymers
-            polymer["block_monomer_types"] = [random_type_string]
-            self.segment_lengths.update({random_type_string: statistical_segment_length})
-            self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
-
-        # (C++ class) Molecules list
-        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], self.segment_lengths)
-
-        # Add polymer chains
-        for polymer in self.distinct_polymers:
-            molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
-
-        # (C++ class) Propagator Computation Optimizer
-        if "aggregate_propagator_computation" in params:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(
-                molecules, params["aggregate_propagator_computation"]
-            )
-        else:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
-
-        # (C++ class) Solver using Pseudo-spectral method
-        self.solver = factory.create_propagator_computation(self.cb, molecules, propagator_computation_optimizer, "rqm4")
+        # (C++ class) Computation box, molecules, optimizer and propagator solver
+        self.cb = self.prop_solver.computation_box
+        molecules = self.prop_solver.molecules
+        propagator_computation_optimizer = self.prop_solver.propagator_optimizer
+        self.solver = self.prop_solver.propagator_computation
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(

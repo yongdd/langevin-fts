@@ -7,19 +7,14 @@ import numpy as np
 import itertools
 from scipy.io import savemat, loadmat
 
-from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .compressor import LR, LRAM
 from .propagator_solver import PropagatorSolver
 from .validation import validate_lfts_params, validate_runtime_state, ValidationError
+from .system_spec import parse_system
 from .utils import (
     create_monomer_color_dict,
     draw_polymer_architecture,
-    parse_chi_n,
-    validate_polymers,
-    process_polymer_blocks,
-    process_random_copolymer,
-    DEFAULT_MONOMER_COLORS,
 )
 from .smearing import Smearing
 from .wtmd import WTMD
@@ -391,47 +386,16 @@ class LFTS:
         self.validation_runtime = params.get("validation_runtime", None)
         self._partition_checked = False  # Only check partition once
 
-        # Segment length
-        self.monomer_types = sorted(list(params["segment_lengths"].keys()))
-        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-
-        # Choose platform among [cuda, cpu-mkl, cpu-fftw]
-        avail_platforms = _core.PlatformSelector.avail_platforms()
-        if "platform" in params:
-            platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
-        elif "cuda" in avail_platforms: # If cuda is available, use GPU
-            platform = "cuda"
-        else:
-            platform = avail_platforms[0]
-
-        # Get checkpointing option
-        reduce_memory = params.get("reduce_memory", False)
-
-        # Get boundary conditions
-        bc = params.get("bc", None)
-        if bc is None:
-            # Default to periodic boundaries
-            bc = ["periodic"] * (2 * len(params["nx"]))
-
-        # Flory-Huggins parameters, χN
-        self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
-
-        # Add missing monomer pair combinations with zero interaction
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            monomer_pair = list(monomer_pair)
-            monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-            if sorted_monomer_pair not in self.chi_n:
-                self.chi_n[sorted_monomer_pair] = 0.0
-
-        # Compressibility parameter (zeta_n)
-        if "zeta_n" in params:
-            self.zeta_n = params["zeta_n"]
-        else:
-            self.zeta_n = None  # incompressible (default)
+        # Shared system definition: grid, chain model, monomers, chi N, polymers, platform
+        spec = parse_system(params, validate=False)   # validate_lfts_params ran above
+        self.spec = spec
+        self.monomer_types = list(spec.monomer_types)
+        self.segment_lengths = dict(spec.chain.segment_lengths)
+        self.distinct_polymers = list(spec.polymers)
+        self.random_fraction = dict(spec.random_fraction)
+        self.chi_n = dict(spec.chi_n)
+        self.zeta_n = spec.zeta_n          # None: incompressible (default)
+        platform = spec.platform
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
@@ -441,77 +405,22 @@ class LFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
-        # Validate polymer chain definitions
-        validate_polymers(self.distinct_polymers)
-
-        # Process polymer chain blocks
-        for polymer in self.distinct_polymers:
-            blocks_input = process_polymer_blocks(polymer)
-            polymer["blocks_input"] = blocks_input
-
-        # Process random copolymer chains
-        self.random_fraction = {}
-        for polymer in self.distinct_polymers:
-            result = process_random_copolymer(polymer, self.segment_lengths)
-            if result is not None:
-                random_type_string, statistical_segment_length, fraction_dict = result
-                polymer["block_monomer_types"] = [random_type_string]
-                self.segment_lengths[random_type_string] = statistical_segment_length
-                self.random_fraction[random_type_string] = fraction_dict
-
         # Make a monomer color dictionary
         dict_color = create_monomer_color_dict(self.segment_lengths)
         logger.debug(f"Monomer color: {dict_color}")
 
         # Draw polymer chain architectures
         for idx, polymer in enumerate(self.distinct_polymers):
-            draw_polymer_architecture(polymer, idx, params["ds"], dict_color)
+            draw_polymer_architecture(polymer, idx, spec.chain.ds, dict_color)
 
-        # Get numerical method
-        numerical_method = params.get("numerical_method", "rqm4")
-
-        # Create PropagatorSolver instance
-        self.prop_solver = PropagatorSolver(
-            nx=params["nx"],
-            lx=params["lx"],
-            ds=params["ds"],
-            bond_lengths=self.segment_lengths,
-            bc=bc,
-            chain_model=params["chain_model"],
-            numerical_method=numerical_method,
-            platform=platform,
-            reduce_memory=reduce_memory,
-        )
-
-        # Set angles if provided
-        if "angles" in params:
-            self.prop_solver._computation_box = self.prop_solver._factory.create_computation_box(
-                params["nx"], params["lx"], angles=params["angles"], bc=bc
-            )
-
-        # Add polymer chains
-        for polymer in self.distinct_polymers:
-            self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
-
-        # Initialize the solver (creates propagator optimizer and propagator computation)
-        self.prop_solver._initialize_solver()
-
-        # Set aggregate_propagator_computation option
-        if "aggregate_propagator_computation" in params:
-            aggregate = params["aggregate_propagator_computation"]
-            self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
-                self.prop_solver._molecules, aggregate
-            )
-            self.prop_solver._propagator_computation = self.prop_solver._factory.create_propagator_computation(
-                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer,
-                self.prop_solver.numerical_method
-            )
+        # Create the propagator solver from the validated system definition
+        self.prop_solver = PropagatorSolver.from_spec(spec)
 
         # Display factory info
-        self.prop_solver._factory.display_info()
+        self.prop_solver.display_platform_info()
 
         # Expose computation box as cb for convenience (like SCFT)
-        self.cb = self.prop_solver._computation_box
+        self.cb = self.prop_solver.computation_box
 
         # Initialize smearing (must be after self.cb is set)
         self.smearing = Smearing(
@@ -624,14 +533,14 @@ class LFTS:
         if self.zeta_n is not None:
             print("zeta_n: %f" % (self.zeta_n))
 
-        self.prop_solver._molecules.display_architectures()
+        self.prop_solver.display_architectures()
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        self.prop_solver._propagator_optimizer.display_statistics()
+        self.prop_solver.display_statistics()
 
         #  Save internal variables
         self.params = params
@@ -1450,7 +1359,7 @@ class LFTS:
 
                 # Calculate Hamiltonian
                 total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
                 # Check the mass conservation
                 mass_error = self.cb.mean(h_deriv[I-1])

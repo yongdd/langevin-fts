@@ -1,10 +1,10 @@
 """Structured result objects for polymer field theory simulations.
 
-This module provides dataclass-based result objects that encapsulate
-simulation outputs in a clean, documented interface.
+This module provides dataclass-based result objects for SCFT runs and
+per-iteration progress callbacks.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 import numpy as np
 
@@ -65,27 +65,6 @@ class SCFTResult:
     stress: Optional[np.ndarray] = None
     angles: Optional[List[float]] = None
 
-    def get_field(self, monomer_type: str) -> np.ndarray:
-        """Get potential field for a monomer type.
-
-        Parameters
-        ----------
-        monomer_type : str
-            Monomer type label (e.g., "A", "B").
-
-        Returns
-        -------
-        np.ndarray
-            Potential field for the specified monomer.
-
-        Raises
-        ------
-        KeyError
-            If monomer type not found.
-        """
-        idx = self.monomer_types.index(monomer_type)
-        return self.w[idx]
-
     def get_concentration(self, monomer_type: str) -> np.ndarray:
         """Get concentration field for a monomer type.
 
@@ -105,108 +84,6 @@ class SCFTResult:
             If monomer type not found.
         """
         return self.phi[monomer_type]
-
-    def reshape_field(self, field: np.ndarray) -> np.ndarray:
-        """Reshape a flattened field to grid dimensions.
-
-        Parameters
-        ----------
-        field : np.ndarray
-            Flattened field array.
-
-        Returns
-        -------
-        np.ndarray
-            Field reshaped to nx dimensions.
-        """
-        return field.reshape(self.nx)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert result to dictionary.
-
-        Returns
-        -------
-        dict
-            Dictionary containing all result data.
-        """
-        result = {
-            "converged": self.converged,
-            "free_energy": self.free_energy,
-            "error_level": self.error_level,
-            "iterations": self.iterations,
-            "lx": self.lx,
-            "nx": self.nx,
-            "monomer_types": self.monomer_types,
-            "partition_functions": self.partition_functions,
-        }
-
-        # Add fields
-        for i, mt in enumerate(self.monomer_types):
-            result[f"w_{mt}"] = self.w[i]
-            result[f"phi_{mt}"] = self.phi[mt]
-
-        if self.stress is not None:
-            result["stress"] = self.stress
-
-        if self.angles is not None:
-            result["angles"] = self.angles
-
-        return result
-
-
-@dataclass
-class LFTSResult:
-    """Result object for L-FTS simulations.
-
-    Encapsulates outputs from a Langevin FTS simulation step or run.
-
-    Attributes
-    ----------
-    step : int
-        Current Langevin step number.
-    hamiltonian : float
-        Current Hamiltonian value.
-    phi : dict
-        Monomer concentration fields {monomer_type: array}.
-    w : np.ndarray
-        Current potential fields.
-    structure_function : np.ndarray or None
-        Structure function S(k) if computed.
-    lx : list
-        Current box dimensions.
-    nx : list
-        Grid dimensions.
-    monomer_types : list
-        List of monomer type labels.
-    """
-    step: int
-    hamiltonian: float
-    phi: Dict[str, np.ndarray]
-    w: np.ndarray
-    lx: List[float]
-    nx: List[int]
-    monomer_types: List[str]
-    structure_function: Optional[np.ndarray] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert result to dictionary."""
-        result = {
-            "step": self.step,
-            "hamiltonian": self.hamiltonian,
-            "lx": self.lx,
-            "nx": self.nx,
-            "monomer_types": self.monomer_types,
-        }
-
-        for i, mt in enumerate(self.monomer_types):
-            result[f"w_{mt}"] = self.w[i]
-            result[f"phi_{mt}"] = self.phi[mt]
-
-        if self.structure_function is not None:
-            result["structure_function"] = self.structure_function
-
-        return result
-
 
 @dataclass
 class IterationInfo:

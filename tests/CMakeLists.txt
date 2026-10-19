@@ -14,7 +14,6 @@ endif()
 SET(BASIC_TESTS
     # Platform & utilities
     TestDisplayArchitecture
-    TestArray
     TestCircularBuffer
     TestScheduler
     TestPropagatorCode
@@ -92,11 +91,19 @@ FUNCTION(SET_TEST_LABELS TEST_NAME)
     ENDIF()
 ENDFUNCTION()
 
-# Add Python Files
+# Add Python Files. They import the package staged in the build tree
+# (see polymerfts_stage in the top-level CMakeLists.txt), so 'make install'
+# is not required and an old site-packages install is never tested by mistake.
+IF(DEFINED ENV{PYTHONPATH})
+    SET(POLYMERFTS_TEST_PYTHONPATH "${CMAKE_BINARY_DIR}/python:$ENV{PYTHONPATH}")
+ELSE()
+    SET(POLYMERFTS_TEST_PYTHONPATH "${CMAKE_BINARY_DIR}/python")
+ENDIF()
 FILE(GLOB FILE_LIST "Test*.py")
 FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     ADD_TEST(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${FILE_NAME})
+    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES ENVIRONMENT "PYTHONPATH=${POLYMERFTS_TEST_PYTHONPATH}")
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 
@@ -126,7 +133,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
         common
         )
 
-    IF(${TEST_NAME} MATCHES "ParamParser" OR ${TEST_NAME} MATCHES "Scft" OR ${TEST_NAME} MATCHES "Stress" OR ${TEST_NAME} MATCHES "Hexagonal")
+    IF(${TEST_NAME} MATCHES "Scft" OR ${TEST_NAME} MATCHES "Stress" OR ${TEST_NAME} MATCHES "Hexagonal")
         ADD_TEST(NAME ${TEST_NAME}
             COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

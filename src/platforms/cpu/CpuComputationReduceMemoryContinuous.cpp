@@ -78,7 +78,6 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             PropagatorComputation<T>::set_space_group(space_group);
         }
 
-        const int M = this->cb->get_total_grid();  // Full grid size for workspace arrays
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         this->method = method;
@@ -125,7 +124,6 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         {
             std::string key = item.first;
             auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
-            int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
 
             if(this->propagator_at_check_point.find(std::make_tuple(key, 0)) == this->propagator_at_check_point.end())
                 this->propagator_at_check_point[std::make_tuple(key, 0)] = new T[N];

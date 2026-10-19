@@ -52,7 +52,6 @@
 #include <pybind11/stl_bind.h>
 #include <pybind11/numpy.h>
 
-#include "Array.h"
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 #include "ComputationBox.h"
@@ -482,9 +481,6 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
     std::string class_name = "AbstractFactory_" + type_name;
     
     py::class_<AbstractFactory<T>>(m, class_name.c_str())
-        // .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory<double>::create_array))
-        // .def("create_computation_box", &AbstractFactory::create_computation_box)
-        // .def("get_model_name", &AbstractFactory::get_model_name);
         .def("create_computation_box", [](
             AbstractFactory<T>& obj,
             std::vector<int> nx, std::vector<double> lx,
@@ -577,34 +573,9 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  */
 PYBIND11_MODULE(_core, m)
 {
-    // py::class_<Array>(m, "Array")
-    //     .def("set_data", [](Array& obj, py::array_t<const double> data)
-    //     {
-    //         try
-    //         {
-    //             int size = obj.get_size();
-    //             py::buffer_info buf = data.request();
-    //             if (buf.size != size) {
-    //                 throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(size) + ") must match");
-    //             }
-    //             obj.set_data((double*) buf.ptr, size);
-    //         }
-    //         catch(std::exception& exc)
-    //         {
-    //             throw_without_line_number(exc.what());
-    //         }
-    //     })
-    //     .def("get_ptr", [](Array& obj)
-    //     {
-    //         return reinterpret_cast<std::uintptr_t>(obj.get_ptr());
-    //     })
-    //     .def("get_size", &Array::get_size);
 
 
     py::class_<Polymer>(m, "Polymer")
-        // .def(py::init<double, std::map<std::string, double>, double,
-        //     std::vector<std::string>, std::vector<double>,
-        //     std::vector<int>, std::vector<int>, std::map<int, std::string>>())
         .def("get_alpha", &Polymer::get_alpha)
         .def("get_volume_fraction", &Polymer::get_volume_fraction)
         .def("get_n_blocks", &Polymer::get_n_blocks)

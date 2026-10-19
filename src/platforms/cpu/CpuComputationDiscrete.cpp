@@ -727,7 +727,6 @@ void CpuComputationDiscrete<T>::compute_concentrations()
 {
     try
     {
-        const int M = this->cb->get_total_grid();
         const int N = this->cb->get_n_basis();
         const bool use_reduced_basis = (this->space_group_ != nullptr);
 
@@ -867,8 +866,6 @@ void CpuComputationDiscrete<T>::compute_stress()
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int M = this->cb->get_total_grid();
 
-        // Space group: propagators in reduced basis need expansion to full grid for FFT
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 

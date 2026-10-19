@@ -344,7 +344,6 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
                 const int M_phys = this->get_crysfft_physical_size();
-                const bool identity = this->use_crysfft_identity_map();
                 if (static_cast<int>(phys_in.size()) != M_phys)
                 {
                     phys_in.resize(M_phys);

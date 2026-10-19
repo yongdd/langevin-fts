@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article below."
+title: "PolymerFTS: Polymer Field Theory Simulations with Python"
+type: software
+authors:
+  - family-names: Yong
+    given-names: Daeseong
+repository-code: "https://github.com/yongdd/langevin-fts"
+license: Apache-2.0
+version: 1.0.0
+preferred-citation:
+  type: article
+  title: "Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations"
+  authors:
+    - family-names: Yong
+      given-names: Daeseong
+    - family-names: Kim
+      given-names: Jaeup U.
+  journal: "Journal of Chemical Theory and Computation"
+  year: 2025
+  volume: 21
+  start: 3676

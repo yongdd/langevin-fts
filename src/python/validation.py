@@ -111,8 +111,8 @@ def validate_list_length(value: List, expected_len: int, name: str) -> None:
         )
 
 
-def validate_scft_params(params: Dict[str, Any]) -> None:
-    """Validate SCFT simulation parameters.
+def validate_system_params(params: Dict[str, Any]) -> None:
+    """Validate the parameters shared by SCFT, L-FTS and CL-FTS.
 
     Performs comprehensive validation of parameter dictionary for SCFT
     simulations, checking types, required fields, and value constraints.
@@ -136,7 +136,7 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
     Examples
     --------
     >>> params = {"nx": [32, 32], "lx": [4.0, 4.0], ...}
-    >>> validate_scft_params(params)  # raises ValidationError if invalid
+    >>> validate_system_params(params)  # raises ValidationError if invalid
     """
     # Check required keys
     required = ["nx", "lx", "ds", "segment_lengths", "chi_n", "distinct_polymers"]
@@ -241,6 +241,10 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
             )
 
 
+# Backward-compatible alias: the checks are not SCFT specific.
+validate_scft_params = validate_system_params
+
+
 def validate_lfts_params(params: Dict[str, Any]) -> None:
     """Validate L-FTS simulation parameters.
 
@@ -259,8 +263,8 @@ def validate_lfts_params(params: Dict[str, Any]) -> None:
     ValidationError
         If any parameter is invalid
     """
-    # First validate common SCFT parameters
-    validate_scft_params(params)
+    # First validate the shared system parameters
+    validate_system_params(params)
 
     # Validate Langevin-specific parameters
     if "langevin" not in params:

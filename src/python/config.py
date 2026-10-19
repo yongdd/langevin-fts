@@ -6,7 +6,6 @@ without writing Python scripts.
 """
 
 import json
-import os
 import warnings
 from typing import Dict, Any, Union
 from pathlib import Path
@@ -86,40 +85,6 @@ def load_config(path: Union[str, Path]) -> Dict[str, Any]:
     return params
 
 
-def save_config(params: Dict[str, Any], path: Union[str, Path]) -> None:
-    """Save simulation parameters to a configuration file.
-
-    Parameters
-    ----------
-    params : dict
-        Simulation parameters dictionary.
-    path : str or Path
-        Output file path. Format determined by extension.
-
-    Raises
-    ------
-    ConfigError
-        If file format is not supported.
-    """
-    path = Path(path)
-    suffix = path.suffix.lower()
-
-    # Convert numpy arrays to lists for serialization
-    params_serializable = _make_serializable(params)
-
-    with open(path, 'w') as f:
-        if suffix in ('.yaml', '.yml'):
-            yaml.dump(params_serializable, f, default_flow_style=None,
-                     width=90, sort_keys=False)
-        elif suffix == '.json':
-            json.dump(params_serializable, f, indent=2)
-        else:
-            raise ConfigError(
-                f"Unsupported configuration file format: {suffix}. "
-                "Use .yaml, .yml, or .json"
-            )
-
-
 def _process_config_values(obj: Any) -> Any:
     """Process configuration values, evaluating special expressions.
 
@@ -160,116 +125,3 @@ def _process_config_values(obj: Any) -> Any:
         return obj
     else:
         return obj
-
-
-def _make_serializable(obj: Any) -> Any:
-    """Convert objects to JSON/YAML serializable format.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to convert.
-
-    Returns
-    -------
-    Any
-        Serializable version of object.
-    """
-    if isinstance(obj, dict):
-        return {k: _make_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [_make_serializable(item) for item in obj]
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, (np.integer, np.floating)):
-        return obj.item()
-    elif isinstance(obj, np.bool_):
-        return bool(obj)
-    else:
-        return obj
-
-
-def create_template_config(path: Union[str, Path], simulation_type: str = "scft") -> None:
-    """Create a template configuration file.
-
-    Parameters
-    ----------
-    path : str or Path
-        Output file path.
-    simulation_type : str
-        Type of simulation: "scft" or "lfts".
-
-    Examples
-    --------
-    >>> create_template_config("template.yaml", simulation_type="scft")
-    """
-    if simulation_type == "scft":
-        template = {
-            "nx": [32, 32, 32],
-            "lx": [4.0, 4.0, 4.0],
-
-            "chain_model": "continuous",
-            "ds": 0.01,
-
-            "segment_lengths": {"A": 1.0, "B": 1.0},
-            "chi_n": {"A,B": 15.0},
-
-            "distinct_polymers": [{
-                "volume_fraction": 1.0,
-                "blocks": [
-                    {"type": "A", "length": 0.5},
-                    {"type": "B", "length": 0.5}
-                ]
-            }],
-
-            "optimizer": {
-                "name": "am",
-                "max_hist": 20,
-                "start_error": 0.1,
-                "mix_min": 0.1,
-                "mix_init": 0.1
-            },
-
-            "box_is_altering": False,
-            "max_iter": 2000,
-            "tolerance": 1e-8,
-            "verbose_level": 1
-        }
-    elif simulation_type == "lfts":
-        template = {
-            "nx": [32, 32, 32],
-            "lx": [4.0, 4.0, 4.0],
-
-            "chain_model": "discrete",
-            "ds": 0.01,
-
-            "segment_lengths": {"A": 1.0, "B": 1.0},
-            "chi_n": {"A,B": 15.0},
-
-            "distinct_polymers": [{
-                "volume_fraction": 1.0,
-                "blocks": [
-                    {"type": "A", "length": 0.5},
-                    {"type": "B", "length": 0.5}
-                ]
-            }],
-
-            "langevin": {
-                "nbar": 10000,
-                "dt": 0.8
-            },
-
-            "recording": {
-                "dir": "data",
-                "recording_period": 1000,
-                "sf_computing_period": 10,
-                "sf_recording_period": 100
-            },
-
-            "box_is_altering": False,
-            "verbose_level": 1
-        }
-    else:
-        raise ConfigError(f"Unknown simulation type: {simulation_type}")
-
-    save_config(template, path)

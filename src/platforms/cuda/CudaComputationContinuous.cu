@@ -384,7 +384,6 @@ void CudaComputationContinuous<T>::compute_propagators(
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 const int STREAM = omp_get_thread_num();
-                // printf("gpu, STREAM: %d, %d\n ", gpu, STREAM);
 
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
@@ -392,10 +391,6 @@ void CudaComputationContinuous<T>::compute_propagators(
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                // // Display job info
-                // #ifndef NDEBUG
-                // std::cout << job << " started" << std::endl;
-                // #endif
 
                 // Check key
                 #ifndef NDEBUG
@@ -723,8 +718,6 @@ void CudaComputationContinuous<T>::compute_stress()
 
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
@@ -770,7 +763,6 @@ void CudaComputationContinuous<T>::compute_stress()
             advance(block, b);
             const auto& key   = block->first;
 
-            // printf("start, b, gpu, STREAM: %2d, %2d, %2d\n", b, gpu, STREAM);
 
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
@@ -785,7 +777,6 @@ void CudaComputationContinuous<T>::compute_stress()
             if(N_RIGHT == 0)
                 continue;
 
-            // std::cout << p << ", " << key_left << ", " << key_right << ", " << N << ", " << N_LEFT << std::endl;
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N_RIGHT);
             CuDeviceData<T>** d_q_1 = this->d_propagator[key_left];     // dependency v
@@ -866,7 +857,6 @@ void CudaComputationContinuous<T>::compute_stress()
                         _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
                 }
 
-                // std::cout << key_left << ", "  << key_right << ", " << n << ", " << segment_stress[0] << ", " << segment_stress[1] << ", " << segment_stress[2] << std::endl;
 
                 std::swap(prev, next);
             }
@@ -875,8 +865,6 @@ void CudaComputationContinuous<T>::compute_stress()
             gpu_error_check(cudaEventDestroy(kernel_done));
             gpu_error_check(cudaEventDestroy(memcpy_done));
 
-            // std::cout << p << ", " << key_left << ", " << key_right << ", " << N << ", " << N_LEFT << std::endl;
-            // std::cout << "STREAM, _block_dq_dl[0] " << STREAM  << ", " << _block_dq_dl[0] << std::endl;
 
             // Multiply by local_ds for this block (get ds_index from key)
             int ds_index = PropagatorCode::get_ds_index_from_key(key_right);

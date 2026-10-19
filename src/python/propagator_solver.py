@@ -175,9 +175,18 @@ class PropagatorSolver:
         platform: str = "auto",
         reduce_memory: bool = False,
         mask: Optional[NDArray[np.floating]] = None,
-        space_group: Optional[Any] = None
+        space_group: Optional[Any] = None,
+        angles: Optional[List[float]] = None,
+        aggregate_propagator_computation: bool = True,
+        field_type: str = "real"
     ) -> None:
-        """Initialize the propagator solver."""
+        """Initialize the propagator solver.
+
+        ``angles`` (lattice angles in degrees), ``aggregate_propagator_computation``
+        (let the optimizer merge equivalent propagators) and ``field_type``
+        (``"real"`` or ``"complex"`` fields) are optional; see
+        :meth:`from_spec` for building a solver from a :class:`SystemSpec`.
+        """
 
         # Store grid parameters
         self.nx = list(nx)
@@ -277,6 +286,12 @@ class PropagatorSolver:
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
+        # Lattice angles, optimizer aggregation and field type
+        self.angles = list(angles) if angles is not None else None
+        self.aggregate_propagator_computation = bool(aggregate_propagator_computation)
+        self.field_type = field_type.lower()
+        if self.field_type not in ("real", "complex"):
+            raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
 
         # Store and validate mask.
         # Compare against the full grid size: the n_grid property cannot be
@@ -294,7 +309,7 @@ class PropagatorSolver:
 
         # Create factory
         self._factory = _core.PlatformSelector.create_factory(
-            self.platform, self.reduce_memory
+            self.platform, self.reduce_memory, self.field_type
         )
 
         # Create molecules
@@ -345,6 +360,103 @@ class PropagatorSolver:
             else:
                 print(f"Space-group basis: {activated}")
         self._space_group = space_group
+
+    @classmethod
+    def from_spec(
+        cls,
+        spec: "SystemSpec",
+        space_group: Optional[Any] = None,
+        mask: Optional[NDArray[np.floating]] = None,
+        field_type: str = "real",
+    ) -> "PropagatorSolver":
+        """Build a fully initialized solver from a validated :class:`SystemSpec`.
+
+        This is the constructor used by :class:`SCFT`, :class:`LFTS` and
+        :class:`CLFTS`: it creates the solver, adds every polymer of the spec
+        (including grafting-point initial conditions) and initializes the
+        C++ propagator computation, so no private member has to be touched.
+
+        Parameters
+        ----------
+        spec : SystemSpec
+            Output of :func:`polymerfts.parse_system`.
+        space_group : SpaceGroup, optional
+            Space group for the reduced-basis computation.
+        mask : ndarray, optional
+            Accessible-volume mask on the full grid.
+        field_type : {"real", "complex"}
+            Field type; CL-FTS uses complex fields.
+        """
+        solver = cls(
+            nx=list(spec.grid.nx),
+            lx=list(spec.grid.lx),
+            ds=spec.chain.ds,
+            bond_lengths=spec.chain.segment_lengths,
+            bc=list(spec.grid.bc),
+            chain_model=spec.chain.model,
+            numerical_method=spec.chain.numerical_method,
+            platform=spec.platform,
+            reduce_memory=spec.reduce_memory,
+            mask=mask,
+            space_group=space_group,
+            angles=list(spec.grid.angles) if spec.grid.angles is not None else None,
+            aggregate_propagator_computation=spec.aggregate_propagator_computation,
+            field_type=field_type,
+        )
+        for polymer in spec.polymers:
+            solver.add_polymer(
+                polymer["volume_fraction"],
+                polymer["blocks_input"],
+                polymer.get("initial_conditions", None),
+            )
+        solver._initialize_solver()
+        return solver
+
+    # -------------------- Access to the underlying C++ objects --------------------
+
+    @property
+    def computation_box(self) -> Any:
+        """The C++ ComputationBox (grid, box, integrals)."""
+        self._initialize_solver()
+        return self._computation_box
+
+    @property
+    def molecules(self) -> Any:
+        """The C++ Molecules object holding the polymer definitions."""
+        return self._molecules
+
+    @property
+    def propagator_optimizer(self) -> Any:
+        """The C++ PropagatorComputationOptimizer."""
+        self._initialize_solver()
+        return self._propagator_optimizer
+
+    @property
+    def propagator_computation(self) -> Any:
+        """The C++ PropagatorComputation (the propagator solver itself)."""
+        self._initialize_solver()
+        return self._propagator_computation
+
+    @property
+    def space_group(self) -> Optional[Any]:
+        """The space group in use, or None."""
+        return self._space_group
+
+    def display_platform_info(self) -> None:
+        """Print the platform and device information of the backend."""
+        self._factory.display_info()
+
+    def display_architectures(self) -> None:
+        """Print the polymer architectures."""
+        self._molecules.display_architectures()
+
+    def display_statistics(self) -> None:
+        """Print the propagator computation statistics of the optimizer."""
+        self.propagator_optimizer.display_statistics()
+
+    def set_force_off_diagonal_stress(self, flag: bool) -> None:
+        """Force computation of the off-diagonal stress components."""
+        self.propagator_computation.set_force_off_diagonal_stress(flag)
 
     def add_polymer(
         self,
@@ -411,19 +523,17 @@ class PropagatorSolver:
 
         # Create propagator computation optimizer
         self._propagator_optimizer = self._factory.create_propagator_computation_optimizer(
-            self._molecules, True
+            self._molecules, self.aggregate_propagator_computation
         )
 
         # Create computation box if not already set (e.g., by external code setting angles)
         if self._computation_box is None:
+            box_kwargs = dict(nx=self.nx, lx=self.lx, bc=self.bc)
+            if self.angles is not None:
+                box_kwargs["angles"] = self.angles
             if self.mask is not None:
-                self._computation_box = self._factory.create_computation_box(
-                    nx=self.nx, lx=self.lx, bc=self.bc, mask=self.mask
-                )
-            else:
-                self._computation_box = self._factory.create_computation_box(
-                    nx=self.nx, lx=self.lx, bc=self.bc
-                )
+                box_kwargs["mask"] = self.mask
+            self._computation_box = self._factory.create_computation_box(**box_kwargs)
 
         # Create solver with space_group if provided
         # Handle both C++ SpaceGroup objects and Python wrappers with _cpp_sg attribute

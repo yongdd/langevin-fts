@@ -128,9 +128,7 @@ jobs:
         # Compare the per-class file basenames of the Computation*/Solver*
         # families after stripping the platform prefix. Intentional
         # differences go in the allowlists below.
-        # CPU-only: CpuSolverPseudoBase (CPU pseudo solvers share a base
-        #           class; the CUDA solvers are standalone).
-        ALLOW_CPU_ONLY='^(SolverPseudoBase)$'
+        ALLOW_CPU_ONLY='^$'
         ALLOW_CUDA_ONLY='^$'
 
         cpu=$(ls src/platforms/cpu/ \

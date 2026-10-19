@@ -149,13 +149,6 @@ Polymer::Polymer(
         }
     }
 
-    // // Print adjacent_nodes
-    // for(const auto& node : adjacent_nodes){
-    //     std::cout << node.first << ": [";
-    //     for(int i=0; i<node.second.size()-1; i++)
-    //         std::cout << node.second[i] << ",";
-    //     std::cout << node.second[node.second.size()-1] << "]" << std::endl;
-    // }
 
     // Construct edge nodes
     for (size_t i=0; i<v.size(); i++)

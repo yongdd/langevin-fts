@@ -65,6 +65,8 @@ For every computation, launch a separate SLURM job for each parameter value inst
 
 | Dependency | Minimum Version | Notes |
 |------------|-----------------|-------|
+| spglib | - | Space group symmetry (required) |
+| LAPACKE | - | Anderson mixing SVD solver (required) |
 | CMake | 3.17+ | Build system |
 | C++ Compiler | C++20 support | GCC 10+, Clang 10+ |
 | Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
@@ -90,7 +92,7 @@ mkdir build && cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 
-# Install Python modules to conda environment (required before testing)
+# Install Python modules to conda environment (for examples/tutorials; tests use the build tree)
 make install
 
 # Run basic tests (installation verification, ~40 sec)
@@ -150,14 +152,11 @@ Two test modes are available:
 
 ### Running Tests
 
-**Important:** Run `make install` before testing. Python tests import from the installed package.
+**Note:** The Python tests import the package staged in `build/python/` by `make` (target `polymerfts_stage`), so they always test the current build; `make install` is only needed to run examples and tutorials from the installed package.
 
 ```bash
 # From build directory
 cd build
-
-# Install first (required for Python tests)
-make install
 
 # Basic tests (for users, installation verification)
 ctest -L basic
@@ -286,6 +285,8 @@ Iterative solver for SCFT equations. Accelerates convergence by mixing field his
   - Structure function calculations
   - Field compressors (Anderson Mixing, Linear Response)
   - PCG64 random number generator
+
+- `src/python/system_spec.py`: Shared configuration layer. `parse_system(params)` validates the grid, chain model, monomer types, χN and polymer definitions once and returns an immutable `SystemSpec`; SCFT, LFTS and CLFTS build their `PropagatorSolver` from it via `PropagatorSolver.from_spec()`.
 
 - `src/python/polymer_field_theory.py`: Multi-monomer field theory transformations
   - Converts between monomer potential fields and auxiliary fields
@@ -567,6 +568,8 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 - Laplacian operator updates (`update_laplacian_operator`)
 - Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
 
+The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the space-group/CrysFFT setup, `update_laplacian_operator`, the shared `update_dw_impl` and the stress reduction buffers. Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
+
 Derived classes implement chain-model-specific behavior:
 - `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
 - `advance_propagator`: Different algorithms (RQM4 vs simple step)
@@ -616,7 +619,7 @@ Solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimensi
 
 ### When Modifying Python Code
 
-Changes to `src/python/*.py` take effect after `make install` from build directory. No recompilation needed.
+Changes to `src/python/*.py` are picked up by the tests after `make` (they are staged into `build/python/`) and by the installed package after `make install`. No recompilation needed.
 
 ### Deprecated/Internal Methods
 

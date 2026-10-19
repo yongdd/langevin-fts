@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # CPU-only service (FFTW backend)
   polymerfts-cpu:
@@ -12,7 +10,6 @@ services:
       - ./workspace:/home/polymerfts/workspace
     environment:
       - OMP_STACKSIZE=1G
-      - OMP_NUM_THREADS=1
       - OMP_NUM_THREADS=4
     stdin_open: true
     tty: true
@@ -28,7 +25,6 @@ services:
       - ./workspace:/home/polymerfts/workspace
     environment:
       - OMP_STACKSIZE=1G
-      - OMP_NUM_THREADS=1
       - OMP_NUM_THREADS=4
       - NVIDIA_VISIBLE_DEVICES=all
     stdin_open: true

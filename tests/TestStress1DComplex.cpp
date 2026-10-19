@@ -41,8 +41,6 @@ int main()
         T *w;
 
         // String to output file and print stream
-        std::streamsize default_precision = std::cout.precision();
-
         // -------------- Initialize ------------
         std::vector<int> nx = {64};
         std::vector<double> lx = {3.3};

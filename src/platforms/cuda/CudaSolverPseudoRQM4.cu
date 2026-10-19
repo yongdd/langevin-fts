@@ -40,6 +40,7 @@
 #include <thrust/reduce.h>
 
 #include "CudaPseudo.h"
+#include "CudaTypeDispatch.h"
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
@@ -59,106 +60,16 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
     [[maybe_unused]] bool reduce_memory)
+    : CudaSolverPseudoBase<T>(cb, molecules, n_streams, streams,
+                              /*q_full_in_factor=*/1, /*with_exp_dw_half=*/true,
+                              /*complex_requires_periodic=*/true)
 {
     try{
-        this->cb = cb;
-        this->molecules = molecules;
-        this->chain_model = molecules->get_model_name();
-        this->n_streams = n_streams;
-        this->dim_ = cb->get_dim();
-
-        // Initialize fft_ pointers to nullptr
-        for(int i=0; i<MAX_STREAMS; i++)
-            this->fft_[i] = nullptr;
-
-        // Check if all BCs are periodic
-        auto bc_vec = cb->get_boundary_conditions();
-
-        // Validate that both sides of each direction have matching BC
-        // (required for pseudo-spectral: FFT/DCT/DST apply to entire direction)
-        for (int d = 0; d < this->dim_; ++d)
-        {
-            if (bc_vec[2*d] != bc_vec[2*d + 1])
-            {
-                throw_with_line_number("Pseudo-spectral method requires matching boundary conditions on both sides of each direction. "
-                    "Direction " + std::to_string(d) + " has mismatched BCs. Use real-space method for mixed BCs.");
-            }
-        }
-        is_periodic_ = true;
-        for (const auto& b : bc_vec)
-        {
-            if (b != BoundaryCondition::PERIODIC)
-            {
-                is_periodic_ = false;
-                break;
-            }
-        }
-
-
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-        {
-            if (!is_periodic_)
-                throw_with_line_number(
-                    "Complex fields with non-periodic boundary conditions are "
-                    "not yet ported to this CUDA solver; use the discrete "
-                    "chain model or a CPU platform.");
-        }
-        // Pseudo expects ONE boundary condition per dimension; the computation
-        // box stores two (low/high face). Squeeze before passing, otherwise
-        // per-axis mixed BCs (e.g. reflecting-x, absorbing-y) build the
-        // Boltzmann/stress tables with the wrong axis assignment.
-        {
-            auto bc_vec_ctor = cb->get_boundary_conditions();
-            std::vector<BoundaryCondition> bc_dim_ctor;
-            for (int d = 0; d < cb->get_dim(); ++d)
-                bc_dim_ctor.push_back(bc_vec_ctor[2 * d]);
-            pseudo = new CudaPseudo<T>(
-                molecules->get_bond_lengths(),
-                bc_dim_ctor,
-                cb->get_nx(), cb->get_dx(),
-            cb->get_recip_metric(),
-            cb->get_recip_vec());
-        }
-
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-
-        // Copy streams
-        for(int i=0; i<n_streams; i++)
-        {
-            this->streams[i][0] = streams[i][0];
-            this->streams[i][1] = streams[i][1];
-        }
-
-        // Ensure ContourLengthMapping is finalized before using it
-        molecules->finalize_contour_length_mapping();
-
-        // Get unique ds values from ContourLengthMapping
-        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
-        int n_unique_ds = mapping.get_n_unique_ds();
-
-        // Create exp_dw and exp_dw_half for each ds_index and monomer_type
-        // Also register local_ds values with Pseudo for boltz_bond computation
-        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
-        {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
-            pseudo->add_ds_value(ds_idx, local_ds);
-
-            for(const auto& item: molecules->get_bond_lengths())
-            {
-                std::string monomer_type = item.first;
-                this->d_exp_dw     [ds_idx][monomer_type] = nullptr;
-                this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [ds_idx][monomer_type], sizeof(T)*M));
-                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
-            }
-        }
-
-        // Finalize ds values to allocate boltz_bond arrays
-        // (update_laplacian_operator will compute the actual values)
-        pseudo->finalize_ds_values();
-
-        // Initialize cuFFT plans to 0
+        auto bc_vec = cb->get_boundary_conditions();
+        for(int i=0; i<MAX_STREAMS; i++)
+            fft_[i] = nullptr;
         for(int i=0; i<n_streams; i++)
         {
             plan_for_one[i] = 0;
@@ -167,28 +78,6 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             plan_bak_two[i] = 0;
             d_rk_in_1_one[i] = nullptr;
             d_rk_in_2_one[i] = nullptr;
-        }
-
-        // Initialize space group support
-        space_group_ = nullptr;
-        d_reduced_basis_indices_ = nullptr;
-        d_full_to_reduced_map_ = nullptr;
-        n_basis_ = 0;
-        use_crysfft_ = false;
-        crysfft_mode_ = CudaCrysFFTMode::None;
-        crysfft_identity_map_ = false;
-        crysfft_physical_size_ = 0;
-        crysfft_reduced_size_ = 0;
-        d_crysfft_phys_to_reduced_ = nullptr;
-        d_crysfft_reduced_to_phys_ = nullptr;
-        d_crysfft_orbit_counts_ = nullptr;
-        for(int i=0; i<MAX_STREAMS; i++)
-        {
-            d_q_full_in_[i] = nullptr;
-            d_q_full_out_[i] = nullptr;
-            crysfft_[i] = nullptr;
-            d_crysfft_in_[i] = nullptr;
-            d_crysfft_out_[i] = nullptr;
         }
 
         if (is_periodic_)
@@ -213,18 +102,8 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
                 total_grid[0] = cb->get_nx(0);
             }
 
-            cufftType cufft_forward;
-            cufftType cufft_backward;
-            if constexpr (std::is_same<T, double>::value)
-            {
-                cufft_forward = CUFFT_D2Z;
-                cufft_backward = CUFFT_Z2D;
-            }
-            else
-            {
-                cufft_forward = CUFFT_Z2Z;
-                cufft_backward = CUFFT_Z2Z;
-            }
+            const cufftType cufft_forward  = CufftPlanType<T>::forward;
+            const cufftType cufft_backward = CufftPlanType<T>::backward;
 
             for(int i=0; i<n_streams; i++)
             {
@@ -283,28 +162,7 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
         }
-        for(int i=0; i<n_streams; i++)
-        {
-            gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(T)*1));
-            gpu_error_check(cudaMalloc((void**)&d_q_multi[i],         sizeof(T)*M_COMPLEX));
-        }
-
-        // Allocate memory for cub reduction sum
-        for(int i=0; i<n_streams; i++)
-        {
-            d_temp_storage[i] = nullptr;
-            temp_storage_bytes[i] = 0;
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, streams[i][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[i][0]);
-            gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
-        }
-
-        // update_laplacian_operator() handles registration of local_ds values
-        // and calls finalize_ds_values() to compute boltz_bond with correct local_ds
-        update_laplacian_operator();
+        this->update_laplacian_operator();
     }
     catch(std::exception& exc)
     {
@@ -314,9 +172,6 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
 template <typename T>
 CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
 {
-    cleanup_crysfft();
-
-    delete pseudo;
 
     // Clean up FFT resources
     if (is_periodic_)
@@ -349,14 +204,6 @@ CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
         }
     }
 
-    // Free d_exp_dw nested maps: d_exp_dw[ds_index][monomer_type]
-    for(const auto& ds_entry: this->d_exp_dw)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: this->d_exp_dw_half)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-
     // For pseudo-spectral: advance_propagator()
     for(int i=0; i<n_streams; i++)
     {
@@ -367,503 +214,13 @@ CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
         cudaFree(d_qk_in_1_two[i]);
     }
 
-    for(int i=0; i<n_streams; i++)
-    {
-        cudaFree(d_stress_sum[i]);
-        cudaFree(d_stress_sum_out[i]);
-        cudaFree(d_q_multi[i]);
-        cudaFree(d_temp_storage[i]);
-    }
-
-    // Free space group work buffers
-    for(int i=0; i<n_streams; i++)
-    {
-        if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
-        if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
-    }
 }
 
-template <typename T>
-void CudaSolverPseudoRQM4<T>::cleanup_crysfft()
-{
-    use_crysfft_ = false;
-    crysfft_mode_ = CudaCrysFFTMode::None;
-    crysfft_identity_map_ = false;
-    crysfft_physical_size_ = 0;
-    crysfft_reduced_size_ = 0;
-
-    if (d_crysfft_phys_to_reduced_ != nullptr)
-    {
-        cudaFree(d_crysfft_phys_to_reduced_);
-        d_crysfft_phys_to_reduced_ = nullptr;
-    }
-    if (d_crysfft_reduced_to_phys_ != nullptr)
-    {
-        cudaFree(d_crysfft_reduced_to_phys_);
-        d_crysfft_reduced_to_phys_ = nullptr;
-    }
-    if (d_crysfft_orbit_counts_ != nullptr)
-    {
-        cudaFree(d_crysfft_orbit_counts_);
-        d_crysfft_orbit_counts_ = nullptr;
-    }
-
-    for (int i = 0; i < MAX_STREAMS; i++)
-    {
-        if (crysfft_[i] != nullptr)
-        {
-            delete crysfft_[i];
-            crysfft_[i] = nullptr;
-        }
-        if (d_crysfft_in_[i] != nullptr)
-        {
-            cudaFree(d_crysfft_in_[i]);
-            d_crysfft_in_[i] = nullptr;
-        }
-        if (d_crysfft_out_[i] != nullptr)
-        {
-            cudaFree(d_crysfft_out_[i]);
-            d_crysfft_out_[i] = nullptr;
-        }
-    }
-}
-template <typename T>
-void CudaSolverPseudoRQM4<T>::set_space_group(
-    SpaceGroup* sg,
-    int* d_reduced_basis_indices,
-    int* d_full_to_reduced_map,
-    int n_basis)
-{
-    space_group_ = sg;
-    d_reduced_basis_indices_ = d_reduced_basis_indices;
-    d_full_to_reduced_map_ = d_full_to_reduced_map;
-    n_basis_ = n_basis;
-
-    cleanup_crysfft();
-
-    if (sg != nullptr)
-    {
-        const int M = cb->get_total_grid();
-        for(int i=0; i<n_streams; i++)
-        {
-            if (d_q_full_in_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M));
-            if (d_q_full_out_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
-        }
-    }
-    else
-    {
-        // Free work buffers if space group is disabled
-        for(int i=0; i<n_streams; i++)
-        {
-            if (d_q_full_in_[i] != nullptr)
-            {
-                cudaFree(d_q_full_in_[i]);
-                d_q_full_in_[i] = nullptr;
-            }
-            if (d_q_full_out_[i] != nullptr)
-            {
-                cudaFree(d_q_full_out_[i]);
-                d_q_full_out_[i] = nullptr;
-            }
-        }
-    }
-
-    if constexpr (std::is_same_v<T, double>)
-    {
-        if (space_group_ != nullptr && dim_ == 3 && is_periodic_)
-        {
-            const auto nx = cb->get_nx();
-            std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-            const auto angles = cb->get_angles();
-            const bool z_axis_orthogonal =
-                (angles.size() >= 3 &&
-                 std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
-                 std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-            const auto selection = select_crysfft_mode(
-                space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_oblique_z)
-            {
-                const int Nx2 = nx[0] / 2;
-                const int Ny2 = nx[1] / 2;
-                const int Nz2 = nx[2] / 2;
-                const int M_phys_pmmm = Nx2 * Ny2 * Nz2;
-                const int M_phys_hex = nx[0] * nx[1] * Nz2;
-                const int M_reduced = space_group_->get_n_reduced_basis();
-                const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-                const bool use_m3_basis = space_group_->using_m3_physical_basis();
-                const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-                const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
-
-                std::vector<int> phys_to_reduced;
-                std::vector<int> reduced_to_phys;
-
-                auto check_identity = [&](bool even_indices) -> bool {
-                    if (M_reduced != M_phys_pmmm)
-                        return false;
-                    int idx = 0;
-                    for (int ix = 0; ix < Nx2; ++ix)
-                    {
-                        const int fx = even_indices ? (2 * ix) : ix;
-                        for (int iy = 0; iy < Ny2; ++iy)
-                        {
-                            const int fy = even_indices ? (2 * iy) : iy;
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                const int fz = even_indices ? (2 * iz) : iz;
-                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                if (reduced_idx != idx)
-                                    return false;
-                                ++idx;
-                            }
-                        }
-                    }
-                    return true;
-                };
-
-                auto build_mapping = [&](bool even_indices) -> bool {
-                    phys_to_reduced.resize(M_phys_pmmm);
-                    reduced_to_phys.assign(M_reduced, -1);
-                    std::vector<int> coverage(M_reduced, 0);
-                    int idx = 0;
-                    for (int ix = 0; ix < Nx2; ++ix)
-                    {
-                        const int fx = even_indices ? (2 * ix) : ix;
-                        for (int iy = 0; iy < Ny2; ++iy)
-                        {
-                            const int fy = even_indices ? (2 * iy) : iy;
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                const int fz = even_indices ? (2 * iz) : iz;
-                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                phys_to_reduced[idx] = reduced_idx;
-                                if (reduced_to_phys[reduced_idx] < 0)
-                                    reduced_to_phys[reduced_idx] = idx;
-                                coverage[reduced_idx] += 1;
-                                ++idx;
-                            }
-                        }
-                    }
-                    for (int i = 0; i < M_reduced; ++i)
-                    {
-                        if (coverage[i] == 0)
-                            return false;
-                    }
-                    return true;
-                };
-
-                auto check_identity_hex = [&](int z_shift) -> bool {
-                    if (M_reduced != M_phys_hex)
-                        return false;
-                    int idx = 0;
-                    for (int ix = 0; ix < nx[0]; ++ix)
-                    {
-                        for (int iy = 0; iy < nx[1]; ++iy)
-                        {
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                int iz_full = iz + z_shift;
-                                if (iz_full >= nx[2])
-                                    iz_full -= nx[2];
-                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                if (reduced_idx != idx)
-                                    return false;
-                                ++idx;
-                            }
-                        }
-                    }
-                    return true;
-                };
-
-                auto build_mapping_hex = [&](int z_shift) -> bool {
-                    phys_to_reduced.resize(M_phys_hex);
-                    reduced_to_phys.assign(M_reduced, -1);
-                    std::vector<int> coverage(M_reduced, 0);
-                    int idx = 0;
-                    for (int ix = 0; ix < nx[0]; ++ix)
-                    {
-                        for (int iy = 0; iy < nx[1]; ++iy)
-                        {
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                int iz_full = iz + z_shift;
-                                if (iz_full >= nx[2])
-                                    iz_full -= nx[2];
-                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                phys_to_reduced[idx] = reduced_idx;
-                                if (reduced_to_phys[reduced_idx] < 0)
-                                    reduced_to_phys[reduced_idx] = idx;
-                                coverage[reduced_idx] += 1;
-                                ++idx;
-                            }
-                        }
-                    }
-                    for (int i = 0; i < M_reduced; ++i)
-                    {
-                        if (coverage[i] == 0)
-                            return false;
-                    }
-                    return true;
-                };
-
-                auto finalize_crysfft = [&](CudaCrysFFTMode mode, int M_phys, bool identity_forced) {
-                    crysfft_physical_size_ = M_phys;
-                    crysfft_reduced_size_ = M_reduced;
-
-                    bool identity = identity_forced;
-                    if (!identity_forced)
-                    {
-                        identity = (M_reduced == M_phys);
-                        if (identity)
-                        {
-                            for (int i = 0; i < M_phys; ++i)
-                            {
-                                if (phys_to_reduced[i] != i || reduced_to_phys[i] != i)
-                                {
-                                    identity = false;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    crysfft_identity_map_ = identity;
-
-                    if (!crysfft_identity_map_)
-                    {
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * M_phys));
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * M_reduced));
-                        gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, phys_to_reduced.data(),
-                                                   sizeof(int) * M_phys, cudaMemcpyHostToDevice));
-                        gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
-                                                   sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
-                    }
-
-                    // Orbit counts for the CrysFFT stress fast path
-                    const auto& orbit_counts = space_group_->get_orbit_counts();
-                    gpu_error_check(cudaMalloc((void**)&d_crysfft_orbit_counts_, sizeof(int) * M_reduced));
-                    gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
-                                               sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
-
-                    auto lx = cb->get_lx();
-                    auto angles = cb->get_angles();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-
-                    for (int i = 0; i < n_streams; i++)
-                    {
-                        if (mode == CudaCrysFFTMode::Recursive3m)
-                            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, selection.m3_translations);
-                        else if (mode == CudaCrysFFTMode::ObliqueZ)
-                            crysfft_[i] = new CudaCrysFFTObliqueZ(nx_logical, cell_para);
-                        else
-                            crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
-
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
-                    }
-                    crysfft_mode_ = mode;
-                    use_crysfft_ = true;
-                };
-
-                if (selection.mode == CrysFFTChoice::Recursive3m)
-                {
-                    if (use_pmmm_basis)
-                        throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-                    if (use_m3_basis)
-                    {
-                        if (!check_identity(true))
-                            throw_with_line_number("M3 physical basis does not match recursive 3m CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, true);
-                    }
-                    else if (build_mapping(true))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, false);
-                    }
-                }
-
-                if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
-                {
-                    if (use_m3_basis || use_pmmm_basis)
-                        throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-
-                    if (!selection.can_oblique_z)
-                        throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
-
-                    const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                                      : selection.oblique_z_shift;
-                    if (use_hex_basis && z_shift != selection.oblique_z_shift)
-                        throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-
-                    if (use_hex_basis)
-                    {
-                        if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, true);
-                    }
-                    else if (build_mapping_hex(z_shift))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, false);
-                    }
-                }
-
-                if (!use_crysfft_ && selection.can_pmmm)
-                {
-                    if (use_m3_basis)
-                        throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-                    if (use_pmmm_basis)
-                    {
-                        if (!check_identity(false))
-                            throw_with_line_number("Pmmm physical basis does not match Pmmm CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, true);
-                    }
-                    else if (build_mapping(false))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, false);
-                    }
-                }
-
-            }
-        }
-    }
-}
-template <typename T>
-void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
-{
-    try{
-        // Update Pseudo Fourier basis arrays and boltz_bond for new box dimensions
-        // Note: local_ds values are registered once in constructor via add_ds_value()
-        // pseudo->update() recomputes boltz_bond for all registered ds values
-        // Squeeze face BCs to one per dimension (see constructor note).
-        auto bc_vec_upd = this->cb->get_boundary_conditions();
-        std::vector<BoundaryCondition> bc_dim_upd;
-        for (int d = 0; d < this->cb->get_dim(); ++d)
-            bc_dim_upd.push_back(bc_vec_upd[2 * d]);
-        pseudo->update(
-            bc_dim_upd,
-            this->molecules->get_bond_lengths(),
-            this->cb->get_dx(),
-            this->cb->get_recip_metric(),
-            this->cb->get_recip_vec());
-
-        if (use_crysfft_)
-        {
-            auto lx = cb->get_lx();
-            auto angles = cb->get_angles();
-            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-            for (int i = 0; i < n_streams; ++i)
-            {
-                if (crysfft_[i] != nullptr)
-                    crysfft_[i]->set_cell_para(cell_para);
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_with_line_number(exc.what());
-    }
-}
 template <typename T>
 void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string, const T*> w_input)
 {
-    try{
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = cb->get_total_grid();
-        const bool use_reduced_basis = (space_group_ != nullptr);
-        const bool use_crysfft = (use_crysfft_ && space_group_ != nullptr);
-        const int M_use = use_crysfft ? n_basis_ : M;
-
-        // Get unique ds values from ContourLengthMapping
-        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-        int n_unique_ds = mapping.get_n_unique_ds();
-
-        cudaMemcpyKind cudaMemcpyInputToDevice;
-        if (device == "gpu")
-            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
-        else if(device == "cpu")
-            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
-        else
-        {
-            throw_with_line_number("Invalid device \"" + device + "\".");
-        }
-
-        // Compute exp_dw for each ds_index and monomer type
-        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
-        {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
-
-            for(const auto& item: w_input)
-            {
-                std::string monomer_type = item.first;
-                const T *w = item.second;
-
-                if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
-                    throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-
-                if (use_reduced_basis && device == "gpu" && !use_crysfft)
-                {
-                    if constexpr (std::is_same_v<T, double>)
-                    {
-                        // Expand reduced basis → full grid on device
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
-                            this->d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
-                            this->d_exp_dw_half[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
-                    }
-                    else
-                    {
-                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                    }
-                }
-                else
-                {
-                    const T* w_full = w;
-                    std::vector<T> w_full_host;
-                    if (use_reduced_basis && !use_crysfft)
-                    {
-                        if constexpr (std::is_same_v<T, double>)
-                        {
-                            w_full_host.resize(M);
-                            space_group_->from_reduced_basis(w, w_full_host.data(), 1);
-                            w_full = w_full_host.data();
-                        }
-                        else
-                        {
-                            throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                        }
-                    }
-
-                    // Copy field configurations from host to device
-                    gpu_error_check(cudaMemcpyAsync(
-                        this->d_exp_dw[ds_idx][monomer_type], w_full,
-                        sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                    gpu_error_check(cudaMemcpyAsync(
-                        this->d_exp_dw_half[ds_idx][monomer_type], w_full,
-                        sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                }
-
-                // Compute d_exp_dw = exp(-w * local_ds * 0.5)
-                ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    (this->d_exp_dw[ds_idx][monomer_type],
-                     this->d_exp_dw[ds_idx][monomer_type], 1.0, -0.50*local_ds, M_use);
-                // Compute d_exp_dw_half = exp(-w * local_ds * 0.25)
-                ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    (this->d_exp_dw_half[ds_idx][monomer_type],
-                     this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M_use);
-            }
-        }
-        gpu_error_check(cudaPeekAtLastError());
-        gpu_error_check(cudaDeviceSynchronize());
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    // exp(-w ds/2) for the full step and exp(-w ds/4) for the half step
+    this->update_dw_impl(device, w_input, true, 0.5, 0.25);
 }
 // Advance propagator using RQM4
 template <typename T>
@@ -888,6 +245,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         const bool use_crysfft = (use_crysfft_ && space_group_ != nullptr);
         if (use_crysfft)
         {
+            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
             if constexpr (!std::is_same_v<T, double>)
             {
                 throw_with_line_number("CrysFFT path is only supported for real fields.");
@@ -1021,10 +379,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
 
             // step 1/2: Execute a forward FFT
             // step 1/4: Execute a forward FFT
-            if constexpr (std::is_same<T, double>::value)
-                cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
-            else
-                cufftExecZ2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+            cufft_exec_forward(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
@@ -1036,10 +391,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
 
             // step 1/2: Execute a backward FFT
             // step 1/4: Execute a backward FFT
-            if constexpr (std::is_same<T, double>::value)
-                cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
-            else
-                cufftExecZ2Z(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM], CUFFT_INVERSE);
+            cufft_exec_backward(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/2: Evaluate exp(-w*ds/2) in real space
@@ -1050,10 +402,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/4: Execute a forward FFT
-            if constexpr (std::is_same<T, double>::value)
-                cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
-            else
-                cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM], CUFFT_FORWARD);
+            cufft_exec_forward(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
@@ -1061,10 +410,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/4: Execute a backward FFT
-            if constexpr (std::is_same<T, double>::value)
-                cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
-            else
-                cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], CUFFT_INVERSE);
+            cufft_exec_backward(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
             gpu_error_check(cudaPeekAtLastError());
 
             // step 1/4: Evaluate exp(-w*ds/4) in real space.
@@ -1140,6 +486,7 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             double* d_q_mask_full = d_q_mask;
             if (space_group_ != nullptr)
             {
+                // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
                 if constexpr (std::is_same_v<T, double>)
                 {
                     ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -1177,6 +524,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
     std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try{
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
             if (!this->is_periodic_)
@@ -1209,6 +557,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         // Mirrors CpuSolverPseudoBase::compute_single_segment_stress.
         // ObliqueZ and all other cases fall through to the standard path.
         // =====================================================================
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
         if constexpr (std::is_same_v<T, double>)
         {
             // NOTE: The CrysFFT fast path computes only the diagonal sums
@@ -1269,12 +618,11 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         if (is_periodic_)
         {
             // Periodic BC: Execute a forward FFT
-            if constexpr (std::is_same<T, double>::value)
-                cufftExecD2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM]);
-            else
-                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+            cufft_exec_forward(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM]);
             gpu_error_check(cudaPeekAtLastError());
 
+            // [type-specific algorithm] Real fields store the Hermitian half-spectrum, so the
+            // conjugate product is formed directly; complex fields need the -k index map.
             // Multiply two propagators in the fourier spaces
             if constexpr (std::is_same<T, double>::value)
                 ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
@@ -1288,6 +636,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         else
         {
             // Non-periodic BC: use CudaFFT (DCT/DST)
+            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
             if constexpr (!std::is_same<T, double>::value)
             {
                 throw_with_line_number("RQM4 stress computation with non-periodic BC is only supported for real fields (double).");
@@ -1348,28 +697,19 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             // V₁₁
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // V₂₂
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // V₃₃
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
@@ -1379,28 +719,19 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
                 // V₁₂
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
-                if constexpr (std::is_same<T, double>::value)
-                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[3], M_COMPLEX, streams[STREAM][0]);
-                else
-                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[3], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[3], M_COMPLEX, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // V₁₃
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xz, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
-                if constexpr (std::is_same<T, double>::value)
-                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[4], M_COMPLEX, streams[STREAM][0]);
-                else
-                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[4], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[4], M_COMPLEX, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // V₂₃
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_yz, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
-                if constexpr (std::is_same<T, double>::value)
-                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[5], M_COMPLEX, streams[STREAM][0]);
-                else
-                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[5], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[5], M_COMPLEX, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }
@@ -1415,19 +746,13 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             // V₁₁
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // V₂₂
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_yy, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // V₁₂: only compute for non-orthogonal boxes
@@ -1435,10 +760,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             {
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xy, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
-                if constexpr (std::is_same<T, double>::value)
-                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
-                else
-                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }
@@ -1450,10 +772,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
 
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
         }
     }

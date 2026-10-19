@@ -77,16 +77,6 @@ T* PinnedCircularBuffer<T>::get_array(int n)
     int i = (start+n_items-n-1+length)%length;
     return elems[i];
 }
-// double* PinnedCircularBuffer<T>::operator[] (int n)
-// {
-//     int i = (start+n_items-n-1+length)%length;
-//     return elems[i];
-// }
-// double PinnedCircularBuffer<T>::get(int n, int m)
-// {
-//     int i = (start+n_items-n-1+length)%length;
-//     return elems[i][m];
-// }
 
 
 // Explicit template instantiation

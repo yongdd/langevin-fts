@@ -221,6 +221,19 @@ CpuSolver<T>                                  [Abstract Base]
             └── CN-ADI with tridiagonal solver
 ```
 
+The CUDA side mirrors this layout. `CudaSolver<T>` is the abstract base;
+`CudaSolverPseudoBase<T>` (`src/platforms/cuda/CudaSolverPseudoBase.h`) owns what the
+three pseudo-spectral solvers share -- computation box, `Pseudo` helper, streams, the
+stress reduction workspace, the space-group reduced basis and the CrysFFT fast path --
+and implements `set_space_group()`, `update_laplacian_operator()` and the shared
+`update_dw_impl()`. `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and
+`CudaSolverPseudoDiscrete` keep only their cuFFT plans, work buffers and the
+`advance_propagator()` / `compute_single_segment_stress()` algorithms;
+`CudaSolverCNADI` is the finite-difference solver. Mechanical real/complex
+differences (D2Z vs Z2Z transforms, CUB sum vs reduce) are hidden behind the overloads
+in `CudaTypeDispatch.h`, so a remaining `if constexpr` on the field type marks a genuine
+algorithmic difference or a real-only feature and is commented as such.
+
 ### 3.4 FFT Hierarchy
 
 **Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`, `src/platforms/cpu/MklFFT.h`

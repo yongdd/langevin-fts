@@ -4,13 +4,11 @@ This module provides common utility functions and constants used across
 the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
-import functools
 import logging
 import os
 import re
 import sys
-import warnings
-from typing import Dict, List, Any, Optional, Tuple, Callable
+from typing import Dict, List, Any, Optional, Tuple
 
 import numpy as np
 import networkx as nx
@@ -98,111 +96,6 @@ def configure_logging(
     pkg_logger.addHandler(handler)
 
 
-def get_verbose_level(params: Dict[str, Any]) -> int:
-    """Get verbose level from params dict.
-
-    Parameters
-    ----------
-    params : dict
-        Simulation parameters.
-
-    Returns
-    -------
-    int
-        Verbose level (0=quiet, 1=normal, 2=verbose).
-    """
-    return params.get("verbose_level", 1)
-
-
-# =============================================================================
-# Deprecation Warnings
-# =============================================================================
-
-def deprecated(
-    reason: str = "",
-    version: Optional[str] = None,
-    replacement: Optional[str] = None
-) -> Callable:
-    """Decorator to mark functions/methods as deprecated.
-
-    Parameters
-    ----------
-    reason : str
-        Explanation for why it's deprecated.
-    version : str, optional
-        Version when it will be removed.
-    replacement : str, optional
-        Name of replacement function/method.
-
-    Returns
-    -------
-    Callable
-        Decorated function that emits deprecation warning.
-
-    Examples
-    --------
-    >>> @deprecated(reason="Use new_function instead", version="2.0")
-    ... def old_function():
-    ...     pass
-
-    >>> @deprecated(replacement="SCFT.run")
-    ... def legacy_run():
-    ...     pass
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            msg = f"{func.__name__} is deprecated"
-            if reason:
-                msg += f": {reason}"
-            if replacement:
-                msg += f". Use {replacement} instead"
-            if version:
-                msg += f". Will be removed in version {version}"
-
-            warnings.warn(msg, DeprecationWarning, stacklevel=2)
-            return func(*args, **kwargs)
-
-        # Update docstring
-        doc = func.__doc__ or ""
-        deprecation_note = f"\n\n.. deprecated::\n   {reason or 'This function is deprecated.'}"
-        if replacement:
-            deprecation_note += f"\n   Use :func:`{replacement}` instead."
-        wrapper.__doc__ = doc + deprecation_note
-
-        return wrapper
-    return decorator
-
-
-def warn_deprecated_param(
-    param_name: str,
-    replacement: Optional[str] = None,
-    version: Optional[str] = None
-) -> None:
-    """Emit a deprecation warning for a parameter.
-
-    Parameters
-    ----------
-    param_name : str
-        Name of the deprecated parameter.
-    replacement : str, optional
-        Name of replacement parameter.
-    version : str, optional
-        Version when it will be removed.
-
-    Examples
-    --------
-    >>> if "old_param" in params:
-    ...     warn_deprecated_param("old_param", replacement="new_param")
-    ...     params["new_param"] = params["old_param"]
-    """
-    msg = f"Parameter '{param_name}' is deprecated"
-    if replacement:
-        msg += f". Use '{replacement}' instead"
-    if version:
-        msg += f". Will be removed in version {version}"
-
-    warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
 # Default colors for monomer visualization
 DEFAULT_MONOMER_COLORS: List[str] = [

@@ -52,7 +52,6 @@
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
-#include "Array.h"
 
 /**
  * @class FftwFactory

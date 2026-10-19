@@ -52,8 +52,6 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
 {
     try
     {
-        // const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-        // gpu_error_check(cudaSetDevice(0));
 
         // Number of anderson mixing steps, increases from 0 to this->max_hist
         this->n_anderson = -1;
@@ -164,10 +162,7 @@ void CudaAndersonMixing<T>::calculate_new_fields(
 
         gpu_error_check(cudaMemcpy(d_w_deriv,   w_deriv,   sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_w_current, w_current, sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-        // If (N_GPUS > 1)
-        //     gpu_error_check(cudaMemcpy(d_w_deriv[1], d_w_deriv[0], sizeof(double)*this->n_var, cudaMemcpyDeviceToDevice));
 
-        //printf("this->mix: %f\n", this->mix);
         // Condition to start anderson mixing
         if(error_level < this->start_error || this->n_anderson >= 0)
             this->n_anderson = this->n_anderson + 1;
@@ -191,7 +186,6 @@ void CudaAndersonMixing<T>::calculate_new_fields(
                 gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
 
-            //print_array(this->max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots);
         }
 
@@ -225,8 +219,6 @@ void CudaAndersonMixing<T>::calculate_new_fields(
                                                     std::abs(i-j));
                 }
             }
-            //print_array(this->max_hist, v_n);
-            //exit(-1);
             this->find_an(u_nm, v_n, a_n, this->n_anderson);
 
             // Calculate the new field

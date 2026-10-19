@@ -1,7 +1,8 @@
-# CMake
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-# Project version
+# ============================================================================
+#  Project
+# ============================================================================
 SET(POLYMERFTS_VERSION_MAJOR 1)
 SET(POLYMERFTS_VERSION_MINOR 0)
 SET(POLYMERFTS_VERSION_PATCH 0)
@@ -13,22 +14,26 @@ PROJECT(LANGEVIN_FTS
     LANGUAGES CXX
 )
 
-# Add cmake modules path for custom finders
+# Custom find modules (FindMKL.cmake)
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# Build options
-OPTION(POLYMERFTS_USE_FFTW "Enable FFTW3 backend" OFF)  # GPL license
-OPTION(POLYMERFTS_USE_MKL "Enable Intel MKL backend" OFF)
-OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
-OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
-OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
+# ============================================================================
+#  Options
+# ============================================================================
+OPTION(POLYMERFTS_USE_FFTW        "Enable FFTW3 backend (GPL license)"        OFF)
+OPTION(POLYMERFTS_USE_MKL         "Enable Intel MKL backend"                  OFF)
+OPTION(POLYMERFTS_USE_CUDA        "Enable CUDA backend"                       ON)
+OPTION(POLYMERFTS_BUILD_TESTS     "Build test executables"                    ON)
+OPTION(POLYMERFTS_INSTALL_PYTHON  "Install Python module"                     ON)
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
 
+# ============================================================================
+#  Compiler settings
+# ============================================================================
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-# NOTE: nvcc (CUDA 11.x) supports at most C++17, so headers shared between
-# host and device code must stay C++17-compatible even though host-only
-# code may use C++20.
+# nvcc (CUDA 11.x) supports at most C++17, so headers shared between host and
+# device code must stay C++17-compatible even though host-only code may use C++20.
 SET(CMAKE_CUDA_STANDARD 17)
 SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
@@ -40,30 +45,32 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF()
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
-#---------- FTS_LIBRARIES -----------
-# Basic warnings for host code in every build type (Debug adds -Wextra -pg)
+
+# Warnings for host code in every build type; Debug adds -Wextra and gprof
+# instrumentation. (For AddressSanitizer add -fsanitize=address
+# -fno-omit-frame-pointer to CMAKE_CXX_FLAGS on the command line.)
 ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wall>)
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
-    # SET(CMAKE_VERBOSE_MAKEFILE ON)
     ADD_COMPILE_OPTIONS(-Wextra -pg)
-    # -fsanitize=address -fno-omit-frame-pointer)
-    # SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
-    # SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
 ENDIF()
 
-# OpenMP
+# OpenMP (propagator-level parallelism on the CPU; the CUDA target adds
+# -fopenmp for its host code below)
 FIND_PACKAGE(OpenMP REQUIRED)
-IF (OPENMP_FOUND)
-    SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-ENDIF()
+SET(CMAKE_C_FLAGS          "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+SET(CMAKE_CXX_FLAGS        "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/common/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cpu/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
-# spglib (required for space group symmetry)
+# ============================================================================
+#  Required dependencies: spglib, LAPACKE
+# ============================================================================
+# spglib: space group symmetry. SpaceGroup.cpp is always compiled and includes
+# spglib.h, so a missing spglib must stop configuration here rather than
+# failing mid-compile.
 FIND_PACKAGE(PkgConfig QUIET)
 IF(PkgConfig_FOUND)
     PKG_CHECK_MODULES(SPGLIB QUIET spglib)
@@ -79,20 +86,28 @@ IF(SPGLIB_FOUND)
     INCLUDE_DIRECTORIES(${SPGLIB_INCLUDE_DIRS})
     MESSAGE(STATUS "spglib found: ${SPGLIB_LIBRARIES}")
 ELSE()
-    MESSAGE(WARNING "spglib not found. SpaceGroup functionality will not be available.")
+    MESSAGE(FATAL_ERROR "spglib is required but was not found. "
+        "Install with: conda install -c conda-forge spglib "
+        "(or apt install libsymspg-dev), or set SPGLIB_ROOT.")
 ENDIF()
 
-# LAPACKE (for Anderson Mixing SVD-based solver)
-FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke)
-IF(LAPACKE_LIBRARY)
-    MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY}")
+# LAPACKE: SVD solver of Anderson mixing. AndersonMixing.cpp includes
+# lapacke.h unconditionally, so both the library and the header are required.
+FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
+FIND_PATH(LAPACKE_INCLUDE_DIR lapacke.h HINTS ENV LAPACKE_ROOT PATH_SUFFIXES include)
+IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
+    INCLUDE_DIRECTORIES(${LAPACKE_INCLUDE_DIR})
+    MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY} (${LAPACKE_INCLUDE_DIR})")
 ELSE()
-    MESSAGE(WARNING "LAPACKE not found. Install with: conda install -c conda-forge lapack")
+    MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h) is required but was not found. "
+        "Install with: conda install -c conda-forge lapack "
+        "(or apt install liblapacke-dev), or set LAPACKE_ROOT.")
 ENDIF()
 
-# Common Files
+# ============================================================================
+#  Platform-independent library
+# ============================================================================
 ADD_LIBRARY(common
-    src/common/Array.cpp
     src/common/ComputationBox.cpp
     src/common/PropagatorCode.cpp
     src/common/Polymer.cpp
@@ -108,16 +123,33 @@ ADD_LIBRARY(common
     src/common/Scheduler.cpp
     src/common/SpaceGroup.cpp
 )
-IF(SPGLIB_FOUND)
-    TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES})
-ENDIF()
-IF(LAPACKE_LIBRARY)
-    TARGET_LINK_LIBRARIES(common ${LAPACKE_LIBRARY})
-ENDIF()
+TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES} ${LAPACKE_LIBRARY})
 
-# FFTW3
+# ============================================================================
+#  CPU backends (FFTW and/or MKL)
+# ============================================================================
+# Sources shared by both CPU backends. USE_CPU_FFTW / USE_CPU_MKL are global
+# definitions, so these objects are the same for both backends (the transform
+# backend is chosen at run time via FFTBackend); compile them once.
+SET(POLYMERFTS_CPU_COMMON_SOURCES
+    src/platforms/cpu/CpuComputationBox.cpp
+    src/platforms/cpu/CpuSolverPseudoBase.cpp
+    src/platforms/cpu/CpuSolverPseudoRQM4.cpp
+    src/platforms/cpu/CpuSolverPseudoRK2.cpp
+    src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
+    src/platforms/cpu/CpuSolverCNADI.cpp
+    src/platforms/cpu/CpuComputationBase.cpp
+    src/platforms/cpu/CpuComputationContinuous.cpp
+    src/platforms/cpu/CpuComputationDiscrete.cpp
+    src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
+    src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
+    src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
+    src/platforms/cpu/CpuAndersonMixing.cpp
+)
+
+# ---- FFTW3 ----
+SET(BUILD_CPU_FFTW_LIB FALSE)
 IF(POLYMERFTS_USE_FFTW)
-    FIND_PACKAGE(PkgConfig QUIET)
     IF(PkgConfig_FOUND)
         PKG_CHECK_MODULES(FFTW3 QUIET fftw3)
     ENDIF()
@@ -128,19 +160,17 @@ IF(POLYMERFTS_USE_FFTW)
             SET(FFTW3_FOUND TRUE)
         ENDIF()
     ENDIF()
-ENDIF()
+    IF(NOT FFTW3_FOUND)
+        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_FFTW=ON but FFTW3 was not found. "
+            "Install fftw (e.g. conda install -c conda-forge fftw) or set FFTW_ROOT.")
+    ENDIF()
 
-IF(POLYMERFTS_USE_FFTW AND NOT FFTW3_FOUND)
-    MESSAGE(FATAL_ERROR "POLYMERFTS_USE_FFTW=ON but FFTW3 was not found. "
-        "Install fftw (e.g. conda install -c conda-forge fftw) or set FFTW_ROOT.")
-ENDIF()
-
-IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
     SET(BUILD_CPU_FFTW_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
     # Put the FFTW library directory on the linker search path so short-form
-    # (-lfftw3) references resolve without relying on LIBRARY_PATH in the shell.
+    # (-lfftw3) references from pkg-config resolve without relying on
+    # LIBRARY_PATH in the shell.
     IF(FFTW3_LIBRARY_DIRS)
         LINK_DIRECTORIES(${FFTW3_LIBRARY_DIRS})
     ENDIF()
@@ -150,33 +180,7 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
             LINK_DIRECTORIES(${_fftw_dir})
         ENDIF()
     ENDFOREACH()
-    ADD_LIBRARY(cpu-fftw
-        src/platforms/cpu/FftwFFT.cpp
-        src/platforms/cpu/FftwCrysFFTPmmm.cpp
-        src/platforms/cpu/FftwCrysFFTRecursive3m.cpp
-        src/platforms/cpu/FftwCrysFFTObliqueZ.cpp
-        src/platforms/cpu/CpuArray.cpp
-        src/platforms/cpu/CpuComputationBox.cpp
-        src/platforms/cpu/CpuSolverPseudoBase.cpp
-        src/platforms/cpu/CpuSolverPseudoRQM4.cpp
-        src/platforms/cpu/CpuSolverPseudoRK2.cpp
-        src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
-        src/platforms/cpu/CpuSolverCNADI.cpp
-        src/platforms/cpu/CpuComputationBase.cpp
-        src/platforms/cpu/CpuComputationContinuous.cpp
-        src/platforms/cpu/CpuComputationDiscrete.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
-        src/platforms/cpu/CpuAndersonMixing.cpp
-        src/platforms/cpu/FftwFactory.cpp
-    )
-    TARGET_COMPILE_DEFINITIONS(cpu-fftw PRIVATE USE_CPU_FFTW)
-    # PUBLIC so consumers (tests, _core) inherit FFTW transitively and no
-    # raw -lfftw3 flags are needed anywhere.
-    TARGET_LINK_LIBRARIES(cpu-fftw PUBLIC ${FFTW3_LIBRARIES})
 
-    # GPL License Warning
     MESSAGE(WARNING
         "================================================================================\n"
         "  GPL LICENSE WARNING\n"
@@ -194,79 +198,81 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
         "  For more information, see: https://www.fftw.org/faq/section1.html\n"
         "================================================================================\n"
     )
-ELSE()
-    SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
 
-# Intel MKL
+# ---- Intel MKL ----
+SET(BUILD_CPU_MKL_LIB FALSE)
 IF(POLYMERFTS_USE_MKL)
     FIND_PACKAGE(MKL QUIET)
-ENDIF()
+    IF(NOT MKL_FOUND)
+        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
+            "Install mkl-devel (e.g. conda install -c conda-forge mkl mkl-devel mkl-include) "
+            "or set MKLROOT.")
+    ENDIF()
 
-IF(POLYMERFTS_USE_MKL AND NOT MKL_FOUND)
-    MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
-        "Install mkl-devel (e.g. conda install -c conda-forge mkl mkl-devel mkl-include) "
-        "or set MKLROOT.")
-ENDIF()
-
-IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
+ENDIF()
+
+# ---- CPU backend libraries ----
+IF(BUILD_CPU_FFTW_LIB OR BUILD_CPU_MKL_LIB)
+    ADD_LIBRARY(cpu-common OBJECT ${POLYMERFTS_CPU_COMMON_SOURCES})
+ENDIF()
+IF(BUILD_CPU_FFTW_LIB)
+    ADD_LIBRARY(cpu-fftw
+        src/platforms/cpu/FftwFFT.cpp
+        src/platforms/cpu/FftwCrysFFTPmmm.cpp
+        src/platforms/cpu/FftwCrysFFTRecursive3m.cpp
+        src/platforms/cpu/FftwCrysFFTObliqueZ.cpp
+        src/platforms/cpu/FftwFactory.cpp
+        $<TARGET_OBJECTS:cpu-common>
+    )
+    # PUBLIC so consumers (tests, _core) inherit FFTW transitively and no
+    # raw -lfftw3 flags are needed anywhere.
+    TARGET_LINK_LIBRARIES(cpu-fftw PUBLIC ${FFTW3_LIBRARIES})
+ENDIF()
+IF(BUILD_CPU_MKL_LIB)
     ADD_LIBRARY(cpu-mkl
         src/platforms/cpu/MklFFT.cpp
         src/platforms/cpu/MklRealTransform.cpp
         src/platforms/cpu/MklCrysFFTPmmm.cpp
         src/platforms/cpu/MklCrysFFTRecursive3m.cpp
         src/platforms/cpu/MklCrysFFTObliqueZ.cpp
-        src/platforms/cpu/CpuArray.cpp
-        src/platforms/cpu/CpuComputationBox.cpp
-        src/platforms/cpu/CpuSolverPseudoBase.cpp
-        src/platforms/cpu/CpuSolverPseudoRQM4.cpp
-        src/platforms/cpu/CpuSolverPseudoRK2.cpp
-        src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
-        src/platforms/cpu/CpuSolverCNADI.cpp
-        src/platforms/cpu/CpuComputationBase.cpp
-        src/platforms/cpu/CpuComputationContinuous.cpp
-        src/platforms/cpu/CpuComputationDiscrete.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
-        src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
-        src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
+        $<TARGET_OBJECTS:cpu-common>
     )
-    TARGET_COMPILE_DEFINITIONS(cpu-mkl PRIVATE USE_CPU_MKL)
     TARGET_LINK_LIBRARIES(cpu-mkl ${MKL_LIBRARIES})
-ELSE()
-    SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
 
-# NVIDIA CUDA
+# ============================================================================
+#  CUDA backend
+# ============================================================================
 IF(POLYMERFTS_USE_CUDA)
     FIND_PACKAGE(CUDAToolkit QUIET)
-ENDIF()
-
-IF(POLYMERFTS_USE_CUDA AND NOT CUDAToolkit_FOUND)
-    # CUDA defaults to ON, so a missing toolkit is only a warning: CPU-only
-    # machines should still configure. Explicitly disable with
-    # -DPOLYMERFTS_USE_CUDA=OFF to silence this.
-    MESSAGE(WARNING "POLYMERFTS_USE_CUDA=ON but no CUDA toolkit was found; "
-        "building without the GPU backend.")
+    IF(NOT CUDAToolkit_FOUND)
+        # CUDA defaults to ON, so a missing toolkit is only a warning: CPU-only
+        # machines should still configure. Use -DPOLYMERFTS_USE_CUDA=OFF to silence it.
+        MESSAGE(WARNING "POLYMERFTS_USE_CUDA=ON but no CUDA toolkit was found; "
+            "building without the GPU backend.")
+    ENDIF()
 ENDIF()
 
 IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     ENABLE_LANGUAGE(CUDA)
+    # Host-compiled sources (PlatformSelector.cpp, the pybind module, tests)
+    # include cufft.h, so the toolkit headers go on the C++ include path too.
+    MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: include ${CUDAToolkit_INCLUDE_DIRS}")
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
-    # Put the CUDA toolkit library directory on the linker search path so the static
-    # CUDA runtime references (-lcudart_static, -lcudadevrt) resolve without relying
-    # on LIBRARY_PATH being set in the shell (e.g. by `module load cuda`).
+    # Put the CUDA toolkit library directory on the linker search path so the
+    # static runtime references (-lcudart_static, -lcudadevrt) resolve without
+    # relying on LIBRARY_PATH in the shell (e.g. from `module load cuda`).
     IF(CUDAToolkit_LIBRARY_DIR)
         LINK_DIRECTORIES(${CUDAToolkit_LIBRARY_DIR})
     ENDIF()
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
-        src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaFFT.cu
@@ -275,6 +281,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaCrysFFTObliqueZ.cu
         src/platforms/cuda/CudaCrysFFTStress.cu
         src/platforms/cuda/CudaRealTransform.cu
+        src/platforms/cuda/CudaSolverPseudoBase.cu
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoRK2.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
@@ -291,48 +298,32 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
         src/platforms/cuda/CudaFactory.cu
     )
-
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
-
-    IF (OPENMP_FOUND)
-        TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>: -Xcompiler=-fopenmp>)
-    ENDIF()
-
+    TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
 ENDIF()
 
-IF( (NOT BUILD_CPU_FFTW_LIB) AND
-    (NOT BUILD_CPU_MKL_LIB) AND
-    (NOT CUDAToolkit_FOUND) )
-    MESSAGE( FATAL_ERROR "Could not find any FFT library (FFTW, MKL, or CUDA), CMake will exit." )
+IF(NOT BUILD_CPU_FFTW_LIB AND NOT BUILD_CPU_MKL_LIB AND NOT CUDAToolkit_FOUND)
+    MESSAGE(FATAL_ERROR "No computational backend enabled: turn on at least one of "
+        "POLYMERFTS_USE_MKL, POLYMERFTS_USE_FFTW, or POLYMERFTS_USE_CUDA (with a CUDA toolkit).")
 ENDIF()
 
-#  Factory
+# Platform selector: depends on every enabled backend, hence a separate target
 ADD_LIBRARY(factory
     src/common/PlatformSelector.cpp
 )
 
-#---------- Python Wrapper -----------
+# ============================================================================
+#  Python module (pybind11)
+# ============================================================================
 FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development NumPy REQUIRED)
 FIND_PACKAGE(pybind11 2.13 REQUIRED)
-SET(PYBIND11_CPP_STANDARD -std=c++17)
 
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
-# # Set correct module suffix for macOS (.so -> .dylib for modules, but Python expects .so)
-# if(APPLE)
-#     set(PYTHON_MODULE_SUFFIX ".dylib")
-# else()
-    set(PYTHON_MODULE_SUFFIX ".so")
-# endif()
-
-ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp) 
-SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX "${PYTHON_MODULE_SUFFIX}")
-
-IF(CMAKE_BUILD_TYPE STREQUAL Release)
-ENDIF()
-
+ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
+SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
 TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
@@ -342,16 +333,30 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     common
 )
 
-# Set install paths for Python modules.
+# Stage an importable 'polymerfts' package inside the build tree on every
+# build. The Python tests put this directory on PYTHONPATH so they always
+# exercise the code that was just built, never a stale site-packages install.
+SET(POLYMERFTS_STAGE_DIR "${CMAKE_BINARY_DIR}/python/polymerfts")
+FILE(GLOB POLYMERFTS_PY_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/python/*.py")
+ADD_CUSTOM_TARGET(polymerfts_stage ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${POLYMERFTS_STAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${POLYMERFTS_PY_SOURCES} "${POLYMERFTS_STAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:_core> "${POLYMERFTS_STAGE_DIR}"
+    DEPENDS _core
+    COMMENT "Staging polymerfts package in ${POLYMERFTS_STAGE_DIR}"
+    VERBATIM)
+
+# ============================================================================
+#  Install rules
+# ============================================================================
 IF(SKBUILD)
     # Building a wheel via scikit-build-core (pip install .): relative
     # destinations are mapped into the wheel's platlib automatically.
     SET(POLYMERFTS_PY_INSTALL_DIR "polymerfts")
 ELSE()
     # Direct 'make install': query the SAME interpreter found by
-    # FIND_PACKAGE(Python3) — a bare "python" may be a different (system)
+    # FIND_PACKAGE(Python3). A bare "python" may be a different (system)
     # interpreter and would install into the wrong site-packages.
-    # sysconfig replaces distutils, which was removed in Python 3.12.
     EXECUTE_PROCESS(
         COMMAND ${Python3_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_path('platlib'))"
         OUTPUT_VARIABLE Python3_SITEARCH
@@ -363,58 +368,50 @@ ELSE()
     SET(POLYMERFTS_PY_INSTALL_DIR "${Python3_SITEARCH}/polymerfts")
 ENDIF()
 
-# ----------------  Install rules  ----------------
 IF(POLYMERFTS_INSTALL_PYTHON)
-    # 1. compiled extension
-    install(TARGETS  _core
-            LIBRARY  DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}      # Linux/macOS
-            ARCHIVE  DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}
+    # Compiled extension
+    INSTALL(TARGETS _core
+            LIBRARY DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}
+            ARCHIVE DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}
             COMPONENT python)
-
-    # 2. pure‑Python files
-    install(DIRECTORY  src/python/                         # contains __init__.py scft.py lfts.py …
-            DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}       # keeps sub‑dir structure intact
+    # Pure-Python files (__init__.py, scft.py, lfts.py, ...)
+    INSTALL(DIRECTORY src/python/
+            DESTINATION ${POLYMERFTS_PY_INSTALL_DIR}
             COMPONENT python
             FILES_MATCHING PATTERN "*.py")
 ENDIF()
 
-# Install headers for downstream C++ projects
 IF(POLYMERFTS_INSTALL_HEADERS)
-    install(DIRECTORY src/common/
+    # Headers for downstream C++ projects
+    INSTALL(DIRECTORY src/common/
             DESTINATION include/polymerfts
             COMPONENT development
             FILES_MATCHING PATTERN "*.h")
-ENDIF()
 
-#---------- Test -----------
-IF(POLYMERFTS_BUILD_TESTS)
-    ENABLE_TESTING()
-    ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)
-ENDIF()
-
-#---------- CMake Config Export -----------
-IF(POLYMERFTS_INSTALL_HEADERS)
+    # CMake package config
     INCLUDE(CMakePackageConfigHelpers)
-
-    # Generate version file
     WRITE_BASIC_PACKAGE_VERSION_FILE(
         "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
     )
-
-    # Generate config file
     CONFIGURE_PACKAGE_CONFIG_FILE(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/polymerfts-config.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
         INSTALL_DESTINATION lib/cmake/polymerfts
     )
-
-    # Install CMake config files
     INSTALL(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
         DESTINATION lib/cmake/polymerfts
         COMPONENT development
     )
+ENDIF()
+
+# ============================================================================
+#  Tests
+# ============================================================================
+IF(POLYMERFTS_BUILD_TESTS)
+    ENABLE_TESTING()
+    ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)
 ENDIF()

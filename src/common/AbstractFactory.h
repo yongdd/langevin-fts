@@ -63,7 +63,6 @@
 #include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
-#include "Array.h"
 #include "SpaceGroup.h"
 
 /**
