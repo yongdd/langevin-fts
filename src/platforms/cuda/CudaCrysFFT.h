@@ -28,9 +28,7 @@
 // Forward declaration
 class CudaRealTransform3D;
 
-/**
- * @brief CrysFFT mode selection for CUDA solvers.
- */
+/// CrysFFT mode selection for CUDA solvers.
 enum class CudaCrysFFTMode
 {
     None,
@@ -91,24 +89,16 @@ private:
     double* d_axis_k2_[3] = {nullptr, nullptr, nullptr};          ///< k_axis² per axis
     std::map<std::pair<int, double>, double*> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·k_axis² per (axis, coeff)
 
-    /**
-     * @brief Generate Boltzmann factors for given ds.
-     */
+    /// Generate Boltzmann factors for given ds.
     void generateBoltzmann(double ds);
 
-    /**
-     * @brief Free Boltzmann factor memory.
-     */
+    /// Free Boltzmann factor memory.
     void freeBoltzmann();
 
-    /**
-     * @brief Free cached stress multiplier arrays.
-     */
+    /// Free cached stress multiplier arrays.
     void freeMultiplierCaches();
 
-    /**
-     * @brief Compute per-axis k² arrays on the physical grid (host).
-     */
+    /// Compute per-axis k² arrays on the physical grid (host).
     void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
 
 public:
@@ -126,14 +116,10 @@ public:
 
     ~CudaCrysFFT();
 
-    /**
-     * @brief Update cell parameters.
-     */
+    /// Update cell parameters.
     void set_cell_para(const std::array<double, 6>& cell_para);
 
-    /**
-     * @brief Set contour step size.
-     */
+    /// Set contour step size.
     void set_contour_step(double ds);
 
     /**

@@ -100,14 +100,10 @@ private:
     std::map<int, std::map<std::string, double*>> d_boltz_bond_half;  ///< Half bond diffusion (device) [ds_index][monomer_type]
     /// @}
 
-    /**
-     * @brief Upload Boltzmann factors to GPU.
-     */
+    /// Upload Boltzmann factors to GPU.
     void upload_boltz_bond();
 
-    /**
-     * @brief Upload Fourier basis to GPU.
-     */
+    /// Upload Fourier basis to GPU.
     void upload_fourier_basis();
 
 public:
@@ -135,9 +131,7 @@ public:
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
-    /**
-     * @brief Destructor. Frees GPU memory.
-     */
+    /// Destructor. Frees GPU memory.
     ~CudaPseudo();
 
     /**
@@ -156,25 +150,25 @@ public:
      */
     double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type];};
 
-    /** @brief Get x-direction Fourier basis (device pointer). */
+    /// Get x-direction Fourier basis (device pointer).
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};
 
-    /** @brief Get y-direction Fourier basis (device pointer). */
+    /// Get y-direction Fourier basis (device pointer).
     const double* get_fourier_basis_y() override { return d_fourier_basis_y;};
 
-    /** @brief Get z-direction Fourier basis (device pointer). */
+    /// Get z-direction Fourier basis (device pointer).
     const double* get_fourier_basis_z() override { return d_fourier_basis_z;};
 
-    /** @brief Get negative frequency mapping (device pointer). */
+    /// Get negative frequency mapping (device pointer).
     const int* get_negative_frequency_mapping() override { return d_negative_k_idx;};
 
-    /** @brief Get xy cross-term Fourier basis (device pointer). */
+    /// Get xy cross-term Fourier basis (device pointer).
     const double* get_fourier_basis_xy() override { return d_fourier_basis_xy;};
 
-    /** @brief Get xz cross-term Fourier basis (device pointer). */
+    /// Get xz cross-term Fourier basis (device pointer).
     const double* get_fourier_basis_xz() override { return d_fourier_basis_xz;};
 
-    /** @brief Get yz cross-term Fourier basis (device pointer). */
+    /// Get yz cross-term Fourier basis (device pointer).
     const double* get_fourier_basis_yz() override { return d_fourier_basis_yz;};
 
     /**

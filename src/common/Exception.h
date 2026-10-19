@@ -72,9 +72,7 @@ public:
     Exception(const std::string &arg, const char *file, const char *func):
         std::runtime_error("File: \"" + std::string(file) + "\", function <" + std::string(func) + ">\n\t" + arg){};
 
-    /**
-     * @brief Destructor (noexcept).
-     */
+    /// Destructor (noexcept).
     ~Exception() throw() {};
 };
 

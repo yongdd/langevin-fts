@@ -94,16 +94,10 @@ private:
     std::map<std::string, std::vector<T>> w_;
 
     // ============== Reduced basis support ==============
-    /**
-     * @brief Device array for full_to_reduced_map.
-     * Maps each full grid point to its irreducible index.
-     */
+    /// Device array for full_to_reduced_map. Maps each full grid point to its irreducible index.
     int* d_full_to_reduced_map_;
 
-    /**
-     * @brief Device array for reduced_basis_indices.
-     * Flat indices of irreducible mesh points.
-     */
+    /// Device array for reduced_basis_indices. Flat indices of irreducible mesh points.
     int* d_reduced_basis_indices_;
 
     /**
@@ -152,7 +146,7 @@ public:
         PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method,
         std::string numerical_method = "", SpaceGroup* space_group = nullptr);
 
-    /** @brief Destructor. Frees GPU and pinned memory. */
+    /// Destructor. Frees GPU and pinned memory.
     ~CudaComputationReduceMemoryContinuous();
 
     /**
@@ -167,18 +161,11 @@ public:
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /** @brief Compute concentrations using recalculation. */
+    /// Compute concentrations using recalculation.
     void compute_concentrations() override;
 
-    /** @brief Compute stress using recalculated propagators. */
+    /// Compute stress using recalculated propagators.
     void compute_stress() override;
-
-    /**
-     * @brief Get partition function.
-     * @param polymer Polymer index
-     * @return log(Q) normalized by volume
-     */
-    T get_total_partition(int polymer) override;
 
     /**
      * @brief Extract chain propagator (requires recalculation).
@@ -190,7 +177,7 @@ public:
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /** @brief Verify partition function consistency. */
+    /// Verify partition function consistency.
     bool check_total_partition() override;
 };
 

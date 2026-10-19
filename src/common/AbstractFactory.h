@@ -99,9 +99,7 @@ protected:
     bool reduce_memory;    ///< Enable checkpointing mode (reduces memory, increases compute)
 
 public :
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~AbstractFactory() {};
 
     /**

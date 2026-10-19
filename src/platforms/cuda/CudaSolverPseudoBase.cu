@@ -13,11 +13,13 @@
 
 #include "CudaSolverPseudoBase.h"
 #include "CudaPseudo.h"
+#include "CudaFFT.h"
 #include "CudaTypeDispatch.h"
 #include "CudaCrysFFT.h"
 #include "CudaCrysFFTRecursive3m.h"
 #include "CudaCrysFFTObliqueZ.h"
 #include "CrysFFTSelector.h"
+#include "CrysFFTBasisMapping.h"
 #include "SpaceGroup.h"
 
 #ifndef M_PI
@@ -30,6 +32,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
+    int max_fft_batch,
     int q_full_in_factor,
     bool with_exp_dw_half,
     bool complex_requires_periodic)
@@ -42,6 +45,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         this->n_streams = n_streams;
         this->dim_ = cb->get_dim();
         this->q_full_in_factor_ = q_full_in_factor;
+        this->max_fft_batch_ = max_fft_batch;
 
         for(int i=0; i<n_streams; i++)
         {
@@ -158,6 +162,9 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             cuda_reduce_sum(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, streams[i][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
         }
+
+        // Spectral transforms: cuFFT plans (periodic) or DCT/DST objects (non-periodic)
+        init_fft();
     }
     catch(std::exception& exc)
     {
@@ -170,6 +177,17 @@ CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
 {
     cleanup_crysfft();
     delete pseudo;
+
+    for(int i=0; i<n_streams; i++)
+    {
+        for (int b = 0; b < 2; b++)
+        {
+            if (plan_for_[i][b] != 0) cufftDestroy(plan_for_[i][b]);
+            if (plan_bak_[i][b] != 0) cufftDestroy(plan_bak_[i][b]);
+        }
+        delete fft_[i];
+        fft_[i] = nullptr;
+    }
 
     for(const auto& ds_entry: this->d_exp_dw)
         for(const auto& item: ds_entry.second)
@@ -190,6 +208,76 @@ CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
         if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
         if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
     }
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::init_fft()
+{
+    for (int i = 0; i < MAX_STREAMS; i++)
+    {
+        fft_[i] = nullptr;
+        plan_for_[i][0] = plan_for_[i][1] = 0;
+        plan_bak_[i][0] = plan_bak_[i][1] = 0;
+    }
+
+    if (is_periodic_)
+    {
+        // One plan per stream and batch size; cufftPlanMany reads dim_ entries of total_grid
+        const int NRANK = dim_;
+        int total_grid[3] = {0, 0, 0};
+        for (int d = 0; d < dim_; ++d)
+            total_grid[d] = cb->get_nx(d);
+
+        for (int i = 0; i < n_streams; i++)
+        {
+            for (int b = 0; b < max_fft_batch_; b++)
+            {
+                cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1);
+                cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1);
+                cufftSetStream(plan_for_[i][b], streams[i][0]);
+                cufftSetStream(plan_bak_[i][b], streams[i][0]);
+            }
+        }
+    }
+    else
+    {
+        // Per-stream DCT/DST objects: each has its own work buffers, so streams
+        // never race on them. One BC per dimension (both faces match).
+        auto bc_vec = cb->get_boundary_conditions();
+        for (int i = 0; i < n_streams; i++)
+        {
+            if (dim_ == 3)
+            {
+                std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
+                std::array<BoundaryCondition, 3> bc_arr = {bc_vec[0], bc_vec[2], bc_vec[4]};
+                fft_[i] = new CudaFFT<T, 3>(nx_arr, bc_arr);
+            }
+            else if (dim_ == 2)
+            {
+                std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
+                std::array<BoundaryCondition, 2> bc_arr = {bc_vec[0], bc_vec[2]};
+                fft_[i] = new CudaFFT<T, 2>(nx_arr, bc_arr);
+            }
+            else
+            {
+                std::array<int, 1> nx_arr = {cb->get_nx(0)};
+                std::array<BoundaryCondition, 1> bc_arr = {bc_vec[0]};
+                fft_[i] = new CudaFFT<T, 1>(nx_arr, bc_arr);
+            }
+        }
+    }
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::fft_forward(int stream, CuDeviceData<T>* d_in, cuDoubleComplex* d_out, int batch)
+{
+    cufft_exec_forward(plan_for_[stream][batch - 1], d_in, d_out);
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::fft_backward(int stream, cuDoubleComplex* d_in, CuDeviceData<T>* d_out, int batch)
+{
+    cufft_exec_backward(plan_bak_[stream][batch - 1], d_in, d_out);
 }
 
 template <typename T>
@@ -251,21 +339,18 @@ void CudaSolverPseudoBase<T>::set_space_group(
 
     cleanup_crysfft();
 
-    if (sg != nullptr)
+    // Full-grid work buffers around the FFT (freed again when the space group is removed)
+    const int M = cb->get_total_grid();
+    for(int i=0; i<n_streams; i++)
     {
-        const int M = cb->get_total_grid();
-        for(int i=0; i<n_streams; i++)
+        if (sg != nullptr)
         {
             if (d_q_full_in_[i] == nullptr)
                 gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M*q_full_in_factor_));
             if (d_q_full_out_[i] == nullptr)
                 gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
         }
-    }
-    else
-    {
-        // Free work buffers if space group is disabled
-        for(int i=0; i<n_streams; i++)
+        else
         {
             if (d_q_full_in_[i] != nullptr)
             {
@@ -285,262 +370,113 @@ void CudaSolverPseudoBase<T>::set_space_group(
     if constexpr (std::is_same_v<T, double>)
     {
         if (space_group_ != nullptr && dim_ == 3 && is_periodic_)
-        {
-            const auto nx = cb->get_nx();
-            std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-            const auto angles = cb->get_angles();
-            const bool z_axis_orthogonal =
-                (angles.size() >= 3 &&
-                 std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
-                 std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-            const auto selection = select_crysfft_mode(
-                space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-            if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_oblique_z)
-            {
-                const int Nx2 = nx[0] / 2;
-                const int Ny2 = nx[1] / 2;
-                const int Nz2 = nx[2] / 2;
-                const int M_phys_pmmm = Nx2 * Ny2 * Nz2;
-                const int M_phys_hex = nx[0] * nx[1] * Nz2;
-                const int M_reduced = space_group_->get_n_reduced_basis();
-                const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-                const bool use_m3_basis = space_group_->using_m3_physical_basis();
-                const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-                const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
-
-                std::vector<int> phys_to_reduced;
-                std::vector<int> reduced_to_phys;
-
-                auto check_identity = [&](bool even_indices) -> bool {
-                    if (M_reduced != M_phys_pmmm)
-                        return false;
-                    int idx = 0;
-                    for (int ix = 0; ix < Nx2; ++ix)
-                    {
-                        const int fx = even_indices ? (2 * ix) : ix;
-                        for (int iy = 0; iy < Ny2; ++iy)
-                        {
-                            const int fy = even_indices ? (2 * iy) : iy;
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                const int fz = even_indices ? (2 * iz) : iz;
-                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                if (reduced_idx != idx)
-                                    return false;
-                                ++idx;
-                            }
-                        }
-                    }
-                    return true;
-                };
-
-                auto build_mapping = [&](bool even_indices) -> bool {
-                    phys_to_reduced.resize(M_phys_pmmm);
-                    reduced_to_phys.assign(M_reduced, -1);
-                    std::vector<int> coverage(M_reduced, 0);
-                    int idx = 0;
-                    for (int ix = 0; ix < Nx2; ++ix)
-                    {
-                        const int fx = even_indices ? (2 * ix) : ix;
-                        for (int iy = 0; iy < Ny2; ++iy)
-                        {
-                            const int fy = even_indices ? (2 * iy) : iy;
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                const int fz = even_indices ? (2 * iz) : iz;
-                                const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                phys_to_reduced[idx] = reduced_idx;
-                                if (reduced_to_phys[reduced_idx] < 0)
-                                    reduced_to_phys[reduced_idx] = idx;
-                                coverage[reduced_idx] += 1;
-                                ++idx;
-                            }
-                        }
-                    }
-                    for (int i = 0; i < M_reduced; ++i)
-                    {
-                        if (coverage[i] == 0)
-                            return false;
-                    }
-                    return true;
-                };
-
-                auto check_identity_hex = [&](int z_shift) -> bool {
-                    if (M_reduced != M_phys_hex)
-                        return false;
-                    int idx = 0;
-                    for (int ix = 0; ix < nx[0]; ++ix)
-                    {
-                        for (int iy = 0; iy < nx[1]; ++iy)
-                        {
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                int iz_full = iz + z_shift;
-                                if (iz_full >= nx[2])
-                                    iz_full -= nx[2];
-                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                if (reduced_idx != idx)
-                                    return false;
-                                ++idx;
-                            }
-                        }
-                    }
-                    return true;
-                };
-
-                auto build_mapping_hex = [&](int z_shift) -> bool {
-                    phys_to_reduced.resize(M_phys_hex);
-                    reduced_to_phys.assign(M_reduced, -1);
-                    std::vector<int> coverage(M_reduced, 0);
-                    int idx = 0;
-                    for (int ix = 0; ix < nx[0]; ++ix)
-                    {
-                        for (int iy = 0; iy < nx[1]; ++iy)
-                        {
-                            for (int iz = 0; iz < Nz2; ++iz)
-                            {
-                                int iz_full = iz + z_shift;
-                                if (iz_full >= nx[2])
-                                    iz_full -= nx[2];
-                                const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                const int reduced_idx = full_to_reduced[full_idx];
-                                phys_to_reduced[idx] = reduced_idx;
-                                if (reduced_to_phys[reduced_idx] < 0)
-                                    reduced_to_phys[reduced_idx] = idx;
-                                coverage[reduced_idx] += 1;
-                                ++idx;
-                            }
-                        }
-                    }
-                    for (int i = 0; i < M_reduced; ++i)
-                    {
-                        if (coverage[i] == 0)
-                            return false;
-                    }
-                    return true;
-                };
-
-                auto finalize_crysfft = [&](CudaCrysFFTMode mode, int M_phys, bool identity_forced) {
-                    crysfft_physical_size_ = M_phys;
-                    crysfft_reduced_size_ = M_reduced;
-
-                    bool identity = identity_forced;
-                    if (!identity_forced)
-                    {
-                        identity = (M_reduced == M_phys);
-                        if (identity)
-                        {
-                            for (int i = 0; i < M_phys; ++i)
-                            {
-                                if (phys_to_reduced[i] != i || reduced_to_phys[i] != i)
-                                {
-                                    identity = false;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    crysfft_identity_map_ = identity;
-
-                    if (!crysfft_identity_map_)
-                    {
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * M_phys));
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * M_reduced));
-                        gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, phys_to_reduced.data(),
-                                                   sizeof(int) * M_phys, cudaMemcpyHostToDevice));
-                        gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, reduced_to_phys.data(),
-                                                   sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
-                    }
-
-                    // Orbit counts for the CrysFFT stress fast path
-                    const auto& orbit_counts = space_group_->get_orbit_counts();
-                    gpu_error_check(cudaMalloc((void**)&d_crysfft_orbit_counts_, sizeof(int) * M_reduced));
-                    gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
-                                               sizeof(int) * M_reduced, cudaMemcpyHostToDevice));
-
-                    auto lx = cb->get_lx();
-                    auto angles = cb->get_angles();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-
-                    for (int i = 0; i < n_streams; i++)
-                    {
-                        if (mode == CudaCrysFFTMode::Recursive3m)
-                            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, selection.m3_translations);
-                        else if (mode == CudaCrysFFTMode::ObliqueZ)
-                            crysfft_[i] = new CudaCrysFFTObliqueZ(nx_logical, cell_para);
-                        else
-                            crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
-
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * M_phys));
-                        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * M_phys));
-                    }
-                    crysfft_mode_ = mode;
-                    use_crysfft_ = true;
-                };
-
-                if (selection.mode == CrysFFTChoice::Recursive3m)
-                {
-                    if (use_pmmm_basis)
-                        throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-                    if (use_m3_basis)
-                    {
-                        if (!check_identity(true))
-                            throw_with_line_number("M3 physical basis does not match recursive 3m CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, true);
-                    }
-                    else if (build_mapping(true))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::Recursive3m, M_phys_pmmm, false);
-                    }
-                }
-
-                if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
-                {
-                    if (use_m3_basis || use_pmmm_basis)
-                        throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-
-                    if (!selection.can_oblique_z)
-                        throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
-
-                    const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                                      : selection.oblique_z_shift;
-                    if (use_hex_basis && z_shift != selection.oblique_z_shift)
-                        throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-
-                    if (use_hex_basis)
-                    {
-                        if (!check_identity_hex(z_shift))
-                            throw_with_line_number("Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, true);
-                    }
-                    else if (build_mapping_hex(z_shift))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::ObliqueZ, M_phys_hex, false);
-                    }
-                }
-
-                if (!use_crysfft_ && selection.can_pmmm)
-                {
-                    if (use_m3_basis)
-                        throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-                    if (use_pmmm_basis)
-                    {
-                        if (!check_identity(false))
-                            throw_with_line_number("Pmmm physical basis does not match Pmmm CrysFFT grid ordering.");
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, true);
-                    }
-                    else if (build_mapping(false))
-                    {
-                        finalize_crysfft(CudaCrysFFTMode::PmmmDct, M_phys_pmmm, false);
-                    }
-                }
-
-            }
-        }
+            init_crysfft();
     }
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::init_crysfft()
+{
+    const auto nx = cb->get_nx();
+    const std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+    const auto angles = cb->get_angles();
+    const bool z_axis_orthogonal =
+        (angles.size() >= 3 &&
+         std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
+         std::abs(angles[1] - M_PI / 2.0) < 1e-10);
+    const auto selection = select_crysfft_mode(
+        space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
+    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
+        return;
+
+    const int M_reduced = space_group_->get_n_reduced_basis();
+    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
+    const bool use_m3_basis = space_group_->using_m3_physical_basis();
+    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
+    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
+
+    // Recursive 3m: octant sampled at even full-grid indices
+    if (selection.mode == CrysFFTChoice::Recursive3m)
+    {
+        if (use_pmmm_basis)
+            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
+        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/true);
+        if (crysfft_mapping_usable(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
+            setup_crysfft(CudaCrysFFTMode::Recursive3m, map, selection.m3_translations);
+    }
+
+    // ObliqueZ: lower z half (z-mirror)
+    if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
+    {
+        if (use_m3_basis || use_pmmm_basis)
+            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+        if (!selection.can_oblique_z)
+            throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
+        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
+                                          : selection.oblique_z_shift;
+        if (use_hex_basis && z_shift != selection.oblique_z_shift)
+            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
+        const auto map = build_crysfft_mapping_z_mirror(nx_logical, full_to_reduced, M_reduced, z_shift);
+        if (crysfft_mapping_usable(map, use_hex_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
+            setup_crysfft(CudaCrysFFTMode::ObliqueZ, map, selection.m3_translations);
+    }
+
+    // Pmmm DCT: octant at consecutive indices
+    if (!use_crysfft_ && selection.can_pmmm)
+    {
+        if (use_m3_basis)
+            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
+        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/false);
+        if (crysfft_mapping_usable(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
+            setup_crysfft(CudaCrysFFTMode::PmmmDct, map, selection.m3_translations);
+    }
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::setup_crysfft(
+    CudaCrysFFTMode mode, const CrysFFTBasisMapping& map, const std::array<double, 9>& m3_translations)
+{
+    crysfft_physical_size_ = map.M_phys;
+    crysfft_reduced_size_ = map.M_reduced;
+    crysfft_identity_map_ = map.identity;
+
+    // Index maps are needed only when the physical grid is not the reduced basis itself
+    if (!crysfft_identity_map_)
+    {
+        gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * map.M_phys));
+        gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * map.M_reduced));
+        gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, map.phys_to_reduced.data(),
+                                   sizeof(int) * map.M_phys, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, map.reduced_to_phys.data(),
+                                   sizeof(int) * map.M_reduced, cudaMemcpyHostToDevice));
+    }
+
+    // Orbit counts for the CrysFFT stress fast path
+    const auto& orbit_counts = space_group_->get_orbit_counts();
+    gpu_error_check(cudaMalloc((void**)&d_crysfft_orbit_counts_, sizeof(int) * map.M_reduced));
+    gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
+                               sizeof(int) * map.M_reduced, cudaMemcpyHostToDevice));
+
+    const auto nx = cb->get_nx();
+    const std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+    const auto lx = cb->get_lx();
+    const auto angles = cb->get_angles();
+    const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
+
+    for (int i = 0; i < n_streams; i++)
+    {
+        if (mode == CudaCrysFFTMode::Recursive3m)
+            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, m3_translations);
+        else if (mode == CudaCrysFFTMode::ObliqueZ)
+            crysfft_[i] = new CudaCrysFFTObliqueZ(nx_logical, cell_para);
+        else
+            crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
+
+        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * map.M_phys));
+        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * map.M_phys));
+    }
+    crysfft_mode_ = mode;
+    use_crysfft_ = true;
 }
 
 template <typename T>

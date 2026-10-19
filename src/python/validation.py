@@ -241,9 +241,6 @@ def validate_system_params(params: Dict[str, Any]) -> None:
             )
 
 
-# Backward-compatible alias: the checks are not SCFT specific.
-validate_scft_params = validate_system_params
-
 
 def validate_lfts_params(params: Dict[str, Any]) -> None:
     """Validate L-FTS simulation parameters.

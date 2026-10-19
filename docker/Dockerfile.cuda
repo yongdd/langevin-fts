@@ -97,6 +97,6 @@ CMD ["python", "-c", "import polymerfts; print('PolymerFTS loaded successfully')
 
 # Labels for metadata
 LABEL maintainer="Daeseong Yong"
-LABEL version="1.0.0"
+LABEL version="0.10.0"
 LABEL description="PolymerFTS - Polymer Field Theory Simulation Library (CUDA + FFTW)"
 LABEL org.opencontainers.image.source="https://github.com/yongdd/langevin-fts"

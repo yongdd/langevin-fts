@@ -279,8 +279,9 @@ int main()
             // for(int i=0; i<M; i++)
             //     std::cout<< "q1_last[i]: "<< q1_last[i] << std::endl;
 
-            std::cout<< "Check total_partition: "<< error << std::endl;
-            if (solver->check_total_partition() == false)
+            const bool partition_ok = solver->check_total_partition();
+            std::cout<< "Check total_partition: "<< (partition_ok ? "ok" : "FAILED") << std::endl;
+            if (!partition_ok)
                 return -1;
 
             solver->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);

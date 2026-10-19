@@ -222,12 +222,14 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-4, it is ok!" << std::endl;
 
-            std::cout<< "Check total_partition 1: "<< error << std::endl;
-            if (solver_1_list[n]->check_total_partition() == false)
+            const bool partition_ok_1 = solver_1_list[n]->check_total_partition();
+            std::cout<< "Check total_partition 1: "<< (partition_ok_1 ? "ok" : "FAILED") << std::endl;
+            if (!partition_ok_1)
                 return -1;
 
-            std::cout<< "Check total_partition 2: "<< error << std::endl;
-            if (solver_2_list[n]->check_total_partition() == false)
+            const bool partition_ok_2 = solver_2_list[n]->check_total_partition();
+            std::cout<< "Check total_partition 2: "<< (partition_ok_2 ? "ok" : "FAILED") << std::endl;
+            if (!partition_ok_2)
                 return -1;
 
             T QQ_1 = solver_1_list[n]->get_total_partition(p);

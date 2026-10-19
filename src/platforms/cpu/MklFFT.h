@@ -72,24 +72,16 @@ private:
     std::vector<std::vector<double>> sin_tables_;  ///< sin(k*pi/(2*n)) for twiddle factors
     std::vector<std::vector<double>> cos_tables_;  ///< cos(k*pi/(2*n)) for twiddle factors
 
-    /**
-     * @brief Initialize MKL DFTI descriptors for periodic FFT.
-     */
+    /// Initialize MKL DFTI descriptors for periodic FFT.
     void initPeriodicFFT();
 
-    /**
-     * @brief Initialize DCT/DST trig tables for non-periodic BC.
-     */
+    /// Initialize DCT/DST trig tables for non-periodic BC.
     void initNonPeriodicFFT();
 
-    /**
-     * @brief Precompute twiddle factors for O(N log N) DCT/DST via FFT.
-     */
+    /// Precompute twiddle factors for O(N log N) DCT/DST via FFT.
     void precomputeTrigTables();
 
-    /**
-     * @brief Precompute twiddle factors for O(N log N) DCT/DST via FFT.
-     */
+    /// Precompute twiddle factors for O(N log N) DCT/DST via FFT.
     void precomputeTwiddleFactors();
 
     /**
@@ -124,9 +116,7 @@ private:
      */
     void applyDST3Backward(double* data, double* temp, int dim);
 
-    /**
-     * @brief Get stride information for dimension-by-dimension transform.
-     */
+    /// Get stride information for dimension-by-dimension transform.
     void getStrides(int dim, int& stride, int& num_transforms) const;
 
 public:
@@ -147,9 +137,7 @@ public:
      */
     MklFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc);
 
-    /**
-     * @brief Destructor. Frees MKL DFTI descriptors and buffers.
-     */
+    /// Destructor. Frees MKL DFTI descriptors and buffers.
     ~MklFFT();
 
     /**

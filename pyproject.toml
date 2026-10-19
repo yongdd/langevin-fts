@@ -8,7 +8,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "polymerfts"
-version = "1.0.0"
+version = "0.10.0"
 description = "Polymer field theory simulation library for SCFT and L-FTS"
 readme = "README.md"
 license = {text = "Apache-2.0"}

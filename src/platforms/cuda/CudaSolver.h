@@ -84,9 +84,7 @@ public:
      */
     bool force_off_diagonal_stress_ = false;
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CudaSolver() {};
 
     /**

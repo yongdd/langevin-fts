@@ -80,16 +80,8 @@ private:
     using Base::crysfft_physical_size_; using Base::crysfft_reduced_size_;
     using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
     using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
+    using Base::fft_; using Base::fft_forward; using Base::fft_backward;
 
-    FFT<T>* fft_[MAX_STREAMS];    ///< Spectral transform objects (per-stream, for non-periodic BC)
-
-    /// @name cuFFT Resources
-    /// @{
-    cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT
-    cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT
-    cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT
-    cufftHandle plan_bak_two[MAX_STREAMS];             ///< Batched backward FFT
-    /// @}
 
     /// @name Workspace Arrays
     /// @{
@@ -109,18 +101,6 @@ private:
     double *d_rk_in_2_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST)
     /// @}
 
-    /// @name CUB Reduction Storage
-    /// @{
-    /// @}
-
-    /// @name Space Group Support (reduced basis)
-    /// @{
-    /// @}
-
-    /// @name Crystallographic FFT support
-    /// @{
-    /// @}
-
 public:
     /**
      * @brief Construct GPU pseudo-spectral solver for discrete chains.
@@ -133,9 +113,7 @@ public:
      */
     CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
-    /**
-     * @brief Destructor. Frees GPU resources.
-     */
+    /// Destructor. Frees GPU resources.
     ~CudaSolverPseudoDiscrete();
 
     /**
@@ -148,7 +126,7 @@ public:
      */
     bool exp_dw_stored_reduced() const { return use_crysfft_ && space_group_ != nullptr; }
 
-    /** @brief Update Boltzmann factors. */
+    /// Update Boltzmann factors.
     void update_dw(std::string device, std::map<std::string, const T*> w_input) override;
 
     /**

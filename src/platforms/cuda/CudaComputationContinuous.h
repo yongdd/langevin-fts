@@ -83,16 +83,10 @@ private:
     std::vector<std::tuple<int, CuDeviceData<T> *, CuDeviceData<T> *, int>> single_partition_segment;
 
     // ============== Reduced basis support ==============
-    /**
-     * @brief Device array for full_to_reduced_map.
-     * Maps each full grid point to its irreducible index.
-     */
+    /// Device array for full_to_reduced_map. Maps each full grid point to its irreducible index.
     int* d_full_to_reduced_map_;
 
-    /**
-     * @brief Device array for reduced_basis_indices.
-     * Flat indices of irreducible mesh points.
-     */
+    /// Device array for reduced_basis_indices. Flat indices of irreducible mesh points.
     int* d_reduced_basis_indices_;
 
     /**
@@ -139,7 +133,7 @@ public:
     CudaComputationContinuous(ComputationBox<T>* cb, Molecules *pc,
         PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method, std::string numerical_method = "", SpaceGroup* space_group = nullptr);
 
-    /** @brief Destructor. Frees GPU resources. */
+    /// Destructor. Frees GPU resources.
     ~CudaComputationContinuous();
 
     /**
@@ -163,7 +157,7 @@ public:
      */
     void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
-    /** @brief Compute all concentrations from propagators. */
+    /// Compute all concentrations from propagators.
     void compute_concentrations() override;
 
     /**
@@ -178,7 +172,7 @@ public:
         std::map<std::string, const T*> w_input,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /** @brief Compute stress tensor for box relaxation. */
+    /// Compute stress tensor for box relaxation.
     void compute_stress() override;
 
     /**
@@ -191,7 +185,7 @@ public:
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /** @brief Verify partition function consistency. */
+    /// Verify partition function consistency.
     bool check_total_partition() override;
 };
 

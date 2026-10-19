@@ -687,6 +687,8 @@ Example:
              "Map from full grid index to reduced-basis index.")
         .def("get_orbit_counts", &SpaceGroup::get_orbit_counts,
              "Number of equivalent points for each reduced-basis point.")
+        .def("physical_basis_name", &SpaceGroup::physical_basis_name,
+             "Name of the active physical basis: 'irreducible', 'pmmm', 'm3' or 'z-mirror'.")
         .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,
              "Enable Pmmm physical basis (1/8 grid) mapping.")
         .def("using_pmmm_physical_basis", &SpaceGroup::using_pmmm_physical_basis,

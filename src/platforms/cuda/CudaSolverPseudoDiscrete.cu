@@ -24,8 +24,8 @@
  *
  * **cuFFT Plans:**
  *
- * - plan_for_one/two: Forward FFTs (D2Z for real, Z2Z for complex)
- * - plan_bak_one/two: Backward FFTs
+ * - cuFFT plans and DCT/DST objects are owned by CudaSolverPseudoBase
+ *   (fft_forward / fft_backward / fft_)
  * - Stream-associated for concurrent execution
  *
  * **Template Instantiations:**
@@ -63,87 +63,16 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
     [[maybe_unused]] bool reduce_memory)
-    : CudaSolverPseudoBase<T>(cb, molecules, n_streams, streams,
+    : CudaSolverPseudoBase<T>(cb, molecules, n_streams, streams, /*max_fft_batch=*/2,
                               /*q_full_in_factor=*/2, /*with_exp_dw_half=*/false,
                               /*complex_requires_periodic=*/false)
 {
     try{
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        auto bc_vec = cb->get_boundary_conditions();
-        const int dim = cb->get_dim();
-        for(int i=0; i<MAX_STREAMS; i++)
-            fft_[i] = nullptr;
         for(int i=0; i<n_streams; i++)
         {
-            plan_for_one[i] = 0;
-            plan_for_two[i] = 0;
-            plan_bak_one[i] = 0;
-            plan_bak_two[i] = 0;
             d_rk_in_1_one[i] = nullptr;
             d_rk_in_2_one[i] = nullptr;
-        }
-
-        // Create FFT plan
-        const int NRANK{cb->get_dim()};
-        int total_grid[NRANK];
-
-        if(cb->get_dim() == 3)
-        {
-            total_grid[0] = cb->get_nx(0);
-            total_grid[1] = cb->get_nx(1);
-            total_grid[2] = cb->get_nx(2);
-        }
-        else if(cb->get_dim() == 2)
-        {
-            total_grid[0] = cb->get_nx(0);
-            total_grid[1] = cb->get_nx(1);
-        }
-        else if(cb->get_dim() == 1)
-        {
-            total_grid[0] = cb->get_nx(0);
-        }
-
-        const cufftType cufft_forward  = CufftPlanType<T>::forward;
-        const cufftType cufft_backward = CufftPlanType<T>::backward;
-
-        for(int i=0; i<n_streams; i++)
-        {
-            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
-            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 2);
-            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
-            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 2);
-            cufftSetStream(plan_for_one[i], streams[i][0]);
-            cufftSetStream(plan_for_two[i], streams[i][0]);
-            cufftSetStream(plan_bak_one[i], streams[i][0]);
-            cufftSetStream(plan_bak_two[i], streams[i][0]);
-        }
-
-        // Create FFT objects for non-periodic BC (DCT/DST)
-        // Extract one BC per dimension
-        std::vector<BoundaryCondition> bc_per_dim;
-        for (int d = 0; d < dim; ++d)
-            bc_per_dim.push_back(bc_vec[2 * d]);
-
-        for(int i=0; i<n_streams; i++)
-        {
-            if (dim == 3)
-            {
-                std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
-                std::array<BoundaryCondition, 3> bc_arr = {bc_per_dim[0], bc_per_dim[1], bc_per_dim[2]};
-                fft_[i] = new CudaFFT<T, 3>(nx_arr, bc_arr);
-            }
-            else if (dim == 2)
-            {
-                std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
-                std::array<BoundaryCondition, 2> bc_arr = {bc_per_dim[0], bc_per_dim[1]};
-                fft_[i] = new CudaFFT<T, 2>(nx_arr, bc_arr);
-            }
-            else if (dim == 1)
-            {
-                std::array<int, 1> nx_arr = {cb->get_nx(0)};
-                std::array<BoundaryCondition, 1> bc_arr = {bc_per_dim[0]};
-                fft_[i] = new CudaFFT<T, 1>(nx_arr, bc_arr);
-            }
         }
 
         // Allocate memory for pseudo-spectral: advance_propagator()
@@ -173,14 +102,6 @@ template <typename T>
 CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
 {
 
-    for(int i=0; i<n_streams; i++)
-    {
-        cufftDestroy(plan_for_one[i]);
-        cufftDestroy(plan_for_two[i]);
-        cufftDestroy(plan_bak_one[i]);
-        cufftDestroy(plan_bak_two[i]);
-    }
-
     // For pseudo-spectral: advance_propagator()
     for(int i=0; i<n_streams; i++)
     {
@@ -188,7 +109,6 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
         cudaFree(d_qk_in_1_two[i]);
         cudaFree(d_rk_in_1_one[i]);
         cudaFree(d_rk_in_2_one[i]);
-        delete fft_[i];
     }
 
 }
@@ -306,13 +226,13 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         if (this->is_periodic_)
         {
             // Execute a forward FFT
-            cufft_exec_forward(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
+            fft_forward(STREAM, fft_in, d_qk_in_1_one[STREAM], 1);
 
             // Multiply exp(-k^2 ds/6) in fourier space
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
 
             // Execute a backward FFT
-            cufft_exec_backward(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
+            fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
 
             // Evaluate exp(-w*ds) in real space (1/M normalization from unnormalized cuFFT)
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
@@ -460,7 +380,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         if (this->is_periodic_)
         {
             // 3D fourier discrete transform, forward
-            cufft_exec_forward(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
+            fft_forward(STREAM, fft_in, d_qk_in_1_one[STREAM], 1);
             gpu_error_check(cudaPeekAtLastError());
 
             // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
@@ -468,7 +388,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             gpu_error_check(cudaPeekAtLastError());
 
             // 3D fourier discrete transform, backward
-            cufft_exec_backward(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
+            fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
             gpu_error_check(cudaPeekAtLastError());
         }
         else
@@ -624,7 +544,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         if (is_periodic_)
         {
             // Periodic BC: Execute a forward FFT using cuFFT (batched, two propagators)
-            cufft_exec_forward(plan_for_two[STREAM], d_q_pair_full, d_qk_in_1_two[STREAM]);
+            fft_forward(STREAM, d_q_pair_full, d_qk_in_1_two[STREAM], 2);
             gpu_error_check(cudaPeekAtLastError());
 
             // [type-specific algorithm] Real fields store the Hermitian half-spectrum, so the

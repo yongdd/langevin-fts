@@ -4,19 +4,24 @@
  *
  * CudaSolverPseudoRQM4, CudaSolverPseudoRK2 and CudaSolverPseudoDiscrete differ
  * only in how they advance a propagator (and, for the discrete model, in the
- * bond factor used by the stress). Everything else -- computation box, the
- * Pseudo helper, stream handles, the stress reduction workspace, the space
- * group reduced basis and the CrysFFT fast path -- lives here, mirroring
- * CpuSolverPseudoBase on the CPU side.
+ * bond factor used by the stress). Everything else lives here, mirroring
+ * CpuSolverPseudoBase on the CPU side:
  *
- * Derived classes own their cuFFT plans, spectral-transform objects and
- * propagator work buffers, because the number and size of those buffers is
- * what distinguishes the three methods.
+ * - computation box, Pseudo helper and stream handles,
+ * - the spectral transforms: cuFFT plans for periodic boundaries
+ *   (fft_forward / fft_backward, batch of 1 or 2 fields) and per-stream
+ *   DCT/DST objects (fft_) for non-periodic boundaries,
+ * - the stress reduction workspace,
+ * - the space-group reduced basis and the CrysFFT fast path.
+ *
+ * Derived classes own only their propagator work buffers, because the number
+ * and size of those buffers is what distinguishes the three methods.
  */
 
 #ifndef CUDA_SOLVER_PSEUDO_BASE_H_
 #define CUDA_SOLVER_PSEUDO_BASE_H_
 
+#include <array>
 #include <string>
 #include <vector>
 #include <map>
@@ -26,11 +31,13 @@
 #include "Molecules.h"
 #include "ComputationBox.h"
 #include "Pseudo.h"
+#include "FFT.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"   // CudaCrysFFTBase, CudaCrysFFTMode
 
 class SpaceGroup;
+struct CrysFFTBasisMapping;
 
 template <typename T>
 class CudaSolverPseudoBase : public CudaSolver<T>
@@ -44,6 +51,12 @@ protected:
     int dim_;                     ///< Number of dimensions (1, 2, or 3)
     bool is_periodic_;            ///< True if all BCs are periodic
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy] per index
+
+    // Spectral transforms (created by init_fft(), released by the destructor)
+    int max_fft_batch_;                      ///< Largest batch a derived solver transforms at once (1 or 2)
+    cufftHandle plan_for_[MAX_STREAMS][2];   ///< Periodic BC: forward plans, index = batch - 1
+    cufftHandle plan_bak_[MAX_STREAMS][2];   ///< Periodic BC: backward plans, index = batch - 1
+    FFT<T>* fft_[MAX_STREAMS];               ///< Non-periodic BC: per-stream DCT/DST transform objects
 
     // Stress reduction workspace (per stream)
     size_t temp_storage_bytes[MAX_STREAMS];
@@ -75,6 +88,8 @@ protected:
     double* d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
 
     /**
+     * @param max_fft_batch             Largest number of fields the derived solver
+     *                                  transforms in one cuFFT call (1 or 2).
      * @param q_full_in_factor          Number of full-grid fields d_q_full_in_ must hold.
      * @param with_exp_dw_half          Also allocate d_exp_dw_half (half-step Boltzmann factors).
      * @param complex_requires_periodic Reject complex fields with non-periodic BCs.
@@ -82,7 +97,12 @@ protected:
     CudaSolverPseudoBase(
         ComputationBox<T>* cb, Molecules *molecules, int n_streams,
         cudaStream_t streams[MAX_STREAMS][2],
-        int q_full_in_factor, bool with_exp_dw_half, bool complex_requires_periodic);
+        int max_fft_batch, int q_full_in_factor, bool with_exp_dw_half, bool complex_requires_periodic);
+
+    /// Forward FFT of `batch` consecutive full-grid fields on stream `stream` (periodic BC only).
+    void fft_forward(int stream, CuDeviceData<T>* d_in, cuDoubleComplex* d_out, int batch = 1);
+    /// Backward (unnormalized) FFT, inverse of fft_forward() (periodic BC only).
+    void fft_backward(int stream, cuDoubleComplex* d_in, CuDeviceData<T>* d_out, int batch = 1);
 
     /// Release the CrysFFT objects and device maps (safe to call repeatedly).
     void cleanup_crysfft();
@@ -94,6 +114,15 @@ protected:
     void update_dw_impl(
         const std::string& device, const std::map<std::string, const T*>& w_input,
         bool with_half, double factor, double factor_half);
+
+private:
+    /// Create the cuFFT plans (periodic BC) or the DCT/DST objects (non-periodic BC).
+    void init_fft();
+    /// Select and build the CrysFFT fast path for the current space group (3D periodic, real fields).
+    void init_crysfft();
+    /// Upload the index maps and create the per-stream CrysFFT objects for `mode`.
+    void setup_crysfft(CudaCrysFFTMode mode, const CrysFFTBasisMapping& map,
+                       const std::array<double, 9>& m3_translations);
 
 public:
     virtual ~CudaSolverPseudoBase();

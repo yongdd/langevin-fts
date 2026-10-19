@@ -141,6 +141,7 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
             }
 
             #ifndef NDEBUG
+            const int max_n_segment = item.second.max_n_segment;
             this->propagator_finished[key] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
                 this->propagator_finished[key][i] = false;
@@ -1001,18 +1002,6 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         // Divide by exp_dw for proper normalization
         for(int i=0; i<M; i++)
             phi[i] /= _exp_dw[i];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-T CpuComputationReduceMemoryDiscrete<T>::get_total_partition(int polymer)
-{
-    try
-    {
-        return this->single_polymer_partitions[polymer];
     }
     catch(std::exception& exc)
     {

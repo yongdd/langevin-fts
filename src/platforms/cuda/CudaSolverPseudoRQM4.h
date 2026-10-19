@@ -21,10 +21,8 @@
  * **cuFFT Plans:**
  *
  * Pre-created FFT plans for efficiency:
- * - plan_for_one: Single r2c transform
- * - plan_bak_one: Single c2r transform
- * - plan_for_two: Batched r2c (for half-step pairs)
- * - plan_bak_two: Batched c2r (for half-step pairs)
+ * - cuFFT plans (batch 1 for the full step, batch 2 for the half-step pair)
+ *   and DCT/DST objects are owned by CudaSolverPseudoBase
  *
  * **Stress Array Convention (Voigt Notation):**
  *
@@ -95,15 +93,7 @@ private:
     using Base::crysfft_physical_size_; using Base::crysfft_reduced_size_;
     using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
     using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
-
-    /// @name Spectral Transform Resources
-    /// @{
-    FFT<T>* fft_[MAX_STREAMS];                         ///< Spectral transform objects (per-stream, for non-periodic BC)
-    cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT plans (periodic BC)
-    cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT plans (periodic BC)
-    cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT plans (periodic BC)
-    cufftHandle plan_bak_two[MAX_STREAMS];             ///< Batched backward FFT plans (periodic BC)
-    /// @}
+    using Base::fft_; using Base::fft_forward; using Base::fft_backward;
 
     /// @name Workspace Arrays (per stream)
     /// @{
@@ -124,18 +114,6 @@ private:
     double *d_rk_in_2_one[MAX_STREAMS];    ///< Real coefficients buffer 2
     /// @}
 
-    /// @name CUB Reduction Storage (per stream)
-    /// @{
-    /// @}
-
-    /// @name Space Group Support (reduced basis)
-    /// @{
-    /// @}
-
-    /// @name Crystallographic FFT support
-    /// @{
-    /// @}
-
 public:
     /**
      * @brief Construct GPU pseudo-spectral solver for continuous chains.
@@ -148,9 +126,7 @@ public:
      */
     CudaSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
-    /**
-     * @brief Destructor. Frees GPU memory and cuFFT plans.
-     */
+    /// Destructor. Frees GPU memory and cuFFT plans.
     ~CudaSolverPseudoRQM4();
 
     /**
@@ -175,7 +151,7 @@ public:
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type, double *d_q_mask, int ds_index) override;
 
-    /** @brief Half-bond step (empty for continuous chains). */
+    /// Half-bond step (empty for continuous chains).
     void advance_propagator_half_bond_step(
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 

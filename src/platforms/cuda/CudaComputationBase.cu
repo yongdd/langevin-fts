@@ -27,40 +27,9 @@ CudaComputationBase<T>::CudaComputationBase(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
-    : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer),
-      propagator_solver(nullptr),
-      n_streams(0),
-      d_q_unity(nullptr),
-      d_q_mask(nullptr),
-      sc(nullptr),
+    : CudaComputationCommon<T>(cb, molecules, propagator_computation_optimizer, /*n_streams=*/0),
       d_phi(nullptr)
 {
-}
-
-template <typename T>
-void CudaComputationBase<T>::update_laplacian_operator()
-{
-    try
-    {
-        propagator_solver->update_laplacian_operator();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-template <typename T>
-T CudaComputationBase<T>::get_total_partition(int polymer)
-{
-    try
-    {
-        return this->single_polymer_partitions[polymer];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
 }
 
 template <typename T>
@@ -204,19 +173,6 @@ void CudaComputationBase<T>::get_block_concentration(int p, T *phi)
 
             gpu_error_check(cudaMemcpy(&phi[b*N], d_block, sizeof(T)*N, cudaMemcpyDeviceToHost));
         }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-template <typename T>
-T CudaComputationBase<T>::get_solvent_partition(int s)
-{
-    try
-    {
-        return this->single_solvent_partitions[s];
     }
     catch(std::exception& exc)
     {

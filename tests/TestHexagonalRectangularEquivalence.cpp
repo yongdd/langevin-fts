@@ -107,7 +107,6 @@ ScftResult run_scft_fixed_box(
     double* phi_b = new double[M];
 
     // Try to load pre-converged fields from file
-    bool loaded_from_file = false;
     std::ifstream input_field_file(input_filename);
     if (input_field_file.is_open())
     {
@@ -118,7 +117,6 @@ ScftResult run_scft_fixed_box(
             w[i] = std::stod(line);
         }
         input_field_file.close();
-        loaded_from_file = true;
         if (verbose)
             std::cout << "  Loaded fields from " << input_filename << std::endl;
     }

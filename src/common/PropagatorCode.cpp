@@ -448,8 +448,8 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     // sub_key, sub_n_segment, sub_n_repeated
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     std::string sub_key;
-    int sub_n_segment;
-    int sub_n_repeated;
+    int sub_n_segment = 0;    // always assigned in state 2 before use; initialised for -Wmaybe-uninitialized
+    int sub_n_repeated = 1;
 
     int pos_start = 1; // start from 1 to remove open parenthesis
     std::stack<char> stack_brace;

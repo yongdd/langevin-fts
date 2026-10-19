@@ -72,16 +72,16 @@ template <typename T>
 class CudaComputationDiscrete : public CudaComputationBase<T>
 {
 private:
-    /** @brief Half-bond propagators q(r,n+1/2) at junctions. */
+    /// Half-bond propagators q(r,n+1/2) at junctions.
     std::map<std::string, CuDeviceData<T> **> d_propagator_half_steps;
 
     /// @name Space Group Support (reduced basis)
     /// @{
-    /** @brief Typed pointer to the discrete solver (owned via propagator_solver). */
+    /// Typed pointer to the discrete solver (owned via propagator_solver).
     CudaSolverPseudoDiscrete<T>* solver_discrete_;
-    /** @brief Device array: full grid index -> reduced basis index. */
+    /// Device array: full grid index -> reduced basis index.
     int* d_full_to_reduced_map_;
-    /** @brief Device array: reduced basis index -> full grid index. */
+    /// Device array: reduced basis index -> full grid index.
     int* d_reduced_basis_indices_;
     /**
      * @brief exp(-w*ds) in the reduced basis, per monomer type.
@@ -95,7 +95,7 @@ private:
     /// @}
 
     #ifndef NDEBUG
-    /** @brief Debug: track half-step completion. */
+    /// Debug: track half-step completion.
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
     #endif
 
@@ -143,7 +143,7 @@ public:
     CudaComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules,
         PropagatorComputationOptimizer *propagator_computation_optimizer, SpaceGroup* space_group = nullptr);
 
-    /** @brief Destructor. Frees GPU resources. */
+    /// Destructor. Frees GPU resources.
     ~CudaComputationDiscrete();
 
     /**
@@ -167,7 +167,7 @@ public:
      */
     void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
-    /** @brief Compute concentrations with exp(-w) weighting. */
+    /// Compute concentrations with exp(-w) weighting.
     void compute_concentrations() override;
 
     /**
@@ -180,7 +180,7 @@ public:
         std::map<std::string, const T*> w_input,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /** @brief Compute stress with half-bond contributions. */
+    /// Compute stress with half-bond contributions.
     void compute_stress() override;
 
     /**
@@ -193,7 +193,7 @@ public:
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /** @brief Verify partition function consistency. */
+    /// Verify partition function consistency.
     bool check_total_partition() override;
 };
 

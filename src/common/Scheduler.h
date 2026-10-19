@@ -75,19 +75,13 @@ private:
      */
     std::map<std::string, std::tuple<int, int, int>, ComparePropagatorKey> job_assignment;
 
-    /**
-     * @brief Time when each propagator's dependencies are resolved.
-     */
+    /// Time when each propagator's dependencies are resolved.
     std::map<std::string, int> dependency_resolved_time;
 
-    /**
-     * @brief Propagators sorted by start time: (key, start_time).
-     */
+    /// Propagators sorted by start time: (key, start_time).
     std::vector<std::tuple<std::string, int>> sorted_jobs;
 
-    /**
-     * @brief Discrete time points where schedule changes (job starts or ends).
-     */
+    /// Discrete time points where schedule changes (job starts or ends).
     std::vector<int> time_points;
 
     /**
@@ -127,9 +121,7 @@ public:
      */
     Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> propagators, int n_streams);
 
-    /**
-     * @brief Destructor.
-     */
+    /// Destructor.
     ~Scheduler() {};
 
     /**

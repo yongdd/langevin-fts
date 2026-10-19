@@ -31,9 +31,7 @@
 
 class SpaceGroup;
 
-/**
- * @brief Inputs for the CrysFFT stress fast path (one stream's resources).
- */
+/// Inputs for the CrysFFT stress fast path (one stream's resources).
 struct CudaCrysFFTStressArgs
 {
     CudaCrysFFTBase* crysfft;        ///< Per-stream CrysFFT object

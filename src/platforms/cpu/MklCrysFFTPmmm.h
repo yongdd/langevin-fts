@@ -40,18 +40,14 @@ private:
     std::array<std::vector<double>, 3> cos_tables_;
     std::array<std::vector<double>, 3> sin_tables_;
 
-    /**
-     * @brief Thread-local buffer structure.
-     */
+    /// Thread-local buffer structure.
     struct ThreadBuffers {
         std::vector<double> io;
         std::vector<double> temp;
         int size = 0;
     };
 
-    /**
-     * @brief Get thread-local buffers.
-     */
+    /// Get thread-local buffers.
     std::pair<double*, double*> get_thread_local_buffers()
     {
         thread_local ThreadBuffers buffers;
@@ -64,24 +60,16 @@ private:
         return {buffers.io.data(), buffers.temp.data()};
     }
 
-    /**
-     * @brief Apply DCT-II forward via FFT.
-     */
+    /// Apply DCT-II forward via FFT.
     void dct_forward_impl(double* io, double* temp);
 
-    /**
-     * @brief Apply DCT-III backward via FFT.
-     */
+    /// Apply DCT-III backward via FFT.
     void dct_backward_impl(double* io, double* temp);
 
-    /**
-     * @brief Initialize MKL DFTI descriptors.
-     */
+    /// Initialize MKL DFTI descriptors.
     void initFFTPlans();
 
-    /**
-     * @brief Precompute twiddle factors.
-     */
+    /// Precompute twiddle factors.
     void precomputeTwiddleFactors();
 
 public:
@@ -97,9 +85,7 @@ public:
         std::array<double, 6> cell_para,
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
 
-    /**
-     * @brief Destructor. Frees MKL descriptors and buffers.
-     */
+    /// Destructor. Frees MKL descriptors and buffers.
     ~MklCrysFFTPmmm();
 };
 

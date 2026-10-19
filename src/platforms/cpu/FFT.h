@@ -78,9 +78,7 @@ template <typename T>
 class FFT
 {
 public:
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~FFT() {}
 
     /**

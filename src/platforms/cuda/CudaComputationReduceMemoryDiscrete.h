@@ -87,7 +87,7 @@ private:
      */
     std::map<std::tuple<std::string, int>, T *> propagator_half_steps_at_check_point;
 
-    /** @brief Typed pointer to the discrete solver (owned via propagator_solver). */
+    /// Typed pointer to the discrete solver (owned via propagator_solver).
     CudaSolverPseudoDiscrete<T>* solver_discrete_;
 
     /**
@@ -113,16 +113,10 @@ private:
     std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
 
     // ============== Reduced basis support ==============
-    /**
-     * @brief Device array for full_to_reduced_map.
-     * Maps each full grid point to its irreducible index.
-     */
+    /// Device array for full_to_reduced_map. Maps each full grid point to its irreducible index.
     int* d_full_to_reduced_map_;
 
-    /**
-     * @brief Device array for reduced_basis_indices.
-     * Flat indices of irreducible mesh points.
-     */
+    /// Device array for reduced_basis_indices. Flat indices of irreducible mesh points.
     int* d_reduced_basis_indices_;
 
 
@@ -170,7 +164,7 @@ public:
     CudaComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules,
         PropagatorComputationOptimizer *propagator_computation_optimizer, SpaceGroup* space_group = nullptr);
 
-    /** @brief Destructor. Frees GPU and pinned memory. */
+    /// Destructor. Frees GPU and pinned memory.
     ~CudaComputationReduceMemoryDiscrete();
 
     /**
@@ -185,18 +179,11 @@ public:
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /** @brief Compute concentrations with on-the-fly recomputation. */
+    /// Compute concentrations with on-the-fly recomputation.
     void compute_concentrations() override;
 
-    /** @brief Compute stress (requires recomputation). */
+    /// Compute stress (requires recomputation).
     void compute_stress() override;
-
-    /**
-     * @brief Get partition function with exp(-w) normalization.
-     * @param polymer Polymer index
-     * @return log(Q) normalized by volume
-     */
-    T get_total_partition(int polymer) override;
 
     /**
      * @brief Extract chain propagator (requires stored checkpoint).
@@ -208,7 +195,7 @@ public:
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /** @brief Verify partition function consistency. */
+    /// Verify partition function consistency.
     bool check_total_partition() override;
 };
 

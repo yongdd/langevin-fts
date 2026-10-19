@@ -153,31 +153,35 @@ PropagatorComputation<T>                      [Abstract Base]
 ├── get_total_concentration(monomer)          [pure virtual]
 └── update_laplacian_operator()               [pure virtual]
         │
-        ├── CpuComputationBase<T>             [CPU Common Logic]
+        ├── CpuComputationCommon<T>           [CPU: solver, scheduler, φ storage, getters]
         │   │
-        │   ├── CpuComputationContinuous<T>   [Continuous Chains]
-        │   │   └── RQM4, RK2, or CN-ADI2 (selectable)
+        │   ├── CpuComputationBase<T>         [full propagator storage]
+        │   │   ├── CpuComputationContinuous<T>   RQM4, RK2, or CN-ADI2 (selectable)
+        │   │   └── CpuComputationDiscrete<T>     Boltzmann weight + bond convolution
         │   │
-        │   └── CpuComputationDiscrete<T>     [Discrete Chains]
-        │       └── Boltzmann weight + bond convolution
+        │   └── CpuComputationReduceMemoryBase<T> [checkpointed storage]
+        │       ├── CpuComputationReduceMemoryContinuous<T>
+        │       └── CpuComputationReduceMemoryDiscrete<T>
         │
-        ├── CpuComputationReduceMemoryBase<T> [CPU Checkpointing Logic]
-        │   │
-        │   ├── CpuComputationReduceMemoryContinuous<T>
-        │   └── CpuComputationReduceMemoryDiscrete<T>
-        │
-        ├── CudaComputationBase<T>            [GPU Common Logic]
-        │   │
-        │   ├── CudaComputationContinuous<T>
-        │   └── CudaComputationDiscrete<T>
-        │
-        └── CudaComputationReduceMemoryBase<T> [GPU Checkpointing Logic]
+        └── CudaComputationCommon<T>          [GPU: solver, scheduler, streams, unity/mask, partition getters]
             │
-            ├── CudaComputationReduceMemoryContinuous<T>
-            └── CudaComputationReduceMemoryDiscrete<T>
+            ├── CudaComputationBase<T>        [full storage, device-side φ]
+            │   ├── CudaComputationContinuous<T>
+            │   └── CudaComputationDiscrete<T>
+            │
+            └── CudaComputationReduceMemoryBase<T> [checkpointed storage, pinned host φ]
+                ├── CudaComputationReduceMemoryContinuous<T>
+                └── CudaComputationReduceMemoryDiscrete<T>
 ```
 
-The memory-saving (`reduce_memory=True`) classes on both platforms derive from their own `*ReduceMemoryBase<T>` classes, which inherit directly from `PropagatorComputation<T>` — not from `CpuComputationBase<T>`/`CudaComputationBase<T>`.
+`CpuComputationCommon<T>` / `CudaComputationCommon<T>` hold only what is identical for
+the full-storage and the memory-saving (`reduce_memory=True`) variant: the solver and
+scheduler handles, `update_laplacian_operator()`, the partition-function getters and,
+on the CPU, the concentration getters (both CPU variants keep `phi_block` on the host
+in the same layout). The CUDA variants keep their concentration getters apart because
+the full variant stores `d_phi_block` on the device and the reduce-memory variant
+`phi_block` in pinned host memory. Propagator storage and the `compute_*` algorithms
+stay in the variant classes so that each can be changed on its own.
 
 **Chain Models:**
 
@@ -226,9 +230,14 @@ The CUDA side mirrors this layout. `CudaSolver<T>` is the abstract base;
 three pseudo-spectral solvers share -- computation box, `Pseudo` helper, streams, the
 stress reduction workspace, the space-group reduced basis and the CrysFFT fast path --
 and implements `set_space_group()`, `update_laplacian_operator()` and the shared
-`update_dw_impl()`. `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and
-`CudaSolverPseudoDiscrete` keep only their cuFFT plans, work buffers and the
-`advance_propagator()` / `compute_single_segment_stress()` algorithms;
+`update_dw_impl()`. It also owns the spectral transforms: cuFFT plans for periodic boundaries
+(`fft_forward()` / `fft_backward()`, batch of 1 or 2 fields, the largest batch is a
+constructor argument) and per-stream DCT/DST objects (`fft_`) for non-periodic ones.
+The physical-grid ↔ reduced-basis maps of the CrysFFT fast path are built by the
+platform-independent `CrysFFTBasisMapping.h` and shared with the CPU solver.
+`CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` keep
+only their work buffers and the `advance_propagator()` /
+`compute_single_segment_stress()` algorithms;
 `CudaSolverCNADI` is the finite-difference solver. Mechanical real/complex
 differences (D2Z vs Z2Z transforms, CUB sum vs reduce) are hidden behind the overloads
 in `CudaTypeDispatch.h`, so a remaining `if constexpr` on the field type marks a genuine

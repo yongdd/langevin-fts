@@ -137,9 +137,7 @@ public:
      */
     CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::FFTW, SpaceGroup* space_group = nullptr);
 
-    /**
-     * @brief Destructor. Frees propagators and concentrations.
-     */
+    /// Destructor. Frees propagators and concentrations.
     ~CpuComputationDiscrete();
 
     /**
@@ -163,9 +161,7 @@ public:
      */
     void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
-    /**
-     * @brief Calculate concentration fields from propagators.
-     */
+    /// Calculate concentration fields from propagators.
     void compute_concentrations() override;
 
     /**
@@ -178,9 +174,7 @@ public:
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /**
-     * @brief Compute stress tensor.
-     */
+    /// Compute stress tensor.
     void compute_stress() override;
 
     /**
@@ -194,9 +188,7 @@ public:
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /**
-     * @brief Validate partition function (testing).
-     */
+    /// Validate partition function (testing).
     bool check_total_partition() override;
 };
 #endif    

@@ -19,18 +19,6 @@ extern "C" {
 #include <spglib.h>
 }
 
-namespace {
-bool env_flag_enabled(const char* name)
-{
-    const char* env = std::getenv(name);
-    if (env == nullptr || *env == '\0')
-        return false;
-
-    char c = static_cast<char>(std::tolower(static_cast<unsigned char>(env[0])));
-    return c == '1' || c == 't' || c == 'y' || c == 'o';
-}
-}  // namespace
-
 SpaceGroup::SpaceGroup(std::vector<int> nx, int hall_number)
 {
     initialize(std::move(nx), hall_number);
@@ -356,9 +344,9 @@ void SpaceGroup::get_symmetry_operations()
 {
     // Get symmetry operations from spglib database using Hall number
     // Maximum possible symmetry operations is 192 (for Fm-3m)
-    int max_size = 192;
-    int rotations[192][3][3];
-    double translations[192][3];
+    constexpr int max_size = 192;
+    int rotations[max_size][3][3];
+    double translations[max_size][3];
 
     int n_ops = spg_get_symmetry_from_database(rotations, translations, hall_number_);
 
@@ -718,7 +706,7 @@ void SpaceGroup::symmetrize(const double* field_in, double* field_out, int n_fie
 
 void SpaceGroup::symmetrize_reduced_basis(double* reduced_field, int n_fields) const
 {
-    if (!use_pmmm_physical_basis_ && !use_m3_physical_basis_ && !use_z_mirror_physical_basis_)
+    if (physical_basis_ == PhysicalBasis::None)
         return;
     if (reduced_to_irreducible_map_.empty() || orbit_counts_full_.empty())
         return;
@@ -952,7 +940,7 @@ bool SpaceGroup::get_z_mirror_translation(double& t_z, double tol) const
 
 void SpaceGroup::enable_pmmm_physical_basis()
 {
-    if (use_pmmm_physical_basis_)
+    if (physical_basis_ == PhysicalBasis::Pmmm)
         return;
 
     if (nx_.size() != 3)
@@ -1021,14 +1009,13 @@ void SpaceGroup::enable_pmmm_physical_basis()
         reduced_to_irreducible_map_.clear();
     }
 
-    use_pmmm_physical_basis_ = true;
-    use_m3_physical_basis_ = false;
+    physical_basis_ = PhysicalBasis::Pmmm;
     std::cout << "Pmmm physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
 }
 
 void SpaceGroup::enable_m3_physical_basis()
 {
-    if (use_m3_physical_basis_)
+    if (physical_basis_ == PhysicalBasis::M3)
         return;
 
     if (nx_.size() != 3)
@@ -1173,15 +1160,13 @@ void SpaceGroup::enable_m3_physical_basis()
         reduced_to_irreducible_map_.clear();
     }
 
-    use_m3_physical_basis_ = true;
-    use_pmmm_physical_basis_ = false;
-    use_z_mirror_physical_basis_ = false;
+    physical_basis_ = PhysicalBasis::M3;
     std::cout << "M3 physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
 }
 
 void SpaceGroup::enable_z_mirror_physical_basis()
 {
-    if (use_z_mirror_physical_basis_)
+    if (physical_basis_ == PhysicalBasis::ZMirror)
         return;
 
     if (nx_.size() != 3)
@@ -1279,10 +1264,33 @@ void SpaceGroup::enable_z_mirror_physical_basis()
 
     z_mirror_shift_ = shift;
     z_mirror_translation_ = t_z;
-    use_z_mirror_physical_basis_ = true;
-    use_pmmm_physical_basis_ = false;
-    use_m3_physical_basis_ = false;
+    physical_basis_ = PhysicalBasis::ZMirror;
 
     std::cout << "Z-mirror physical basis enabled (shift=" << z_mirror_shift_
               << "). Reduced basis size: " << n_irreducible_ << std::endl;
+}
+
+void SpaceGroup::enable_physical_basis(PhysicalBasis basis)
+{
+    switch (basis)
+    {
+        case PhysicalBasis::None:
+            if (physical_basis_ != PhysicalBasis::None)
+                throw_with_line_number("Restoring the irreducible basis after a physical basis was enabled is not supported; create a new SpaceGroup.");
+            break;
+        case PhysicalBasis::Pmmm:    enable_pmmm_physical_basis(); break;
+        case PhysicalBasis::M3:      enable_m3_physical_basis(); break;
+        case PhysicalBasis::ZMirror: enable_z_mirror_physical_basis(); break;
+    }
+}
+
+std::string SpaceGroup::physical_basis_name() const
+{
+    switch (physical_basis_)
+    {
+        case PhysicalBasis::Pmmm:    return "pmmm";
+        case PhysicalBasis::M3:      return "m3";
+        case PhysicalBasis::ZMirror: return "z-mirror";
+        default:                     return "irreducible";
+    }
 }

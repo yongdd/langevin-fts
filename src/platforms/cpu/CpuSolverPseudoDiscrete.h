@@ -136,9 +136,7 @@ public:
      */
     CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::FFTW);
 
-    /**
-     * @brief Destructor. Frees exp_dw arrays.
-     */
+    /// Destructor. Frees exp_dw arrays.
     ~CpuSolverPseudoDiscrete();
 
     /**

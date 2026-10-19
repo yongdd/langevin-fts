@@ -49,14 +49,10 @@
 #include "CudaCommon.h"
 #include "SpaceGroup.h"
 
-/**
- * @brief Device function: max of two integers.
- */
+/// Device function: max of two integers.
 __device__ int d_max_of_two(int x, int y);
 
-/**
- * @brief Device function: min of two integers.
- */
+/// Device function: min of two integers.
 __device__ int d_min_of_two(int x, int y);
 
 /**
@@ -356,9 +352,7 @@ private:
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index);
 
-    /**
-     * @brief 3D ADI step with explicit coefficient arrays.
-     */
+    /// 3D ADI step with explicit coefficient arrays.
     void advance_propagator_3d_step(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
@@ -367,9 +361,7 @@ private:
         double *_d_yl, double *_d_yd, double *_d_yh,
         double *_d_zl, double *_d_zd, double *_d_zh);
 
-    /**
-     * @brief 2D ADI step with explicit coefficient arrays.
-     */
+    /// 2D ADI step with explicit coefficient arrays.
     void advance_propagator_2d_step(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
@@ -377,9 +369,7 @@ private:
         double *_d_xl, double *_d_xd, double *_d_xh,
         double *_d_yl, double *_d_yd, double *_d_yh);
 
-    /**
-     * @brief 1D step with explicit coefficient arrays.
-     */
+    /// 1D step with explicit coefficient arrays.
     void advance_propagator_1d_step(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
@@ -399,9 +389,7 @@ public:
     CudaSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
         int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
-    /**
-     * @brief Destructor. Frees GPU resources.
-     */
+    /// Destructor. Frees GPU resources.
     ~CudaSolverCNADI();
 
     /**
@@ -416,10 +404,10 @@ public:
         int* d_full_to_reduced_map,
         int n_basis) override;
 
-    /** @brief Update finite difference coefficients for new box. */
+    /// Update finite difference coefficients for new box.
     void update_laplacian_operator() override;
 
-    /** @brief Update Boltzmann factors from potential fields. */
+    /// Update Boltzmann factors from potential fields.
     void update_dw(std::string device, std::map<std::string, const double*> w_input) override;
 
     /**
@@ -439,7 +427,7 @@ public:
         double *d_q_in, double *d_q_out,
         std::string monomer_type, double *d_q_mask, int ds_index) override;
 
-    /** @brief Half-bond step (not applicable for CN-ADI continuous). */
+    /// Half-bond step (not applicable for CN-ADI continuous).
     void advance_propagator_half_bond_step(
         const int, double *, double *, std::string) override {};
 

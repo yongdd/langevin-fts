@@ -26,6 +26,7 @@
 #include <iostream>
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 #include <stdexcept>
 #include "FftwFFT.h"
 
@@ -432,7 +433,7 @@ void FftwFFT<T, DIM>::forward(T *rdata, std::complex<double> *cdata)
         if (static_cast<int>(work_local.size()) < total_grid_ * 2)
             work_local.resize(total_grid_ * 2);
 
-        std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(std::complex<double>));
+        std::copy_n(rdata, total_grid_, reinterpret_cast<std::complex<double>*>(work_local.data()));
         fftw_execute_dft(plan_forward_,
                          reinterpret_cast<fftw_complex*>(work_local.data()),
                          reinterpret_cast<fftw_complex*>(cdata));
@@ -465,7 +466,7 @@ void FftwFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
         if (static_cast<int>(complex_local.size()) < total_complex_grid_)
             complex_local.resize(total_complex_grid_);
 
-        std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+        std::copy_n(cdata, total_complex_grid_, complex_local.data());
         fftw_execute_dft_c2r(plan_backward_,
                              reinterpret_cast<fftw_complex*>(complex_local.data()),
                              work_local.data());
@@ -479,7 +480,7 @@ void FftwFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
         if (static_cast<int>(complex_local.size()) < total_complex_grid_)
             complex_local.resize(total_complex_grid_);
 
-        std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+        std::copy_n(cdata, total_complex_grid_, complex_local.data());
         fftw_execute_dft(plan_backward_,
                          reinterpret_cast<fftw_complex*>(complex_local.data()),
                          reinterpret_cast<fftw_complex*>(work_local.data()));
@@ -514,7 +515,7 @@ void FftwFFT<T, DIM>::forward(T *rdata, double *cdata)
             std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(double));
             fftw_execute_dft_r2c(plan_forward_, work_local.data(),
                                  reinterpret_cast<fftw_complex*>(complex_local.data()));
-            std::memcpy(cdata, complex_local.data(), total_complex_grid_ * sizeof(std::complex<double>));
+            std::copy_n(complex_local.data(), total_complex_grid_, reinterpret_cast<std::complex<double>*>(cdata));
         }
         else
         {
@@ -525,11 +526,11 @@ void FftwFFT<T, DIM>::forward(T *rdata, double *cdata)
                 complex_local.resize(total_complex_grid_);
 
             // c2c: copy to local buffer, execute with new-array interface, copy output
-            std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(std::complex<double>));
+            std::copy_n(rdata, total_grid_, reinterpret_cast<std::complex<double>*>(work_local.data()));
             fftw_execute_dft(plan_forward_,
                              reinterpret_cast<fftw_complex*>(work_local.data()),
                              reinterpret_cast<fftw_complex*>(complex_local.data()));
-            std::memcpy(cdata, complex_local.data(), total_complex_grid_ * sizeof(std::complex<double>));
+            std::copy_n(complex_local.data(), total_complex_grid_, reinterpret_cast<std::complex<double>*>(cdata));
         }
     }
     else
@@ -607,7 +608,7 @@ void FftwFFT<T, DIM>::backward(double *cdata, T *rdata)
                 complex_local.resize(total_complex_grid_);
 
             // c2r: copy input to local buffer (preserving original), execute, copy with scaling
-            std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+            std::copy_n(reinterpret_cast<const std::complex<double>*>(cdata), total_complex_grid_, complex_local.data());
             fftw_execute_dft_c2r(plan_backward_,
                                  reinterpret_cast<fftw_complex*>(complex_local.data()),
                                  work_local.data());
@@ -623,7 +624,7 @@ void FftwFFT<T, DIM>::backward(double *cdata, T *rdata)
                 complex_local.resize(total_complex_grid_);
 
             // c2c: copy input to local buffer, execute, copy with scaling
-            std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+            std::copy_n(reinterpret_cast<const std::complex<double>*>(cdata), total_complex_grid_, complex_local.data());
             fftw_execute_dft(plan_backward_,
                              reinterpret_cast<fftw_complex*>(complex_local.data()),
                              reinterpret_cast<fftw_complex*>(work_local.data()));

@@ -43,6 +43,7 @@
 #include "CudaCommon.h"
 #include "CudaSolver.h"
 #include "Scheduler.h"
+#include "CudaComputationCommon.h"
 
 /**
  * @class CudaComputationReduceMemoryBase
@@ -73,21 +74,14 @@
  * - check_total_partition(): Different validation logic
  */
 template <typename T>
-class CudaComputationReduceMemoryBase : public PropagatorComputation<T>
+class CudaComputationReduceMemoryBase : public CudaComputationCommon<T>
 {
 protected:
-    CudaSolver<T> *propagator_solver;  ///< PDE solver
-    Scheduler *sc;                      ///< Propagator execution scheduler
-    int n_streams;                      ///< Number of parallel streams
-
-    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
     /// @name Minimal GPU Workspace
     /// @{
     CuDeviceData<T> *d_q_one[MAX_STREAMS][2];              ///< Current/next propagator
     CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2]; ///< Sub-dependency workspace
-    CuDeviceData<T> *d_q_unity;                            ///< Unity array for initialization
-    double *d_q_mask;                                       ///< Mask for impenetrable regions
     /// @}
 
     /// @name Recalculation Workspace
@@ -140,13 +134,6 @@ protected:
      */
     std::map<std::tuple<std::string, int>, T *> propagator_at_check_point;
 
-    #ifndef NDEBUG
-    /**
-     * @brief Debug: track which propagator steps are computed.
-     */
-    std::map<std::string, bool *> propagator_finished;
-    #endif
-
     /**
      * @brief Block concentration fields in pinned host memory.
      *
@@ -173,25 +160,8 @@ public:
     CudaComputationReduceMemoryBase(ComputationBox<T>* cb, Molecules *molecules,
                                     PropagatorComputationOptimizer* propagator_computation_optimizer);
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CudaComputationReduceMemoryBase() {}
-
-    /**
-     * @brief Update solver for new box dimensions.
-     */
-    void update_laplacian_operator() override;
-
-    /**
-     * @brief Force off-diagonal stress computation; forwarded to the solver.
-     */
-    void set_force_off_diagonal_stress(bool force) override
-    {
-        PropagatorComputation<T>::set_force_off_diagonal_stress(force);
-        if (propagator_solver != nullptr)
-            propagator_solver->set_force_off_diagonal_stress(force);
-    }
 
     /**
      * @brief Compute all statistics.
@@ -248,14 +218,6 @@ public:
      * @param phi     Output array (size n_grid * n_blocks)
      */
     void get_block_concentration(int polymer, T *phi) override;
-
-    /**
-     * @brief Get solvent partition function.
-     *
-     * @param s Solvent index
-     * @return Solvent partition function
-     */
-    T get_solvent_partition(int s) override;
 
     /**
      * @brief Get solvent concentration field.

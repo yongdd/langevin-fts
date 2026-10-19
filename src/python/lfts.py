@@ -12,6 +12,7 @@ from .compressor import LR, LRAM
 from .propagator_solver import PropagatorSolver
 from .validation import validate_lfts_params, validate_runtime_state, ValidationError
 from .system_spec import parse_system
+from .simulation_options import LftsOptions
 from .utils import (
     create_monomer_color_dict,
     draw_polymer_architecture,
@@ -382,8 +383,12 @@ class LFTS:
         # Validate input parameters
         validate_lfts_params(params)
 
+        # Method-specific options (defaults live in simulation_options.py)
+        options = LftsOptions.from_params(params)
+        self.options = options
+
         # Validation runtime config (needed early for compute_concentrations)
-        self.validation_runtime = params.get("validation_runtime", None)
+        self.validation_runtime = options.validation_runtime
         self._partition_checked = False  # Only check partition once
 
         # Shared system definition: grid, chain model, monomers, chi N, polymers, platform
@@ -426,17 +431,17 @@ class LFTS:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            params.get("smearing", None)
+            options.smearing
         )
 
         # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
         # Uses same interface as deep-langevin-fts
-        wtmd_params = params.get("wtmd", None)
+        wtmd_params = options.wtmd
         if wtmd_params is not None:
             self.wtmd = WTMD(
                 nx=list(self.cb.get_nx()),
                 lx=list(self.cb.get_lx()),
-                nbar=params["langevin"]["nbar"],
+                nbar=options.langevin["nbar"],
                 eigenvalues=self.mpt.eigenvalues,
                 real_fields_idx=self.mpt.aux_fields_real_idx,
                 l=wtmd_params.get("ell", 4),
@@ -456,16 +461,16 @@ class LFTS:
             self.wtmd = None
 
         # (C++ class) Fields Relaxation using Anderson Mixing
-        if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
+        if options.compressor["name"] == "am" or options.compressor["name"] == "lram":
             am = self.prop_solver.create_anderson_mixing(
                 len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
-                params["compressor"]["max_hist"],                          # maximum number of history
-                params["compressor"]["start_error"],                       # when switch to AM from simple mixing
-                params["compressor"]["mix_min"],                           # minimum mixing rate of simple mixing
-                params["compressor"]["mix_init"])                          # initial mixing rate of simple mixing
+                options.compressor["max_hist"],                          # maximum number of history
+                options.compressor["start_error"],                       # when switch to AM from simple mixing
+                options.compressor["mix_min"],                           # minimum mixing rate of simple mixing
+                options.compressor["mix_init"])                          # initial mixing rate of simple mixing
 
         # Fields Relaxation using Linear Response Method
-        if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
+        if options.compressor["name"] == "lr" or options.compressor["name"] == "lram":
             if I != 1:
                 raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
 
@@ -489,15 +494,15 @@ class LFTS:
 
             lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric)
 
-        if params["compressor"]["name"] == "am":
+        if options.compressor["name"] == "am":
             self.compressor = am
-        elif params["compressor"]["name"] == "lr":
+        elif options.compressor["name"] == "lr":
             self.compressor = lr
-        elif params["compressor"]["name"] == "lram":
+        elif options.compressor["name"] == "lram":
             self.compressor = LRAM(lr, am)            
 
         # Standard deviation of normal noise of Langevin dynamics
-        langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
+        langevin_sigma = calculate_sigma(options.langevin["nbar"], options.langevin["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
@@ -535,7 +540,7 @@ class LFTS:
 
         self.prop_solver.display_architectures()
 
-        print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
+        print("Invariant Polymerization Index (N_Ref): %d" % (options.langevin["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
@@ -546,12 +551,12 @@ class LFTS:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.langevin = params["langevin"].copy()
+        self.langevin = dict(options.langevin)
         self.langevin.update({"sigma":langevin_sigma})
 
-        self.verbose_level = params["verbose_level"]
-        self.saddle = params["saddle"].copy()
-        self.recording = params["recording"].copy()
+        self.verbose_level = options.verbose_level
+        self.saddle = dict(options.saddle)
+        self.recording = dict(options.recording)
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.

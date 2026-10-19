@@ -267,8 +267,9 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
 
-            std::cout<< "Check total_partition: "<< error << std::endl;
-            if (solver->check_total_partition() == false)
+            const bool partition_ok = solver->check_total_partition();
+            std::cout<< "Check total_partition: "<< (partition_ok ? "ok" : "FAILED") << std::endl;
+            if (!partition_ok)
                 return -1;
 
             solver->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);

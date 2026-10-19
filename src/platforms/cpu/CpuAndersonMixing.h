@@ -80,9 +80,7 @@ public:
     CpuAndersonMixing(int n_var, int max_hist,
         double start_error, double mix_min, double mix_init);
 
-    /**
-     * @brief Destructor. Frees all allocated memory.
-     */
+    /// Destructor. Frees all allocated memory.
     ~CpuAndersonMixing();
 
     /**

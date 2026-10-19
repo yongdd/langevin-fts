@@ -68,9 +68,7 @@ public:
                       std::vector<double> angles, const double* mask=nullptr)
         : ComputationBox<T>(nx, lx, bc, angles, mask) {};
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CpuComputationBox() {};
 };
 #endif

@@ -42,6 +42,7 @@
 #include "PropagatorComputation.h"
 #include "CpuSolver.h"
 #include "Scheduler.h"
+#include "CpuComputationCommon.h"
 
 /**
  * @class CpuComputationReduceMemoryBase
@@ -72,13 +73,10 @@
  * - check_total_partition(): Different validation logic
  */
 template <typename T>
-class CpuComputationReduceMemoryBase : public PropagatorComputation<T>
+class CpuComputationReduceMemoryBase : public CpuComputationCommon<T>
 {
 protected:
-    CpuSolver<T> *propagator_solver;  ///< Solver for diffusion equation
     std::string method;                ///< Solver method ("pseudospectral" or "realspace")
-    Scheduler *sc;                     ///< Propagator computation scheduler
-    int n_streams;                     ///< Number of parallel streams (always 1 for reduce memory)
 
     /**
      * @brief Total sum of segments across all propagators.
@@ -127,28 +125,6 @@ protected:
      */
     std::map<std::tuple<std::string, int>, T *> propagator_at_check_point;
 
-    #ifndef NDEBUG
-    /**
-     * @brief Debug: track which propagator steps are computed.
-     */
-    std::map<std::string, bool *> propagator_finished;
-    #endif
-
-    /**
-     * @brief Block concentration fields.
-     *
-     * Key: (polymer_id, key_left, key_right) with key_left <= key_right
-     * Value: Concentration array (size n_grid)
-     */
-    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
-
-    /**
-     * @brief Solvent concentration fields.
-     *
-     * One array per solvent species.
-     */
-    std::vector<T *> phi_solvent;
-
 public:
     /**
      * @brief Construct CPU reduce-memory computation base.
@@ -160,25 +136,8 @@ public:
     CpuComputationReduceMemoryBase(ComputationBox<T>* cb, Molecules *molecules,
                                    PropagatorComputationOptimizer* propagator_computation_optimizer);
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CpuComputationReduceMemoryBase() {}
-
-    /**
-     * @brief Update solver for new box dimensions.
-     */
-    void update_laplacian_operator() override;
-
-    /**
-     * @brief Force off-diagonal stress computation; forwarded to the solver.
-     */
-    void set_force_off_diagonal_stress(bool force) override
-    {
-        PropagatorComputation<T>::set_force_off_diagonal_stress(force);
-        if (propagator_solver != nullptr)
-            propagator_solver->set_force_off_diagonal_stress(force);
-    }
 
     /**
      * @brief Compute all statistics.
@@ -200,57 +159,6 @@ public:
      * @param u      Ending vertex of the block
      */
     void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
-
-    /**
-     * @brief Get total concentration of a monomer type.
-     *
-     * @param monomer_type Monomer type (e.g., "A")
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-
-    /**
-     * @brief Get concentration of monomer type from a specific polymer.
-     *
-     * @param polymer      Polymer index
-     * @param monomer_type Monomer type
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-
-    /**
-     * @brief Get concentration with fugacity weighting.
-     *
-     * @param fugacity     Chemical activity
-     * @param polymer      Polymer index
-     * @param monomer_type Monomer type
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
-
-    /**
-     * @brief Get block concentration for a polymer.
-     *
-     * @param polymer Polymer index
-     * @param phi     Output array (size n_grid * n_blocks)
-     */
-    void get_block_concentration(int polymer, T *phi) override;
-
-    /**
-     * @brief Get solvent partition function.
-     *
-     * @param s Solvent index
-     * @return Solvent partition function
-     */
-    T get_solvent_partition(int s) override;
-
-    /**
-     * @brief Get solvent concentration field.
-     *
-     * @param s   Solvent index
-     * @param phi Output concentration array
-     */
-    void get_solvent_concentration(int s, T *phi) override;
 };
 
 #endif

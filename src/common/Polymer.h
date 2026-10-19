@@ -222,9 +222,7 @@ public:
         std::vector<BlockInput> block_inputs,
         std::map<int, std::string> chain_end_to_q_init={});
 
-    /**
-     * @brief Destructor.
-     */
+    /// Destructor.
     ~Polymer() {};
 
     /**

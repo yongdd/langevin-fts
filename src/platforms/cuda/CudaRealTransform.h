@@ -41,30 +41,22 @@ enum CudaTransformType {
     CUDA_DST_4 = 7    // FFTW_RODFT11: DST-IV
 };
 
-/**
- * @brief Check if transform type is DCT
- */
+/// Check if transform type is DCT
 inline bool isDCT(CudaTransformType type) {
     return type <= CUDA_DCT_4;
 }
 
-/**
- * @brief Check if transform type is DST
- */
+/// Check if transform type is DST
 inline bool isDST(CudaTransformType type) {
     return type >= CUDA_DST_1;
 }
 
-/**
- * @brief Check if transform type is Type-1 (special handling required)
- */
+/// Check if transform type is Type-1 (special handling required)
 inline bool isType1(CudaTransformType type) {
     return type == CUDA_DCT_1 || type == CUDA_DST_1;
 }
 
-/**
- * @brief Get the name string for a transform type
- */
+/// Get the name string for a transform type
 inline const char* getTransformName(CudaTransformType type) {
     switch (type) {
         case CUDA_DCT_1: return "DCT-1";
@@ -124,24 +116,16 @@ public:
     void execute(double* d_data);
     void execute(double* d_data, cudaStream_t stream);
 
-    /**
-     * @brief Set CUDA stream for execution.
-     */
+    /// Set CUDA stream for execution.
     void set_stream(cudaStream_t stream);
 
-    /**
-     * @brief Get the input/output size.
-     */
+    /// Get the input/output size.
     int get_size() const;
 
-    /**
-     * @brief Get transform type.
-     */
+    /// Get transform type.
     CudaTransformType get_type() const { return type_; }
 
-    /**
-     * @brief Get normalization factor for round-trip.
-     */
+    /// Get normalization factor for round-trip.
     double get_normalization() const;
 };
 
@@ -243,29 +227,19 @@ public:
     void execute(double* d_data);
     void execute(double* d_data, cudaStream_t stream);
 
-    /**
-     * @brief Set CUDA stream for execution.
-     */
+    /// Set CUDA stream for execution.
     void set_stream(cudaStream_t stream);
 
-    /**
-     * @brief Get the input/output size.
-     */
+    /// Get the input/output size.
     int get_size() const { return M_; }
 
-    /**
-     * @brief Get dimensions for this transform.
-     */
+    /// Get dimensions for this transform.
     void get_dims(int& nx, int& ny) const;
 
-    /**
-     * @brief Get transform types for each dimension.
-     */
+    /// Get transform types for each dimension.
     void get_types(CudaTransformType& type_x, CudaTransformType& type_y) const;
 
-    /**
-     * @brief Get normalization factor for round-trip.
-     */
+    /// Get normalization factor for round-trip.
     double get_normalization() const;
 };
 
@@ -409,29 +383,19 @@ public:
     void execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz);
     void execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz, cudaStream_t stream);
 
-    /**
-     * @brief Set CUDA stream for execution.
-     */
+    /// Set CUDA stream for execution.
     void set_stream(cudaStream_t stream);
 
-    /**
-     * @brief Get the input/output size.
-     */
+    /// Get the input/output size.
     int get_size() const { return M_; }
 
-    /**
-     * @brief Get dimensions for this transform.
-     */
+    /// Get dimensions for this transform.
     void get_dims(int& nx, int& ny, int& nz) const;
 
-    /**
-     * @brief Get transform types for each dimension.
-     */
+    /// Get transform types for each dimension.
     void get_types(CudaTransformType& type_x, CudaTransformType& type_y, CudaTransformType& type_z) const;
 
-    /**
-     * @brief Get normalization factor for round-trip.
-     */
+    /// Get normalization factor for round-trip.
     double get_normalization() const;
 };
 

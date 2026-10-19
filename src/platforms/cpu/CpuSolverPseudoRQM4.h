@@ -115,9 +115,7 @@ public:
      */
     CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::FFTW);
 
-    /**
-     * @brief Destructor. Frees exp_dw arrays.
-     */
+    /// Destructor. Frees exp_dw arrays.
     ~CpuSolverPseudoRQM4();
 
     /**

@@ -110,9 +110,7 @@ public:
      */
     CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::FFTW);
 
-    /**
-     * @brief Destructor. Frees exp_dw arrays.
-     */
+    /// Destructor. Frees exp_dw arrays.
     ~CpuSolverPseudoRK2();
 
     /**

@@ -287,6 +287,7 @@ Iterative solver for SCFT equations. Accelerates convergence by mixing field his
   - PCG64 random number generator
 
 - `src/python/system_spec.py`: Shared configuration layer. `parse_system(params)` validates the grid, chain model, monomer types, χN and polymer definitions once and returns an immutable `SystemSpec`; SCFT, LFTS and CLFTS build their `PropagatorSolver` from it via `PropagatorSolver.from_spec()`.
+- `src/python/simulation_options.py`: Method-specific options. `ScftOptions`, `LftsOptions` and `ClftsOptions` are read once in each constructor via `from_params(params)` and kept as `self.options`; the defaults live there.
 
 - `src/python/polymer_field_theory.py`: Multi-monomer field theory transformations
   - Converts between monomer potential fields and auxiliary fields
@@ -568,7 +569,9 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 - Laplacian operator updates (`update_laplacian_operator`)
 - Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
 
-The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the space-group/CrysFFT setup, `update_laplacian_operator`, the shared `update_dw_impl` and the stress reduction buffers. Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
+The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the cuFFT plans and DCT/DST objects (`fft_forward`/`fft_backward`/`fft_`), the space-group/CrysFFT setup (index maps from the platform-independent `CrysFFTBasisMapping.h`), `update_laplacian_operator`, the shared `update_dw_impl` and the stress reduction buffers. Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
+
+**Computation Class Hierarchy**: `CpuComputationCommon<T>` / `CudaComputationCommon<T>` hold what the full-storage (`*ComputationBase`) and reduce-memory (`*ComputationReduceMemoryBase`) variants share (solver and scheduler handles, partition getters, and on the CPU the concentration getters). Propagator storage and the `compute_*` algorithms stay in the variant classes on purpose, so each variant can be changed independently.
 
 Derived classes implement chain-model-specific behavior:
 - `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)

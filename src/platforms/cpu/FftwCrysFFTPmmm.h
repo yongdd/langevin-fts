@@ -34,9 +34,7 @@ private:
     fftw_plan plan_forward_;    ///< Forward DCT-II (REDFT10)
     fftw_plan plan_backward_;   ///< Backward DCT-III (REDFT01)
 
-    /**
-     * @brief Thread-local buffer structure for FFTW.
-     */
+    /// Thread-local buffer structure for FFTW.
     struct AlignedDeleter {
         void operator()(double* ptr) const { if (ptr) fftw_free(ptr); }
     };
@@ -47,9 +45,7 @@ private:
         int size = 0;
     };
 
-    /**
-     * @brief Get thread-local buffers.
-     */
+    /// Get thread-local buffers.
     std::pair<double*, double*> get_thread_local_buffers()
     {
         thread_local ThreadBuffers buffers;
@@ -66,18 +62,14 @@ private:
         return {buffers.io.get(), buffers.temp.get()};
     }
 
-    /**
-     * @brief Apply DCT-II forward (FFTW REDFT10).
-     */
+    /// Apply DCT-II forward (FFTW REDFT10).
     void dct_forward_impl(double* io, double* temp)
     {
         fftw_execute_r2r(plan_forward_, io, temp);
         std::memcpy(io, temp, sizeof(double) * M_physical_);
     }
 
-    /**
-     * @brief Apply DCT-III backward (FFTW REDFT01).
-     */
+    /// Apply DCT-III backward (FFTW REDFT01).
     void dct_backward_impl(double* io, double* temp)
     {
         fftw_execute_r2r(plan_backward_, io, temp);
@@ -97,9 +89,7 @@ public:
         std::array<double, 6> cell_para,
         std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0});
 
-    /**
-     * @brief Destructor. Frees FFTW plans and buffers.
-     */
+    /// Destructor. Frees FFTW plans and buffers.
     ~FftwCrysFFTPmmm();
 };
 

@@ -144,9 +144,7 @@ public:
      */
     CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW, SpaceGroup* space_group = nullptr);
 
-    /**
-     * @brief Destructor. Frees checkpoints and workspace.
-     */
+    /// Destructor. Frees checkpoints and workspace.
     ~CpuComputationReduceMemoryContinuous();
 
     /**
@@ -168,24 +166,13 @@ public:
      */
     void compute_concentrations() override;
 
-    /**
-     * @brief Compute stress (requires recomputation).
-     */
+    /// Compute stress (requires recomputation).
     void compute_stress() override;
 
-    /**
-     * @brief Get partition function.
-     */
-    T get_total_partition(int polymer) override;
-
-    /**
-     * @brief Get propagator (requires recomputation).
-     */
+    /// Get propagator (requires recomputation).
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    /**
-     * @brief Validate partition function.
-     */
+    /// Validate partition function.
     bool check_total_partition() override;
 };
 #endif

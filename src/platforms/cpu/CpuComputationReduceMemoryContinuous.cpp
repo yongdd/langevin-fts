@@ -138,6 +138,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             }
 
             #ifndef NDEBUG
+            const int max_n_segment = item.second.max_n_segment;
             // +1 because later debug checks index n+1 up to max_n_segment
             this->propagator_finished[key] = new bool[max_n_segment + 1];
             for(int i=0; i<=max_n_segment; i++)
@@ -952,18 +953,6 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                     phi[i] += simpson_rule_coeff[n] * q_left_n[i] * q_right_curr[i];
             }
         }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-T CpuComputationReduceMemoryContinuous<T>::get_total_partition(int polymer)
-{
-    try
-    {
-        return this->single_polymer_partitions[polymer];
     }
     catch(std::exception& exc)
     {

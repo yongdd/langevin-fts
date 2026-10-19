@@ -166,9 +166,7 @@ public:
      */
     PropagatorComputation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~PropagatorComputation();
 
     /**

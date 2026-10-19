@@ -3762,6 +3762,67 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
     set_stream(stream_);
 }
 
+//------------------------------------------------------------------------------
+// Per-axis cuFFT plan for the DCT/DST types 2-4 and the generic fallback.
+//
+// All axes use the same plan layout: the transform of length N (or fft_size for
+// the fallback) is batched `batch` times over contiguous rows. Only the DCT-3
+// input layout differs per axis (the X axis of the 3D/2D transforms reads the
+// strided layout produced by the preceding axes), so its input stride and
+// distance are passed in.
+//------------------------------------------------------------------------------
+static void create_axis_plan(
+    cufftHandle& plan, CudaTransformType type, int N, int fft_size, int batch,
+    const char* axis, int dct3_istride, int dct3_idist)
+{
+    auto fail = [axis](const char* kind, const char* suffix) {
+        throw std::runtime_error(std::string("Failed to create cuFFT ") + kind + " plan for " + axis + suffix);
+    };
+
+    if (usesZ2Z(type)) {
+        if (cufftPlan1d(&plan, fft_size, CUFFT_Z2Z, batch) != CUFFT_SUCCESS)
+            fail("Z2Z", "");
+    } else if (type == CUDA_DCT_2) {
+        int n[1] = {N};
+        int inembed[1] = {N / 2 + 1};
+        int onembed[1] = {N};
+        if (cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
+                          onembed, 1, N, CUFFT_Z2D, batch) != CUFFT_SUCCESS)
+            fail("Z2D", "");
+    } else if (type == CUDA_DCT_3) {
+        int n[1] = {N};
+        int inembed[1] = {N};
+        int onembed[1] = {N / 2 + 1};
+        if (cufftPlanMany(&plan, 1, n, inembed, dct3_istride, dct3_idist,
+                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+            fail("D2Z", "");
+    } else if (type == CUDA_DST_2) {
+        // DST-2: Z2D FFT of size N - FCT/FST style (Makhoul 1980)
+        int n[1] = {N};
+        int inembed[1] = {N / 2 + 1};
+        int onembed[1] = {N};
+        if (cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
+                          onembed, 1, N, CUFFT_Z2D, batch) != CUFFT_SUCCESS)
+            fail("Z2D", " (DST-2)");
+    } else if (type == CUDA_DST_3) {
+        // DST-3: D2Z FFT of size N - FCT/FST style (Makhoul 1980) with a padded
+        // buffer of N+2 elements per row (in-place, interleaved output)
+        int n[1] = {N};
+        int inembed[1] = {N + 2};
+        int onembed[1] = {N / 2 + 1};
+        if (cufftPlanMany(&plan, 1, n, inembed, 1, N + 2,
+                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+            fail("D2Z", " (DST-3)");
+    } else {
+        int n[1] = {fft_size};
+        int inembed[1] = {fft_size};
+        int onembed[1] = {fft_size / 2 + 1};
+        if (cufftPlanMany(&plan, 1, n, inembed, 1, fft_size,
+                          onembed, 1, fft_size / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+            fail("D2Z", "");
+    }
+}
+
 void CudaRealTransform2D::init()
 {
     M_ = Nx_ * Ny_;
@@ -3789,28 +3850,8 @@ void CudaRealTransform2D::init()
     gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
     gpu_error_check(cudaMalloc(&d_x1_, std::max(complex_size_y, complex_size_x)));
 
-    // Create FFT plans for Y dimension
-    if (z2z_y) {
-        if (cufftPlan1d(&plan_y_, fftSize_y, CUFFT_Z2Z, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan for Y");
-        }
-    } else if (type_y_ == CUDA_DCT_2) {
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_ / 2 + 1};
-        int onembed[1] = {Ny_};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_ / 2 + 1,
-                          onembed, 1, Ny_, CUFFT_Z2D, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Y");
-        }
-    } else if (type_y_ == CUDA_DCT_3) {
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_};
-        int onembed[1] = {Ny_ / 2 + 1};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_,
-                          onembed, 1, Ny_ / 2 + 1, CUFFT_D2Z, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y");
-        }
-    } else if (type_y_ == CUDA_DCT_1) {
+    // Whole-plane DCT-1 / DST-1 use a single 2D FFT with mirror/odd extension
+    if (type_y_ == CUDA_DCT_1) {
         // DCT-1 2D
         M_padded_ = 2 * Nx_ * 2 * Ny_;
         cudaFree(d_work_);
@@ -3823,7 +3864,8 @@ void CudaRealTransform2D::init()
         plan_x_ = 0;
         initialized_ = true;
         return;
-    } else if (type_y_ == CUDA_DST_1) {
+    }
+    if (type_y_ == CUDA_DST_1) {
         // DST-1 2D
         int ext_Nx = 2 * (Nx_ + 1);
         int ext_Ny = 2 * (Ny_ + 1);
@@ -3838,92 +3880,12 @@ void CudaRealTransform2D::init()
         plan_x_ = 0;
         initialized_ = true;
         return;
-    } else if (type_y_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT (size Ny) - FCT/FST style (Makhoul 1980)
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_ / 2 + 1};
-        int onembed[1] = {Ny_};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_ / 2 + 1,
-                          onembed, 1, Ny_, CUFFT_Z2D, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Y (DST-2)");
-        }
-    } else if (type_y_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT (size Ny) with padded buffer - FCT/FST style (Makhoul 1980)
-        // Buffer layout: [Nx][Ny+2], FFT operates on first Ny elements of each row
-        int stride = Ny_ + 2;
-        int n[1] = {Ny_};
-        int inembed[1] = {stride};
-        int onembed[1] = {stride / 2};  // Output is in-place, interleaved
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, stride,
-                          onembed, 1, stride / 2, CUFFT_D2Z, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y (DST-3)");
-        }
-    } else {
-        // Fallback
-        int n[1] = {fftSize_y};
-        int inembed[1] = {fftSize_y};
-        int onembed[1] = {fftSize_y / 2 + 1};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, fftSize_y,
-                          onembed, 1, fftSize_y / 2 + 1, CUFFT_D2Z, Nx_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y");
-        }
     }
 
-    // Create FFT plans for X dimension
-    if (z2z_x) {
-        if (cufftPlan1d(&plan_x_, fftSize_x, CUFFT_Z2Z, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan for X");
-        }
-    } else if (type_x_ == CUDA_DCT_2) {
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_ / 2 + 1};
-        int onembed[1] = {Nx_};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_ / 2 + 1,
-                          onembed, 1, Nx_, CUFFT_Z2D, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for X");
-        }
-    } else if (type_x_ == CUDA_DCT_3) {
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_};
-        int onembed[1] = {Nx_ / 2 + 1};
-        int istride = Ny_;
-        int idist = 1;
-        int ostride = 1;
-        int odist = Nx_ / 2 + 1;
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, istride, idist,
-                          onembed, ostride, odist, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
-        }
-    } else if (type_x_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT (size Nx) - FCT/FST style (Makhoul 1980)
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_ / 2 + 1};
-        int onembed[1] = {Nx_};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_ / 2 + 1,
-                          onembed, 1, Nx_, CUFFT_Z2D, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for X (DST-2)");
-        }
-    } else if (type_x_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT (size Nx) with padded buffer - FCT/FST style (Makhoul 1980)
-        // Buffer layout: [Ny][Nx+2], FFT operates on first Nx elements of each row
-        int stride = Nx_ + 2;
-        int n[1] = {Nx_};
-        int inembed[1] = {stride};
-        int onembed[1] = {stride / 2};  // Output is in-place, interleaved
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, stride,
-                          onembed, 1, stride / 2, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X (DST-3)");
-        }
-    } else {
-        // Fallback
-        int n[1] = {fftSize_x};
-        int inembed[1] = {fftSize_x};
-        int onembed[1] = {fftSize_x / 2 + 1};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, fftSize_x,
-                          onembed, 1, fftSize_x / 2 + 1, CUFFT_D2Z, Ny_) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
-        }
-    }
+    // Per-axis plans. The X axis DCT-3 reads the y-major layout directly,
+    // hence its strided input (istride = Ny, idist = 1).
+    create_axis_plan(plan_y_, type_y_, Ny_, fftSize_y, Nx_, "Y", 1, Ny_);
+    create_axis_plan(plan_x_, type_x_, Nx_, fftSize_x, Ny_, "X", Ny_, 1);
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
@@ -4411,165 +4373,11 @@ void CudaRealTransform3D::init()
     gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
     gpu_error_check(cudaMalloc(&d_x1_, max_complex));
 
-    // Create FFT plans for Z dimension (batch of Nx*Ny)
-    int batch_z = Nx_ * Ny_;
-    if (z2z_z) {
-        if (cufftPlan1d(&plan_z_, fftSize_z, CUFFT_Z2Z, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan for Z");
-        }
-    } else if (type_z_ == CUDA_DCT_2) {
-        int n[1] = {Nz_};
-        int inembed[1] = {Nz_ / 2 + 1};
-        int onembed[1] = {Nz_};
-        if (cufftPlanMany(&plan_z_, 1, n, inembed, 1, Nz_ / 2 + 1,
-                          onembed, 1, Nz_, CUFFT_Z2D, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Z");
-        }
-    } else if (type_z_ == CUDA_DCT_3) {
-        int n[1] = {Nz_};
-        int inembed[1] = {Nz_};
-        int onembed[1] = {Nz_ / 2 + 1};
-        if (cufftPlanMany(&plan_z_, 1, n, inembed, 1, Nz_,
-                          onembed, 1, Nz_ / 2 + 1, CUFFT_D2Z, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Z");
-        }
-    } else if (type_z_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT of size Nz - FCT/FST style (Makhoul 1980)
-        int n[1] = {Nz_};
-        int inembed[1] = {Nz_ / 2 + 1};
-        int onembed[1] = {Nz_};
-        if (cufftPlanMany(&plan_z_, 1, n, inembed, 1, Nz_ / 2 + 1,
-                          onembed, 1, Nz_, CUFFT_Z2D, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Z (DST-2)");
-        }
-    } else if (type_z_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT of size Nz - FCT/FST style (Makhoul 1980) with padded buffer (N+2 elements)
-        int n[1] = {Nz_};
-        int inembed[1] = {Nz_ + 2};
-        int onembed[1] = {Nz_ / 2 + 1};
-        if (cufftPlanMany(&plan_z_, 1, n, inembed, 1, Nz_ + 2,
-                          onembed, 1, Nz_ / 2 + 1, CUFFT_D2Z, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Z (DST-3)");
-        }
-    } else {
-        int n[1] = {fftSize_z};
-        int inembed[1] = {fftSize_z};
-        int onembed[1] = {fftSize_z / 2 + 1};
-        if (cufftPlanMany(&plan_z_, 1, n, inembed, 1, fftSize_z,
-                          onembed, 1, fftSize_z / 2 + 1, CUFFT_D2Z, batch_z) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Z");
-        }
-    }
-
-    // Create FFT plans for Y dimension (batch of Nx*Nz)
-    int batch_y = Nx_ * Nz_;
-    if (z2z_y) {
-        if (cufftPlan1d(&plan_y_, fftSize_y, CUFFT_Z2Z, batch_y) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan for Y");
-        }
-    } else if (type_y_ == CUDA_DCT_2) {
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_ / 2 + 1};
-        int onembed[1] = {Ny_};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_ / 2 + 1,
-                          onembed, 1, Ny_, CUFFT_Z2D, batch_y) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Y");
-        }
-    } else if (type_y_ == CUDA_DCT_3) {
-        // Contiguous Y transforms after transpose: batch over (Nx * Nz)
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_};
-        int onembed[1] = {Ny_ / 2 + 1};
-        int istride = 1;
-        int idist = Ny_;
-        int ostride = 1;
-        int odist = Ny_ / 2 + 1;
-        int batch = Nx_ * Nz_;
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, istride, idist,
-                          onembed, ostride, odist, CUFFT_D2Z, batch) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y");
-        }
-    } else if (type_y_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT of size Ny - FCT/FST style (Makhoul 1980)
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_ / 2 + 1};
-        int onembed[1] = {Ny_};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_ / 2 + 1,
-                          onembed, 1, Ny_, CUFFT_Z2D, batch_y) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for Y (DST-2)");
-        }
-    } else if (type_y_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT of size Ny - FCT/FST style (Makhoul 1980) with padded buffer (N+2 elements)
-        int n[1] = {Ny_};
-        int inembed[1] = {Ny_ + 2};
-        int onembed[1] = {Ny_ / 2 + 1};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, Ny_ + 2,
-                          onembed, 1, Ny_ / 2 + 1, CUFFT_D2Z, batch_y) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y (DST-3)");
-        }
-    } else {
-        int n[1] = {fftSize_y};
-        int inembed[1] = {fftSize_y};
-        int onembed[1] = {fftSize_y / 2 + 1};
-        if (cufftPlanMany(&plan_y_, 1, n, inembed, 1, fftSize_y,
-                          onembed, 1, fftSize_y / 2 + 1, CUFFT_D2Z, batch_y) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for Y");
-        }
-    }
-
-    // Create FFT plans for X dimension (batch of Ny*Nz)
-    int batch_x = Ny_ * Nz_;
-    if (z2z_x) {
-        if (cufftPlan1d(&plan_x_, fftSize_x, CUFFT_Z2Z, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan for X");
-        }
-    } else if (type_x_ == CUDA_DCT_2) {
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_ / 2 + 1};
-        int onembed[1] = {Nx_};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_ / 2 + 1,
-                          onembed, 1, Nx_, CUFFT_Z2D, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for X");
-        }
-    } else if (type_x_ == CUDA_DCT_3) {
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_};
-        int onembed[1] = {Nx_ / 2 + 1};
-        int istride = Ny_ * Nz_;
-        int idist = 1;
-        int ostride = 1;
-        int odist = Nx_ / 2 + 1;
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, istride, idist,
-                          onembed, ostride, odist, CUFFT_D2Z, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
-        }
-    } else if (type_x_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT of size Nx - FCT/FST style (Makhoul 1980)
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_ / 2 + 1};
-        int onembed[1] = {Nx_};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_ / 2 + 1,
-                          onembed, 1, Nx_, CUFFT_Z2D, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for X (DST-2)");
-        }
-    } else if (type_x_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT of size Nx - FCT/FST style (Makhoul 1980) with padded buffer (N+2 elements)
-        int n[1] = {Nx_};
-        int inembed[1] = {Nx_ + 2};
-        int onembed[1] = {Nx_ / 2 + 1};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, Nx_ + 2,
-                          onembed, 1, Nx_ / 2 + 1, CUFFT_D2Z, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X (DST-3)");
-        }
-    } else {
-        int n[1] = {fftSize_x};
-        int inembed[1] = {fftSize_x};
-        int onembed[1] = {fftSize_x / 2 + 1};
-        if (cufftPlanMany(&plan_x_, 1, n, inembed, 1, fftSize_x,
-                          onembed, 1, fftSize_x / 2 + 1, CUFFT_D2Z, batch_x) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for X");
-        }
-    }
+    // Per-axis plans. The X axis DCT-3 reads the (y,z)-major layout directly,
+    // hence its strided input (istride = Ny*Nz, idist = 1).
+    create_axis_plan(plan_z_, type_z_, Nz_, fftSize_z, Nx_ * Ny_, "Z", 1, Nz_);
+    create_axis_plan(plan_y_, type_y_, Ny_, fftSize_y, Nx_ * Nz_, "Y", 1, Ny_);
+    create_axis_plan(plan_x_, type_x_, Nx_, fftSize_x, Ny_ * Nz_, "X", Ny_ * Nz_, 1);
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)

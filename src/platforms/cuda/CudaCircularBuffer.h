@@ -74,9 +74,7 @@ public:
      */
     CudaCircularBuffer(int length, int width);
 
-    /**
-     * @brief Destructor. Frees all GPU memory.
-     */
+    /// Destructor. Frees all GPU memory.
     ~CudaCircularBuffer();
 
     /**

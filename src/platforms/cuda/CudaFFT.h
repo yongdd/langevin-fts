@@ -77,14 +77,10 @@ private:
     void* rt_forward_;                           ///< Forward transform (DCT-2/DST-2)
     void* rt_backward_;                          ///< Backward transform (DCT-3/DST-3)
 
-    /**
-     * @brief Initialize cuFFT plans for periodic BC.
-     */
+    /// Initialize cuFFT plans for periodic BC.
     void initPeriodicFFT();
 
-    /**
-     * @brief Initialize CudaRealTransform for non-periodic BC.
-     */
+    /// Initialize CudaRealTransform for non-periodic BC.
     void initNonPeriodicFFT();
 
 public:
@@ -103,29 +99,19 @@ public:
      */
     CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc);
 
-    /**
-     * @brief Destructor. Frees GPU memory and cuFFT plans.
-     */
+    /// Destructor. Frees GPU memory and cuFFT plans.
     ~CudaFFT();
 
-    /**
-     * @brief Check if all boundaries are periodic.
-     */
+    /// Check if all boundaries are periodic.
     bool is_all_periodic() const { return is_all_periodic_; }
 
-    /**
-     * @brief Get total complex grid size.
-     */
+    /// Get total complex grid size.
     int get_total_complex_grid() const { return total_complex_grid_; }
 
-    /**
-     * @brief Get total real grid size.
-     */
+    /// Get total real grid size.
     int get_total_grid() const { return total_grid_; }
 
-    /**
-     * @brief Get boundary condition for a dimension.
-     */
+    /// Get boundary condition for a dimension.
     BoundaryCondition get_bc(int dim) const { return bc_[dim]; }
 
     /**

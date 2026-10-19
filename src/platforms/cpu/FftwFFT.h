@@ -82,34 +82,22 @@ private:
     double* work_buffer_ = nullptr;                ///< Work buffer for transforms
     fftw_complex* complex_buffer_ = nullptr;       ///< Complex buffer for r2c/c2r
 
-    /**
-     * @brief Initialize FFTW plans for periodic FFT.
-     */
+    /// Initialize FFTW plans for periodic FFT.
     void initPeriodicFFT();
 
-    /**
-     * @brief Initialize FFTW plans for non-periodic BC (DCT/DST).
-     */
+    /// Initialize FFTW plans for non-periodic BC (DCT/DST).
     void initNonPeriodicFFT();
 
-    /**
-     * @brief Get stride information for dimension-by-dimension transform.
-     */
+    /// Get stride information for dimension-by-dimension transform.
     void getStrides(int dim, int& stride, int& num_transforms) const;
 
-    /**
-     * @brief Apply forward transform for one dimension (non-periodic).
-     */
+    /// Apply forward transform for one dimension (non-periodic).
     void applyForward1D(double* data, double* temp, int dim);
 
-    /**
-     * @brief Apply backward transform for one dimension (non-periodic).
-     */
+    /// Apply backward transform for one dimension (non-periodic).
     void applyBackward1D(double* data, double* temp, int dim);
 
-    /**
-     * @brief Compute complex grid size based on dimensions and input type.
-     */
+    /// Compute complex grid size based on dimensions and input type.
     void computeComplexGridSize();
 
 public:
@@ -130,9 +118,7 @@ public:
      */
     FftwFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc);
 
-    /**
-     * @brief Destructor. Frees FFTW plans and buffers.
-     */
+    /// Destructor. Frees FFTW plans and buffers.
     ~FftwFFT();
 
     /**

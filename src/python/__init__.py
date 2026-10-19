@@ -6,7 +6,7 @@ try:
     from importlib.metadata import version as _dist_version
     __version__ = _dist_version("polymerfts")
 except Exception:
-    __version__ = "1.0.0"
+    __version__ = "0.10.0"
 
 # Core C++ bindings (re-export all for user convenience)
 from ._core import *
@@ -21,6 +21,7 @@ from .clfts import CLFTS
 from .wtmd import WTMD
 from .validation import ValidationError
 from .system_spec import SystemSpec, GridSpec, ChainSpec, parse_system
+from .simulation_options import ScftOptions, LftsOptions, ClftsOptions
 from .result import SCFTResult, IterationInfo
 from .config import load_config, ConfigError
 

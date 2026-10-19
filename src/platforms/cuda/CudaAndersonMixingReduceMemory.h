@@ -113,14 +113,10 @@ public:
     CudaAndersonMixingReduceMemory(int n_var, int max_hist,
         double start_error, double mix_min, double mix_init);
 
-    /**
-     * @brief Destructor. Frees GPU and pinned memory.
-     */
+    /// Destructor. Frees GPU and pinned memory.
     ~CudaAndersonMixingReduceMemory();
 
-    /**
-     * @brief Reset history.
-     */
+    /// Reset history.
     void reset_count() override;
 
     /**

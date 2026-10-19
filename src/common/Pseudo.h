@@ -187,59 +187,37 @@ protected:
     int total_grid;          ///< Total real grid size
     int total_complex_grid;  ///< Total "complex" grid size
 
-    /**
-     * @brief Update total_complex_grid based on boundary conditions.
-     */
+    /// Update total_complex_grid based on boundary conditions.
     void update_total_complex_grid();
 
-    /**
-     * @brief Recompute Boltzmann factors.
-     */
+    /// Recompute Boltzmann factors.
     void update_boltz_bond();
 
-    /**
-     * @brief Recompute Fourier basis arrays for stress.
-     */
+    /// Recompute Fourier basis arrays for stress.
     void update_weighted_fourier_basis();
 
-    /**
-     * @brief Update negative frequency index mapping.
-     */
+    /// Update negative frequency index mapping.
     void update_negative_frequency_mapping();
 
-    /**
-     * @brief Check if all BCs are periodic.
-     */
+    /// Check if all BCs are periodic.
     bool is_all_periodic() const;
 
-    /**
-     * @brief Update Boltzmann factors for periodic BC (with recip_metric).
-     */
+    /// Update Boltzmann factors for periodic BC (with recip_metric).
     void update_boltz_bond_periodic();
 
-    /**
-     * @brief Update Boltzmann factors for mixed BC.
-     */
+    /// Update Boltzmann factors for mixed BC.
     void update_boltz_bond_mixed();
 
-    /**
-     * @brief Update Boltzmann factors for a specific ds_index (periodic BC).
-     */
+    /// Update Boltzmann factors for a specific ds_index (periodic BC).
     void update_boltz_bond_periodic_for_ds_index(int ds_idx);
 
-    /**
-     * @brief Update Boltzmann factors for a specific ds_index (mixed BC).
-     */
+    /// Update Boltzmann factors for a specific ds_index (mixed BC).
     void update_boltz_bond_mixed_for_ds_index(int ds_idx);
 
-    /**
-     * @brief Update Fourier basis for periodic BC (with cross-terms).
-     */
+    /// Update Fourier basis for periodic BC (with cross-terms).
     void update_weighted_fourier_basis_periodic();
 
-    /**
-     * @brief Update Fourier basis for mixed BC (no cross-terms).
-     */
+    /// Update Fourier basis for mixed BC (no cross-terms).
     void update_weighted_fourier_basis_mixed();
 
 public:
@@ -266,9 +244,7 @@ public:
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~Pseudo();
 
     /**
@@ -317,44 +293,28 @@ public:
      */
     virtual void finalize_ds_values();
 
-    /**
-     * @brief Get x-direction Fourier basis for stress.
-     */
+    /// Get x-direction Fourier basis for stress.
     virtual const double* get_fourier_basis_x();
 
-    /**
-     * @brief Get y-direction Fourier basis for stress.
-     */
+    /// Get y-direction Fourier basis for stress.
     virtual const double* get_fourier_basis_y();
 
-    /**
-     * @brief Get z-direction Fourier basis for stress.
-     */
+    /// Get z-direction Fourier basis for stress.
     virtual const double* get_fourier_basis_z();
 
-    /**
-     * @brief Get xy cross-term Fourier basis for stress.
-     */
+    /// Get xy cross-term Fourier basis for stress.
     virtual const double* get_fourier_basis_xy();
 
-    /**
-     * @brief Get xz cross-term Fourier basis for stress.
-     */
+    /// Get xz cross-term Fourier basis for stress.
     virtual const double* get_fourier_basis_xz();
 
-    /**
-     * @brief Get yz cross-term Fourier basis for stress.
-     */
+    /// Get yz cross-term Fourier basis for stress.
     virtual const double* get_fourier_basis_yz();
 
-    /**
-     * @brief Get negative frequency index mapping.
-     */
+    /// Get negative frequency index mapping.
     virtual const int* get_negative_frequency_mapping();
 
-    /**
-     * @brief Get boundary conditions.
-     */
+    /// Get boundary conditions.
     const std::vector<BoundaryCondition>& get_boundary_conditions() const { return bc; }
 
     /**

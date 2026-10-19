@@ -290,9 +290,7 @@ public:
     ComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
                    std::vector<double> angles, const double* mask=nullptr);
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~ComputationBox();
 
     /**

@@ -213,76 +213,11 @@ class PropagatorSolver:
         self.chain_model = chain_model.lower()
         self.bond_lengths = dict(bond_lengths)
 
-        # Handle numerical method based on chain model
-        if self.chain_model == "discrete":
-            # Discrete chain model has its own solver, numerical_method is not used
-            if numerical_method is not None:
-                print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
-            self.method = "pseudospectral"
-            self.numerical_method = "rqm4"  # Placeholder, not actually used for discrete
-        else:
-            # Continuous chain model: validate and set numerical method
-            if numerical_method is None:
-                numerical_method = "rqm4"
-            else:
-                numerical_method = numerical_method.lower()
+        self.method, self.numerical_method = self._resolve_numerical_method(self.chain_model, numerical_method)
 
-            if numerical_method in self._PSEUDO_METHODS:
-                self.method = "pseudospectral"
-            elif numerical_method in self._REALSPACE_METHODS:
-                self.method = "realspace"
-            else:
-                raise ValueError(
-                    f"Unknown numerical_method '{numerical_method}'. "
-                    f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS}"
-                )
-            self.numerical_method = numerical_method
+        self.platform = self._auto_platform(self.dim) if platform == "auto" else platform
 
-        # Determine platform (mirror scft.py: prefer CPU for 1D, CUDA for
-        # 2D/3D, but only among the platforms actually available in this build)
-        if platform == "auto":
-            avail = _core.PlatformSelector.avail_platforms()
-            cpu_platforms = [p for p in avail if p.startswith("cpu")]
-            if self.dim == 1 and cpu_platforms:
-                platform = cpu_platforms[0]
-            elif "cuda" in avail:
-                platform = "cuda"
-            elif cpu_platforms:
-                platform = cpu_platforms[0]
-            else:
-                raise RuntimeError("No computational platform available in this build.")
-        self.platform = platform
-
-        # Pseudo-spectral non-periodic BC support (verified vs CPU to machine
-        # precision, 1D/2D/3D, continuous and discrete):
-        #   - reflecting (DCT): correct
-        #   - absorbing (DST): correct
-        #   - mixing periodic with non-periodic directions: not supported by the
-        #     spectral transform on either platform
-        bc_lower = [b.lower() for b in self.bc]
-        self._has_non_periodic_bc = any(
-            b in ["reflecting", "absorbing"] for b in bc_lower
-        )
-        has_periodic = any(b == "periodic" for b in bc_lower)
-        if self.method == "pseudospectral" and has_periodic and self._has_non_periodic_bc:
-            # The spectral transform cannot mix periodic and non-periodic
-            # directions on any platform. Do NOT silently switch solvers —
-            # respect the requested numerical_method and fail loudly instead.
-            if self.chain_model == "discrete":
-                raise NotImplementedError(
-                    "Mixing periodic and non-periodic boundary conditions is not "
-                    "supported by the pseudo-spectral transform, and the discrete "
-                    "chain model has no real-space solver. Use uniform boundary "
-                    "conditions (all-periodic, all-reflecting, or all-absorbing)."
-                )
-            raise ValueError(
-                "Mixing periodic and non-periodic boundary conditions is not "
-                "supported by the pseudo-spectral method "
-                f"(requested numerical_method='{self.numerical_method}'). "
-                "Either set numerical_method='cn-adi2' to use the real-space "
-                "solver (continuous chains only), or use uniform boundary "
-                "conditions in all directions."
-            )
+        self._check_boundary_conditions()
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
@@ -327,39 +262,79 @@ class PropagatorSolver:
         self._fields_set = False
         if space_group is not None:
             cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
-            activated = "irreducible"
-
-            preselected = False
-            if hasattr(cpp_sg, "using_m3_physical_basis"):
-                try:
-                    if cpp_sg.using_m3_physical_basis():
-                        activated = "m3-physical"
-                        preselected = True
-                except Exception:
-                    preselected = False
-            if not preselected and hasattr(cpp_sg, "using_pmmm_physical_basis"):
-                try:
-                    if cpp_sg.using_pmmm_physical_basis():
-                        activated = "pmmm-physical"
-                        preselected = True
-                except Exception:
-                    preselected = False
-            if not preselected and hasattr(cpp_sg, "using_z_mirror_physical_basis"):
-                try:
-                    if cpp_sg.using_z_mirror_physical_basis():
-                        activated = "z-mirror-physical"
-                        preselected = True
-                except Exception:
-                    preselected = False
-
-            if not preselected:
-                activated = "irreducible"
-
+            activated = cpp_sg.physical_basis_name() if hasattr(cpp_sg, "physical_basis_name") else "irreducible"
             if activated == "irreducible":
                 print("Space-group basis: irreducible (physical basis not available)")
             else:
-                print(f"Space-group basis: {activated}")
+                print(f"Space-group basis: {activated}-physical")
         self._space_group = space_group
+
+    # ------------------------------------------------------------------
+    # Constructor helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _resolve_numerical_method(cls, chain_model, numerical_method):
+        """Return (method, numerical_method) for the chain model.
+
+        The discrete chain model has its own bond-convolution solver and ignores
+        ``numerical_method``; continuous chains default to RQM4."""
+        if chain_model == "discrete":
+            if numerical_method is not None:
+                print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
+            return "pseudospectral", "rqm4"   # placeholder, not used for discrete chains
+        numerical_method = "rqm4" if numerical_method is None else numerical_method.lower()
+        if numerical_method in cls._PSEUDO_METHODS:
+            return "pseudospectral", numerical_method
+        if numerical_method in cls._REALSPACE_METHODS:
+            return "realspace", numerical_method
+        raise ValueError(
+            f"Unknown numerical_method '{numerical_method}'. "
+            f"Valid options: {cls._PSEUDO_METHODS | cls._REALSPACE_METHODS}"
+        )
+
+    @staticmethod
+    def _auto_platform(dim):
+        """Platform for ``platform="auto"``: CPU for 1D (GPU overhead outweighs
+        the gain), CUDA for 2D/3D when available, otherwise the first CPU
+        backend of this build."""
+        avail = _core.PlatformSelector.avail_platforms()
+        cpu_platforms = [p for p in avail if p.startswith("cpu")]
+        if dim == 1 and cpu_platforms:
+            return cpu_platforms[0]
+        if "cuda" in avail:
+            return "cuda"
+        if cpu_platforms:
+            return cpu_platforms[0]
+        raise RuntimeError("No computational platform available in this build.")
+
+    def _check_boundary_conditions(self):
+        """Reject boundary conditions the pseudo-spectral transform cannot handle.
+
+        Reflecting (DCT) and absorbing (DST) boundaries are supported on both
+        platforms, verified against each other to machine precision in 1D/2D/3D
+        for continuous and discrete chains. Mixing periodic with non-periodic
+        directions is not supported by the spectral transform, so it fails
+        loudly instead of silently switching solvers."""
+        bc_lower = [b.lower() for b in self.bc]
+        self._has_non_periodic_bc = any(b in ["reflecting", "absorbing"] for b in bc_lower)
+        has_periodic = any(b == "periodic" for b in bc_lower)
+        if self.method == "pseudospectral" and has_periodic and self._has_non_periodic_bc:
+            if self.chain_model == "discrete":
+                raise NotImplementedError(
+                    "Mixing periodic and non-periodic boundary conditions is not "
+                    "supported by the pseudo-spectral transform, and the discrete "
+                    "chain model has no real-space solver. Use uniform boundary "
+                    "conditions (all-periodic, all-reflecting, or all-absorbing)."
+                )
+            raise ValueError(
+                "Mixing periodic and non-periodic boundary conditions is not "
+                "supported by the pseudo-spectral method "
+                f"(requested numerical_method='{self.numerical_method}'). "
+                "Either set numerical_method='cn-adi2' to use the real-space "
+                "solver (continuous chains only), or use uniform boundary "
+                "conditions in all directions."
+            )
 
     @classmethod
     def from_spec(
@@ -1129,26 +1104,6 @@ class PropagatorSolver:
 
     # -------------------- Space Group / Reduced Basis --------------------
 
-    def set_space_group(self, space_group) -> None:
-        """
-        Set space group for reduced basis representation.
-
-        .. deprecated::
-            Pass space_group to the constructor instead.
-            This method will be removed in a future version.
-
-        Parameters
-        ----------
-        space_group : SpaceGroup
-            SpaceGroup object from polymerfts.space_group module.
-        """
-        if self._propagator_computation is not None:
-            raise RuntimeError(
-                "Cannot set space_group after solver initialization. "
-                "Pass space_group to the PropagatorSolver constructor instead."
-            )
-        self._space_group = space_group
-
     def to_reduced_basis(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
         """
         Convert full grid field to reduced basis.
@@ -1165,7 +1120,7 @@ class PropagatorSolver:
         """
         if self._space_group is None:
             raise RuntimeError(
-                "Space group not set. Call set_space_group() first."
+                "Space group not set. Pass space_group= to PropagatorSolver() or from_spec()."
             )
         field_2d = np.reshape(field, (1, -1))
         return self._space_group.to_reduced_basis(field_2d)[0]
@@ -1186,7 +1141,7 @@ class PropagatorSolver:
         """
         if self._space_group is None:
             raise RuntimeError(
-                "Space group not set. Call set_space_group() first."
+                "Space group not set. Pass space_group= to PropagatorSolver() or from_spec()."
             )
         field_2d = np.reshape(field_reduced, (1, -1))
         return self._space_group.from_reduced_basis(field_2d)[0]

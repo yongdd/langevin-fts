@@ -179,30 +179,20 @@ public:
      */
     void set(int n_blocks, int n_threads, int process_idx);
 
-    /**
-     * @brief Get number of thread blocks.
-     */
+    /// Get number of thread blocks.
     int get_n_blocks();
 
-    /**
-     * @brief Get threads per block.
-     */
+    /// Get threads per block.
     int get_n_threads();
     // int get_n_gpus();
 
-    /**
-     * @brief Set number of thread blocks.
-     */
+    /// Set number of thread blocks.
     void set_n_blocks(int n_blocks);
 
-    /**
-     * @brief Set threads per block.
-     */
+    /// Set threads per block.
     void set_n_threads(int n_threads);
 
-    /**
-     * @brief Set GPU device index.
-     */
+    /// Set GPU device index.
     void set_idx(int process_idx);
 };
 

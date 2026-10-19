@@ -80,9 +80,7 @@
 class ContourLengthMapping
 {
 private:
-    /**
-     * @brief Global contour step size (target Δs from user input).
-     */
+    /// Global contour step size (target Δs from user input).
     double global_ds;
 
     /**
@@ -121,14 +119,10 @@ private:
      */
     std::vector<int> length_to_n_segment;
 
-    /**
-     * @brief Whether finalize() has been called.
-     */
+    /// Whether finalize() has been called.
     bool is_finalized;
 
-    /**
-     * @brief Temporary storage for contour lengths before finalization.
-     */
+    /// Temporary storage for contour lengths before finalization.
     std::vector<double> pending_lengths;
 
     /**
@@ -158,14 +152,10 @@ public:
      */
     ContourLengthMapping(double global_ds, double tolerance = 1e-10);
 
-    /**
-     * @brief Default constructor (creates uninitialized mapping).
-     */
+    /// Default constructor (creates uninitialized mapping).
     ContourLengthMapping();
 
-    /**
-     * @brief Destructor.
-     */
+    /// Destructor.
     ~ContourLengthMapping() {}
 
     /**
@@ -291,9 +281,7 @@ public:
      */
     bool finalized() const;
 
-    /**
-     * @brief Print mapping information for debugging.
-     */
+    /// Print mapping information for debugging.
     void print_mapping() const;
 };
 

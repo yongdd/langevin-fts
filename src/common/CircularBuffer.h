@@ -98,9 +98,7 @@ public:
      */
     CircularBuffer(int length, int width);
 
-    /**
-     * @brief Destructor. Frees all allocated memory.
-     */
+    /// Destructor. Frees all allocated memory.
     ~CircularBuffer();
 
     /**

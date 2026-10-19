@@ -15,6 +15,7 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .validation import validate_system_params
 from .system_spec import parse_system
+from .simulation_options import ScftOptions
 from .config import load_config
 from .result import SCFTResult, IterationInfo
 from .utils import (
@@ -631,6 +632,10 @@ class SCFT:
         params = copy.deepcopy(params)
         params.pop("space_group_basis", None)
 
+        # Method-specific options (defaults live in simulation_options.py)
+        options = ScftOptions.from_params(params)
+        self.options = options
+
         # Handle axis ordering (convert user ordering to standard [a, b, c]).
         # This rewrites nx/lx/angles in `params` before the shared parser runs.
         self.axis_ordering, self._axis_perm = self._apply_axis_ordering(params)
@@ -674,11 +679,11 @@ class SCFT:
             draw_polymer_architecture(polymer, idx, spec.chain.ds, dict_color)
 
         # Create space group object early (before PropagatorSolver) if specified
-        if "space_group" in params:
-            if "number" in params["space_group"]:
-                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
+        if options.space_group is not None:
+            if "number" in options.space_group:
+                self.sg = _core.SpaceGroup(params["nx"], options.space_group["symbol"], options.space_group["number"])
             else:
-                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
+                self.sg = _core.SpaceGroup(params["nx"], options.space_group["symbol"])
             # Auto-enable physical basis when possible (m3 → pmmm → z-mirror).
             # NOTE: reuse the (possibly axis_ordering-reordered) local `angles`;
             # missing angles means an orthogonal cell for classification, while
@@ -727,7 +732,7 @@ class SCFT:
         self.cb = self.prop_solver.computation_box
 
         # Initialize smearing (must be after self.cb is set)
-        if params.get("smearing", None) is not None and self.sg is not None:
+        if options.smearing is not None and self.sg is not None:
             # Smearing operates on full-grid fields, but with a space group the
             # fields live in the reduced basis; Smearing.apply would reshape a
             # reduced-basis array to the full grid and crash (or corrupt data).
@@ -737,15 +742,11 @@ class SCFT:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            params.get("smearing", None)
+            options.smearing
         )
 
-
         # Scaling factor for stress when the fields and box size are simultaneously computed
-        if "scale_stress" in params:
-            self.scale_stress = params["scale_stress"]
-        else:
-            self.scale_stress = 1
+        self.scale_stress = options.scale_stress
 
         # Space group symmetry operations (self.sg was created above)
         if self.sg is not None:
@@ -776,7 +777,7 @@ class SCFT:
             # Total number of variables to be adjusted to minimize the Hamiltonian
             # Using reduced basis from space group symmetry
             n_reduced = self.sg.get_n_reduced_basis_full()
-            if params["box_is_altering"]:
+            if options.box_is_altering:
                 n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
             else :
                 n_var = len(self.monomer_types)*n_reduced
@@ -787,7 +788,7 @@ class SCFT:
             dim = len(params["nx"])
 
             # Auto-detect crystal system from angles for 2D non-orthogonal systems
-            if "crystal_system" not in params and dim == 2 and "angles" in params:
+            if options.crystal_system is None and dim == 2 and "angles" in params:
                 # For 2D, angles can be [gamma] or [alpha, beta, gamma]
                 angles = params["angles"]
                 gamma = angles[0] if len(angles) == 1 else angles[2]
@@ -800,7 +801,7 @@ class SCFT:
                 else:
                     crystal_system = "Orthorhombic"
             else:
-                crystal_system = params.get("crystal_system", "Orthorhombic")
+                crystal_system = options.crystal_system if options.crystal_system is not None else "Orthorhombic"
 
             self.crystal_system = crystal_system
 
@@ -863,7 +864,7 @@ class SCFT:
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
             n_angles = len(self.angles_reduced_indices)
-            if params["box_is_altering"]:
+            if options.box_is_altering:
                 n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
@@ -878,32 +879,21 @@ class SCFT:
 
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point
-        if params["optimizer"]["name"] == "am":
+        optimizer = options.optimizer
+        if optimizer["name"] == "am":
             self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
-                params["optimizer"]["max_hist"],     # maximum number of history
-                params["optimizer"]["start_error"],  # when switch to AM from simple mixing
-                params["optimizer"]["mix_min"],      # minimum mixing rate of simple mixing
-                params["optimizer"]["mix_init"])     # initial mixing rate of simple mixing
+                optimizer["max_hist"],     # maximum number of history
+                optimizer["start_error"],  # when switch to AM from simple mixing
+                optimizer["mix_min"],      # minimum mixing rate of simple mixing
+                optimizer["mix_init"])     # initial mixing rate of simple mixing
 
         # (Python class) ADAM optimizer for finding saddle point
-        elif params["optimizer"]["name"] == "adam":
+        elif optimizer["name"] == "adam":
             self.field_optimizer = Adam(total_grid = n_var,
-                lr = params["optimizer"]["lr"],
-                gamma = params["optimizer"]["gamma"])
+                lr = optimizer["lr"],
+                gamma = optimizer["gamma"])
         else:
-            raise ValueError(f"Invalid optimizer name: {params['optimizer']['name']}. Choose among 'am' and 'adam'.")
-
-       # The maximum iteration steps
-        if "max_iter" in params :
-            max_iter = params["max_iter"]
-        else :
-            max_iter = 2000      # the number of maximum iterations
-
-        # Tolerance
-        if "tolerance" in params :
-            tolerance = params["tolerance"]
-        else :
-            tolerance = 1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+            raise ValueError(f"Invalid optimizer name: {optimizer['name']}. Choose among 'am' and 'adam'.")
 
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
@@ -936,24 +926,20 @@ class SCFT:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.box_is_altering = params["box_is_altering"]
+        self.box_is_altering = options.box_is_altering
 
-        # Stress computation interval (compute stress every N iterations)
-        # Options: integer (1, 2, 3, ...) or "adaptive"
-        # - Integer: compute stress every N iterations
-        # - "adaptive": automatically adjust based on error level
-        #   (more frequent when error high, less frequent when converging)
-        # Default is 3 for ~15% speedup with minimal impact on convergence
-        self.stress_interval = params.get("stress_interval", 1)
+        # Stress computation interval: an integer (every N iterations) or
+        # "adaptive" (more often while the error is high, see run()).
+        self.stress_interval = options.stress_interval
 
-        self.max_iter = max_iter
-        self.tolerance = tolerance
+        self.max_iter = options.max_iter
+        self.tolerance = options.tolerance
 
-        # Use FTS-consistent energy convention by pinning field means to the saddle point.
-        # When enabled, the SCFT free energy matches the field-theoretic Hamiltonian
-        # used in L-FTS/CL-FTS (F_dis = -chi_N*(f-1/2)^2 for disordered phase).
-        # Default is off (mean=0 convention, F_dis=0 for disordered phase).
-        self.fts_consistent_energy = params.get("fts_consistent_energy", False)
+        # FTS-consistent energy convention: pin the field means to the saddle point
+        # so the SCFT free energy matches the field-theoretic Hamiltonian used in
+        # L-FTS/CL-FTS (F_dis = -chi_N*(f-1/2)^2 for the disordered phase).
+        # Off: mean = 0 convention (F_dis = 0 for the disordered phase).
+        self.fts_consistent_energy = options.fts_consistent_energy
 
 
     # =========================================================================
@@ -1284,6 +1270,184 @@ class SCFT:
         else:
             raise ValueError("Invalid output file extension. Use .mat, .json, or .yaml.")
 
+    # =========================================================================
+    # run() helpers
+    # =========================================================================
+
+    def _initial_fields_to_working_basis(self, initial_fields):
+        """Stack the user's full-grid initial fields into the (M, n_grid) array
+        the optimizer works on. With a space group the fields are symmetrized
+        and converted to the irreducible basis."""
+        M = len(self.monomer_types)
+        if self.sg is not None:
+            w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
+            for i in range(M):
+                w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
+            w_full = self.sg.symmetrize(w_full)
+            w = self.sg.to_reduced_basis(w_full)
+            try:
+                w = self.sg.reduced_to_irreducible(w)
+            except Exception:
+                pass
+            return w
+        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+        for i in range(M):
+            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
+        return w
+
+    def _initial_chi_phi_mean(self):
+        """χ·mean(φ) from the chain composition: mean(φ_i) = Σ_p f_p Σ_{blocks of type i} length."""
+        M = len(self.monomer_types)
+        phi_mean = np.zeros(M)
+        for polymer in self.distinct_polymers:
+            vf = polymer["volume_fraction"]
+            for block in polymer["blocks"]:
+                idx = self.monomer_types.index(block["type"])
+                phi_mean[idx] += vf * block["length"]
+        return self.matrix_chi @ phi_mean
+
+    def _pin_field_means(self, w, chi_phi_mean, xi=0.0):
+        """Normalize the field means in place (mean() works in the reduced basis
+        when a space group is set).
+
+        fts_consistent_energy: pin the means to the saddle point,
+        mean(w_i) = Σ_j χ_ij mean(φ_j) + ξ. For incompressible systems only the
+        P-projected mean is pinned; mean(W+) is a gauge freedom that P annihilates.
+        Otherwise (mean = 0 convention) incompressible fields are shifted to zero
+        mean and compressible fields are left as they are.
+        """
+        M = len(self.monomer_types)
+        if self.fts_consistent_energy:
+            if self.zeta_n is None:
+                p_target = self.matrix_p @ chi_phi_mean
+                w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
+                p_current = self.matrix_p @ w_mean
+                shift = p_target - p_current
+                for i in range(M):
+                    w[i] += shift[i]
+            else:
+                for i in range(M):
+                    w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
+        elif self.zeta_n is None:
+            for i in range(M):
+                w[i] -= self.prop_solver.mean(w[i])
+
+    def _compute_error_level(self, w, w_diff):
+        """Relative distance between input and output fields,
+        sqrt(Σ_i <w_diff_i²> / (1 + Σ_i <w_i²>))."""
+        error_level = 0.0
+        error_normal = 1.0  # add 1.0 to prevent divergence
+        for i in range(len(self.monomer_types)):
+            error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i])
+            error_normal += self.prop_solver.inner_product(w[i], w[i])
+        return np.sqrt(error_level/error_normal)
+
+    @staticmethod
+    def _angle_stress_map(dim):
+        """Angle index in [α, β, γ] -> index in the stress array.
+
+        Stress array layout: 3D [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα],
+        2D [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]."""
+        return {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
+
+    def _effective_stress_interval(self, error_level):
+        """Stress computation interval; "adaptive" computes the stress more often
+        while the error is high and less often as the box converges."""
+        if self.stress_interval == "adaptive":
+            if error_level > 1e-2:
+                return 1
+            elif error_level > 1e-4:
+                return 2
+            return 4
+        return self.stress_interval
+
+    def _stress_error_contribution(self, stress_array, dim):
+        """Norm of the stress components that are optimized: the box lengths of
+        the existing dimensions and, when angles are optimized, their derivatives."""
+        diagonal_stress = stress_array[0:dim]
+        angle_stress_map = self._angle_stress_map(dim)
+        angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
+        off_diagonal_stress = stress_array[angle_stress_indices] if angle_stress_indices else np.array([])
+        relevant_stress = np.concatenate([diagonal_stress, off_diagonal_stress])
+        return np.sqrt(np.sum(relevant_stress**2))
+
+    def _print_iteration(self, iter, mass_error, total_partitions, energy_total, error_level):
+        print("%8d %12.3E " % (iter, mass_error), end=" [ ")
+        for Q in total_partitions:
+            print("%13.7E " % (Q), end=" ")
+        print("] %15.9f %15.7E " % (energy_total, error_level), end=" " if self.box_is_altering else "\n")
+        if self.box_is_altering:
+            print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
+            if len(self.angles_reduced_indices) > 0:
+                print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")
+            print()
+
+    def _reduced_box_gradient(self, stress_array):
+        """-dH/dL for the independent box lengths. Lengths tied by the crystal
+        system (a = b, or a = b = c) use the averaged derivative."""
+        dlx_full = -stress_array[0:3]
+        crystal_system = getattr(self, 'crystal_system', None)   # not set when a space group fixes the system
+        if crystal_system == "Hexagonal2D":
+            return np.array([0.5 * (dlx_full[0] + dlx_full[1])])
+        if crystal_system == "Tetragonal" or (crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
+            return np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
+        if crystal_system == "Cubic":
+            return np.array([np.mean(dlx_full)])
+        return dlx_full[self.lx_reduced_indices]
+
+    def _update_fields_and_box(self, w, w_diff, stress_array, old_error_level, error_level):
+        """One optimizer step on the concatenated (fields, box lengths, angles)
+        vector. Applies the new lattice parameters to the solver and returns the
+        new fields. Length changes are limited to 10 % and angle changes to
+        5 degrees per step."""
+        M = len(self.monomer_types)
+        dim = self.prop_solver.dim
+
+        dlx_reduced = self._reduced_box_gradient(stress_array)
+        # get_stress() returns +dH/d(parameter) for angles as well as lengths
+        # (the d(cosγ)/dγ = -sinγ factor is already applied in the C++
+        # compute_stress post-processing), so gradient descent uses the same
+        # negative sign as for the box lengths.
+        angle_stress_map = self._angle_stress_map(dim)
+        dangle = -np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
+
+        current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
+        current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
+
+        am_current = np.concatenate((w.flatten(), current_lx, current_angles))
+        am_diff = np.concatenate((w_diff.flatten(),
+                                 self.scale_stress*dlx_reduced,
+                                 self.scale_stress*dangle))
+        am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
+
+        w = np.reshape(am_new[0:len(w.flatten())], (M, -1))
+
+        n_lx = len(self.lx_reduced_indices)
+        n_angles = len(self.angles_reduced_indices)
+
+        # Restricting |dLx| to be less than 10 % of Lx
+        old_lx = current_lx
+        new_lx = np.array(am_new[-(n_lx + n_angles):-(n_angles)] if n_angles > 0 else am_new[-n_lx:])
+        new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
+        new_lx = (1 + new_dlx)*old_lx
+
+        if n_angles > 0:
+            old_angles = current_angles
+            new_angles = np.array(am_new[-n_angles:])
+            new_dangle = np.clip(new_angles - old_angles, -5.0, 5.0)
+            new_angles = old_angles + new_dangle
+
+            full_angles = list(self.prop_solver.get_angles_degrees())
+            for i, idx in enumerate(self.angles_full_indices):
+                full_angles[idx] = new_angles[i]
+            self.prop_solver.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
+        else:
+            self.prop_solver.set_lx(list(np.array(new_lx)[self.lx_full_indices]))
+
+        # Update bond parameters using new lx
+        self.prop_solver.update_laplacian_operator()
+        return w
+
     def run(
         self,
         initial_fields: Dict[str, np.ndarray],
@@ -1483,7 +1647,6 @@ class SCFT:
         >>> print(f"Optimized box: {calc2.prop_solver.get_lx()}")
         """
 
-        # The number of components
         M = len(self.monomer_types)
 
         # Assign large initial value for the energy and error
@@ -1492,64 +1655,16 @@ class SCFT:
 
         # Reset optimizer
         self.field_optimizer.reset_count()
-        
+
         print("---------- Run ----------")
         print("iteration, mass error, total_partitions, energy_total, error_level", end="")
-        if (self.box_is_altering):
-            print(", box size")
-        else:
-            print("")
+        print(", box size" if self.box_is_altering else "")
 
-        # Reshape initial fields
-        # When space group is set, field optimizer uses irreducible grid.
-        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+        # Working fields: irreducible basis when a space group is set, full grid otherwise
+        w = self._initial_fields_to_working_basis(initial_fields)
+        self._pin_field_means(w, self._initial_chi_phi_mean() if self.fts_consistent_energy else None)
 
-        if self.sg is not None:
-            # User provides full grid initial_fields, convert to irreducible basis
-            w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
-            for i in range(M):
-                w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
-            # Symmetrize full grid fields, then convert to irreducible basis
-            w_full = self.sg.symmetrize(w_full)
-            w = self.sg.to_reduced_basis(w_full)
-            try:
-                w = self.sg.reduced_to_irreducible(w)
-            except Exception:
-                pass
-        else:
-            for i in range(M):
-                w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
-
-        # Normalize initial field means
-        # mean() works correctly with reduced basis when space group is set
-        if self.fts_consistent_energy:
-            # Pin initial field means to saddle-point values using mean(φ_i) = f_i.
-            # Compute f_i (average concentration of each monomer type) from polymer params.
-            phi_mean = np.zeros(M)
-            for polymer in self.distinct_polymers:
-                vf = polymer["volume_fraction"]
-                for block in polymer["blocks"]:
-                    idx = self.monomer_types.index(block["type"])
-                    phi_mean[idx] += vf * block["length"]
-            if self.zeta_n is None:
-                chi_phi_mean = self.matrix_chi @ phi_mean
-                p_target = self.matrix_p @ chi_phi_mean
-                w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
-                p_current = self.matrix_p @ w_mean
-                shift = p_target - p_current
-                for i in range(M):
-                    w[i] += shift[i]
-            else:
-                chi_phi_mean = self.matrix_chi @ phi_mean
-                for i in range(M):
-                    w[i] += chi_phi_mean[i] - self.prop_solver.mean(w[i])
-        else:
-            if self.zeta_n is None:
-                for i in range(M):
-                    w[i] -= self.prop_solver.mean(w[i])
-
-        # Iteration begins here
-        # w is in reduced basis when space group is set, full grid otherwise
+        stress_array = None
         time_iter_start = time.time()
         for iter in range(1, self.max_iter+1):
 
@@ -1583,8 +1698,7 @@ class SCFT:
             phi_total = sum(phi[m] for m in self.monomer_types)
             phi_diff = phi_total - 1.0
 
-            # Calculate self-consistency error (vectorized)
-            # phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
+            # Self-consistency residual, phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
             phi_smeared = self.smearing.apply_to_dict(phi)
             phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
             w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
@@ -1593,85 +1707,19 @@ class SCFT:
             for i in range(M):
                 w_diff[i] -= self.prop_solver.mean(w_diff[i])
 
-            # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
-            error_level = 0.0
-            error_normal = 1.0  # add 1.0 to prevent divergence
-            for i in range(M):
-                error_level += self.prop_solver.inner_product(w_diff[i],w_diff[i])
-                error_normal += self.prop_solver.inner_product(w[i],w[i])
-            error_level = np.sqrt(error_level/error_normal)
-
-            # Print iteration # and error levels and check the mass conservation
+            error_level = self._compute_error_level(w, w_diff)
             mass_error = self.prop_solver.mean(phi_diff)
-            
-            if (self.box_is_altering):
-                # Calculate stress (only every stress_interval iterations to save time)
-                # stress_interval > 1 can significantly speed up computation since
-                # stress computation takes ~30% of iteration time
-                #
-                # Adaptive mode: compute stress more frequently when error is high,
-                # less frequently when error is low (box is nearly converged)
-                if self.stress_interval == "adaptive":
-                    if error_level > 1e-2:
-                        effective_stress_interval = 1
-                    elif error_level > 1e-4:
-                        effective_stress_interval = 2
-                    else:
-                        effective_stress_interval = 4
-                else:
-                    effective_stress_interval = self.stress_interval
 
-                compute_stress_this_iter = (iter == 1) or (iter % effective_stress_interval == 0)
-
-                if compute_stress_this_iter:
+            if self.box_is_altering:
+                # The stress costs ~30 % of an iteration; compute it every
+                # stress_interval iterations and reuse it in between.
+                if (iter == 1) or (iter % self._effective_stress_interval(error_level) == 0):
                     self.prop_solver.compute_stress()
                     stress_array = np.array(self.prop_solver.get_stress())
-                    cached_stress_array = stress_array.copy()
-                else:
-                    # Reuse cached stress from previous computation
-                    stress_array = cached_stress_array
+                error_level += self._stress_error_contribution(stress_array, self.prop_solver.dim)
 
-                dim = self.prop_solver.dim
-
-                # Only include stress components that are being optimized
-                # Stress array layout differs by dimension:
-                # 3D: [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
-                # 2D: [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]
-                # For 1D/2D, only include stress components for existing dimensions
-                diagonal_stress = stress_array[0:dim]
-                # For non-orthogonal systems, include off-diagonal stress if angles are being optimized
-                angle_stress_indices = []
-                if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
-                    # Mapping from angle index to stress array index
-                    # 3D: α→index 5, β→index 4, γ→index 3
-                    # 2D: γ→index 2 (only γ matters in 2D)
-                    if dim == 3:
-                        angle_stress_map = {0: 5, 1: 4, 2: 3}
-                    else:  # dim == 2
-                        angle_stress_map = {2: 2}  # γ at index 2 for 2D
-                    for i in self.angles_reduced_indices:
-                        if i in angle_stress_map:
-                            angle_stress_indices.append(angle_stress_map[i])
-                off_diagonal_stress = stress_array[angle_stress_indices] if angle_stress_indices else np.array([])
-                relevant_stress = np.concatenate([diagonal_stress, off_diagonal_stress])
-                error_level += np.sqrt(np.sum(relevant_stress**2))
-
-                print("%8d %12.3E " %
-                (iter, mass_error), end=" [ ")
-                for Q in total_partitions:
-                    print("%13.7E " % (Q), end=" ")
-                print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
-                # Also print angles if optimizing non-orthogonal system
-                if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
-                    print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")
-                print()
-            else:
-                print("%8d %12.3E " % (iter, mass_error), end=" [ ")
-                for Q in total_partitions:
-                    print("%13.7E " % (Q), end=" ")
-                print("] %15.9f %15.7E " % (energy_total, error_level))
+            self._print_iteration(iter, mass_error, total_partitions, energy_total, error_level)
 
             # Call progress callback if provided
             if on_iteration is not None:
@@ -1683,8 +1731,7 @@ class SCFT:
                     partition_functions=total_partitions,
                     lx=list(self.prop_solver.get_lx()) if self.box_is_altering else None,
                     angles=list(self.prop_solver.get_angles_degrees()) if (
-                        self.box_is_altering and hasattr(self, 'angles_reduced_indices')
-                        and len(self.angles_reduced_indices) > 0
+                        self.box_is_altering and len(self.angles_reduced_indices) > 0
                     ) else None
                 )
                 callback_result = on_iteration(info)
@@ -1699,117 +1746,19 @@ class SCFT:
             # Calculate new fields using simple and Anderson mixing
             # Note: w and w_diff are in irreducible basis when space group is set
             if self.box_is_altering:
-                # Stress components:
-                # [0,1,2] = dH/dL1, dH/dL2, dH/dL3 - for box lengths
-                # [3,4,5] = dH/dγ, dH/dβ, dH/dα - for angles
-                dlx_full = -stress_array[0:3]  # Diagonal stress for lengths
-
-                # For crystal systems with constraints (a=b or a=b=c), average the constrained stress components
-                if hasattr(self, 'crystal_system'):
-                    if self.crystal_system == "Hexagonal2D":
-                        # 2D hexagonal: a = b, average the two length derivatives
-                        dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
-                    elif self.crystal_system == "Tetragonal" or (self.crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
-                        # Tetragonal/3D Hexagonal: a = b ≠ c, average first two derivatives for a, keep third for c
-                        dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
-                    elif self.crystal_system == "Cubic":
-                        # Cubic: a = b = c, average all three components
-                        dlx_reduced = np.array([np.mean(dlx_full)])
-                    else:
-                        # No constraints: use stress directly for reduced indices
-                        dlx_reduced = dlx_full[self.lx_reduced_indices]
-                else:
-                    dlx_reduced = dlx_full[self.lx_reduced_indices]
-
-                # Map off-diagonal stress to angle gradients
-                # For Monoclinic: stress index 4 (dH/dβ) drives β angle
-                # For Triclinic: index 3→γ, index 4→β, index 5→α
-                # Stress array layout differs by dimension:
-                # 3D: [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
-                # 2D: [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]
-                # get_stress() returns +dH/d(parameter) for angles as well as lengths
-                # (the d(cosγ)/dγ = -sinγ factor is already applied in the C++
-                # compute_stress post-processing), so gradient descent uses the
-                # same negative sign as for the box lengths.
-                if dim == 3:
-                    angle_stress_map = {0: 5, 1: 4, 2: 3}
-                else:  # dim == 2
-                    angle_stress_map = {2: 2}  # γ at index 2 for 2D
-                dangle = -np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
-
-                # Current values
-                current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
-                current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
-
-                # Build optimization vectors
-                am_current = np.concatenate((w.flatten(), current_lx, current_angles))
-                am_diff = np.concatenate((w_diff.flatten(),
-                                         self.scale_stress*dlx_reduced,
-                                         self.scale_stress*dangle))
-                am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
-
-                # Copy fields
-                w = np.reshape(am_new[0:len(w.flatten())], (M, -1))
-
-                # Extract new box lengths
-                n_lx = len(self.lx_reduced_indices)
-                n_angles = len(self.angles_reduced_indices)
-
-                # Set box size
-                # Restricting |dLx| to be less than 10 % of Lx
-                old_lx = current_lx
-                new_lx = np.array(am_new[-(n_lx + n_angles):-(n_angles)] if n_angles > 0 else am_new[-n_lx:])
-                new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
-                new_lx = (1 + new_dlx)*old_lx
-
-                # Set box angles (if optimizing angles)
-                if n_angles > 0:
-                    old_angles = current_angles
-                    new_angles = np.array(am_new[-n_angles:])
-                    # Restrict angle change to 5 degrees per step
-                    new_dangle = np.clip(new_angles - old_angles, -5.0, 5.0)
-                    new_angles = old_angles + new_dangle
-
-                    # Build full angles array (in degrees)
-                    full_angles = list(self.prop_solver.get_angles_degrees())
-                    for i, idx in enumerate(self.angles_full_indices):
-                        full_angles[idx] = new_angles[i]
-
-                    # Update box with both lengths and angles
-                    self.prop_solver.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
-                else:
-                    self.prop_solver.set_lx(list(np.array(new_lx)[self.lx_full_indices]))
-
-                # Update bond parameters using new lx
-                self.prop_solver.update_laplacian_operator()
+                w = self._update_fields_and_box(w, w_diff, stress_array, old_error_level, error_level)
             else:
                 w = self.field_optimizer.calculate_new_fields(w.flatten(), w_diff.flatten(), old_error_level, error_level)
                 w = np.reshape(w, (M, -1))
 
-            # Normalize field values
-            # mean() works correctly with reduced basis when space group is set
+            # Normalize field means
             if self.fts_consistent_energy:
-                if self.zeta_n is None:
-                    # Pin P-projected mean to saddle: P@mean(w) = P@(χ@mean(φ))
-                    # mean(φ_i) = f_i exactly by chain normalization, so target is constant.
-                    # mean(W+) is gauge (P annihilates it); only mean(W-) is pinned.
-                    chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
-                    p_target = self.matrix_p @ chi_phi_mean
-                    w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
-                    p_current = self.matrix_p @ w_mean
-                    shift = p_target - p_current
-                    for i in range(M):
-                        w[i] += shift[i]
-                else:
-                    # Pin field means to saddle point: mean(w_i) = Σ_j χ_{ij} mean(φ_j) + ξ
-                    xi = self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
-                    chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
-                    for i in range(M):
-                        w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
+                # mean(φ_i) = f_i exactly by chain normalization, so the target is constant
+                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
+                xi = 0.0 if self.zeta_n is None else self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
+                self._pin_field_means(w, chi_phi_mean, xi)
             else:
-                if self.zeta_n is None:
-                    for i in range(M):
-                        w[i] -= self.prop_solver.mean(w[i])
+                self._pin_field_means(w, None)
 
             # Irreducible grid remains valid without extra symmetrization.
 
@@ -1853,7 +1802,7 @@ class SCFT:
                 params=self.params,
                 stress=stress_array if self.box_is_altering else None,
                 angles=list(self.prop_solver.get_angles_degrees()) if (
-                    hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0
+                    len(self.angles_reduced_indices) > 0
                 ) else None
             )
         return None

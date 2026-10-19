@@ -107,14 +107,10 @@ public:
     CudaAndersonMixing(int n_var, int max_hist,
         double start_error, double mix_min, double mix_init);
 
-    /**
-     * @brief Destructor. Frees GPU memory and streams.
-     */
+    /// Destructor. Frees GPU memory and streams.
     ~CudaAndersonMixing();
 
-    /**
-     * @brief Reset history and iteration counter.
-     */
+    /// Reset history and iteration counter.
     void reset_count() override;
 
     /**

@@ -82,14 +82,10 @@ public:
      */
     PinnedCircularBuffer(int length, int width);
 
-    /**
-     * @brief Destructor. Frees pinned memory using cudaFreeHost.
-     */
+    /// Destructor. Frees pinned memory using cudaFreeHost.
     ~PinnedCircularBuffer();
 
-    /**
-     * @brief Clear buffer (logical reset).
-     */
+    /// Clear buffer (logical reset).
     void reset();
 
     /**

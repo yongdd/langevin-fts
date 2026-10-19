@@ -135,9 +135,7 @@ public:
      */
     CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW, SpaceGroup* space_group = nullptr);
 
-    /**
-     * @brief Destructor. Frees all propagator and concentration arrays.
-     */
+    /// Destructor. Frees all propagator and concentration arrays.
     ~CpuComputationContinuous();
 
     /**
@@ -161,9 +159,7 @@ public:
      */
     void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
-    /**
-     * @brief Calculate all concentration fields from propagators.
-     */
+    /// Calculate all concentration fields from propagators.
     void compute_concentrations() override;
 
     /**
@@ -179,9 +175,7 @@ public:
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
-    /**
-     * @brief Compute stress tensor components.
-     */
+    /// Compute stress tensor components.
     void compute_stress() override;
 
     /**

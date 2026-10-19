@@ -161,9 +161,7 @@ public:
      */
     Molecules(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
 
-    /**
-     * @brief Destructor.
-     */
+    /// Destructor.
     ~Molecules() {};
 
     /**

@@ -46,6 +46,7 @@
 #include "Pseudo.h"
 #include "FFTFactory.h"
 #include "SpaceGroup.h"
+#include "CrysFFTBasisMapping.h"
 
 #ifdef USE_CPU_FFTW
 #include "FftwCrysFFTPmmm.h"
@@ -111,9 +112,7 @@ protected:
     bool is_periodic_;           ///< True if all BCs are periodic
     int dim_;                    ///< Number of dimensions (1, 2, or 3)
 
-    /**
-     * @brief Space group for reduced basis operations (nullptr if not used).
-     */
+    /// Space group for reduced basis operations (nullptr if not used).
     SpaceGroup* space_group_;
 
     /**
@@ -336,15 +335,40 @@ protected:
     virtual const double* get_stress_boltz_bond(
         std::string monomer_type, bool is_half_bond_length) const = 0;
 
-public:
+    // ---- space group / CrysFFT setup (set_space_group) ----------------------
+    /// Drop every CrysFFT object and index map.
+    void reset_crysfft();
+    /// Select and build the CrysFFT fast path for the current space group (3D periodic, real fields).
+    void init_crysfft();
+    /// Store a physical-grid <-> reduced-basis map when it is usable (see crysfft_mapping_usable()).
+    bool adopt_crysfft_mapping(const CrysFFTBasisMapping& map, bool physical_basis_enabled, const char* mismatch_message);
+
+    // ---- compute_single_segment_stress() helpers ----------------------------
     /**
-     * @brief Default constructor.
+     * @brief Diagonal stress sums through the CrysFFT fast path.
+     *
+     * Applies to real fields on orthogonal 3D periodic cells with a Pmmm or
+     * recursive-3m CrysFFT and no angle optimization. Returns false when the
+     * fast path does not apply; `stress` is then untouched.
      */
+    bool compute_stress_crysfft(const T* q_1, const T* q_2, double bond_length_sq,
+                                const double* boltz_bond, std::vector<T>& stress);
+    /// phys_out = DCT^-1[ k_axis^2 (boltz) DCT[phys_in] ] through the Pmmm CrysFFT (boltz may be nullptr).
+    void crysfft_pmmm_axis_multiplier(double* phys_in, double* phys_out, int axis, const double* boltz);
+    /// Same through the recursive-3m CrysFFT; returns false when no recursive object exists.
+    bool crysfft_recursive_axis_multiplier(double* phys_in, double* phys_out, int axis, bool with_bond, double coeff);
+    /// Accumulate Σ_k kernel(k) v_i v_j from complex Fourier coefficients (periodic BC).
+    void accumulate_stress_periodic(const double* qk_1, const double* qk_2, double bond_length_sq,
+                                    const double* boltz_bond, bool is_orthogonal, std::vector<T>& stress) const;
+    /// Accumulate Σ_k kernel(k) v_i v_j from real DCT/DST coefficients (non-periodic BC).
+    void accumulate_stress_nonperiodic(const double* qk_1, const double* qk_2, double bond_length_sq,
+                                       const double* boltz_bond, bool is_orthogonal, std::vector<T>& stress) const;
+
+public:
+    /// Default constructor.
     CpuSolverPseudoBase() : fft_(nullptr), pseudo(nullptr), is_periodic_(true), dim_(0), space_group_(nullptr) {}
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CpuSolverPseudoBase() {}
 
     /**
@@ -357,19 +381,13 @@ public:
      */
     void set_space_group(SpaceGroup* sg);
 
-    /**
-     * @brief Register contour step size for a ds index.
-     */
+    /// Register contour step size for a ds index.
     void register_ds_value(int ds_index, double ds) { ds_values_[ds_index] = ds; }
 
-    /**
-     * @brief Get the contour step size for a ds index.
-     */
+    /// Get the contour step size for a ds index.
     double get_ds_value(int ds_index) const;
 
-    /**
-     * @brief Compute effective diffusion coefficient (b^2 * ds / 6).
-     */
+    /// Compute effective diffusion coefficient (b^2 * ds / 6).
     double get_effective_diffusion_coeff(
         const std::string& monomer_type, int ds_index, bool half_step) const;
 

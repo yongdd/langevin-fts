@@ -109,14 +109,10 @@ private:
     /// @}
 
 
-    /**
-     * @brief Return maximum of two integers.
-     */
+    /// Return maximum of two integers.
     int max_of_two(int x, int y);
 
-    /**
-     * @brief Return minimum of two integers.
-     */
+    /// Return minimum of two integers.
     int min_of_two(int x, int y);
 
     /**
@@ -172,9 +168,7 @@ private:
         double *_zl, double *_zd, double *_zh,
         const double *q_mask);
 
-    /**
-     * @brief 3D ADI step with specified coefficients.
-     */
+    /// 3D ADI step with specified coefficients.
     void advance_propagator_3d_step(
         std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out,
@@ -182,18 +176,14 @@ private:
         double *_yl, double *_yd, double *_yh,
         double *_zl, double *_zd, double *_zh);
 
-    /**
-     * @brief 2D ADI step with specified coefficients.
-     */
+    /// 2D ADI step with specified coefficients.
     void advance_propagator_2d_step(
         std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out,
         double *_xl, double *_xd, double *_xh,
         double *_yl, double *_yd, double *_yh);
 
-    /**
-     * @brief 1D step with specified coefficients.
-     */
+    /// 1D step with specified coefficients.
     void advance_propagator_1d_step(
         std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out,
@@ -211,9 +201,7 @@ public:
      */
     CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules);
 
-    /**
-     * @brief Destructor. Frees tridiagonal coefficient arrays.
-     */
+    /// Destructor. Frees tridiagonal coefficient arrays.
     ~CpuSolverCNADI();
 
     /**

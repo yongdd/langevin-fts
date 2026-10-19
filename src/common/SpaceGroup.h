@@ -14,6 +14,20 @@
 #include <string>
 
 /**
+ * @brief Physical (CrysFFT) basis layered on top of the irreducible basis.
+ *
+ * At most one physical basis is active at a time; it selects which
+ * crystallographic FFT fast path the solvers may use.
+ */
+enum class PhysicalBasis
+{
+    None,     ///< Irreducible (full-group) basis only
+    Pmmm,     ///< Pmmm mirror-plane basis (DCT CrysFFT)
+    M3,       ///< Recursive 3m basis
+    ZMirror   ///< z-mirror basis for hexagonal-axes settings (ObliqueZ CrysFFT)
+};
+
+/**
  * @class SpaceGroup
  * @brief Manages space group symmetry for reduced basis field operations.
  *
@@ -48,45 +62,29 @@ private:
     std::vector<int> reduced_to_irreducible_map_; ///< Physical-basis index -> irreducible orbit index
 
     // Physical basis flags
-    bool use_pmmm_physical_basis_{false};
-    bool use_m3_physical_basis_{false};
-    bool use_z_mirror_physical_basis_{false};
+    PhysicalBasis physical_basis_{PhysicalBasis::None};  ///< Active physical basis (at most one)
     int z_mirror_shift_{0};
     double z_mirror_translation_{0.0};
 
-    /**
-     * @brief Initialize space group from Hall number.
-     */
+    /// Initialize space group from Hall number.
     void initialize(std::vector<int> nx, int hall_number);
 
-    /**
-     * @brief Get symmetry operations from spglib database.
-     */
+    /// Get symmetry operations from spglib database.
     void get_symmetry_operations();
 
-    /**
-     * @brief Find irreducible mesh points using orbit algorithm.
-     */
+    /// Find irreducible mesh points using orbit algorithm.
     void find_irreducible_mesh();
 
-    /**
-     * @brief Determine crystal system from space group number.
-     */
+    /// Determine crystal system from space group number.
     void determine_crystal_system();
 
-    /**
-     * @brief Validate grid dimensions for the crystal system.
-     */
+    /// Validate grid dimensions for the crystal system.
     void validate_grid();
 
-    /**
-     * @brief Validate grid compatibility with space group symmetry.
-     */
+    /// Validate grid compatibility with space group symmetry.
     void validate_grid_compatibility();
 
-    /**
-     * @brief Get required grid divisor for this space group.
-     */
+    /// Get required grid divisor for this space group.
     int get_required_grid_divisor() const;
 
 public:
@@ -249,8 +247,14 @@ public:
      * (first octant, size Nx/2 * Ny/2 * Nz/2). Requires 3D even grid
      * and mirror planes along x, y, z.
      */
+    /// Enable one physical basis (None restores the irreducible basis).
+    void enable_physical_basis(PhysicalBasis basis);
+    PhysicalBasis physical_basis() const { return physical_basis_; }
+    /// Human-readable name of the active basis ("irreducible", "pmmm", "m3", "z-mirror").
+    std::string physical_basis_name() const;
+
     void enable_pmmm_physical_basis();
-    bool using_pmmm_physical_basis() const { return use_pmmm_physical_basis_; }
+    bool using_pmmm_physical_basis() const { return physical_basis_ == PhysicalBasis::Pmmm; }
 
     /**
      * @brief Enable 3m physical basis (1/8 even-index grid) mapping.
@@ -260,7 +264,7 @@ public:
      * and valid 3m translations.
      */
     void enable_m3_physical_basis();
-    bool using_m3_physical_basis() const { return use_m3_physical_basis_; }
+    bool using_m3_physical_basis() const { return physical_basis_ == PhysicalBasis::M3; }
 
     /**
      * @brief Enable z-mirror physical basis (half grid along z).
@@ -271,7 +275,7 @@ public:
      * For t_z = 1/2, Nz must be divisible by 4 to align the half-cell shift.
      */
     void enable_z_mirror_physical_basis();
-    bool using_z_mirror_physical_basis() const { return use_z_mirror_physical_basis_; }
+    bool using_z_mirror_physical_basis() const { return physical_basis_ == PhysicalBasis::ZMirror; }
     int get_z_mirror_shift() const { return z_mirror_shift_; }
     double get_z_mirror_translation() const { return z_mirror_translation_; }
 

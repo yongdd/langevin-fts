@@ -76,6 +76,7 @@ from scipy.io import savemat, loadmat
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 from .system_spec import parse_system
+from .simulation_options import ClftsOptions
 from .propagator_solver import PropagatorSolver
 from .lfts import calculate_sigma
 
@@ -171,6 +172,10 @@ class CLFTS:
         # parse_system validates the input exactly as SCFT and LFTS do.
         spec = parse_system(params)
         self.spec = spec
+
+        # Method-specific options (defaults live in simulation_options.py)
+        options = ClftsOptions.from_params(params)
+        self.options = options
         self.monomer_types = list(spec.monomer_types)
         self.segment_lengths = dict(spec.chain.segment_lengths)
         self.distinct_polymers = list(spec.polymers)
@@ -201,8 +206,8 @@ class CLFTS:
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(
-            params["langevin"]["nbar"],
-            params["langevin"]["dt"],
+            options.langevin["nbar"],
+            options.langevin["dt"],
             np.prod(params["nx"]),
             np.prod(params["lx"])
         )
@@ -213,12 +218,7 @@ class CLFTS:
         #   - "dynamic_stabilization": the combined coefficient αds (as in Willis & Matsen 2024)
         #   - "alpha_ds": alias for compatibility with reference codes
         # Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
-        if "dynamic_stabilization" in params:
-            self.alpha_ds = params["dynamic_stabilization"]
-        elif "alpha_ds" in params:
-            self.alpha_ds = params["alpha_ds"]
-        else:
-            self.alpha_ds = 0.0
+        self.alpha_ds = options.alpha_ds
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
@@ -255,7 +255,7 @@ class CLFTS:
 
         molecules.display_architectures()
 
-        print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
+        print("Invariant Polymerization Index (N_Ref): %d" % (options.langevin["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field:", self.dt_scaling)
         print("Dynamical stabilization constant: %f" % (self.alpha_ds))
@@ -267,11 +267,11 @@ class CLFTS:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.langevin = params["langevin"].copy()
+        self.langevin = dict(options.langevin)
         self.langevin.update({"sigma": langevin_sigma})
 
-        self.verbose_level = params["verbose_level"]
-        self.recording = params["recording"].copy()
+        self.verbose_level = options.verbose_level
+        self.recording = dict(options.recording)
 
         self.molecules = molecules
         self.propagator_computation_optimizer = propagator_computation_optimizer
@@ -280,7 +280,7 @@ class CLFTS:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            params.get("smearing", None)
+            options.smearing
         )
 
     def compute_concentrations(self, w_aux):

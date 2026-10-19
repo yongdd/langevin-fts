@@ -87,9 +87,7 @@ protected:
     uint64_t instance_id_{0};
     mutable std::atomic<uint64_t> cache_epoch_{1};
 
-    /**
-     * @brief Get thread-local state for this instance.
-     */
+    /// Get thread-local state for this instance.
     ThreadState& get_thread_state() const
     {
         struct ThreadLocalStates
@@ -111,9 +109,7 @@ protected:
         return state;
     }
 
-    /**
-     * @brief Generate Boltzmann factors for given ds.
-     */
+    /// Generate Boltzmann factors for given ds.
     double* generateBoltzmann(double ds) const
     {
         double* boltz = new double[M_physical_];
@@ -152,17 +148,13 @@ protected:
         return boltz;
     }
 
-    /**
-     * @brief Invalidate all Boltzmann factor caches.
-     */
+    /// Invalidate all Boltzmann factor caches.
     void freeBoltzmann()
     {
         cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
     }
 
-    /**
-     * @brief Access derived class (CRTP).
-     */
+    /// Access derived class (CRTP).
     Derived& derived() { return static_cast<Derived&>(*this); }
     const Derived& derived() const { return static_cast<const Derived&>(*this); }
 
@@ -178,9 +170,9 @@ public:
         std::array<double, 6> cell_para)
         : nx_logical_(nx_logical),
           cell_para_(cell_para),
-          instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed)),
           io_buffer_(nullptr),
-          temp_buffer_(nullptr)
+          temp_buffer_(nullptr),
+          instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
     {
         // Validate even grid sizes
         for (int d = 0; d < 3; ++d)
@@ -210,17 +202,13 @@ public:
         norm_factor_ = 1.0 / static_cast<double>(M_logical_);
     }
 
-    /**
-     * @brief Virtual destructor.
-     */
+    /// Virtual destructor.
     virtual ~CrysFFTPmmmBase()
     {
         freeBoltzmann();
     }
 
-    /**
-     * @brief Update cell parameters.
-     */
+    /// Update cell parameters.
     void set_cell_para(const std::array<double, 6>& cell_para)
     {
         if (cell_para[0] == cell_para_[0] &&
@@ -234,9 +222,7 @@ public:
         freeBoltzmann();
     }
 
-    /**
-     * @brief Set contour step size and prepare Boltzmann factors.
-     */
+    /// Set contour step size and prepare Boltzmann factors.
     void set_contour_step(double ds)
     {
         ThreadState& state = get_thread_state();
@@ -288,9 +274,7 @@ public:
             q_out[i] = io_local[i] * norm_factor_;
     }
 
-    /**
-     * @brief Apply custom multiplier in Fourier space.
-     */
+    /// Apply custom multiplier in Fourier space.
     void apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
     {
         // Get thread-local buffers from derived class

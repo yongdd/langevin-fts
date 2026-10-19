@@ -19,12 +19,7 @@ CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
-    : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer),
-      propagator_solver(nullptr),
-      sc(nullptr),
-      n_streams(1),
-      d_q_unity(nullptr),
-      d_q_mask(nullptr),
+    : CudaComputationCommon<T>(cb, molecules, propagator_computation_optimizer, /*n_streams=*/1),
       total_max_n_segment(0),
       checkpoint_interval(1),
       d_phi(nullptr)
@@ -36,7 +31,6 @@ CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
         {
             d_q_one[i][j] = nullptr;
             d_propagator_sub_dep[i][j] = nullptr;
-            streams[i][j] = nullptr;
         }
     }
     d_workspace[0] = nullptr;
@@ -54,19 +48,6 @@ template <typename T>
 void CudaComputationReduceMemoryBase<T>::free_checkpoint_memory(T* ptr)
 {
     cudaFreeHost(ptr);
-}
-
-template <typename T>
-void CudaComputationReduceMemoryBase<T>::update_laplacian_operator()
-{
-    try
-    {
-        propagator_solver->update_laplacian_operator();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
 }
 
 template <typename T>
@@ -105,7 +86,7 @@ void CudaComputationReduceMemoryBase<T>::advance_propagator_single_segment(
         gpu_error_check(cudaMemcpy(d_q_in, q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Advance
-        propagator_solver->advance_propagator(0, d_q_in, d_q_out, monomer_type, d_q_mask, ds_index);
+        this->propagator_solver->advance_propagator(0, d_q_in, d_q_out, monomer_type, this->d_q_mask, ds_index);
         gpu_error_check(cudaDeviceSynchronize());
 
         // Copy back
@@ -253,19 +234,6 @@ void CudaComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
             for(int i=0; i<N; i++)
                 phi[i+b*N] = _essential_phi_block[i];
         }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-template <typename T>
-T CudaComputationReduceMemoryBase<T>::get_solvent_partition(int s)
-{
-    try
-    {
-        return this->single_solvent_partitions[s];
     }
     catch(std::exception& exc)
     {

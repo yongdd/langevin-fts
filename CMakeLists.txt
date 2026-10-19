@@ -3,8 +3,8 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 # ============================================================================
 #  Project
 # ============================================================================
-SET(POLYMERFTS_VERSION_MAJOR 1)
-SET(POLYMERFTS_VERSION_MINOR 0)
+SET(POLYMERFTS_VERSION_MAJOR 0)
+SET(POLYMERFTS_VERSION_MINOR 10)
 SET(POLYMERFTS_VERSION_PATCH 0)
 SET(POLYMERFTS_VERSION "${POLYMERFTS_VERSION_MAJOR}.${POLYMERFTS_VERSION_MINOR}.${POLYMERFTS_VERSION_PATCH}")
 
@@ -26,6 +26,7 @@ OPTION(POLYMERFTS_USE_CUDA        "Enable CUDA backend"                       ON
 OPTION(POLYMERFTS_BUILD_TESTS     "Build test executables"                    ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON  "Install Python module"                     ON)
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
+OPTION(POLYMERFTS_WERROR          "Treat host C++ warnings as errors (CI)"    OFF)
 
 # ============================================================================
 #  Compiler settings
@@ -50,6 +51,9 @@ SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # instrumentation. (For AddressSanitizer add -fsanitize=address
 # -fno-omit-frame-pointer to CMAKE_CXX_FLAGS on the command line.)
 ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wall>)
+IF(POLYMERFTS_WERROR)
+    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Werror>)
+ENDIF()
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     ADD_COMPILE_OPTIONS(-Wextra -pg)
 ENDIF()
@@ -138,6 +142,7 @@ SET(POLYMERFTS_CPU_COMMON_SOURCES
     src/platforms/cpu/CpuSolverPseudoRK2.cpp
     src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
     src/platforms/cpu/CpuSolverCNADI.cpp
+    src/platforms/cpu/CpuComputationCommon.cpp
     src/platforms/cpu/CpuComputationBase.cpp
     src/platforms/cpu/CpuComputationContinuous.cpp
     src/platforms/cpu/CpuComputationDiscrete.cpp
@@ -262,6 +267,15 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     ENABLE_LANGUAGE(CUDA)
     # Host-compiled sources (PlatformSelector.cpp, the pybind module, tests)
     # include cufft.h, so the toolkit headers go on the C++ include path too.
+    # CMake drops -I flags for directories it believes the compiler searches
+    # implicitly; if CPLUS_INCLUDE_PATH contained the CUDA include directory at
+    # configure time, the flag would be silently omitted and the build would
+    # depend on that environment variable. Remove the directory from the
+    # implicit list so the flag is always emitted.
+    FOREACH(_cuda_inc ${CUDAToolkit_INCLUDE_DIRS})
+        GET_FILENAME_COMPONENT(_cuda_inc_real "${_cuda_inc}" REALPATH)
+        LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${_cuda_inc}" "${_cuda_inc_real}")
+    ENDFOREACH()
     MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: include ${CUDAToolkit_INCLUDE_DIRS}")
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
     # Put the CUDA toolkit library directory on the linker search path so the
@@ -286,6 +300,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoRK2.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
+        src/platforms/cuda/CudaComputationCommon.cu
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu

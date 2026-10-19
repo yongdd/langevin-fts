@@ -968,19 +968,6 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
 }
 
 template <typename T>
-T CudaComputationReduceMemoryDiscrete<T>::get_total_partition(int polymer)
-{
-    try
-    {
-        return this->single_polymer_partitions[polymer];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-template <typename T>
 void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().

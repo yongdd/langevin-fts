@@ -23,6 +23,7 @@
 
 #include "CpuSolverPseudoBase.h"
 #include "CrysFFTSelector.h"
+#include "CrysFFTBasisMapping.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -115,361 +116,169 @@ void CpuSolverPseudoBase<T>::cleanup_shared()
 }
 
 //------------------------------------------------------------------------------
-// Set space group for reduced basis
+// Space group / CrysFFT setup
 //------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoBase<T>::reset_crysfft()
+{
+    crysfft_mode_ = CrysFFTMode::None;
+#ifdef USE_CPU_FFTW
+    crysfft_pmmm_fftw_.reset();
+    crysfft_recursive_fftw_.reset();
+    crysfft_oblique_fftw_.reset();
+#endif
+#ifdef USE_CPU_MKL
+    crysfft_pmmm_mkl_.reset();
+    crysfft_recursive_mkl_.reset();
+    crysfft_oblique_mkl_.reset();
+#endif
+    crysfft_full_indices_.clear();
+    crysfft_reduced_indices_.clear();
+    crysfft_kx2_.clear();
+    crysfft_ky2_.clear();
+    crysfft_kz2_.clear();
+    crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
+    crysfft_identity_map_ = false;
+}
+
+template <typename T>
+bool CpuSolverPseudoBase<T>::adopt_crysfft_mapping(
+    const CrysFFTBasisMapping& map, bool physical_basis_enabled, const char* mismatch_message)
+{
+    if (!crysfft_mapping_usable(map, physical_basis_enabled, mismatch_message))
+        return false;
+    if (physical_basis_enabled)
+    {
+        // The fields already live on the physical grid: no index maps needed.
+        crysfft_full_indices_.clear();
+        crysfft_reduced_indices_.clear();
+        crysfft_identity_map_ = true;
+    }
+    else
+    {
+        crysfft_full_indices_ = map.phys_to_full;
+        crysfft_reduced_indices_ = map.phys_to_reduced;
+        crysfft_identity_map_ = map.identity;
+    }
+    return true;
+}
+
 template <typename T>
 void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
 {
     space_group_ = sg;
 
-    auto reset_crysfft = [&]() {
-        crysfft_mode_ = CrysFFTMode::None;
-#ifdef USE_CPU_FFTW
-        crysfft_pmmm_fftw_.reset();
-        crysfft_recursive_fftw_.reset();
-        crysfft_oblique_fftw_.reset();
-#endif
-#ifdef USE_CPU_MKL
-        crysfft_pmmm_mkl_.reset();
-        crysfft_recursive_mkl_.reset();
-        crysfft_oblique_mkl_.reset();
-#endif
-        crysfft_full_indices_.clear();
-        crysfft_reduced_indices_.clear();
-        crysfft_kx2_.clear();
-        crysfft_ky2_.clear();
-        crysfft_kz2_.clear();
-        crysfft_k_cache_lx_ = {{-1.0, -1.0, -1.0}};
-        crysfft_identity_map_ = false;
-    };
-
-    if (sg != nullptr)
-    {
-        // Allocate full grid buffers for expand/reduce around FFT
-        const int M = cb->get_total_grid();
-        q_full_in_.resize(M);
-        q_full_out_.resize(M);
-
-        // Initialize crystallographic FFT when applicable
-        if constexpr (std::is_same_v<T, double>)
-        {
-            reset_crysfft();
-
-            if (dim_ == 3)
-            {
-                const auto nx = cb->get_nx();
-                std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
-                const auto angles = cb->get_angles();
-                const bool z_axis_orthogonal =
-                    (angles.size() >= 3 &&
-                     std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
-                     std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-                const auto selection = select_crysfft_mode(
-                    space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-                if (selection.mode != CrysFFTChoice::None || selection.can_pmmm || selection.can_oblique_z)
-                {
-                    auto lx = cb->get_lx();
-                    auto angles = cb->get_angles();
-                    std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-
-                    const int M_reduced = space_group_->get_n_reduced_basis();
-                    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-                    const bool use_m3_basis = space_group_->using_m3_physical_basis();
-                    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-                    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
-
-                    auto check_identity = [&](bool even_indices) -> bool {
-                        const int Nx2 = nx[0] / 2;
-                        const int Ny2 = nx[1] / 2;
-                        const int Nz2 = nx[2] / 2;
-                        const int M_phys = Nx2 * Ny2 * Nz2;
-                        if (M_reduced != M_phys)
-                            return false;
-
-                        int idx = 0;
-                        for (int ix = 0; ix < Nx2; ++ix)
-                        {
-                            const int fx = even_indices ? (2 * ix) : ix;
-                            for (int iy = 0; iy < Ny2; ++iy)
-                            {
-                                const int fy = even_indices ? (2 * iy) : iy;
-                                for (int iz = 0; iz < Nz2; ++iz)
-                                {
-                                    const int fz = even_indices ? (2 * iz) : iz;
-                                    const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                    const int reduced_idx = full_to_reduced[full_idx];
-                                    if (reduced_idx != idx)
-                                        return false;
-                                    ++idx;
-                                }
-                            }
-                        }
-                        return true;
-                    };
-
-                    auto build_mapping = [&](bool even_indices) -> bool {
-                        const int Nx2 = nx[0] / 2;
-                        const int Ny2 = nx[1] / 2;
-                        const int Nz2 = nx[2] / 2;
-                        const int M_phys = Nx2 * Ny2 * Nz2;
-
-                        crysfft_full_indices_.resize(M_phys);
-                        crysfft_reduced_indices_.resize(M_phys);
-                        crysfft_identity_map_ = false;
-
-                        std::vector<int> coverage(M_reduced, 0);
-                        int idx = 0;
-                        for (int ix = 0; ix < Nx2; ++ix)
-                        {
-                            const int fx = even_indices ? (2 * ix) : ix;
-                            for (int iy = 0; iy < Ny2; ++iy)
-                            {
-                                const int fy = even_indices ? (2 * iy) : iy;
-                                for (int iz = 0; iz < Nz2; ++iz)
-                                {
-                                    const int fz = even_indices ? (2 * iz) : iz;
-                                    const int full_idx = (fx * nx[1] + fy) * nx[2] + fz;
-                                    crysfft_full_indices_[idx] = full_idx;
-                                    const int reduced_idx = full_to_reduced[full_idx];
-                                    crysfft_reduced_indices_[idx] = reduced_idx;
-                                    coverage[reduced_idx] += 1;
-                                    ++idx;
-                                }
-                            }
-                        }
-
-                        for (int i = 0; i < M_reduced; ++i)
-                        {
-                            if (coverage[i] == 0)
-                                return false;
-                        }
-
-                        if (M_reduced == M_phys)
-                        {
-                            bool identity = true;
-                            for (int i = 0; i < M_phys; ++i)
-                            {
-                                if (crysfft_reduced_indices_[i] != i)
-                                {
-                                    identity = false;
-                                    break;
-                                }
-                            }
-                            crysfft_identity_map_ = identity;
-                        }
-                        return true;
-                    };
-
-                    auto check_identity_hex = [&](int z_shift) -> bool {
-                        const int Nz2 = nx[2] / 2;
-                        const int M_phys = nx[0] * nx[1] * Nz2;
-                        if (M_reduced != M_phys)
-                            return false;
-
-                        int idx = 0;
-                        for (int ix = 0; ix < nx[0]; ++ix)
-                        {
-                            for (int iy = 0; iy < nx[1]; ++iy)
-                            {
-                                for (int iz = 0; iz < Nz2; ++iz)
-                                {
-                                    int iz_full = iz + z_shift;
-                                    if (iz_full >= nx[2])
-                                        iz_full -= nx[2];
-                                    const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                    const int reduced_idx = full_to_reduced[full_idx];
-                                    if (reduced_idx != idx)
-                                        return false;
-                                    ++idx;
-                                }
-                            }
-                        }
-                        return true;
-                    };
-
-                    auto build_mapping_hex = [&](int z_shift) -> bool {
-                        const int Nz2 = nx[2] / 2;
-                        const int M_phys = nx[0] * nx[1] * Nz2;
-
-                        crysfft_full_indices_.resize(M_phys);
-                        crysfft_reduced_indices_.resize(M_phys);
-                        crysfft_identity_map_ = false;
-
-                        std::vector<int> coverage(M_reduced, 0);
-                        int idx = 0;
-                        for (int ix = 0; ix < nx[0]; ++ix)
-                        {
-                            for (int iy = 0; iy < nx[1]; ++iy)
-                            {
-                                for (int iz = 0; iz < Nz2; ++iz)
-                                {
-                                    int iz_full = iz + z_shift;
-                                    if (iz_full >= nx[2])
-                                        iz_full -= nx[2];
-                                    const int full_idx = (ix * nx[1] + iy) * nx[2] + iz_full;
-                                    crysfft_full_indices_[idx] = full_idx;
-                                    const int reduced_idx = full_to_reduced[full_idx];
-                                    crysfft_reduced_indices_[idx] = reduced_idx;
-                                    coverage[reduced_idx] += 1;
-                                    ++idx;
-                                }
-                            }
-                        }
-
-                        for (int i = 0; i < M_reduced; ++i)
-                        {
-                            if (coverage[i] == 0)
-                                return false;
-                        }
-
-                        if (M_reduced == M_phys)
-                        {
-                            bool identity = true;
-                            for (int i = 0; i < M_phys; ++i)
-                            {
-                                if (crysfft_reduced_indices_[i] != i)
-                                {
-                                    identity = false;
-                                    break;
-                                }
-                            }
-                            crysfft_identity_map_ = identity;
-                        }
-                        return true;
-                    };
-
-                    if (selection.mode == CrysFFTChoice::Recursive3m)
-                    {
-                        if (use_pmmm_basis)
-                            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-#ifdef USE_CPU_MKL
-                        if (fft_backend_ == FFTBackend::MKL)
-                            crysfft_recursive_mkl_ = std::make_unique<MklCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
-#endif
-#ifdef USE_CPU_FFTW
-                        if (fft_backend_ == FFTBackend::FFTW)
-                            crysfft_recursive_fftw_ = std::make_unique<FftwCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
-#endif
-                        if (use_m3_basis)
-                        {
-                            if (!check_identity(true))
-                                throw_with_line_number("M3 physical basis does not match recursive 3m CrysFFT grid ordering.");
-                            crysfft_identity_map_ = true;
-                            crysfft_mode_ = CrysFFTMode::Recursive3m;
-                        }
-                        else if (build_mapping(true))
-                        {
-                            crysfft_mode_ = CrysFFTMode::Recursive3m;
-                        }
-                        else
-                        {
-#ifdef USE_CPU_MKL
-                            crysfft_recursive_mkl_.reset();
-#endif
-#ifdef USE_CPU_FFTW
-                            crysfft_recursive_fftw_.reset();
-#endif
-                            crysfft_full_indices_.clear();
-                            crysfft_reduced_indices_.clear();
-                            crysfft_identity_map_ = false;
-                        }
-                    }
-
-                    if (crysfft_mode_ == CrysFFTMode::None && selection.can_pmmm)
-                    {
-                        if (use_m3_basis)
-                            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-#ifdef USE_CPU_MKL
-                        if (fft_backend_ == FFTBackend::MKL)
-                            crysfft_pmmm_mkl_ = std::make_unique<MklCrysFFTPmmm>(nx_logical, cell_para);
-#endif
-#ifdef USE_CPU_FFTW
-                        if (fft_backend_ == FFTBackend::FFTW)
-                            crysfft_pmmm_fftw_ = std::make_unique<FftwCrysFFTPmmm>(nx_logical, cell_para);
-#endif
-                        if (use_pmmm_basis)
-                        {
-                            if (!check_identity(false))
-                                throw_with_line_number("Pmmm physical basis does not match Pmmm CrysFFT grid ordering.");
-                            crysfft_identity_map_ = true;
-                            crysfft_mode_ = CrysFFTMode::PmmmDct;
-                        }
-                        else if (build_mapping(false))
-                        {
-                            crysfft_mode_ = CrysFFTMode::PmmmDct;
-                        }
-                        else
-                        {
-#ifdef USE_CPU_MKL
-                            crysfft_pmmm_mkl_.reset();
-#endif
-#ifdef USE_CPU_FFTW
-                            crysfft_pmmm_fftw_.reset();
-#endif
-                            crysfft_full_indices_.clear();
-                            crysfft_reduced_indices_.clear();
-                            crysfft_identity_map_ = false;
-                        }
-                    }
-
-                    const bool want_hex = (selection.mode == CrysFFTChoice::ObliqueZ);
-                    if (crysfft_mode_ == CrysFFTMode::None && want_hex)
-                    {
-                        if (use_m3_basis || use_pmmm_basis)
-                            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-
-                        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                                          : selection.oblique_z_shift;
-                        if (use_hex_basis && z_shift != selection.oblique_z_shift)
-                            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-
-#ifdef USE_CPU_MKL
-                        if (fft_backend_ == FFTBackend::MKL)
-                            crysfft_oblique_mkl_ = std::make_unique<MklCrysFFTObliqueZ>(nx_logical, cell_para);
-#endif
-#ifdef USE_CPU_FFTW
-                        if (fft_backend_ == FFTBackend::FFTW)
-                            crysfft_oblique_fftw_ = std::make_unique<FftwCrysFFTObliqueZ>(nx_logical, cell_para);
-#endif
-                        if (use_hex_basis)
-                        {
-                            if (!check_identity_hex(z_shift))
-                                throw_with_line_number("Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering.");
-                            crysfft_identity_map_ = true;
-                            crysfft_mode_ = CrysFFTMode::ObliqueZ;
-                        }
-                        else if (build_mapping_hex(z_shift))
-                        {
-                            crysfft_mode_ = CrysFFTMode::ObliqueZ;
-                        }
-                        else
-                        {
-#ifdef USE_CPU_MKL
-                            crysfft_oblique_mkl_.reset();
-#endif
-#ifdef USE_CPU_FFTW
-                            crysfft_oblique_fftw_.reset();
-#endif
-                            crysfft_full_indices_.clear();
-                            crysfft_reduced_indices_.clear();
-                            crysfft_identity_map_ = false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    else
+    if (sg == nullptr)
     {
         // Free buffers when space group is disabled
         q_full_in_.clear();
         q_full_in_.shrink_to_fit();
         q_full_out_.clear();
         q_full_out_.shrink_to_fit();
-
         if constexpr (std::is_same_v<T, double>)
-        {
             reset_crysfft();
+        return;
+    }
+
+    // Full grid buffers for expand/reduce around FFT
+    const int M = cb->get_total_grid();
+    q_full_in_.resize(M);
+    q_full_out_.resize(M);
+
+    // [real-only feature] The CrysFFT fast paths fold real fields on the
+    // physical sub-grid; complex fields always use the full-grid reduced basis.
+    if constexpr (std::is_same_v<T, double>)
+    {
+        reset_crysfft();
+        if (dim_ == 3)
+            init_crysfft();
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::init_crysfft()
+{
+    const auto nx = cb->get_nx();
+    const std::array<int, 3> nx_logical = {nx[0], nx[1], nx[2]};
+    const auto angles = cb->get_angles();
+    const bool z_axis_orthogonal =
+        (angles.size() >= 3 &&
+         std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
+         std::abs(angles[1] - M_PI / 2.0) < 1e-10);
+    const auto selection = select_crysfft_mode(
+        space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
+    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
+        return;
+
+    const auto lx = cb->get_lx();
+    const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
+    const int M_reduced = space_group_->get_n_reduced_basis();
+    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
+    const bool use_m3_basis = space_group_->using_m3_physical_basis();
+    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
+    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
+
+    // Recursive 3m: octant sampled at even full-grid indices
+    if (selection.mode == CrysFFTChoice::Recursive3m)
+    {
+        if (use_pmmm_basis)
+            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
+        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/true);
+        if (adopt_crysfft_mapping(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
+        {
+#ifdef USE_CPU_MKL
+            if (fft_backend_ == FFTBackend::MKL)
+                crysfft_recursive_mkl_ = std::make_unique<MklCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
+#endif
+#ifdef USE_CPU_FFTW
+            if (fft_backend_ == FFTBackend::FFTW)
+                crysfft_recursive_fftw_ = std::make_unique<FftwCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
+#endif
+            crysfft_mode_ = CrysFFTMode::Recursive3m;
+        }
+    }
+
+    // Pmmm DCT: octant at consecutive indices
+    if (crysfft_mode_ == CrysFFTMode::None && selection.can_pmmm)
+    {
+        if (use_m3_basis)
+            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
+        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/false);
+        if (adopt_crysfft_mapping(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
+        {
+#ifdef USE_CPU_MKL
+            if (fft_backend_ == FFTBackend::MKL)
+                crysfft_pmmm_mkl_ = std::make_unique<MklCrysFFTPmmm>(nx_logical, cell_para);
+#endif
+#ifdef USE_CPU_FFTW
+            if (fft_backend_ == FFTBackend::FFTW)
+                crysfft_pmmm_fftw_ = std::make_unique<FftwCrysFFTPmmm>(nx_logical, cell_para);
+#endif
+            crysfft_mode_ = CrysFFTMode::PmmmDct;
+        }
+    }
+
+    // ObliqueZ: lower z half (z-mirror)
+    if (crysfft_mode_ == CrysFFTMode::None && selection.mode == CrysFFTChoice::ObliqueZ)
+    {
+        if (use_m3_basis || use_pmmm_basis)
+            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
+                                          : selection.oblique_z_shift;
+        if (use_hex_basis && z_shift != selection.oblique_z_shift)
+            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
+        const auto map = build_crysfft_mapping_z_mirror(nx_logical, full_to_reduced, M_reduced, z_shift);
+        if (adopt_crysfft_mapping(map, use_hex_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
+        {
+#ifdef USE_CPU_MKL
+            if (fft_backend_ == FFTBackend::MKL)
+                crysfft_oblique_mkl_ = std::make_unique<MklCrysFFTObliqueZ>(nx_logical, cell_para);
+#endif
+#ifdef USE_CPU_FFTW
+            if (fft_backend_ == FFTBackend::FFTW)
+                crysfft_oblique_fftw_ = std::make_unique<FftwCrysFFTObliqueZ>(nx_logical, cell_para);
+#endif
+            crysfft_mode_ = CrysFFTMode::ObliqueZ;
         }
     }
 }
@@ -796,275 +605,340 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
  *
  * @see docs/theory/StressTensor.md for the derivation
  */
+// Space groups whose point-group operations permute axes (cubic: x,y,z;
+// tetragonal: x,y) make the per-axis multipliers k_d² non-orbit-invariant, so
+// the reduced-basis accumulation scrambles the individual components (only
+// their sum is invariant). Since the kernel q1·q2 is space-group symmetric, the
+// exact per-direction sum is the average over equivalent axes.
+static void symmetrize_axis_sums(const std::string& crystal_system, double sums[3])
+{
+    if (crystal_system == "Cubic")
+    {
+        const double avg = (sums[0] + sums[1] + sums[2]) / 3.0;
+        sums[0] = avg; sums[1] = avg; sums[2] = avg;
+    }
+    else if (crystal_system == "Tetragonal")
+    {
+        const double avg = (sums[0] + sums[1]) / 2.0;
+        sums[0] = avg; sums[1] = avg;
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::crysfft_pmmm_axis_multiplier(
+    double* phys_in, double* phys_out, int axis, const double* boltz)
+{
+    const std::vector<double>* k2[3] = {&crysfft_kx2_, &crysfft_ky2_, &crysfft_kz2_};
+    const std::vector<double>& k2_axis = *k2[axis];
+    const double* multiplier = k2_axis.data();
+
+    // Discrete chains: fold the bond factor ĝ(k) into the multiplier
+    thread_local std::vector<double> weighted;
+    if (boltz != nullptr)
+    {
+        const int M_phys = static_cast<int>(k2_axis.size());
+        weighted.resize(M_phys);
+        for (int i = 0; i < M_phys; ++i)
+            weighted[i] = boltz[i] * k2_axis[i];
+        multiplier = weighted.data();
+    }
+#ifdef USE_CPU_MKL
+    if (crysfft_pmmm_mkl_)
+    {
+        crysfft_pmmm_mkl_->apply_multiplier(phys_in, phys_out, multiplier);
+        return;
+    }
+#endif
+#ifdef USE_CPU_FFTW
+    if (crysfft_pmmm_fftw_)
+    {
+        crysfft_pmmm_fftw_->apply_multiplier(phys_in, phys_out, multiplier);
+        return;
+    }
+#endif
+    throw_with_line_number("Pmmm CrysFFT requested but it is not initialized.");
+}
+
+template <typename T>
+bool CpuSolverPseudoBase<T>::crysfft_recursive_axis_multiplier(
+    double* phys_in, double* phys_out, int axis, bool with_bond, double coeff)
+{
+#ifdef USE_CPU_MKL
+    if (crysfft_recursive_mkl_)
+    {
+        using MT = MklCrysFFTRecursive3m::MultiplierType;
+        static constexpr MT k_types[3]   = {MT::Kx2, MT::Ky2, MT::Kz2};
+        static constexpr MT exp_types[3] = {MT::ExpKx2, MT::ExpKy2, MT::ExpKz2};
+        crysfft_recursive_mkl_->apply_multiplier(phys_in, phys_out,
+            with_bond ? exp_types[axis] : k_types[axis], with_bond ? coeff : 0.0);
+        return true;
+    }
+#endif
+#ifdef USE_CPU_FFTW
+    if (crysfft_recursive_fftw_)
+    {
+        using MT = FftwCrysFFTRecursive3m::MultiplierType;
+        static constexpr MT k_types[3]   = {MT::Kx2, MT::Ky2, MT::Kz2};
+        static constexpr MT exp_types[3] = {MT::ExpKx2, MT::ExpKy2, MT::ExpKz2};
+        crysfft_recursive_fftw_->apply_multiplier(phys_in, phys_out,
+            with_bond ? exp_types[axis] : k_types[axis], with_bond ? coeff : 0.0);
+        return true;
+    }
+#endif
+    return false;
+}
+
+template <typename T>
+bool CpuSolverPseudoBase<T>::compute_stress_crysfft(
+    const T* q_1, const T* q_2, double bond_length_sq, const double* boltz_bond, std::vector<T>& stress)
+{
+    // [real-only feature] CrysFFT folds real fields on the physical sub-grid.
+    if constexpr (!std::is_same_v<T, double>)
+    {
+        (void)q_1; (void)q_2; (void)bond_length_sq; (void)boltz_bond; (void)stress;
+        return false;
+    }
+    else
+    {
+        // Only the Pmmm and recursive-3m modes have a stress fast path (ObliqueZ
+        // has none). The fast path computes the diagonal sums V₁₁, V₂₂, V₃₃
+        // only, which is fine because the eligible crystal systems are
+        // orthogonal and never optimize angles. If angle derivatives are forced
+        // (force_off_diagonal_stress_), fall back to the standard path, which
+        // can compute the cross terms, instead of returning zeros for them.
+        if (!(use_crysfft_pmmm() || use_crysfft_recursive())
+            || space_group_ == nullptr || !is_periodic_ || dim_ != 3 || !cb->is_orthogonal()
+            || this->force_off_diagonal_stress_)
+            return false;
+
+        const int M_full = cb->get_total_grid();
+        const int M_reduced = space_group_->get_n_reduced_basis();
+        const int M_phys = get_crysfft_physical_size();
+        const auto& orbit_counts = space_group_->get_orbit_counts();
+
+        thread_local std::vector<double> phys_q1;
+        thread_local std::vector<double> phys_q2;
+        thread_local std::vector<double> phys_tmp;
+        thread_local std::vector<double> reduced_tmp;
+        thread_local std::vector<double> boltz;
+        if (static_cast<int>(phys_q1.size()) != M_phys)
+        {
+            phys_q1.resize(M_phys);
+            phys_q2.resize(M_phys);
+            phys_tmp.resize(M_phys);
+        }
+        if (static_cast<int>(reduced_tmp.size()) != M_reduced)
+            reduced_tmp.resize(M_reduced);
+
+        // Reduced -> physical grid
+        fill_crysfft_from_reduced(q_1, phys_q1.data());
+        fill_crysfft_from_reduced(q_2, phys_q2.data());
+
+        // Discrete chains carry the bond factor ĝ(k) = exp(-b² k² Δs / 6)
+        const bool with_bond = (boltz_bond != nullptr);
+        const double coeff = with_bond ? bond_length_sq * molecules->get_global_ds() / 6.0 : 0.0;
+        if (use_crysfft_pmmm())
+        {
+            update_crysfft_k_cache();   // k-space tables of the DCT physical grid
+            if (with_bond)
+            {
+                boltz.resize(M_phys);
+                for (int i = 0; i < M_phys; ++i)
+                {
+                    const double k2 = crysfft_kx2_[i] + crysfft_ky2_[i] + crysfft_kz2_[i];
+                    boltz[i] = std::exp(-k2 * coeff);
+                }
+            }
+        }
+
+        // sums[d] = Σ_r n_orbit(r) q1(r) [F⁻¹ k_d² ĝ F q2](r) over the reduced basis
+        double sums[3] = {0.0, 0.0, 0.0};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (use_crysfft_pmmm())
+                crysfft_pmmm_axis_multiplier(phys_q2.data(), phys_tmp.data(), axis, with_bond ? boltz.data() : nullptr);
+            else if (!crysfft_recursive_axis_multiplier(phys_q2.data(), phys_tmp.data(), axis, with_bond, coeff))
+                return false;
+            reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
+            double sum = 0.0;
+            for (int i = 0; i < M_reduced; ++i)
+                sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
+            sums[axis] = sum;
+        }
+        symmetrize_axis_sums(space_group_->get_crystal_system(), sums);
+
+        // The CrysFFT multipliers are Cartesian k_d² = (2πm_d/L_d)², while the
+        // standard path accumulates deformation-vector components v_d² = k_d²/L_d²
+        // (see Pseudo::update_weighted_fourier_basis_periodic). Divide by L_d²
+        // so both paths return the same V_dd.
+        const std::vector<double> lx = cb->get_lx();
+        for (int d = 0; d < 3; ++d)
+        {
+            const double inv_L2 = 1.0 / (lx[d] * lx[d]);
+            stress[d] = bond_length_sq * M_full * sums[d] * inv_L2;
+        }
+        return true;
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::accumulate_stress_periodic(
+    const double* qk_1, const double* qk_2, double bond_length_sq,
+    const double* boltz_bond, bool is_orthogonal, std::vector<T>& stress) const
+{
+    const int DIM = dim_;
+    const int M_COMPLEX = pseudo->get_total_complex_grid();
+    const std::complex<double>* qk_1_complex = reinterpret_cast<const std::complex<double>*>(qk_1);
+    const std::complex<double>* qk_2_complex = reinterpret_cast<const std::complex<double>*>(qk_2);
+    const int* negative_k_idx = pseudo->get_negative_frequency_mapping();
+
+    // v⊗v dyad components (deformation vector v = 2π g⁻¹ m, units 1/L²)
+    const double* kk_xx = pseudo->get_fourier_basis_x();
+    const double* kk_yy = pseudo->get_fourier_basis_y();
+    const double* kk_zz = pseudo->get_fourier_basis_z();
+    const double* kk_xy = pseudo->get_fourier_basis_xy();
+    const double* kk_xz = pseudo->get_fourier_basis_xz();
+    const double* kk_yz = pseudo->get_fourier_basis_yz();
+
+    // [type-specific algorithm] Real fields store the Hermitian half-spectrum,
+    // so the conjugate product is formed directly; complex fields need the -k map.
+    auto kernel = [&](int i) -> T
+    {
+        const double boltz_factor = (boltz_bond != nullptr) ? boltz_bond[i] : 1.0;
+        if constexpr (std::is_same<T, double>::value)
+            return bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
+        else
+            return bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[negative_k_idx[i]];
+    };
+
+    if (DIM == 3)
+    {
+        for (int i = 0; i < M_COMPLEX; ++i)
+        {
+            const T coeff = kernel(i);
+            stress[0] += coeff * kk_xx[i];  // V₁₁
+            stress[1] += coeff * kk_yy[i];  // V₂₂
+            stress[2] += coeff * kk_zz[i];  // V₃₃
+        }
+        // Cross terms only for non-orthogonal boxes (see the note in compute_single_segment_stress)
+        if (!is_orthogonal)
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+            {
+                const T coeff = kernel(i);
+                stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
+                stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
+                stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
+            }
+        }
+    }
+    else if (DIM == 2)
+    {
+        for (int i = 0; i < M_COMPLEX; ++i)
+        {
+            const T coeff = kernel(i);
+            stress[0] += coeff * kk_xx[i];  // V₁₁
+            stress[1] += coeff * kk_yy[i];  // V₂₂
+            stress[2] += coeff * kk_xy[i];  // V₁₂ (stored in index 2 for 2D)
+        }
+    }
+    else if (DIM == 1)
+    {
+        // Periodic 1D: the Miller index is mapped to m1, so the stress is in fourier_basis_x
+        for (int i = 0; i < M_COMPLEX; ++i)
+            stress[0] += kernel(i) * kk_xx[i];
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::accumulate_stress_nonperiodic(
+    const double* qk_1, const double* qk_2, double bond_length_sq,
+    const double* boltz_bond, bool is_orthogonal, std::vector<T>& stress) const
+{
+    const int DIM = dim_;
+    const int M_COMPLEX = pseudo->get_total_complex_grid();
+    const double* kk_xx = pseudo->get_fourier_basis_x();
+    const double* kk_yy = pseudo->get_fourier_basis_y();
+    const double* kk_zz = pseudo->get_fourier_basis_z();
+    const double* kk_xy = pseudo->get_fourier_basis_xy();
+    const double* kk_xz = pseudo->get_fourier_basis_xz();
+    const double* kk_yz = pseudo->get_fourier_basis_yz();
+
+    // Real coefficients from DCT/DST. The per-mode Parseval weights (2 for
+    // interior modes, 1 for the DCT m=0 / DST k=n special modes, composed
+    // across dimensions) are folded into the fourier_basis tables by
+    // Pseudo::update_weighted_fourier_basis_mixed, mirroring the periodic
+    // path, so no flat factor is applied here.
+    auto kernel = [&](int i) -> double
+    {
+        const double boltz_factor = (boltz_bond != nullptr) ? boltz_bond[i] : 1.0;
+        return bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
+    };
+
+    if (DIM == 3)
+    {
+        for (int i = 0; i < M_COMPLEX; ++i)
+        {
+            const double coeff = kernel(i);
+            stress[0] += coeff * kk_xx[i];  // V₁₁
+            stress[1] += coeff * kk_yy[i];  // V₂₂
+            stress[2] += coeff * kk_zz[i];  // V₃₃
+        }
+        // Cross terms are zero for non-periodic BC (orthogonal grids only)
+        if (!is_orthogonal)
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+            {
+                const double coeff = kernel(i);
+                stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
+                stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
+                stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
+            }
+        }
+    }
+    else if (DIM == 2)
+    {
+        // The 2D grid is mapped to the y-z axes internally (tnx = {1, nx[0], nx[1]}),
+        // so the stress data live in fourier_basis_y and fourier_basis_z
+        for (int i = 0; i < M_COMPLEX; ++i)
+        {
+            const double coeff = kernel(i);
+            stress[0] += coeff * kk_yy[i];  // V₁₁
+            stress[1] += coeff * kk_zz[i];  // V₂₂
+            stress[2] += coeff * kk_yz[i];  // V₁₂
+        }
+    }
+    else if (DIM == 1)
+    {
+        // The 1D grid is mapped to the z axis internally (tnx = {1, 1, nx[0]})
+        for (int i = 0; i < M_COMPLEX; ++i)
+            stress[0] += kernel(i) * kk_zz[i];
+    }
+}
+
 template <typename T>
 std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length)
 {
     try
     {
-        const int DIM = dim_;
         const int N_STRESS = 6;  // v⊗v dyad sums: V₁₁, V₂₂, V₃₃, V₁₂, V₁₃, V₂₃
         const int M_COMPLEX = pseudo->get_total_complex_grid();
         auto bond_lengths = this->molecules->get_bond_lengths();
 
-        double bond_length_sq;
+        double bond_length_sq = bond_lengths[monomer_type] * bond_lengths[monomer_type];
         if (is_half_bond_length)
-            bond_length_sq = 0.5 * bond_lengths[monomer_type] * bond_lengths[monomer_type];
-        else
-            bond_length_sq = bond_lengths[monomer_type] * bond_lengths[monomer_type];
+            bond_length_sq *= 0.5;
 
         std::vector<T> stress(N_STRESS, 0.0);
 
-        // Get chain-model-specific Boltzmann bond factor
+        // Chain-model-specific Boltzmann bond factor (nullptr for continuous chains)
         const double* _boltz_bond = get_stress_boltz_bond(monomer_type, is_half_bond_length);
 
-        // =====================================================================
-        // CrysFFT stress path (reduced grid, no full-grid FFT)
-        // =====================================================================
-        // NOTE: The CrysFFT fast path computes only the diagonal sums (V₁₁, V₂₂,
-        // V₃₃). This is fine because crystal systems eligible for CrysFFT are
-        // orthogonal and never optimize angles. If the force-off-diagonal flag
-        // is set (angle optimization active) while a space group + CrysFFT are
-        // in use, fall back to the standard path below — which can compute the
-        // cross terms — instead of silently returning zeros for them.
-        if constexpr (std::is_same_v<T, double>)
-        {
-            // Restrict to the modes that actually have a stress fast path
-            // (ObliqueZ has none); otherwise the expansions below would be
-            // wasted before falling through to the standard path. Mirrors the
-            // explicit mode gate used by the CUDA solvers.
-            if ((use_crysfft_pmmm() || use_crysfft_recursive())
-                && space_group_ != nullptr && is_periodic_ && dim_ == 3 && cb->is_orthogonal()
-                && !this->force_off_diagonal_stress_)
-            {
-                const int M_full = cb->get_total_grid();
-                const int M_reduced = space_group_->get_n_reduced_basis();
-                const int M_phys = get_crysfft_physical_size();
-                const auto& orbit_counts = space_group_->get_orbit_counts();
+        // CrysFFT fast path (reduced grid, no full-grid FFT)
+        if (compute_stress_crysfft(q_1, q_2, bond_length_sq, _boltz_bond, stress))
+            return stress;
 
-                // The CrysFFT multipliers below are weighted by Cartesian k_d² = (2πm_d/L_d)²,
-                // while the standard path accumulates deformation-vector components
-                // v_d² = k_d²/L_d² (see Pseudo::update_weighted_fourier_basis_periodic).
-                // Divide each accumulated sum by L_d² so both paths return the same V_dd.
-                const std::vector<double> lx_vec = cb->get_lx();
-                const double inv_L2[3] = {1.0 / (lx_vec[0] * lx_vec[0]),
-                                          1.0 / (lx_vec[1] * lx_vec[1]),
-                                          1.0 / (lx_vec[2] * lx_vec[2])};
-
-                // Space groups whose point-group operations permute axes (cubic: x,y,z;
-                // tetragonal: x,y) make the per-axis multipliers k_d² non-orbit-invariant,
-                // so the reduced-basis accumulation scrambles the individual components
-                // (only their sum is invariant). Since the kernel q1·q2 is space-group
-                // symmetric, the exact per-direction sum is the average over equivalent axes.
-                const std::string& crystal_system = space_group_->get_crystal_system();
-                auto symmetrize_axis_sums = [&crystal_system](double& sxx, double& syy, double& szz)
-                {
-                    if (crystal_system == "Cubic")
-                    {
-                        double avg = (sxx + syy + szz) / 3.0;
-                        sxx = avg; syy = avg; szz = avg;
-                    }
-                    else if (crystal_system == "Tetragonal")
-                    {
-                        double avg = (sxx + syy) / 2.0;
-                        sxx = avg; syy = avg;
-                    }
-                };
-
-                thread_local std::vector<double> phys_q1;
-                thread_local std::vector<double> phys_q2;
-                thread_local std::vector<double> phys_tmp;
-                thread_local std::vector<double> reduced_tmp;
-
-                if (static_cast<int>(phys_q1.size()) != M_phys)
-                {
-                    phys_q1.resize(M_phys);
-                    phys_q2.resize(M_phys);
-                    phys_tmp.resize(M_phys);
-                }
-                if (static_cast<int>(reduced_tmp.size()) != M_reduced)
-                {
-                    reduced_tmp.resize(M_reduced);
-                }
-
-                // Reduced -> physical grid
-                fill_crysfft_from_reduced(q_1, phys_q1.data());
-                fill_crysfft_from_reduced(q_2, phys_q2.data());
-
-                if (use_crysfft_pmmm())
-                {
-                    // Ensure k-space cache for DCT physical grid
-                    update_crysfft_k_cache();
-
-                    auto accumulate_component = [&](const std::vector<double>& multiplier) -> double
-                    {
-#ifdef USE_CPU_MKL
-                        if (crysfft_pmmm_mkl_)
-                            crysfft_pmmm_mkl_->apply_multiplier(phys_q2.data(), phys_tmp.data(), multiplier.data());
-#endif
-#ifdef USE_CPU_FFTW
-                        if (crysfft_pmmm_fftw_)
-                            crysfft_pmmm_fftw_->apply_multiplier(phys_q2.data(), phys_tmp.data(), multiplier.data());
-#endif
-                        reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
-                        double sum = 0.0;
-                        for (int i = 0; i < M_reduced; ++i)
-                            sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
-                        return sum;
-                    };
-
-                    if (_boltz_bond == nullptr)
-                    {
-                        // Continuous chains: no Boltzmann bond factor
-                        double sum_xx = accumulate_component(crysfft_kx2_);
-                        double sum_yy = accumulate_component(crysfft_ky2_);
-                        double sum_zz = accumulate_component(crysfft_kz2_);
-                        symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                        stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                        stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                        stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                    }
-                    else
-                    {
-                        // Discrete chains: include Boltzmann bond factor in multiplier
-                        const double ds = molecules->get_global_ds();
-                        const double coeff = bond_length_sq * ds / 6.0;
-
-                        thread_local std::vector<double> boltz;
-                        thread_local std::vector<double> multiplier;
-
-                        if (static_cast<int>(boltz.size()) != M_phys)
-                        {
-                            boltz.resize(M_phys);
-                            multiplier.resize(M_phys);
-                        }
-
-                        for (int i = 0; i < M_phys; ++i)
-                        {
-                            double k2 = crysfft_kx2_[i] + crysfft_ky2_[i] + crysfft_kz2_[i];
-                            boltz[i] = std::exp(-k2 * coeff);
-                        }
-
-                        for (int i = 0; i < M_phys; ++i)
-                            multiplier[i] = boltz[i] * crysfft_kx2_[i];
-                        double sum_xx = accumulate_component(multiplier);
-
-                        for (int i = 0; i < M_phys; ++i)
-                            multiplier[i] = boltz[i] * crysfft_ky2_[i];
-                        double sum_yy = accumulate_component(multiplier);
-
-                        for (int i = 0; i < M_phys; ++i)
-                            multiplier[i] = boltz[i] * crysfft_kz2_[i];
-                        double sum_zz = accumulate_component(multiplier);
-                        symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                        stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                        stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                        stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                    }
-
-                    return stress;
-                }
-                else if (use_crysfft_recursive())
-                {
-#ifdef USE_CPU_MKL
-                    if (crysfft_recursive_mkl_)
-                    {
-                        auto accumulate_component = [&](MklCrysFFTRecursive3m::MultiplierType type, double coeff) -> double
-                        {
-                            crysfft_recursive_mkl_->apply_multiplier(phys_q2.data(), phys_tmp.data(), type, coeff);
-                            reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
-                            double sum = 0.0;
-                            for (int i = 0; i < M_reduced; ++i)
-                                sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
-                            return sum;
-                        };
-
-                        // Recursive3m applies only to cubic space groups whose symmetry
-                        // operations permute the axes. The per-axis multipliers k_d² are not
-                        // orbit-invariant, so the reduced-basis accumulation scrambles the
-                        // individual components (only their k²-weighted sum is invariant).
-                        // Since the kernel q1·q2 is space-group symmetric, the exact
-                        // per-direction sum equals the orbit average (sum_xx+sum_yy+sum_zz)/3.
-                        if (_boltz_bond == nullptr)
-                        {
-                            double sum_xx = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Kx2, 0.0);
-                            double sum_yy = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Ky2, 0.0);
-                            double sum_zz = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::Kz2, 0.0);
-                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                        }
-                        else
-                        {
-                            const double ds = molecules->get_global_ds();
-                            const double coeff = bond_length_sq * ds / 6.0;
-
-                            double sum_xx = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKx2, coeff);
-                            double sum_yy = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKy2, coeff);
-                            double sum_zz = accumulate_component(MklCrysFFTRecursive3m::MultiplierType::ExpKz2, coeff);
-                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                        }
-
-                        return stress;
-                    }
-#endif
-#ifdef USE_CPU_FFTW
-                    if (crysfft_recursive_fftw_)
-                    {
-                        auto accumulate_component = [&](FftwCrysFFTRecursive3m::MultiplierType type, double coeff) -> double
-                        {
-                            crysfft_recursive_fftw_->apply_multiplier(phys_q2.data(), phys_tmp.data(), type, coeff);
-                            reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
-                            double sum = 0.0;
-                            for (int i = 0; i < M_reduced; ++i)
-                                sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
-                            return sum;
-                        };
-
-                        // See the MKL Recursive3m branch above: axis-permuting cubic symmetry
-                        // requires the orbit-averaged sum, converted to v² units via 1/L_d².
-                        if (_boltz_bond == nullptr)
-                        {
-                            double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kx2, 0.0);
-                            double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Ky2, 0.0);
-                            double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::Kz2, 0.0);
-                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                        }
-                        else
-                        {
-                            const double ds = molecules->get_global_ds();
-                            const double coeff = bond_length_sq * ds / 6.0;
-
-                            double sum_xx = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKx2, coeff);
-                            double sum_yy = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKy2, coeff);
-                            double sum_zz = accumulate_component(FftwCrysFFTRecursive3m::MultiplierType::ExpKz2, coeff);
-                            symmetrize_axis_sums(sum_xx, sum_yy, sum_zz);
-
-                            stress[0] = bond_length_sq * M_full * sum_xx * inv_L2[0];
-                            stress[1] = bond_length_sq * M_full * sum_yy * inv_L2[1];
-                            stress[2] = bond_length_sq * M_full * sum_zz * inv_L2[2];
-                        }
-
-                        return stress;
-                    }
-#endif
-                }
-            }
-        }
-
-        // Allocate Fourier coefficient arrays
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
             if (!is_periodic_)
@@ -1072,17 +946,9 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     "Stress computation for complex fields with non-periodic "
                     "boundary conditions is not implemented.");
         }
-        int coeff_size = complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
+        const int coeff_size = complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> qk_1(coeff_size);
         std::vector<double> qk_2(coeff_size);
-
-        // v⊗v dyad components (deformation vector v = 2π g⁻¹ m, units 1/L²)
-        const double* kk_xx = pseudo->get_fourier_basis_x();
-        const double* kk_yy = pseudo->get_fourier_basis_y();
-        const double* kk_zz = pseudo->get_fourier_basis_z();
-        const double* kk_xy = pseudo->get_fourier_basis_xy();
-        const double* kk_xz = pseudo->get_fourier_basis_xz();
-        const double* kk_yz = pseudo->get_fourier_basis_yz();
 
         // ============================================================================
         // PERFORMANCE-CRITICAL: Orthogonal box optimization
@@ -1103,16 +969,13 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // ============================================================================
         const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
 
-        // Determine pointers based on space group
+        // Expand reduced basis → full grid. Thread-local buffers: this function
+        // is called from OpenMP parallel regions (block loops in compute_stress),
+        // so the shared class members q_full_in_/q_full_out_ must NOT be used here.
         T* q_1_full = q_1;
         T* q_2_full = q_2;
-
-        // Thread-local buffers: this function is called from OpenMP parallel
-        // regions (block loops in compute_stress), so the shared class members
-        // q_full_in_/q_full_out_ must NOT be used here.
         thread_local std::vector<T> q_full_1_local;
         thread_local std::vector<T> q_full_2_local;
-
         if (space_group_ != nullptr)
         {
             const int M_full = cb->get_total_grid();
@@ -1121,8 +984,6 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                 q_full_1_local.resize(M_full);
                 q_full_2_local.resize(M_full);
             }
-
-            // Expand reduced basis → full grid
             if constexpr (std::is_same<T, double>::value)
             {
                 space_group_->from_reduced_basis(q_1, q_full_1_local.data(), 1);
@@ -1141,154 +1002,13 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             q_2_full = q_full_2_local.data();
         }
 
-        // Transform to Fourier space
+        // Transform to Fourier space and accumulate Σ_k kernel(k) v_i v_j
         transform_forward(q_1_full, qk_1.data());
         transform_forward(q_2_full, qk_2.data());
-
         if (is_periodic_)
-        {
-            std::complex<double>* qk_1_complex = reinterpret_cast<std::complex<double>*>(qk_1.data());
-            std::complex<double>* qk_2_complex = reinterpret_cast<std::complex<double>*>(qk_2.data());
-            const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
-
-            if (DIM == 3)
-            {
-                // Diagonal components (always computed)
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    T coeff;
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    if constexpr (std::is_same<T, double>::value)
-                        coeff = bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
-                    else
-                        coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
-
-                    // Diagonal v⊗v sums
-                    stress[0] += coeff * kk_xx[i];  // V₁₁
-                    stress[1] += coeff * kk_yy[i];  // V₂₂
-                    stress[2] += coeff * kk_zz[i];  // V₃₃
-                }
-
-                // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
-                // For orthogonal boxes, these are mathematically zero.
-                if (!is_orthogonal)
-                {
-                    for (int i = 0; i < M_COMPLEX; ++i)
-                    {
-                        T coeff;
-                        double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                        if constexpr (std::is_same<T, double>::value)
-                            coeff = bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
-                        else
-                            coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
-
-                        stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
-                        stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
-                        stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
-                    }
-                }
-            }
-            else if (DIM == 2)
-            {
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    T coeff;
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    if constexpr (std::is_same<T, double>::value)
-                        coeff = bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
-                    else
-                        coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
-
-                    // v⊗v sums for 2D
-                    stress[0] += coeff * kk_xx[i];  // V₁₁
-                    stress[1] += coeff * kk_yy[i];  // V₂₂
-                    stress[2] += coeff * kk_xy[i];  // V₁₂ (stored in index 2 for 2D)
-                }
-            }
-            else if (DIM == 1)
-            {
-                // For periodic 1D: Miller index is mapped to m1, so stress is in fourier_basis_x
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    T coeff;
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    if constexpr (std::is_same<T, double>::value)
-                        coeff = bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
-                    else
-                        coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
-
-                    stress[0] += coeff * kk_xx[i];  // V₁₁ (Miller index maps to m1 for periodic)
-                }
-            }
-        }
+            accumulate_stress_periodic(qk_1.data(), qk_2.data(), bond_length_sq, _boltz_bond, is_orthogonal, stress);
         else
-        {
-            // For non-periodic BCs (real coefficients from DCT/DST) the
-            // per-mode Parseval weights (2 for interior modes, 1 for the
-            // DCT m=0 / DST k=n special modes, composed across dimensions)
-            // are folded into the fourier_basis tables by
-            // Pseudo::update_weighted_fourier_basis_mixed, mirroring the
-            // periodic path. No flat factor is applied here.
-            // Cross-terms are zero for non-periodic BC (orthogonal grids only)
-            const double FACTOR = 1.0;
-
-            if (DIM == 3)
-            {
-                // Diagonal components (always computed)
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
-
-                    // Diagonal v⊗v sums
-                    stress[0] += coeff * kk_xx[i];  // V₁₁
-                    stress[1] += coeff * kk_yy[i];  // V₂₂
-                    stress[2] += coeff * kk_zz[i];  // V₃₃
-                }
-
-                // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
-                // For orthogonal boxes, these are mathematically zero.
-                if (!is_orthogonal)
-                {
-                    for (int i = 0; i < M_COMPLEX; ++i)
-                    {
-                        double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                        double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
-
-                        stress[3] += coeff * kk_xy[i];  // V₁₂ (→ dH/dγ)
-                        stress[4] += coeff * kk_xz[i];  // V₁₃ (→ dH/dβ)
-                        stress[5] += coeff * kk_yz[i];  // V₂₃ (→ dH/dα)
-                    }
-                }
-            }
-            else if (DIM == 2)
-            {
-                // Note: 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
-                // so stress data is stored in fourier_basis_y and fourier_basis_z
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
-
-                    // v⊗v sums for 2D (mapped to y-z internally)
-                    stress[0] += coeff * kk_yy[i];  // V₁₁ (stored in y due to internal mapping)
-                    stress[1] += coeff * kk_zz[i];  // V₂₂ (stored in z due to internal mapping)
-                    stress[2] += coeff * kk_yz[i];  // V₁₂ (stored in yz due to internal mapping)
-                }
-            }
-            else if (DIM == 1)
-            {
-                // Note: 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
-                // so the stress data is stored in fourier_basis_z (kk_zz)
-                for (int i = 0; i < M_COMPLEX; ++i)
-                {
-                    double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
-
-                    stress[0] += coeff * kk_zz[i];  // V₁₁ (stored in z due to internal mapping)
-                }
-            }
-        }
+            accumulate_stress_nonperiodic(qk_1.data(), qk_2.data(), bond_length_sq, _boltz_bond, is_orthogonal, stress);
 
         return stress;
     }

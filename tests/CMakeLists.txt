@@ -12,6 +12,9 @@ endif()
 # Basic tests for verification (~56 tests, ~40 sec total)
 # Run with: ctest -L basic
 SET(BASIC_TESTS
+    # Configuration layer (pure Python, < 1 s)
+    TestSystemSpec
+    TestSimulationOptions
     # Platform & utilities
     TestDisplayArchitecture
     TestCircularBuffer
