@@ -44,6 +44,10 @@ Test files in `tests/` contain carefully calibrated parameters. The following mo
 
 If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
 
+### Leave `devel/` Alone
+
+`devel/` is the maintainer's private working folder. Do not audit, clean up, reformat or commit anything in it, and never link to it from the documentation. Its files frequently appear as modified in `git status`; that is expected.
+
 ### Use SLURM for Long-Running Jobs
 
 For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
@@ -95,10 +99,10 @@ make -j8
 # Install Python modules to conda environment (for examples/tutorials; tests use the build tree)
 make install
 
-# Run basic tests (installation verification, ~40 sec)
+# Run basic tests (installation verification, ~1 min)
 ctest -L basic
 
-# Run full tests (development validation, ~5 min)
+# Run full tests (development validation, ~6 min)
 ctest
 
 # Clean build (if needed)
@@ -112,6 +116,8 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MK
 - Set `CUDA_ARCHITECTURES` in CMakeLists.txt based on target GPU (default includes compute capabilities 60-90)
 - If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
+- `-DPOLYMERFTS_WERROR=ON` turns host C++ warnings into errors (CI builds with it); keep new C++ warning-free under GCC 13
+- The build links libraries by absolute path and passes the CUDA directories explicitly; it does not depend on `CPLUS_INCLUDE_PATH` or `LIBRARY_PATH` of the shell. Configure with `-DCMAKE_PREFIX_PATH=$CONDA_PREFIX`
 - **User builds**: CMakeLists.txt defaults are both OFF. Users who only need one backend can build without these flags.
 
 ### Environment Setup
@@ -147,8 +153,8 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~56 | ~40 sec | Installation verification |
-| **Full** | `ctest` | ~80 | ~5 min | Development validation |
+| **Basic** | `ctest -L basic` | ~57 | ~1 min | Installation verification |
+| **Full** | `ctest` | ~82 | ~6 min | Development validation |
 
 ### Running Tests
 

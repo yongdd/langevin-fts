@@ -16,7 +16,7 @@ mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
 make -j8
 make install
-ctest -L basic  # Basic installation verification (~40 seconds)
+ctest -L basic  # Basic installation verification (~1 minute)
 ```
 
 
@@ -160,12 +160,12 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~40 | ~40 sec | Installation verification |
-| **Full** | `ctest` | ~65 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | ~57 | ~1 min | Installation verification |
+| **Full** | `ctest` | ~82 | ~6 min | Development validation |
 
 **Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
 
-**Basic tests** (~40 tests):
+**Basic tests** (~57 tests):
 - FFT: CPU/CUDA, DCT, DST, mixed boundary conditions
 - Propagator: linear, branched, mixture polymers
 - Numerical methods: pseudo-spectral (RQM4, RK2), real-space (CN-ADI)
