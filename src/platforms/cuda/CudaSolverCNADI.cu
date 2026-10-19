@@ -42,14 +42,12 @@ CudaSolverCNADI::CudaSolverCNADI(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_memory)
+    [[maybe_unused]] bool reduce_memory)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
-        this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
-        this->reduce_memory = reduce_memory;
         this->space_group_ = nullptr;
         this->d_reduced_basis_indices_ = nullptr;
         this->d_full_to_reduced_map_ = nullptr;

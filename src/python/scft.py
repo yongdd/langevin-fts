@@ -6,11 +6,10 @@ import yaml
 import copy
 import itertools
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable, Union
+from typing import Dict, Any, Optional, Callable, Union, List
 import scipy.io
 
 from dataclasses import dataclass
-from typing import List
 
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
@@ -19,7 +18,6 @@ from .validation import validate_system_params, ValidationError
 from .utils import (
     load_config,
     parse_chi_n,
-    validate_polymers,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
@@ -224,11 +222,12 @@ class SCFT:
             if key not in params:
                 raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
         params = copy.deepcopy(params)
-        params.pop("space_group_basis", None)
 
-        # Handle axis ordering (convert user ordering to standard [a, b, c]);
-        # this rewrites nx/lx/angles in `params`.
+        # Handle axis ordering (convert user ordering to standard [a, b, c]); this
+        # rewrites nx/lx/angles in `params`, so the key is dropped from the copy that
+        # save_results() writes as "initial_params" (it must not be applied twice)
         self.axis_ordering, self._axis_perm = self._apply_axis_ordering(params)
+        params.pop("axis_ordering", None)
 
         # Monomer types and statistical segment lengths
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -246,7 +245,6 @@ class SCFT:
         self.zeta_n = params.get("zeta_n", None)
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
-        validate_polymers(self.distinct_polymers)
         for polymer in self.distinct_polymers:
             polymer["blocks_input"] = process_polymer_blocks(polymer)
         self.random_fraction = {}
@@ -282,7 +280,14 @@ class SCFT:
                     matrix_chi[j,i] = self.chi_n[key]
         
         self.matrix_chi = matrix_chi
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
+        # The field residual projects out the pressure with chi^-1 (Macromolecules 2025,
+        # 58, 816), so SCFT needs an invertible chi N matrix. A single monomer type, or a
+        # zero pair in a three-monomer system, makes it singular.
+        try:
+            matrix_chi_inv = np.linalg.inv(matrix_chi)
+        except np.linalg.LinAlgError:
+            raise ValidationError("SCFT needs an invertible chi N matrix (a single monomer type, or a zero "
+                                  "chi N pair in a three-monomer system, makes it singular).") from None
         self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
 
         # Create space group object early (before PropagatorSolver) if specified
@@ -309,7 +314,11 @@ class SCFT:
                 # applicable to this group/grid (the C++ side throws
                 # RuntimeError). Other exception types indicate real bugs
                 # and must propagate.
+                # (the m3 basis needs the recursive 3m CrysFFT: even grid, nz >= 16
+                # and a compatible translation parity)
                 try:
+                    if not self.sg.m3_crysfft_feasible():
+                        raise RuntimeError("recursive 3m CrysFFT is not feasible on this grid")
                     self.sg.enable_m3_physical_basis()
                 except RuntimeError:
                     try:
@@ -373,7 +382,7 @@ class SCFT:
         if self.sg is not None:
             # The space group fixes the crystal system; angles never vary
             crystal_system = self.sg.get_crystal_system()
-            if not crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
+            if crystal_system not in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
                 raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
                     "The current crystal system is " + crystal_system + ".")
             n_field_var = len(self.monomer_types) * self.sg.get_n_reduced_basis_full()
@@ -389,14 +398,15 @@ class SCFT:
                     crystal_system = "Orthorhombic"
             else:
                 crystal_system = params.get("crystal_system", None) or "Orthorhombic"
-            self.crystal_system = crystal_system
 
-            if crystal_system in ["Monoclinic", "Triclinic", "Hexagonal"] and dim != 3:
-                raise ValueError(f"Crystal system '{crystal_system}' requires 3D simulation (nx must have 3 elements).")
-            if crystal_system not in CRYSTAL_SYSTEMS or crystal_system == "Trigonal":
-                raise ValueError(f"Unknown crystal system: {crystal_system}. " +
-                    "Choose from: Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic, Triclinic.")
+            valid_systems = {1: ["Orthorhombic"],
+                             2: ["Orthorhombic", "Hexagonal2D", "Oblique2D"],
+                             3: ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Monoclinic", "Triclinic"]}[dim]
+            if crystal_system not in valid_systems:
+                raise ValueError(f"Crystal system '{crystal_system}' is not valid for a {dim}D box. " +
+                    "Choose from: " + ", ".join(valid_systems) + ".")
             n_field_var = len(self.monomer_types) * np.prod(params["nx"])
+        self.crystal_system = crystal_system
 
         row = CRYSTAL_SYSTEMS[crystal_system]
         if crystal_system == "Orthorhombic":    # every box length is free, in any dimension
@@ -470,6 +480,8 @@ class SCFT:
         self.stress_interval = params.get("stress_interval", 1)
 
         self.max_iter = params.get("max_iter", 2000)       # maximum number of iterations
+        if self.max_iter < 1:
+            raise ValidationError(f"'max_iter' must be at least 1, got {self.max_iter}")
         self.tolerance = params.get("tolerance", 1e-8)     # stop when the self-consistency error is below this
 
         # FTS-consistent energy convention: pin the field means to the saddle point
@@ -561,12 +573,11 @@ class SCFT:
         self.prop_solver.compute_concentrations()
         elapsed_time["pseudo"] = time.time() - time_p_start
 
-        # Partition-consistency guardrail (checked once, on the first call,
-        # like LFTS): run() warns when "partition_ok" is below 0.5.
+        # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
-            elapsed_time["partition_ok"] = \
-                1.0 if self.prop_solver.check_total_partition() else 0.0
+            if not self.prop_solver.check_total_partition():
+                raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         # Compute total concentration for each monomer type
         phi = {}
@@ -676,6 +687,22 @@ class SCFT:
     # run() helpers (used more than once, or long enough to stand on their own)
     # =========================================================================
 
+    def mean_concentrations(self):
+        """Volume-averaged concentration of each monomer type from the chain compositions.
+
+        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b),
+        which is what the C++ normalization of the concentrations gives.
+        """
+        phi_mean = np.zeros(len(self.monomer_types))
+        for p, polymer in enumerate(self.distinct_polymers):
+            alpha = self.prop_solver.get_polymer(p).get_alpha()
+            for block in polymer["blocks"]:
+                weight = polymer["volume_fraction"] * block["length"] / alpha
+                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+                for monomer_type, fraction in fractions.items():
+                    phi_mean[self.monomer_types.index(monomer_type)] += weight * fraction
+        return phi_mean
+
     def _pin_field_means(self, w, chi_phi_mean, xi=0.0):
         """Normalize the field means in place (mean() works in the reduced basis
         when a space group is set).
@@ -714,7 +741,7 @@ class SCFT:
         # -dH/dL for the independent box lengths; lengths tied by the crystal
         # system (a = b, or a = b = c) use the averaged derivative
         dlx_full = -stress_array[0:3]
-        crystal_system = getattr(self, 'crystal_system', None)   # not set when a space group fixes the system
+        crystal_system = self.crystal_system
         if crystal_system == "Hexagonal2D":
             dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
         elif crystal_system == "Tetragonal" or (crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
@@ -843,25 +870,21 @@ class SCFT:
                 w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
             w_full = self.sg.symmetrize(w_full)
             w = self.sg.to_reduced_basis(w_full)
-            try:
-                w = self.sg.reduced_to_irreducible(w)
-            except Exception:
-                pass
+            w = self.sg.reduced_to_irreducible(w)
         else:
             w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             for i in range(M):
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
         # Normalize the initial field means. With fts_consistent_energy the target is
-        # chi N . mean(phi) from the chain composition: mean(phi_i) = sum_p f_p sum_{blocks of type i} length
+        # chi N . mean(phi) from the chain compositions (see mean_concentrations)
         if self.fts_consistent_energy:
-            phi_mean = np.zeros(M)
-            for polymer in self.distinct_polymers:
-                for block in polymer["blocks"]:
-                    phi_mean[self.monomer_types.index(block["type"])] += polymer["volume_fraction"] * block["length"]
-            self._pin_field_means(w, self.matrix_chi @ phi_mean)
+            self._pin_field_means(w, self.matrix_chi @ self.mean_concentrations())
         else:
             self._pin_field_means(w, None)
+
+        # Check the partition consistency on the first field of this run
+        self._partition_checked = False
 
         # ---- 2. Iteration ----
         # Stress array layout: 3D [dH/dL1, dH/dL2, dH/dL3, dH/dgamma, dH/dbeta, dH/dalpha],
@@ -876,8 +899,6 @@ class SCFT:
 
             # Concentrations for the current fields
             phi, runtime_info = self.compute_concentrations(w, q_init=q_init)
-            if runtime_info.get("partition_ok", 1.0) < 0.5:
-                print(f"Warning: partition consistency check reported a mismatch at iteration {iter}.")
 
             # Total energy from the auxiliary fields and the partition functions
             w_aux = self.mpt.to_aux_fields(w)

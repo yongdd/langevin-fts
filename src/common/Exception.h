@@ -73,7 +73,7 @@ public:
         std::runtime_error("File: \"" + std::string(file) + "\", function <" + std::string(func) + ">\n\t" + arg){};
 
     /// Destructor (noexcept).
-    ~Exception() throw() {};
+    ~Exception() noexcept {}
 };
 
 /**

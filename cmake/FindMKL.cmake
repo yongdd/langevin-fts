@@ -1,4 +1,4 @@
-# FindMKL.cmake - Fallback MKL finder for systems without MKLConfig.cmake
+# FindMKL.cmake - Intel MKL finder (module mode: used instead of MKLConfig.cmake)
 #
 # This module finds Intel MKL and sets:
 #   MKL_FOUND - True if MKL was found
@@ -6,10 +6,6 @@
 #   MKL_LIBRARIES - MKL libraries to link
 #
 # It also creates the MKL::MKL imported target if MKL is found.
-
-if(MKL_FOUND)
-    return()
-endif()
 
 # Search paths - check environment variables and common locations
 set(_MKL_SEARCH_PATHS
@@ -92,10 +88,7 @@ if(MKL_FOUND)
         )
     endif()
 
-    # Extract library directory for RPATH
     get_filename_component(MKL_LIBRARY_DIR ${MKL_CORE_LIB} DIRECTORY)
-    set(MKL_LIBRARY_DIRS ${MKL_LIBRARY_DIR} CACHE PATH "MKL library directory")
-
     message(STATUS "Found MKL: ${MKL_LIBRARY_DIR}")
     message(STATUS "  Include: ${MKL_INCLUDE_DIRS}")
 endif()

@@ -6,9 +6,10 @@ in Langevin field-theoretic simulations of block copolymers.
 This implementation follows deep-langevin-fts exactly.
 """
 
-import os
 import numpy as np
 from scipy.io import savemat
+
+from .validation import ValidationError
 
 
 class WTMD:
@@ -41,6 +42,8 @@ class WTMD:
         self.update_freq = update_freq
         self.recording_period = recording_period
 
+        if len(nx) != 3:
+            raise ValidationError("WTMD requires a 3D grid (nx with three entries)")
         self.nx = nx
         self.lx = lx
         self.M = nx[0] * nx[1] * nx[2]

@@ -52,7 +52,7 @@ test:
     - pip
   commands:
     - pip check
-    - python -c "from polymerfts import PlatformSelector; ps = PlatformSelector(); print('Platforms:', ps.avail_platforms())"
+    - python -c "from polymerfts import PlatformSelector; print('Platforms:', PlatformSelector.avail_platforms())"
 
 about:
   home: https://github.com/yongdd/langevin-fts

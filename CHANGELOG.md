@@ -43,6 +43,21 @@ commits are omitted.
   symmetry convention and the expected free energies replaced by converged values
   (2026-10-19, 9e69f9e2). The example `DG.mat`/`SG.mat` were re-converged library outputs
   since 2026-01-21.
+- CUDA RK2 stress (2026-10-19): complex fields gathered q(-k) in place through the k -> -k
+  map (a data race on grids larger than one kernel launch), and non-periodic 1D/2D boxes
+  read the wrong basis tables (V11 = 0). RQM4 and the discrete chain were correct.
+- Continuing an L-FTS run from a checkpoint restored the Langevin noise array with a
+  squeezed shape when there is a single real field (every AB system), so the continued
+  trajectory differed from an uninterrupted run; the continuation also no longer
+  re-solves the saddle point of the loaded fields (2026-10-19). CL-FTS, whose noise array
+  has one row per field, reshapes it the same way for safety.
+- SCFT box relaxation with a space group reduces the stress of lengths tied by the crystal
+  system (Cubic, Tetragonal, Hexagonal) by averaging the tied components, as runs without
+  a space group already did; the components agree to round-off for symmetrized fields, so
+  converged results are unchanged but such runs are not byte-identical (2026-10-19).
+- `fts_consistent_energy`: the mean concentrations now include random-copolymer blocks and
+  the chain length (f_p / alpha_p); before, random copolymers raised and blends of
+  unequal chain lengths pinned the wrong mean (2026-10-19).
 
 ### Interface changes
 
@@ -53,8 +68,10 @@ commits are omitted.
   stay importable from `polymerfts`. The `SystemSpec`/`*Options` layer tried during the
   2026-10 cleanup was removed again before release.
 - Removed small features that carried disproportionate code: the ADAM optimizer
-  (`optimizer.name` must be `am`), the `validation_runtime` option of L-FTS (one partition
-  check per run now prints a warning) and `configure_logging` (the package prints).
+  (`optimizer.name` must be `am`), the `validation_runtime` option of L-FTS (SCFT, L-FTS
+  and CL-FTS check the partition consistency once per run and raise `ValidationError`
+  on failure, as `validation_runtime` did by default) and `configure_logging` (the
+  package prints).
   `polymerfts.draw_polymer_architectures` redraws the architecture figures that the
   constructors write. Docstrings were cut to the essentials; the parameter documentation
   moved to docs/references/Parameters.md.
@@ -72,10 +89,34 @@ commits are omitted.
   to the constructor), the SCFT context manager, `LFTSResult`,
   `save_config`/`create_template_config` (2026-10-19).
 - `SpaceGroup.physical_basis_name()` reports the active physical basis
-  (`irreducible`, `pmmm`, `m3`, `z-mirror`).
+  (`irreducible`, `pmmm`, `m3`, `z-mirror`). `SpaceGroup.m3_crysfft_feasible()` tells
+  whether the recursive 3m CrysFFT works on the grid (even nx, nz >= 16, translation
+  parity); SCFT enables the m3 basis only then and otherwise uses the Pmmm basis (or the
+  irreducible basis for groups without xyz mirrors), instead of failing in the solver or
+  silently running the m3 basis through the full-grid FFT on small grids.
+- The CPU stress of an orthogonal 2D box no longer computes the shear term (index 2) that
+  the CUDA side and the 3D path skip unless `set_force_off_diagonal_stress(True)` is set
+  (SCFT sets it when angles are optimized); the platforms now return identical vectors.
+- Parameter checks (2026-10-19): SCFT rejects a singular chi N matrix (a single monomer
+  type, or a zero pair in a three-monomer system) with a clear message, crystal systems
+  are checked against the box dimension, `max_iter` must be positive; L-FTS/CL-FTS accept
+  `verbose_level` 0 and reject other values than 0-2, reject unknown compressor names and
+  WTMD on non-3D grids; `"platform": "auto"` may be given explicitly.
+  `PlatformSelector.avail_platforms()` lists `cuda` only when a GPU is visible, so CUDA
+  builds fall back to the CPU on nodes without a device.
+- Python bindings (2026-10-19): input arrays are made C-contiguous and cast to the expected
+  dtype (a strided view was read as if contiguous; `zero_mean`, which works in place,
+  rejects arrays that would have to be copied), the complex-field factory reads a real
+  `mask`, objects created by a factory keep the objects they point to alive,
+  `PlatformSelector.avail_platforms` and the `PropagatorCode` helpers are static methods,
+  `get_computation_propagators` lost its misspelled name.
+- CL-FTS uses the same idioms as L-FTS (propagator solver accessors, architecture figures,
+  material-conservation and partition checks); `calculate_sigma` lives in `utils`.
 - Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
-  errors (on in CI). The generated build no longer depends on `LIBRARY_PATH` or
+  errors (on in CI); `POLYMERFTS_CUDA_ARCHITECTURES` selects the compute capabilities;
+  the installed `_core.so` carries an RPATH to the libraries it was linked against; the
+  staged package in `build/python` drops modules that no longer exist in the sources. The generated build no longer depends on `LIBRARY_PATH` or
   `CPLUS_INCLUDE_PATH` of the configuring shell: libraries are linked by absolute path and
   the CUDA toolkit directories are always passed explicitly. Packaging with pip (`pyproject.toml`), conda (`conda-recipe/`) and
   Docker (`docker/`) was added (2026-01-09, fe3a54df).
@@ -91,6 +132,11 @@ commits are omitted.
   YAML/JSON parameter files (`load_config`, `SCFT.from_file`).
 - `scripts/install_versioned.sh`: wheel per version plus a per-version virtual environment,
   for keeping several releases side by side (documented in Installation.md).
+- Tests (2026-10-19): `TestStressComplexPlatforms` (complex stress on every platform, 64^3
+  grid), `TestStressNonPeriodicRK2`, `TestComplexMask` (array handling and object
+  lifetimes of the bindings), `TestLftsRun` (L-FTS/CL-FTS run loops and checkpoint
+  continuation); `TestConvergenceOrderLite` had no `__main__` block and never ran under
+  ctest; `TestParams` regained the solver-option assertions.
 
 ## [0.9.1] - 2025-05-02
 

@@ -180,7 +180,7 @@ $$L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}$$
 
 $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \frac{\partial H}{\partial \alpha}$$
 
-where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing or ADAM); the plain gradient-descent update above corresponds to the simple-mixing limit.
+where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing); the plain gradient-descent update above corresponds to the simple-mixing limit.
 
 **Implementation details:**
 - Box size changes are limited to 10% per iteration

@@ -417,7 +417,6 @@ void FftwFFT<T, DIM>::forward(T *rdata, std::complex<double> *cdata)
 
     // Thread-safe FFT using thread-local buffers
     thread_local std::vector<double> work_local;
-    thread_local std::vector<std::complex<double>> complex_local;
 
     if constexpr (std::is_same<T, double>::value)
     {

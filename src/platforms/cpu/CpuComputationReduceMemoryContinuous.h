@@ -93,6 +93,8 @@ template <typename T>
 class CpuComputationReduceMemoryContinuous : public CpuComputationReduceMemoryBase<T>
 {
 private:
+    std::string method;                ///< Solver method ("pseudospectral" or "realspace")
+
     /**
      * @brief Segment pairs for partition function.
      *

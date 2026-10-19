@@ -4,6 +4,7 @@
  */
 
 #include "MklCrysFFTRecursive3m.h"
+#include "MklStatusCheck.h"
 #include <algorithm>
 #include <cstring>
 #include <vector>
@@ -50,31 +51,21 @@ void MklCrysFFTRecursive3m::init_fft_plans()
     MKL_LONG strides_real[4] = { 0, nx_physical_[1] * nx_physical_[2], nx_physical_[2], 1 };
     MKL_LONG strides_complex[4] = { 0, nx_physical_[1] * nx_physical_[2], nx_physical_[2], 1 };
 
-    MKL_LONG status;
-
     // Forward r2c plan
-    status = DftiCreateDescriptor(&plan_forward_, DFTI_DOUBLE, DFTI_REAL, 3, dims);
-    if (status != 0)
-        throw_with_line_number("Failed to create MKL DFTI descriptor for forward FFT.");
-    status = DftiSetValue(plan_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiSetValue(plan_forward_, DFTI_INPUT_STRIDES, strides_real);
-    status = DftiSetValue(plan_forward_, DFTI_OUTPUT_STRIDES, strides_complex);
-    status = DftiCommitDescriptor(plan_forward_);
-    if (status != 0)
-        throw_with_line_number("Failed to commit MKL DFTI descriptor for forward FFT.");
+    mkl_dfti_check(DftiCreateDescriptor(&plan_forward_, DFTI_DOUBLE, DFTI_REAL, 3, dims), "DftiCreateDescriptor (3m forward)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, 3m forward)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, 3m forward)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_INPUT_STRIDES, strides_real), "DftiSetValue(DFTI_INPUT_STRIDES, 3m forward)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_OUTPUT_STRIDES, strides_complex), "DftiSetValue(DFTI_OUTPUT_STRIDES, 3m forward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_forward_), "DftiCommitDescriptor (3m forward)");
 
     // Backward c2r plan
-    status = DftiCreateDescriptor(&plan_backward_, DFTI_DOUBLE, DFTI_REAL, 3, dims);
-    if (status != 0)
-        throw_with_line_number("Failed to create MKL DFTI descriptor for backward FFT.");
-    status = DftiSetValue(plan_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiSetValue(plan_backward_, DFTI_INPUT_STRIDES, strides_complex);
-    status = DftiSetValue(plan_backward_, DFTI_OUTPUT_STRIDES, strides_real);
-    status = DftiCommitDescriptor(plan_backward_);
-    if (status != 0)
-        throw_with_line_number("Failed to commit MKL DFTI descriptor for backward FFT.");
+    mkl_dfti_check(DftiCreateDescriptor(&plan_backward_, DFTI_DOUBLE, DFTI_REAL, 3, dims), "DftiCreateDescriptor (3m backward)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, 3m backward)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, 3m backward)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_INPUT_STRIDES, strides_complex), "DftiSetValue(DFTI_INPUT_STRIDES, 3m backward)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_OUTPUT_STRIDES, strides_real), "DftiSetValue(DFTI_OUTPUT_STRIDES, 3m backward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_backward_), "DftiCommitDescriptor (3m backward)");
 }
 
 //------------------------------------------------------------------------------
@@ -102,7 +93,7 @@ void MklCrysFFTRecursive3m::apply_with_cache(
     std::memcpy(buffers.iomat.data(), q_in, sizeof(double) * M_physical_);
 
     // Forward r2c FFT
-    DftiComputeForward(plan_forward_, buffers.iomat.data(), buffers.step1.data());
+    mkl_dfti_check(DftiComputeForward(plan_forward_, buffers.iomat.data(), buffers.step1.data()), "DftiComputeForward (3m)");
 
     const int Nx2 = nx_physical_[0];
     const int Ny2 = nx_physical_[1];
@@ -158,7 +149,7 @@ void MklCrysFFTRecursive3m::apply_with_cache(
     }
 
     // Backward c2r FFT
-    DftiComputeBackward(plan_backward_, buffers.step2.data(), buffers.iomat.data());
+    mkl_dfti_check(DftiComputeBackward(plan_backward_, buffers.step2.data(), buffers.iomat.data()), "DftiComputeBackward (3m)");
 
     std::memcpy(q_out, buffers.iomat.data(), sizeof(double) * M_physical_);
 }

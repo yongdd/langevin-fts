@@ -88,7 +88,7 @@ protected:
     /// @{
     int total_max_n_segment;    ///< Total sum of segments across all propagators
     int checkpoint_interval;    ///< Checkpoint interval (sqrt(total_N) for optimal memory-computation tradeoff)
-    std::vector<T*> q_recal;    ///< Recalculation temporary (size: checkpoint_interval+3)
+    std::vector<T*> q_recal;    ///< Recalculation temporary (size: checkpoint_interval)
     /// @}
 
     /// @name Checkpoint Memory Management
@@ -143,7 +143,7 @@ protected:
     std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
 
     /**
-     * @brief Solvent concentration fields in pinned host memory.
+     * @brief Solvent concentration fields in pageable host memory (new T[N]).
      *
      * One array per solvent species.
      */

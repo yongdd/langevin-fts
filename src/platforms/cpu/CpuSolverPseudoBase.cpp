@@ -9,7 +9,7 @@
  * - Laplacian operator updates
  * - Stress computation with chain-model-specific factors
  *
- * Transform dispatch is handled via virtual functions in FFTMixedBC.
+ * Transform dispatch goes through the FFT<T> interface (FftwFFT or MklFFT).
  *
  * @see CpuSolverPseudoBase.h for interface documentation
  */
@@ -87,6 +87,11 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
         std::array<BoundaryCondition, 1> bc_arr = {bc_vec[0]};
         fft_ = createFFT<T, 1>(nx_arr, bc_arr, backend);
     }
+    else
+    {
+        throw_with_line_number("Pseudo-spectral solver supports 1D, 2D, or 3D only, got dim = "
+                               + std::to_string(dim_) + ".");
+    }
 
     // Create Pseudo object
     std::vector<BoundaryCondition> bc_per_dim;
@@ -107,7 +112,7 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
 template <typename T>
 void CpuSolverPseudoBase<T>::cleanup_shared()
 {
-    // FFTMixedBC has virtual destructor, so delete works polymorphically
+    // FFT<T> has a virtual destructor, so delete works polymorphically
     delete fft_;
     fft_ = nullptr;
 
@@ -170,20 +175,10 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
 
     if (sg == nullptr)
     {
-        // Free buffers when space group is disabled
-        q_full_in_.clear();
-        q_full_in_.shrink_to_fit();
-        q_full_out_.clear();
-        q_full_out_.shrink_to_fit();
         if constexpr (std::is_same_v<T, double>)
             reset_crysfft();
         return;
     }
-
-    // Full grid buffers for expand/reduce around FFT
-    const int M = cb->get_total_grid();
-    q_full_in_.resize(M);
-    q_full_out_.resize(M);
 
     // [real-only feature] The CrysFFT fast paths fold real fields on the
     // physical sub-grid; complex fields always use the full-grid reduced basis.
@@ -309,6 +304,54 @@ double CpuSolverPseudoBase<T>::get_effective_diffusion_coeff(
         throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
     double bond_length_sq = it->second * it->second;
     return bond_length_sq * ds / 6.0;
+}
+
+//------------------------------------------------------------------------------
+// update_dw() helper: fields on the grid the Boltzmann factors live on
+//------------------------------------------------------------------------------
+template <typename T>
+int CpuSolverPseudoBase<T>::expand_w_for_update_dw(
+    const std::map<std::string, const T*>& w_input,
+    std::map<std::string, std::vector<T>>& w_full_cache,
+    std::map<std::string, const T*>& w_use) const
+{
+    const int M_full = cb->get_total_grid();
+    const int M_reduced = (space_group_ != nullptr)
+        ? space_group_->get_n_reduced_basis()
+        : M_full;
+    const bool use_reduced_basis = (space_group_ != nullptr);
+    const bool use_crysfft_path = (use_crysfft() && space_group_ != nullptr);
+
+    w_full_cache.clear();
+    w_use.clear();
+    if (use_reduced_basis && !use_crysfft_path)
+    {
+        // Standard FFT path: exp_dw lives on the full grid, so expand the
+        // reduced-basis fields. [real-only feature]
+        if constexpr (std::is_same_v<T, double>)
+        {
+            for (const auto& item : w_input)
+            {
+                const std::string& monomer_type = item.first;
+                std::vector<T>& w_full = w_full_cache[monomer_type];
+                w_full.resize(M_full);
+                space_group_->from_reduced_basis(item.second, w_full.data(), 1);
+                w_use[monomer_type] = w_full.data();
+            }
+        }
+        else
+        {
+            throw_with_line_number("Space group reduced basis is only supported for real fields.");
+        }
+    }
+    else
+    {
+        // No space group (full grid), or CrysFFT path (exp_dw stays in the reduced basis)
+        for (const auto& item : w_input)
+            w_use[item.first] = item.second;
+    }
+
+    return use_crysfft_path ? M_reduced : M_full;
 }
 
 //------------------------------------------------------------------------------
@@ -739,7 +782,14 @@ bool CpuSolverPseudoBase<T>::compute_stress_crysfft(
         const double coeff = with_bond ? bond_length_sq * molecules->get_global_ds() / 6.0 : 0.0;
         if (use_crysfft_pmmm())
         {
-            update_crysfft_k_cache();   // k-space tables of the DCT physical grid
+            // k-space tables of the DCT physical grid. This runs inside the
+            // OpenMP stress loop and a refill writes shared members, so it is
+            // serialized: the first thread fills the cache, the others return
+            // early once the tables are valid.
+            #pragma omp critical(crysfft_k_cache)
+            {
+                update_crysfft_k_cache();
+            }
             if (with_bond)
             {
                 boltz.resize(M_phys);
@@ -839,7 +889,12 @@ void CpuSolverPseudoBase<T>::accumulate_stress_periodic(
             const T coeff = kernel(i);
             stress[0] += coeff * kk_xx[i];  // V₁₁
             stress[1] += coeff * kk_yy[i];  // V₂₂
-            stress[2] += coeff * kk_xy[i];  // V₁₂ (stored in index 2 for 2D)
+        }
+        // Cross term only for non-orthogonal boxes (as in 3D and on the CUDA side)
+        if (!is_orthogonal)
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+                stress[2] += kernel(i) * kk_xy[i];  // V₁₂ (stored in index 2 for 2D)
         }
     }
     else if (DIM == 1)
@@ -924,9 +979,12 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     {
         const int N_STRESS = 6;  // v⊗v dyad sums: V₁₁, V₂₂, V₃₃, V₁₂, V₁₃, V₂₃
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        auto bond_lengths = this->molecules->get_bond_lengths();
+        const auto& bond_lengths = this->molecules->get_bond_lengths();
+        auto bond_it = bond_lengths.find(monomer_type);
+        if (bond_it == bond_lengths.end())
+            throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
 
-        double bond_length_sq = bond_lengths[monomer_type] * bond_lengths[monomer_type];
+        double bond_length_sq = bond_it->second * bond_it->second;
         if (is_half_bond_length)
             bond_length_sq *= 0.5;
 
@@ -971,7 +1029,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
 
         // Expand reduced basis → full grid. Thread-local buffers: this function
         // is called from OpenMP parallel regions (block loops in compute_stress),
-        // so the shared class members q_full_in_/q_full_out_ must NOT be used here.
+        // so no shared class member may be used as scratch space here.
         T* q_1_full = q_1;
         T* q_2_full = q_2;
         thread_local std::vector<T> q_full_1_local;

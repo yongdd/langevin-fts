@@ -94,7 +94,7 @@ public:
      * Copies data into pinned memory. If buffer is full,
      * overwrites oldest entry.
      *
-     * @param new_arr Source array (can be host or device pointer)
+     * @param new_arr Source array (host pointer; copied element-wise on the CPU)
      */
     void insert(T* new_arr);
 

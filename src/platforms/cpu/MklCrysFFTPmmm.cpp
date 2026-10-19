@@ -8,6 +8,7 @@
 #include <cstring>
 #include <numbers>
 #include "MklCrysFFTPmmm.h"
+#include "MklStatusCheck.h"
 
 //------------------------------------------------------------------------------
 // Static helper: Apply DCT-II forward along one dimension
@@ -60,9 +61,10 @@ static void applyDCT2Forward1D(
             }
 
             // Inverse FFT (c2r)
-            DftiComputeBackward(fft_backward,
-                                reinterpret_cast<double*>(fft_in.data()),
-                                fft_out.data());
+            mkl_dfti_check(DftiComputeBackward(fft_backward,
+                                               reinterpret_cast<double*>(fft_in.data()),
+                                               fft_out.data()),
+                           "DftiComputeBackward (Pmmm DCT-II)");
 
             // DCT-II postprocessing
             // Scaled to match FFTW's unnormalized REDFT10 convention:
@@ -139,7 +141,8 @@ static void applyDCT3Backward1D(
             }
 
             // Forward FFT (r2c)
-            DftiComputeForward(fft_forward, fft_in.data(), fft_out.data());
+            mkl_dfti_check(DftiComputeForward(fft_forward, fft_in.data(), fft_out.data()),
+                           "DftiComputeForward (Pmmm DCT-III)");
 
             // DCT-III postprocessing
             // No 1/n scaling: matches FFTW's unnormalized REDFT01 convention,
@@ -179,10 +182,6 @@ MklCrysFFTPmmm::MklCrysFFTPmmm(
         dct_fft_backward_[d] = nullptr;
     }
 
-    // Allocate work buffers
-    io_buffer_ = new double[M_physical_];
-    temp_buffer_ = new double[M_physical_];
-
     initFFTPlans();
     precomputeTwiddleFactors();
 }
@@ -197,9 +196,6 @@ MklCrysFFTPmmm::~MklCrysFFTPmmm()
         if (dct_fft_forward_[d]) DftiFreeDescriptor(&dct_fft_forward_[d]);
         if (dct_fft_backward_[d]) DftiFreeDescriptor(&dct_fft_backward_[d]);
     }
-
-    delete[] io_buffer_;
-    delete[] temp_buffer_;
 }
 
 //------------------------------------------------------------------------------
@@ -210,20 +206,16 @@ void MklCrysFFTPmmm::initFFTPlans()
     for (int d = 0; d < 3; ++d)
     {
         int n = nx_physical_[d];
-        MKL_LONG status;
 
-        status = DftiCreateDescriptor(&dct_fft_forward_[d], DFTI_DOUBLE, DFTI_REAL, 1, n);
-        status = DftiSetValue(dct_fft_forward_[d], DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-        status = DftiSetValue(dct_fft_forward_[d], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-        status = DftiCommitDescriptor(dct_fft_forward_[d]);
+        mkl_dfti_check(DftiCreateDescriptor(&dct_fft_forward_[d], DFTI_DOUBLE, DFTI_REAL, 1, n), "DftiCreateDescriptor (Pmmm forward)");
+        mkl_dfti_check(DftiSetValue(dct_fft_forward_[d], DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, Pmmm forward)");
+        mkl_dfti_check(DftiSetValue(dct_fft_forward_[d], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, Pmmm forward)");
+        mkl_dfti_check(DftiCommitDescriptor(dct_fft_forward_[d]), "DftiCommitDescriptor (Pmmm forward)");
 
-        status = DftiCreateDescriptor(&dct_fft_backward_[d], DFTI_DOUBLE, DFTI_REAL, 1, n);
-        status = DftiSetValue(dct_fft_backward_[d], DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-        status = DftiSetValue(dct_fft_backward_[d], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-        status = DftiCommitDescriptor(dct_fft_backward_[d]);
-
-        if (status != 0)
-            throw_with_line_number("MKL FFT plan creation failed for dimension " + std::to_string(d));
+        mkl_dfti_check(DftiCreateDescriptor(&dct_fft_backward_[d], DFTI_DOUBLE, DFTI_REAL, 1, n), "DftiCreateDescriptor (Pmmm backward)");
+        mkl_dfti_check(DftiSetValue(dct_fft_backward_[d], DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, Pmmm backward)");
+        mkl_dfti_check(DftiSetValue(dct_fft_backward_[d], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, Pmmm backward)");
+        mkl_dfti_check(DftiCommitDescriptor(dct_fft_backward_[d]), "DftiCommitDescriptor (Pmmm backward)");
     }
 }
 

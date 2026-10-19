@@ -16,8 +16,11 @@
  * Only members whose meaning and implementation are identical for the full
  * and the reduce-memory variant live here: the concentration and partition
  * getters read phi_block, phi_solvent and the partition arrays, which both
- * variants fill in the same layout. Propagator storage and the compute_*
- * algorithms stay in the variant classes so that each can be changed on its own.
+ * variants fill in the same layout; compute_statistics() chains the two
+ * compute_* calls; the destructor frees phi_block and phi_solvent, which the
+ * derived constructors allocate (the sizes differ per variant). Propagator
+ * storage and the compute_* algorithms stay in the variant classes so that
+ * each can be changed on its own.
  */
 
 #ifndef CPU_COMPUTATION_COMMON_H_
@@ -53,6 +56,15 @@ protected:
 
     std::vector<T *> phi_solvent;  ///< One concentration array per solvent species
 
+    /**
+     * @brief Number of propagator streams from OMP_NUM_THREADS.
+     *
+     * Returns the leading integer of OMP_NUM_THREADS when it is positive, and
+     * `default_n_streams` when the variable is unset, empty, or not a positive
+     * integer.
+     */
+    static int n_streams_from_env(int default_n_streams);
+
 public:
     /**
      * @param cb                               Computation box
@@ -64,10 +76,16 @@ public:
     CpuComputationCommon(ComputationBox<T>* cb, Molecules *molecules,
                          PropagatorComputationOptimizer* propagator_computation_optimizer,
                          int n_streams);
-    virtual ~CpuComputationCommon() {}
+    /// Frees phi_block and phi_solvent (allocated by the derived constructors).
+    virtual ~CpuComputationCommon();
 
     /// Update the solver for new box dimensions.
     void update_laplacian_operator() override;
+
+    /// compute_propagators() followed by compute_concentrations().
+    void compute_statistics(
+        std::map<std::string, const T*> w_block,
+        std::map<std::string, const T*> q_init = {}) override;
 
     /// Force off-diagonal stress computation; forwarded to the solver.
     void set_force_off_diagonal_stress(bool force) override

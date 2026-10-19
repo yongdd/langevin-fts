@@ -42,6 +42,10 @@
 
 #include "Exception.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /**
  * @class CrysFFTPmmmBase
  * @brief CRTP base class for Pmmm crystallographic FFT.
@@ -303,7 +307,6 @@ public:
     const std::array<int, 3>& get_nx_physical() const { return nx_physical_; }
     int get_M_logical() const { return M_logical_; }
     int get_M_physical() const { return M_physical_; }
-    double* get_io_buffer() { return io_buffer_; }
 };
 
 #endif  // CRYS_FFT_PMMM_BASE_H_

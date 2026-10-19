@@ -90,13 +90,6 @@ private:
     int* d_reduced_basis_indices_;
 
     /**
-     * @brief Per-stream temporary buffers for full grid propagator.
-     * d_q_full_[STREAM][0] = input, d_q_full_[STREAM][1] = output
-     * Only allocated when space group is set.
-     */
-    CuDeviceData<T>* d_q_full_[MAX_STREAMS][2];
-
-    /**
      * @brief Device storage for reduced basis w fields (for solvent computation).
      * Only used when space group is set. Allows direct exp(-w*ds) computation
      * without gathering from full grid.

@@ -5,6 +5,7 @@
 
 #include "SpaceGroup.h"
 #include "Exception.h"
+#include "CrysFFTSelector.h"
 #include <cstring>
 #include <cmath>
 #include <cctype>
@@ -1011,6 +1012,15 @@ void SpaceGroup::enable_pmmm_physical_basis()
 
     physical_basis_ = PhysicalBasis::Pmmm;
     std::cout << "Pmmm physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
+}
+
+bool SpaceGroup::m3_crysfft_feasible() const
+{
+    if (nx_.size() != 3)
+        return false;
+    std::array<double, 9> trans_part = {0,0,0, 0,0,0, 0,0,0};
+    const std::array<int, 3> nx3 = {nx_[0], nx_[1], nx_[2]};
+    return crysfft_recursive_3m_feasible(this, nx3, trans_part);
 }
 
 void SpaceGroup::enable_m3_physical_basis()

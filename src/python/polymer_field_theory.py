@@ -78,12 +78,15 @@ class SymmetricPolymerTheory:
         self.aux_fields_real_idx = []
         # Indices whose auxiliary fields are imaginary including the pressure field
         self.aux_fields_imag_idx = []
+        # The incompressible model (zeta_n None) has exactly one zero eigenvalue, the
+        # pressure mode appended below; any other zero means a degenerate chi N matrix
+        n_zero = int(np.sum(np.isclose(eigenvalues, 0.0)))
+        if n_zero > (1 if zeta_n is None else 0):
+            print("(Warning!) The chi N matrix has a zero eigenvalue; the corresponding auxiliary field is dropped.")
         for i in range(M):
-            # assert(not np.isclose(eigenvalues[i], 0.0)), \
-            #     "One of eigenvalues is zero for given chiN values."
             if np.isclose(eigenvalues[i], 0.0):
-                print("One of eigenvalues is zero for given chiN values.")
-            elif eigenvalues[i] > 0:
+                continue
+            if eigenvalues[i] > 0:
                 self.aux_fields_imag_idx.append(i)
             else:
                 self.aux_fields_real_idx.append(i)
@@ -150,8 +153,6 @@ class SymmetricPolymerTheory:
         print("Eigenvalues:\n\t", self.eigenvalues)
         print("Eigenvectors [v1, v2, ...] :\n\t", str(self.matrix_o).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         print("Real Fields: ",      self.aux_fields_real_idx)
         print("Imaginary Fields: ", self.aux_fields_imag_idx)

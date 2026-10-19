@@ -244,7 +244,7 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     int blocks = (M_physical_ + threads - 1) / threads;
 
     static std::atomic<bool> profile_once{false};
-    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM") != nullptr);
+    static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM") != nullptr);
     const bool profile_this = do_profile && !profile_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{}, ev4{};
     if (profile_this)

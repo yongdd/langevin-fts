@@ -3,8 +3,9 @@
  * @brief Common base class implementation for memory-efficient CPU propagator computation.
  *
  * Implements shared functionality between CpuComputationReduceMemoryContinuous
- * and CpuComputationReduceMemoryDiscrete, including concentration queries and
- * partition function accessors.
+ * and CpuComputationReduceMemoryDiscrete: construction and
+ * advance_propagator_single_segment(). The accessors shared with the
+ * full-storage variant live in CpuComputationCommon.
  *
  * @see CpuComputationReduceMemoryBase.h for class documentation
  */
@@ -22,15 +23,6 @@ CpuComputationReduceMemoryBase<T>::CpuComputationReduceMemoryBase(
       total_max_n_segment(0),
       checkpoint_interval(1)
 {
-}
-
-template <typename T>
-void CpuComputationReduceMemoryBase<T>::compute_statistics(
-    std::map<std::string, const T*> w_input,
-    std::map<std::string, const T*> q_init)
-{
-    this->compute_propagators(w_input, q_init);
-    this->compute_concentrations();
 }
 
 template <typename T>

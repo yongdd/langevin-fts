@@ -178,7 +178,7 @@ $$\sigma_i \propto \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot \frac{\partia
 
 ## 5. Box Optimization
 
-During SCFT iteration with `box_is_altering=True`, the scaled negative stress components are appended to the potential-field residuals, and the combined vector is passed to the field optimizer (Anderson mixing or ADAM), which updates the fields and lattice parameters together:
+During SCFT iteration with `box_is_altering=True`, the scaled negative stress components are appended to the potential-field residuals, and the combined vector is passed to the field optimizer (Anderson mixing), which updates the fields and lattice parameters together:
 
 $$\Delta\theta_i = \eta \cdot (-\sigma_i)$$
 

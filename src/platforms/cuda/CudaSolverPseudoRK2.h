@@ -73,14 +73,14 @@ class CudaSolverPseudoRK2 : public CudaSolverPseudoBase<T>
 {
 private:
     using Base = CudaSolverPseudoBase<T>;
-    using Base::cb; using Base::molecules; using Base::pseudo; using Base::chain_model;
+    using Base::cb; using Base::molecules; using Base::pseudo;
     using Base::n_streams; using Base::dim_; using Base::is_periodic_; using Base::streams;
     using Base::temp_storage_bytes; using Base::d_temp_storage;
     using Base::d_stress_sum; using Base::d_stress_sum_out; using Base::d_q_multi;
     using Base::space_group_; using Base::d_reduced_basis_indices_; using Base::d_full_to_reduced_map_;
     using Base::n_basis_; using Base::d_q_full_in_; using Base::d_q_full_out_;
     using Base::use_crysfft_; using Base::crysfft_mode_; using Base::crysfft_identity_map_;
-    using Base::crysfft_physical_size_; using Base::crysfft_reduced_size_;
+    using Base::crysfft_physical_size_;
     using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
     using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
     using Base::fft_; using Base::fft_forward; using Base::fft_backward;

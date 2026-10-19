@@ -21,7 +21,7 @@
 
 | Type | Description |
 |------|-------------|
-| **SCFT** | Mean-field equilibrium with Anderson mixing or ADAM optimizer, stress-based box optimization, and space groups. |
+| **SCFT** | Mean-field equilibrium with Anderson mixing, stress-based box optimization, and space groups. |
 | **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations and Well-Tempered Metadynamics (WTMD). |
 | **CL-FTS** (beta) | Complex Langevin with dynamical stabilization. |
 
@@ -42,7 +42,6 @@
 | CrysFFT | Symmetry-accelerated FFT: Pmmm (BCC), 3m (Gyroid), hexagonal (HCP, PL) (beta) |
 | Non-orthogonal box | Monoclinic and triclinic unit cells with arbitrary angles |
 | Crystal system constraints | Orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic |
-| ADAM optimizer | Alternative to Anderson mixing for SCFT (SCFT) |
 | Well-Tempered Metadynamics | Enhanced sampling for phase transitions (L-FTS) |
 | Field compressors | Linear Response (LR), Anderson Mixing (AM), and hybrid (LRAM) for saddle point (L-FTS) |
 | Smearing | Finite-range interactions for UV regularization (SCFT, L-FTS, CL-FTS) |

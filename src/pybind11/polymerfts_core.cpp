@@ -64,6 +64,11 @@
 
 namespace py = pybind11;
 
+// Input arrays are taken C-contiguous and in the expected dtype: a strided
+// NumPy view or a float32 array is copied/cast, never read as if contiguous.
+template <typename T>
+using array_in = py::array_t<T, py::array::c_style | py::array::forcecast>;
+
 /**
  * @brief Helper for method overload resolution in pybind11.
  *
@@ -116,12 +121,12 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("set_lx", &ComputationBox<T>::set_lx)
         .def("set_lattice_parameters", overload_cast_<std::vector<double>, std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
         // Space group methods
-        .def("set_space_group", &ComputationBox<T>::set_space_group)
-        .def("get_space_group", &ComputationBox<T>::get_space_group, py::return_value_policy::reference)
+        .def("set_space_group", &ComputationBox<T>::set_space_group, py::keep_alive<1, 2>())
+        .def("get_space_group", &ComputationBox<T>::get_space_group, py::return_value_policy::reference_internal)
         .def("get_n_basis", &ComputationBox<T>::get_n_basis)
         .def("get_orbit_counts", &ComputationBox<T>::get_orbit_counts)
         // Field operations: use get_n_basis() for size (n_reduced if space group set, else total_grid)
-        .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
+        .def("integral", [](ComputationBox<T>& obj, array_in<T> g)
         {
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
@@ -130,7 +135,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             }
             return obj.integral(static_cast<T*>(buf_g.ptr));
         })
-        .def("mean", [](ComputationBox<T>& obj, py::array_t<T> g)
+        .def("mean", [](ComputationBox<T>& obj, array_in<T> g)
         {
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
@@ -139,7 +144,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             }
             return obj.mean(static_cast<T*>(buf_g.ptr));
         })
-        .def("inner_product", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h)
+        .def("inner_product", [](ComputationBox<T>& obj, array_in<T> g, array_in<T> h)
         {
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
@@ -152,7 +157,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             }
             return obj.inner_product(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
         })
-        .def("inner_product_inverse_weight", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h, py::array_t<T> w)
+        .def("inner_product_inverse_weight", [](ComputationBox<T>& obj, array_in<T> g, array_in<T> h, array_in<T> w)
         {
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
@@ -163,7 +168,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             }
             return obj.inner_product_inverse_weight(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr), static_cast<T*>(buf_w.ptr));
         })
-        .def("multi_inner_product", [](ComputationBox<T>& obj, int n_comp, py::array_t<T> g, py::array_t<T> h)
+        .def("multi_inner_product", [](ComputationBox<T>& obj, int n_comp, array_in<T> g, array_in<T> h)
         {
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
@@ -176,8 +181,13 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             }
             return obj.multi_inner_product(n_comp, static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
         })
-        .def("zero_mean", [](ComputationBox<T>& obj, py::array_t<T> g)
+        .def("zero_mean", [](ComputationBox<T>& obj, py::array_t<T, 0> g)
         {
+            // Modified in place: a converted copy would leave the caller's array
+            // unchanged, so the array must already be C-contiguous and of the field type
+            // (a wrong dtype is rejected by pybind11 before the call).
+            if (!(g.flags() & py::array::c_style))
+                throw_with_line_number("zero_mean modifies the array in place; pass a C-contiguous array.");
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != N) {
@@ -195,6 +205,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - get_cb(): Get ComputationBox (use cb.get_n_basis(), cb.get_total_grid(), etc.)
  * - compute_propagators(w_input, q_init=None): Solve propagator equations
  * - advance_propagator_single_segment(q_in, p, v, u): Single step for block (v,u) of polymer p
+ *   (internal; use compute_propagators() and get_chain_propagator() instead)
  * - compute_concentrations(): Calculate segment densities
  * - get_total_concentration(monomer_type): Total density by monomer
  * - get_total_concentration(polymer, monomer_type): Per-polymer density
@@ -208,7 +219,6 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - get_stress(): Retrieve computed stress
  * - get_stress_gce(): Grand canonical stress
  * - check_total_partition(): Validate partition function
- * - set_space_group(sg): Set space group for reduced basis mode
  *
  * When space group is set:
  * - compute_propagators() accepts reduced basis w (size: n_reduced)
@@ -224,10 +234,10 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
     
     py::class_<PropagatorComputation<T>>(m, class_name.c_str())
         .def("update_laplacian_operator", &PropagatorComputation<T>::update_laplacian_operator)
-        .def("get_cb", &PropagatorComputation<T>::get_cb, py::return_value_policy::reference)
+        .def("get_cb", &PropagatorComputation<T>::get_cb, py::return_value_policy::reference_internal)
         // compute_propagators: accepts reduced basis w (n_grid) when space group is set,
         // otherwise accepts full grid w (total_grid)
-        .def("compute_propagators", [](PropagatorComputation<T>& obj, std::map<std::string,py::array_t<const T>> w_input, py::object q_init)
+        .def("compute_propagators", [](PropagatorComputation<T>& obj, std::map<std::string, array_in<const T>> w_input, py::object q_init)
         {
             try{
                 const int N = obj.get_cb()->get_n_basis();
@@ -249,7 +259,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
 
                 // Handle q_init if provided (always full grid)
                 if (!q_init.is_none()) {
-                    std::map<std::string, py::array_t<const T>> q_init_map = q_init.cast<std::map<std::string, py::array_t<const T>>>();
+                    std::map<std::string, array_in<const T>> q_init_map = q_init.cast<std::map<std::string, array_in<const T>>>();
 
                     for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
                     {
@@ -272,7 +282,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
-        .def("advance_propagator_single_segment", [](PropagatorComputation<T>& obj, py::array_t<T> q_in, int p, int v, int u)
+        .def("advance_propagator_single_segment", [](PropagatorComputation<T>& obj, array_in<T> q_in, int p, int v, int u)
         {
             try{
                 // Request input buffer
@@ -427,7 +437,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
     py::class_<AndersonMixing<T>>(m, class_name.c_str())
         .def("reset_count", &AndersonMixing<T>::reset_count)
         .def("calculate_new_fields", [](AndersonMixing<T> &obj,
-                py::array_t<T> w_current, py::array_t<T> w_deriv,
+                array_in<T> w_current, array_in<T> w_deriv,
                 double old_error_level, double error_level)
         {
             try{
@@ -507,7 +517,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
                 // Check if mask is not None
                 if (!mask.is_none())
                 {
-                    py::array_t<const T> mask_cast = mask.cast<py::array_t<const T>>();
+                    array_in<double> mask_cast = mask.cast<array_in<double>>();   // the mask is real for both field types
                     buf_mask = mask_cast.request();
                     if (buf_mask.size != M) {
                         throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
@@ -534,10 +544,14 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
             }
         }, py::arg("nx"), py::arg("lx"), py::arg("angles") = py::none(), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory<T>::create_molecules_information)
-        .def("create_propagator_computation_optimizer", &AbstractFactory<T>::create_propagator_computation_optimizer)
+        // keep_alive: the C++ objects hold raw pointers to their arguments, so the
+        // Python wrappers of those arguments must outlive the created object
+        .def("create_propagator_computation_optimizer", &AbstractFactory<T>::create_propagator_computation_optimizer,
+            py::keep_alive<0, 2>())
         .def("create_propagator_computation", &AbstractFactory<T>::create_propagator_computation,
             py::arg("cb"), py::arg("molecules"), py::arg("propagator_computation_optimizer"),
-            py::arg("numerical_method"), py::arg("space_group") = nullptr)
+            py::arg("numerical_method"), py::arg("space_group") = nullptr,
+            py::keep_alive<0, 2>(), py::keep_alive<0, 3>(), py::keep_alive<0, 4>(), py::keep_alive<0, 6>())
         .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
         .def("display_info", &AbstractFactory<T>::display_info);
 }
@@ -629,15 +643,15 @@ PYBIND11_MODULE(_core, m)
         .def("display_architectures", &Molecules::display_architectures);
         
     py::class_<PropagatorComputationOptimizer>(m, "PropagatorComputationOptimizer")
-        .def("get_computation_propagators()", &PropagatorComputationOptimizer::get_computation_propagators)
+        .def("get_computation_propagators", &PropagatorComputationOptimizer::get_computation_propagators)
         .def("get_computation_propagator", &PropagatorComputationOptimizer::get_computation_propagator)
         .def("get_computation_blocks", &PropagatorComputationOptimizer::get_computation_blocks)
         .def("get_computation_block", &PropagatorComputationOptimizer::get_computation_block)
         .def("display_statistics", &PropagatorComputationOptimizer::display_statistics)
         .def("display_propagators", &PropagatorComputationOptimizer::display_propagators)
         .def("display_blocks", &PropagatorComputationOptimizer::display_blocks)
-        .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
-        .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
+        .def_static("get_deps_from_key", &PropagatorCode::get_deps_from_key)
+        .def_static("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
     // Bind SpaceGroup
     py::class_<SpaceGroup>(m, "SpaceGroup",
@@ -693,6 +707,8 @@ Example:
              "Enable Pmmm physical basis (1/8 grid) mapping.")
         .def("using_pmmm_physical_basis", &SpaceGroup::using_pmmm_physical_basis,
              "Return True if Pmmm physical basis is enabled.")
+        .def("m3_crysfft_feasible", &SpaceGroup::m3_crysfft_feasible,
+             "True when the recursive 3m CrysFFT, which the m3 physical basis needs, is feasible on this grid.")
         .def("enable_m3_physical_basis", &SpaceGroup::enable_m3_physical_basis,
              "Enable M3 physical basis (1/8 even-index grid) mapping.")
         .def("using_m3_physical_basis", &SpaceGroup::using_m3_physical_basis,
@@ -701,7 +717,7 @@ Example:
              "Enable z-mirror physical basis (half grid along z).")
         .def("using_z_mirror_physical_basis", &SpaceGroup::using_z_mirror_physical_basis,
              "Return True if z-mirror physical basis is enabled.")
-        .def("to_reduced_basis", [](SpaceGroup& obj, py::array_t<double> full_field)
+        .def("to_reduced_basis", [](SpaceGroup& obj, array_in<double> full_field)
         {
             py::buffer_info buf = full_field.request();
             if (buf.ndim < 1)
@@ -721,7 +737,7 @@ Example:
                                  n_fields);
             return reduced_field;
         }, "Convert full grid field to reduced basis. Returns (n_fields, n_reduced) array.")
-        .def("symmetrize_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
+        .def("symmetrize_reduced_basis", [](SpaceGroup& obj, array_in<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();
             if (buf.ndim < 1)
@@ -738,7 +754,7 @@ Example:
             obj.symmetrize_reduced_basis(static_cast<double*>(buf.ptr), n_fields);
             return reduced_field;
         }, "Symmetrize reduced-basis fields in-place using full space-group orbits.")
-        .def("reduced_to_irreducible", [](SpaceGroup& obj, py::array_t<double> reduced_field) -> py::object
+        .def("reduced_to_irreducible", [](SpaceGroup& obj, array_in<double> reduced_field) -> py::object
         {
             py::buffer_info buf = reduced_field.request();
             if (buf.ndim < 1)
@@ -760,7 +776,7 @@ Example:
                 return py::reinterpret_steal<py::object>(irreducible_field.attr("__getitem__")(0).release());
             return py::reinterpret_steal<py::object>(irreducible_field.release());
         }, "Convert reduced-basis field to irreducible-basis field (full space-group orbits).")
-        .def("irreducible_to_reduced", [](SpaceGroup& obj, py::array_t<double> irreducible_field) -> py::object
+        .def("irreducible_to_reduced", [](SpaceGroup& obj, array_in<double> irreducible_field) -> py::object
         {
             py::buffer_info buf = irreducible_field.request();
             if (buf.ndim < 1)
@@ -782,7 +798,7 @@ Example:
                 return py::reinterpret_steal<py::object>(reduced_field.attr("__getitem__")(0).release());
             return py::reinterpret_steal<py::object>(reduced_field.release());
         }, "Convert irreducible-basis field to reduced-basis field (physical/irreducible basis).")
-        .def("from_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
+        .def("from_reduced_basis", [](SpaceGroup& obj, array_in<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();
             if (buf.ndim < 1)
@@ -802,7 +818,7 @@ Example:
                                    n_fields);
             return full_field;
         }, "Convert reduced basis field to full grid. Returns (n_fields, total_grid) array.")
-        .def("symmetrize", [](SpaceGroup& obj, py::array_t<double> field)
+        .def("symmetrize", [](SpaceGroup& obj, array_in<double> field)
         {
             py::buffer_info buf = field.request();
             if (buf.ndim < 1)
@@ -842,7 +858,7 @@ Example:
 
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
-        .def("avail_platforms", &PlatformSelector::avail_platforms)
+        .def_static("avail_platforms", &PlatformSelector::avail_platforms)
         .def_static("create_factory", [](std::string platform_name, bool reduce_memory,
                                          std::string type)
         {

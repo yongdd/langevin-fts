@@ -10,7 +10,6 @@
  *
  * - Field history stored in GPU device memory (CudaCircularBuffer)
  * - Dot products computed via CUB parallel reduction
- * - Two CUDA streams for overlapping kernel execution and memory copies
  *
  * **Memory Usage:**
  *
@@ -45,12 +44,6 @@
  * - d_cb_w_deriv_hist: History of residuals in device memory
  * - cb_w_deriv_dots: Cached dot products (on CPU for small size)
  *
- * **CUDA Streams:**
- *
- * Uses two streams for overlapping:
- * - streams[0]: Kernel execution
- * - streams[1]: Memory transfers
- *
  * @example
  * @code
  * CudaAndersonMixing<double> am(n_grid, 20, 1e-1, 0.01, 0.1);
@@ -63,8 +56,6 @@ template <typename T>
 class CudaAndersonMixing : public AndersonMixing<T>
 {
 private:
-    cudaStream_t streams[2];  ///< CUDA streams [kernel, memcpy]
-
     CudaCircularBuffer<T> *d_cb_w_hist;        ///< Field history on GPU
     CudaCircularBuffer<T> *d_cb_w_deriv_hist;  ///< Residual history on GPU
     CircularBuffer<T> *cb_w_deriv_dots;        ///< Cached dot products (CPU)
@@ -107,7 +98,7 @@ public:
     CudaAndersonMixing(int n_var, int max_hist,
         double start_error, double mix_min, double mix_init);
 
-    /// Destructor. Frees GPU memory and streams.
+    /// Destructor. Frees GPU memory.
     ~CudaAndersonMixing();
 
     /// Reset history and iteration counter.

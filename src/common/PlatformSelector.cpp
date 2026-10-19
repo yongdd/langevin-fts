@@ -28,6 +28,9 @@
 #include <vector>
 #include <string>
 #include "Exception.h"
+#ifdef USE_CUDA
+#include <cuda_runtime.h>
+#endif
 
 #ifdef USE_CPU_FFTW
 #include "FftwFactory.h"
@@ -60,7 +63,11 @@ std::vector<std::string> PlatformSelector::avail_platforms()
     names.push_back("cpu-mkl");
 #endif
 #ifdef USE_CUDA
-    names.push_back("cuda");
+    // Only when a GPU is actually visible: a CUDA build on a node without a
+    // device (or driver) then falls back to the CPU backends.
+    int n_devices = 0;
+    if (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0)
+        names.push_back("cuda");
 #endif
     if(names.size() == 0)
         throw_with_line_number("No available platform");

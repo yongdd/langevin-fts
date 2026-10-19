@@ -162,19 +162,6 @@ public:
     /// Calculate all concentration fields from propagators.
     void compute_concentrations() override;
 
-    /**
-     * @brief Compute propagators, concentrations, and partition functions.
-     *
-     * Convenience function that calls compute_propagators() and
-     * compute_concentrations() in sequence.
-     *
-     * @param w_block Potential fields
-     * @param q_init  Optional initial conditions
-     */
-    void compute_statistics(
-        std::map<std::string, const T*> w_block,
-        std::map<std::string, const T*> q_init = {}) override;
-
     /// Compute stress tensor components.
     void compute_stress() override;
 

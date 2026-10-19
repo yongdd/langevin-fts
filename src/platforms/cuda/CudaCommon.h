@@ -30,6 +30,7 @@
 
 #include <complex>
 #include <map>
+#include <string>
 #include <cufft.h>
 
 #include <thrust/system_error.h>
@@ -219,6 +220,35 @@ public:
  * @throws Exception if code != cudaSuccess
  */
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
+
+/**
+ * @def cufft_error_check
+ * @brief Macro for cuFFT error checking with source location.
+ *
+ * Wraps cuFFT API calls (plan creation, cufftSetStream, cufftExec*) and
+ * throws an exception on any result other than CUFFT_SUCCESS.
+ *
+ * @example
+ * @code
+ * cufft_error_check(cufftPlanMany(&plan, ...));
+ * cufft_error_check(cufftExecD2Z(plan, in, out));
+ * @endcode
+ */
+#define cufft_error_check(code) throw_on_cufft_error((code), __FILE__, __LINE__, __func__);
+
+/**
+ * @brief Throw exception on cuFFT error.
+ * @param code cuFFT result code
+ * @param file Source file name
+ * @param line Line number
+ * @param func Function name
+ * @throws Exception if code != CUFFT_SUCCESS
+ */
+inline void throw_on_cufft_error(cufftResult code, const char *file, int line, const char *func)
+{
+    if (code != CUFFT_SUCCESS)
+        throw Exception("cuFFT error code " + std::to_string(static_cast<int>(code)), file, line, func);
+}
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M);
 

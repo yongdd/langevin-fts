@@ -68,7 +68,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `segment_lengths` | dict | Relative statistical segment lengths $b/b_{ref}$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$; pairs that are omitted do not interact (χN = 0) | `{"A,B": 20.0}` |
+| `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$; pairs that are omitted do not interact (χN = 0). SCFT needs an invertible χN matrix (its field residual uses χ⁻¹): a single monomer type, or a zero pair in a three-monomer system, is rejected; L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
 | `zeta_n` | float | (Optional) Compressibility parameter $\zeta N$ of the compressible model. Omitted: incompressible ($\sum_i \phi_i = 1$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition
@@ -233,7 +233,7 @@ Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimiz
 | `"Monoclinic"` | a, b, c (3D only) | β |
 | `"Triclinic"` | a, b, c (3D only) | α, β, γ |
 
-Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`.
+Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`. Valid values depend on the dimension: 3D accepts Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic and Triclinic; 2D accepts Orthorhombic, Hexagonal2D and Oblique2D; 1D only Orthorhombic.
 
 ### Axis Ordering
 

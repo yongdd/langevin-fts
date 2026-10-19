@@ -688,55 +688,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
 }
 
 template <typename T>
-std::vector<T*> CudaComputationReduceMemoryDiscrete<T>::recalculate_propagator(
-    std::string key, const int N_START, const int N_RANGE, std::string monomer_type)
-{
-    // Recalculate propagators from segment N_START+1 to N_START+N_RANGE
-    // Returns q_out where q_out[n] points to propagator at segment N_START+n
-    // If propagator exists in checkpoint, reuse it; otherwise compute it
-
-    // Reduced-basis size when a space group is set
-    const int M = this->cb->get_n_basis();
-    const int STREAM = 0;
-
-    // An array of pointers for q_out
-    std::vector<T*> q_out(this->total_max_n_segment + 1);
-
-    // Compute the q_out
-    for(int n=1; n<=N_RANGE; n++)
-    {
-        int segment_idx = N_START + n;
-
-        // Use this->propagator_at_check_point if exists
-        auto it = this->propagator_at_check_point.find(std::make_tuple(key, segment_idx));
-        if(it != this->propagator_at_check_point.end())
-        {
-            q_out[n] = it->second;
-        }
-        // Assign this->q_recal memory space, and compute the next propagator
-        else if (n > 1)
-        {
-            q_out[n] = this->q_recal[n];
-
-            // Copy previous propagator to device
-            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_out[n-1], sizeof(T)*M, cudaMemcpyHostToDevice));
-
-            // Advance propagator - discrete chains always use ds_index=0 (global ds)
-            this->propagator_solver->advance_propagator(
-                STREAM,
-                this->d_q_one[STREAM][0],
-                this->d_q_one[STREAM][1],
-                monomer_type, this->d_q_mask, 0);
-
-            // Copy result back to host
-            gpu_error_check(cudaMemcpy(q_out[n], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
-        }
-    }
-
-    return q_out;
-}
-
-template <typename T>
 void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
 {
     try
@@ -1003,9 +954,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] = 0.0;
 
-        CuDeviceData<T> *d_segment_stress;
-        T segment_stress[N_STRESS];
-        gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS));
+        // Per-stream device scratch (allocated once in CudaComputationCommon)
+        CuDeviceData<T> *d_segment_stress = this->d_segment_stress_[STREAM];
+        T segment_stress[6];  // Max size to avoid VLA issues (N_STRESS <= 6)
         // Zero-initialize: all six components are copied back and accumulated,
         // but the solver writes only the components that are structurally
         // nonzero (orthogonal boxes and the CrysFFT fast path skip the cross
@@ -1272,7 +1223,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             }
         }
 
-        cudaFree(d_segment_stress);
     }
     catch(std::exception& exc)
     {

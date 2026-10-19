@@ -5,7 +5,6 @@ the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
 import json
-import os
 import re
 import warnings
 from pathlib import Path
@@ -184,28 +183,6 @@ def parse_chi_n(
     return chi_n
 
 
-def validate_polymers(
-    distinct_polymers: List[Dict[str, Any]]
-) -> None:
-    """Validate polymer chain definitions.
-
-    Parameters
-    ----------
-    distinct_polymers : list of dict
-        List of polymer chain specifications.
-
-    Raises
-    ------
-    ValidationError
-        If no polymers are defined or volume fractions don't sum to 1.
-    """
-    if len(distinct_polymers) < 1:
-        raise ValidationError("There is no polymer chain.")
-
-    total_volume_fraction = sum(p["volume_fraction"] for p in distinct_polymers)
-    if not np.isclose(total_volume_fraction, 1.0):
-        raise ValidationError("The sum of volume fractions must be equal to 1.")
-
 
 def process_polymer_blocks(
     polymer: Dict[str, Any]
@@ -307,6 +284,41 @@ def process_random_copolymer(
         )
 
     return (random_type_string, statistical_segment_length, polymer["blocks"][0]["fraction"])
+
+
+# =============================================================================
+# Langevin noise
+# =============================================================================
+def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
+    """Calculate Langevin noise strength for L-FTS simulations.
+
+    Computes the standard deviation of Gaussian noise to be added at each
+    Langevin step, ensuring correct statistical weighting of field configurations
+    in the field-theoretic ensemble.
+
+    Parameters
+    ----------
+    langevin_nbar : float
+        Average polymerization index N̄ for the Langevin scheme. Related to
+        the prefactor of the Hamiltonian. Typical values: 1-100.
+    langevin_dt : float
+        Langevin time step size Δt. Controls the magnitude of field updates.
+        Typical values: 0.001-0.1.
+    n_grids : int
+        Total number of grid points M (product of nx dimensions).
+    volume : float
+        System volume V in units of (a_Ref * N_Ref^0.5)³.
+
+    Returns
+    -------
+    sigma : float
+        Standard deviation of Gaussian noise for each field component.
+    """
+    return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
+
+# =============================================================================
+# Field compressors for the saddle-point search of the imaginary fields
+# =============================================================================
 
 
 # =============================================================================

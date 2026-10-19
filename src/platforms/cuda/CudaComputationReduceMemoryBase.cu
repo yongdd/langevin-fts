@@ -73,7 +73,7 @@ void CudaComputationReduceMemoryBase<T>::advance_propagator_single_segment(
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int ds_index = mapping.get_ds_index(block.contour_length);
 
-        const int M = this->cb->get_total_grid();
+        const int M = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // Create device pointers
         CuDeviceData<T> *d_q_in;

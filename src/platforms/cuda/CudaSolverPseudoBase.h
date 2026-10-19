@@ -46,7 +46,6 @@ protected:
     ComputationBox<T>* cb;        ///< Computation box
     Molecules *molecules;         ///< Molecules container
     Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities (Fourier basis, Boltzmann bond factors)
-    std::string chain_model;      ///< "continuous" or "discrete"
     int n_streams;                ///< Number of parallel streams
     int dim_;                     ///< Number of dimensions (1, 2, or 3)
     bool is_periodic_;            ///< True if all BCs are periodic
@@ -79,7 +78,6 @@ protected:
     CudaCrysFFTMode crysfft_mode_;
     bool crysfft_identity_map_;                      ///< True when reduced basis matches physical grid
     int crysfft_physical_size_;
-    int crysfft_reduced_size_;
     int* d_crysfft_phys_to_reduced_;                 ///< Device map: physical index -> reduced index
     int* d_crysfft_reduced_to_phys_;                 ///< Device map: reduced index -> physical index
     int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)

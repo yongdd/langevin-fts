@@ -27,6 +27,8 @@ OPTION(POLYMERFTS_BUILD_TESTS     "Build test executables"                    ON
 OPTION(POLYMERFTS_INSTALL_PYTHON  "Install Python module"                     ON)
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
 OPTION(POLYMERFTS_WERROR          "Treat host C++ warnings as errors (CI)"    OFF)
+SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90" CACHE STRING
+    "CUDA compute capabilities to compile for (semicolon-separated)")
 
 # ============================================================================
 #  Compiler settings
@@ -47,6 +49,10 @@ ENDIF()
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# The installed _core.so records the directories of the libraries it was linked
+# against (conda lib, CUDA lib), so importing it does not need LD_LIBRARY_PATH.
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # Warnings for host code in every build type; Debug adds -Wextra and gprof
 # instrumentation. (For AddressSanitizer add -fsanitize=address
 # -fno-omit-frame-pointer to CMAKE_CXX_FLAGS on the command line.)
@@ -55,13 +61,14 @@ IF(POLYMERFTS_WERROR)
     ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Werror>)
 ENDIF()
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
-    ADD_COMPILE_OPTIONS(-Wextra -pg)
+    # host code only: nvcc rejects -Wextra
+    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wextra> $<$<COMPILE_LANGUAGE:CXX>:-pg>)
+    ADD_LINK_OPTIONS(-pg)
 ENDIF()
 
 # OpenMP (propagator-level parallelism on the CPU; the CUDA target adds
 # -fopenmp for its host code below)
 FIND_PACKAGE(OpenMP REQUIRED)
-SET(CMAKE_C_FLAGS          "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 SET(CMAKE_CXX_FLAGS        "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 
@@ -101,8 +108,9 @@ ELSE()
         "(or apt install libsymspg-dev), or set SPGLIB_ROOT.")
 ENDIF()
 
-# LAPACKE: SVD solver of Anderson mixing. AndersonMixing.cpp includes
-# lapacke.h unconditionally, so both the library and the header are required.
+# LAPACKE: SVD solver of Anderson mixing (AndersonMixing.cpp includes lapacke.h,
+# falling back to MKL's mkl_lapacke.h). The library is linked into 'common', so
+# both the library and a header are required at configure time.
 FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
 FIND_PATH(LAPACKE_INCLUDE_DIR lapacke.h HINTS ENV LAPACKE_ROOT PATH_SUFFIXES include)
 IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
@@ -110,7 +118,7 @@ IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
     MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY} (${LAPACKE_INCLUDE_DIR})")
 ELSE()
     MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h) is required but was not found. "
-        "Install with: conda install -c conda-forge lapack "
+        "Install with: conda install -c conda-forge liblapacke "
         "(or apt install liblapacke-dev), or set LAPACKE_ROOT.")
 ENDIF()
 
@@ -208,7 +216,7 @@ IF(POLYMERFTS_USE_MKL)
     FIND_PACKAGE(MKL QUIET)
     IF(NOT MKL_FOUND)
         MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
-            "Install mkl-devel (e.g. conda install -c conda-forge mkl mkl-devel mkl-include) "
+            "Install MKL (e.g. conda install -c conda-forge mkl mkl-include) "
             "or set MKLROOT.")
     ENDIF()
 
@@ -274,14 +282,14 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     GET_FILENAME_COMPONENT(_cuda_root "${CUDAToolkit_TARGET_DIR}" REALPATH)
     FOREACH(_dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
         GET_FILENAME_COMPONENT(_real "${_dir}" REALPATH)
-        STRING(FIND "${_real}" "${_cuda_root}" _pos)
+        STRING(FIND "${_real}/" "${_cuda_root}/" _pos)   # whole path components only
         IF(_pos EQUAL 0)
             LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${_dir}")
         ENDIF()
     ENDFOREACH()
     FOREACH(_dir ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
         GET_FILENAME_COMPONENT(_real "${_dir}" REALPATH)
-        STRING(FIND "${_real}" "${_cuda_root}" _pos)
+        STRING(FIND "${_real}/" "${_cuda_root}/" _pos)
         IF(_pos EQUAL 0)
             LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "${_dir}")
         ENDIF()
@@ -319,7 +327,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
         src/platforms/cuda/CudaFactory.cu
     )
-    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES ${POLYMERFTS_CUDA_ARCHITECTURES})
     TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
 ENDIF()
 
@@ -333,6 +341,23 @@ ADD_LIBRARY(factory
     src/common/PlatformSelector.cpp
 )
 
+# Everything a consumer of the library links (the Python module, tests,
+# benchmarks): selector, enabled backends, common core. Order matters for
+# static libraries.
+SET(POLYMERFTS_BACKEND_LIBS factory)
+IF(CUDAToolkit_FOUND)
+    LIST(APPEND POLYMERFTS_BACKEND_LIBS cuda CUDA::cufft)
+ENDIF()
+IF(BUILD_CPU_FFTW_LIB)
+    LIST(APPEND POLYMERFTS_BACKEND_LIBS cpu-fftw)
+ENDIF()
+IF(BUILD_CPU_MKL_LIB)
+    LIST(APPEND POLYMERFTS_BACKEND_LIBS cpu-mkl)
+ENDIF()
+LIST(APPEND POLYMERFTS_BACKEND_LIBS common)
+ADD_LIBRARY(polymerfts_backends INTERFACE)
+TARGET_LINK_LIBRARIES(polymerfts_backends INTERFACE ${POLYMERFTS_BACKEND_LIBS})
+
 # ============================================================================
 #  Python module (pybind11)
 # ============================================================================
@@ -340,31 +365,26 @@ ADD_LIBRARY(factory
 # but no libpython to embed, which some environments (manylinux, venvs) lack.
 # pybind11/numpy.h talks to NumPy through its Python API, so no NumPy headers.
 FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development.Module REQUIRED)
-FIND_PACKAGE(pybind11 2.13 REQUIRED)
+# pybind11 from conda (CMAKE_PREFIX_PATH) or from pip (its cmake dir is asked
+# from the interpreter)
+EXECUTE_PROCESS(COMMAND ${Python3_EXECUTABLE} -m pybind11 --cmakedir
+    OUTPUT_VARIABLE _pybind11_cmakedir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+FIND_PACKAGE(pybind11 2.13 REQUIRED HINTS ${_pybind11_cmakedir})
 
-INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
-
+# pybind11::module carries the Python and pybind11 include directories
 ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
 SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
-TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
-    factory
-    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-    $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-    common
-)
+TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE polymerfts_backends)
 
 # Stage an importable 'polymerfts' package inside the build tree on every
 # build. The Python tests put this directory on PYTHONPATH so they always
 # exercise the code that was just built, never a stale site-packages install.
+# (cmake/stage_python.cmake also removes modules that no longer exist in src/python.)
 SET(POLYMERFTS_STAGE_DIR "${CMAKE_BINARY_DIR}/python/polymerfts")
-FILE(GLOB POLYMERFTS_PY_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/python/*.py")
 ADD_CUSTOM_TARGET(polymerfts_stage ALL
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${POLYMERFTS_STAGE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${POLYMERFTS_PY_SOURCES} "${POLYMERFTS_STAGE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:_core> "${POLYMERFTS_STAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND}
+        -DSRC=${PROJECT_SOURCE_DIR}/src/python -DDST=${POLYMERFTS_STAGE_DIR}
+        -DCORE=$<TARGET_FILE:_core> -P ${PROJECT_SOURCE_DIR}/cmake/stage_python.cmake
     DEPENDS _core
     COMMENT "Staging polymerfts package in ${POLYMERFTS_STAGE_DIR}"
     VERBATIM)

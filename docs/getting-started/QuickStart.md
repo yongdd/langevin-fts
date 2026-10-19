@@ -59,6 +59,9 @@ params = {
     # Numerical method
     "numerical_method": "rqm4",    # "rqm4", "rk2", or "cn-adi2"
 
+    # Box relaxation (required by SCFT; True relaxes lx with the stress)
+    "box_is_altering": False,
+
     # Optimizer
     "optimizer": {
         "name": "am",

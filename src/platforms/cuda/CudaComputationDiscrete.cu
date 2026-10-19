@@ -83,12 +83,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         const int N = this->cb->get_n_basis();  // n_basis (with space group) or total_grid
 
         // The number of parallel streams for propagator computation
-        const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
-        std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
-        if (env_omp_num_threads.empty())
-            this->n_streams = MAX_STREAMS;
-        else
-            this->n_streams =  std::min(std::stoi(env_omp_num_threads), MAX_STREAMS);
+        this->n_streams = std::min(this->n_streams_from_env(/*default_n_streams=*/MAX_STREAMS), MAX_STREAMS);
         #ifndef NDEBUG
         std::cout << "The number of CPU threads: " << this->n_streams << std::endl;
         #endif
@@ -968,7 +963,7 @@ void CudaComputationDiscrete<T>::compute_stress()
         const int N_grid = this->cb->get_n_basis();
 
         const int N_STRESS = 6;
-        std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>> block_dq_dl[this->n_streams];
+        std::vector<std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>>> block_dq_dl(this->n_streams);
 
         // Reset stress map
         for(const auto& item: this->d_phi_block)
@@ -1030,9 +1025,12 @@ void CudaComputationDiscrete<T>::compute_stress()
             // cross-term slots are sized, transferred, and accumulated.
             const bool is_ortho = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
             const int N_STRESS_DIM = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
-            CuDeviceData<T> *d_segment_stress;
+            // Per-stream device scratch (allocated once in CudaComputationCommon).
+            // Zero it so slots the solver leaves untouched (e.g. the cross term of an
+            // orthogonal 2D box) read as zero rather than stale data.
+            CuDeviceData<T> *d_segment_stress = this->d_segment_stress_[STREAM];
             T segment_stress[6];  // Max size to avoid VLA issues
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS_DIM));
+            gpu_error_check(cudaMemsetAsync(d_segment_stress, 0, sizeof(T)*6, this->streams[STREAM][0]));
 
             int prev, next;
             prev = 0;
@@ -1115,7 +1113,6 @@ void CudaComputationDiscrete<T>::compute_stress()
             for(int d=0; d<N_STRESS_DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
 
-            cudaFree(d_segment_stress);
         }
         gpu_error_check(cudaDeviceSynchronize());
 

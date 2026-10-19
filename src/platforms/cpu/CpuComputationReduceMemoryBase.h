@@ -6,17 +6,19 @@
  * that consolidates shared functionality between CpuComputationReduceMemoryContinuous
  * and CpuComputationReduceMemoryDiscrete, including:
  *
- * - Common member variable declarations (solver, scheduler, checkpoints, workspace)
- * - Shared concentration query methods
- * - Partition function accessors
- * - Laplacian operator updates
+ * - Checkpointed propagator storage and the recomputation workspace
+ * - advance_propagator_single_segment()
+ *
+ * The solver and scheduler handles, the concentration and partition accessors,
+ * compute_statistics() and the Laplacian operator update live in
+ * CpuComputationCommon.
  *
  * **Design Decision:**
  *
  * The `single_partition_segment` has different tuple structures between
  * Continuous (4 elements) and Discrete (5 elements with monomer_type),
- * so `get_total_partition()` remains virtual and is implemented in derived classes.
- * Similarly, methods with significantly different logic stay in derived classes:
+ * so it stays in the derived classes. Similarly, methods with significantly
+ * different logic stay in derived classes:
  * - Constructor/destructor (different checkpoint allocation)
  * - compute_propagators() (discrete has half-bond steps)
  * - compute_concentrations() (different integration formulas)
@@ -49,23 +51,14 @@
  * @brief Common base class for memory-efficient CPU propagator computation.
  *
  * Consolidates shared code between continuous and discrete chain
- * memory-efficient computation classes, including concentration queries
- * and shared workspace management.
+ * memory-efficient computation classes: the checkpoint storage, the
+ * recomputation workspace and advance_propagator_single_segment().
  *
  * @tparam T Numeric type (double or std::complex<double>)
- *
- * **Shared Functionality:**
- *
- * - Laplacian operator updates
- * - Total concentration queries (by monomer type, by polymer)
- * - Block concentration retrieval
- * - Solvent partition and concentration accessors
- * - Grand canonical ensemble concentration
  *
  * **Virtual Methods:**
  *
  * Derived classes must implement:
- * - get_total_partition(): Different tuple structure for partition segment
  * - compute_propagators(): Different propagator algorithms
  * - compute_concentrations(): Different integration formulas
  * - compute_stress(): Different stress computation logic
@@ -76,8 +69,6 @@ template <typename T>
 class CpuComputationReduceMemoryBase : public CpuComputationCommon<T>
 {
 protected:
-    std::string method;                ///< Solver method ("pseudospectral" or "realspace")
-
     /**
      * @brief Total sum of segments across all propagators.
      *
@@ -138,16 +129,6 @@ public:
 
     /// Virtual destructor.
     virtual ~CpuComputationReduceMemoryBase() {}
-
-    /**
-     * @brief Compute all statistics.
-     *
-     * Convenience function that calls compute_propagators() and
-     * compute_concentrations() in sequence.
-     */
-    void compute_statistics(
-        std::map<std::string, const T*> w_block,
-        std::map<std::string, const T*> q_init = {}) override;
 
     /**
      * @brief Advance propagator by one step.

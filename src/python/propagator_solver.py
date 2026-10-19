@@ -164,8 +164,7 @@ class PropagatorSolver:
         self._propagator_optimizer = None
         self._fields_set = False
         if space_group is not None:
-            cpp_sg = space_group._cpp_sg if hasattr(space_group, "_cpp_sg") else space_group
-            activated = cpp_sg.physical_basis_name() if hasattr(cpp_sg, "physical_basis_name") else "irreducible"
+            activated = space_group.physical_basis_name()
             if activated == "irreducible":
                 print("Space-group basis: irreducible (physical basis not available)")
             else:
@@ -350,18 +349,10 @@ class PropagatorSolver:
                 box_kwargs["mask"] = self.mask
             self._computation_box = self._factory.create_computation_box(**box_kwargs)
 
-        # Create solver with space_group if provided
-        # Handle both C++ SpaceGroup objects and Python wrappers with _cpp_sg attribute
-        if self._space_group is None:
-            cpp_space_group = None
-        elif hasattr(self._space_group, '_cpp_sg'):
-            cpp_space_group = self._space_group._cpp_sg
-        else:
-            # Already a C++ SpaceGroup object
-            cpp_space_group = self._space_group
+        # Create solver (with the space group when one is set)
         self._propagator_computation = self._factory.create_propagator_computation(
             self._computation_box, self._molecules, self._propagator_optimizer,
-            self.numerical_method, cpp_space_group
+            self.numerical_method, self._space_group
         )
 
     def compute_propagators(

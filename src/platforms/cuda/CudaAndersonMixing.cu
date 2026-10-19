@@ -9,7 +9,6 @@
  *
  * - Field history stored in CudaCircularBuffer (device memory)
  * - Inner products computed with CUB reduction kernels
- * - CUDA streams for overlapping computation and memory transfer
  *
  * **Algorithm:**
  *
@@ -70,10 +69,6 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
         this->a_n = new T[this->max_hist];
         this->w_deriv_dots = new T[this->max_hist+1];
 
-        // Create streams
-        gpu_error_check(cudaStreamCreate(&streams[0])); // for kernel execution
-        gpu_error_check(cudaStreamCreate(&streams[1])); // for memcpy
-
         // Fields arrays
         gpu_error_check(cudaMalloc((void**)&d_w_current, sizeof(T)*this->n_var));
         gpu_error_check(cudaMalloc((void**)&d_w_new,     sizeof(T)*this->n_var));
@@ -118,10 +113,6 @@ CudaAndersonMixing<T>::~CudaAndersonMixing()
     cudaFree(d_sum);
     cudaFree(d_sum_out);
     cudaFree(d_temp_storage);
-
-    // Destroy streams
-    cudaStreamDestroy(streams[0]);
-    cudaStreamDestroy(streams[1]);
 }
 template <typename T>
 void CudaAndersonMixing<T>::reset_count()

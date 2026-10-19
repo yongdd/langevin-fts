@@ -164,16 +164,6 @@ public:
     /// Calculate concentration fields from propagators.
     void compute_concentrations() override;
 
-    /**
-     * @brief Compute all statistics from fields.
-     *
-     * @param w_block Potential fields
-     * @param q_init  Optional initial conditions
-     */
-    void compute_statistics(
-        std::map<std::string, const T*> w_block,
-        std::map<std::string, const T*> q_init = {}) override;
-
     /// Compute stress tensor.
     void compute_stress() override;
 
@@ -191,4 +181,4 @@ public:
     /// Validate partition function (testing).
     bool check_total_partition() override;
 };
-#endif    
+#endif

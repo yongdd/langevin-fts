@@ -28,6 +28,7 @@
 
 #include "mkl_dfti.h"
 #include "mkl_trig_transforms.h"
+#include "MklStatusCheck.h"
 
 /**
  * @brief Get normalization factor for round-trip transform (FFTW convention).
@@ -63,19 +64,15 @@ public:
     MklFFTHandle(int fft_size)
         : fft_size_(fft_size)
     {
-        MKL_LONG status;
-        status = DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size);
-        status = DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-        status = DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-        status = DftiCommitDescriptor(hand_forward_);
+        mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (forward)");
+        mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, forward)");
+        mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, forward)");
+        mkl_dfti_check(DftiCommitDescriptor(hand_forward_), "DftiCommitDescriptor (forward)");
 
-        status = DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size);
-        status = DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-        status = DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-        status = DftiCommitDescriptor(hand_backward_);
-
-        if (status != 0)
-            throw_with_line_number("MKL FFT handle creation failed");
+        mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (backward)");
+        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, backward)");
+        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, backward)");
+        mkl_dfti_check(DftiCommitDescriptor(hand_backward_), "DftiCommitDescriptor (backward)");
     }
 
     ~MklFFTHandle()
@@ -88,12 +85,12 @@ public:
 
     void forward(double* in, std::complex<double>* out)
     {
-        DftiComputeForward(hand_forward_, in, out);
+        mkl_dfti_check(DftiComputeForward(hand_forward_, in, out), "DftiComputeForward");
     }
 
     void backward(std::complex<double>* in, double* out)
     {
-        DftiComputeBackward(hand_backward_, in, out);
+        mkl_dfti_check(DftiComputeBackward(hand_backward_, in, out), "DftiComputeBackward");
     }
 
     int size() const { return fft_size_; }

@@ -443,8 +443,11 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
                 ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_in_2[STREAM], M_COMPLEX);
             else
             {
-                // For complex fields, need to handle conjugation properly
-                cuDoubleComplex* d_qk_conj = reinterpret_cast<cuDoubleComplex*>(d_qk_in_2[STREAM]);
+                // For complex fields, gather q2(-k) into a separate buffer (an in-place gather
+                // through the k -> -k map would race). d_q_step_2 is free here: its forward FFT
+                // has already been issued on this stream, and for complex fields M_COMPLEX == M
+                // (Pseudo::update_total_complex_grid), so it holds exactly M_COMPLEX values.
+                cuDoubleComplex* d_qk_conj = d_q_step_2[STREAM];
                 ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj, d_qk_in_2[STREAM], _d_negative_k_idx, M_COMPLEX);
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_conj, 1.0, M_COMPLEX);
             }
@@ -563,14 +566,20 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
         }
         if ( DIM == 2 )
         {
+            // For non-periodic BC, 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
+            // so stress data is stored in fourier_basis_y and fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_y;
+            const double* _d_basis_yy = is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z;
+            const double* _d_basis_xy = is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz;
+
             // V₁₁
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
 
             // V₂₂
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_yy, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());
@@ -578,7 +587,7 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
             // V₁₂: only compute for non-orthogonal boxes
             if (!is_orthogonal)
             {
-                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, bond_length_sq, M_COMPLEX);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xy, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
@@ -586,8 +595,11 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
         }
         if ( DIM == 1 )
         {
-            // V₁₁ (only x-direction in 1D)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+            // For non-periodic BC, 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
+            // so stress data is stored in fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_z;
+
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             gpu_error_check(cudaPeekAtLastError());

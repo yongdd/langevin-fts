@@ -300,10 +300,6 @@ CpuComputationReduceMemoryDiscrete<T>::~CpuComputationReduceMemoryDiscrete()
         delete[] item.second;
     for(const auto& item: propagator_half_steps_at_check_point)
         delete[] item.second;
-    for(const auto& item: this->phi_block)
-        delete[] item.second;
-    for(const auto& item: this->phi_solvent)
-        delete[] item;
 
     #ifndef NDEBUG
     for(const auto& item: this->propagator_finished)

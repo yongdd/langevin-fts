@@ -1,19 +1,14 @@
-ENABLE_TESTING()
+# Tests that read input files (Stress*/Hexagonal*/Scft*) run with the source
+# directory as working directory; the Python tests locate tests/data from
+# their own path. Nothing is copied into the build tree.
 
-# Copy test data files to build directory
-file(GLOB TEST_DATA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Stress*.txt")
-file(COPY ${TEST_DATA_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-
-# Copy test data directory (for space group tests)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/data" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-endif()
-
-# Basic tests for verification (~56 tests, ~40 sec total)
+# Basic tests for verification (label "basic", about one minute in total)
 # Run with: ctest -L basic
 SET(BASIC_TESTS
-    # Parameter handling of the simulation classes (CPU, a few seconds)
+    # Parameter handling of the simulation classes and array handling of the
+    # bindings (CPU, a few seconds)
     TestParams
+    TestComplexMask
     # Platform & utilities
     TestDisplayArchitecture
     TestCircularBuffer
@@ -96,16 +91,13 @@ ENDFUNCTION()
 # Add Python Files. They import the package staged in the build tree
 # (see polymerfts_stage in the top-level CMakeLists.txt), so 'make install'
 # is not required and an old site-packages install is never tested by mistake.
-IF(DEFINED ENV{PYTHONPATH})
-    SET(POLYMERFTS_TEST_PYTHONPATH "${CMAKE_BINARY_DIR}/python:$ENV{PYTHONPATH}")
-ELSE()
-    SET(POLYMERFTS_TEST_PYTHONPATH "${CMAKE_BINARY_DIR}/python")
-ENDIF()
+# Only the staged package is on PYTHONPATH; the configuring shell's value is
+# not baked in.
 FILE(GLOB FILE_LIST "Test*.py")
 FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     ADD_TEST(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${FILE_NAME})
-    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES ENVIRONMENT "PYTHONPATH=${POLYMERFTS_TEST_PYTHONPATH}")
+    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_BINARY_DIR}/python")
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 
@@ -126,14 +118,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
     ENDIF()
 
     ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
-    TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-        factory
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-        common
-        )
+    TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE polymerfts_backends)
 
     IF(${TEST_NAME} MATCHES "Scft" OR ${TEST_NAME} MATCHES "Stress" OR ${TEST_NAME} MATCHES "Hexagonal")
         ADD_TEST(NAME ${TEST_NAME}
@@ -160,14 +145,7 @@ FOREACH(FILE_NAME ${BENCHMARK_LIST})
     ENDIF()
 
     ADD_EXECUTABLE(${BENCH_NAME} ${FILE_NAME})
-    TARGET_LINK_LIBRARIES(${BENCH_NAME} PRIVATE
-        factory
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-        common
-        )
+    TARGET_LINK_LIBRARIES(${BENCH_NAME} PRIVATE polymerfts_backends)
 ENDFOREACH()
 
 IF(CUDAToolkit_FOUND)
@@ -183,15 +161,10 @@ IF(CUDAToolkit_FOUND)
         ENDIF()
 
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
-        TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-            factory cuda CUDA::cufft
-            $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-            common)
+        TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE polymerfts_backends)
 
-        # Match the main cuda library's architecture list (OFF = nvcc default
-        # arch only, which breaks on GPUs newer than the toolkit default).
-        SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+        # Same architecture list as the cuda library
+        SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES ${POLYMERFTS_CUDA_ARCHITECTURES})
         # Benchmarks (Test*Bench*.cu) build as executables but are not tests.
         IF(NOT ${TEST_NAME} MATCHES "Bench")
             ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})

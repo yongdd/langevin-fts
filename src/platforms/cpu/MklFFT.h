@@ -79,9 +79,6 @@ private:
     void initNonPeriodicFFT();
 
     /// Precompute twiddle factors for O(N log N) DCT/DST via FFT.
-    void precomputeTrigTables();
-
-    /// Precompute twiddle factors for O(N log N) DCT/DST via FFT.
     void precomputeTwiddleFactors();
 
     /**

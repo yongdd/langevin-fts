@@ -1,13 +1,12 @@
+import sys
+
 import numpy as np
 
 from polymerfts import PropagatorSolver, _core
 
 
 def _available_platforms():
-    try:
-        return set(_core.PlatformSelector().avail_platforms())
-    except Exception:
-        return set()
+    return set(_core.PlatformSelector.avail_platforms())
 
 
 def _get_platform():
@@ -69,3 +68,12 @@ def test_convergence_order_lite_rqm4_and_rk2():
     # Lightweight but meaningful guardrails on expected convergence orders.
     assert order_rqm4 > 3.0, f"Unexpected RQM4 order: {order_rqm4:.3f}"
     assert 1.5 < order_rk2 < 2.5, f"Unexpected RK2 order: {order_rk2:.3f}"
+    print(f"RQM4 order {order_rqm4:.3f}, RK2 order {order_rk2:.3f}")
+
+
+if __name__ == "__main__":
+    if _get_platform() is None:
+        print("SKIP: no CPU platform in this build")
+        sys.exit(0)
+    test_convergence_order_lite_rqm4_and_rk2()
+    print("Test passed, convergence orders")

@@ -36,7 +36,7 @@ inline void require_positive(T value, const std::string& name)
 {
     if (value <= 0)
     {
-        throw_with_line_number(name + " must be a positive number, got: " + std::to_string(value))
+        throw_with_line_number(name + " must be a positive number, got: " + std::to_string(value));
     }
 }
 
@@ -53,7 +53,7 @@ inline void require_non_negative(T value, const std::string& name)
 {
     if (value < 0)
     {
-        throw_with_line_number(name + " must be a non-negative number, got: " + std::to_string(value))
+        throw_with_line_number(name + " must be a non-negative number, got: " + std::to_string(value));
     }
 }
 
@@ -74,7 +74,7 @@ inline void require_in_range(T value, T min_val, T max_val, const std::string& n
     {
         throw_with_line_number(name + " (" + std::to_string(value) +
             ") must be in range [" + std::to_string(min_val) +
-            ", " + std::to_string(max_val) + "]")
+            ", " + std::to_string(max_val) + "]");
     }
 }
 
@@ -100,7 +100,7 @@ inline void require_all_positive(const std::vector<T>& values, const std::string
     {
         if (v <= 0)
         {
-            throw_with_line_number(name + " (" + str_values + ") must contain only positive numbers")
+            throw_with_line_number(name + " (" + str_values + ") must contain only positive numbers");
         }
     }
 }
@@ -120,7 +120,7 @@ inline void require_same_size(size_t size1, size_t size2,
     if (size1 != size2)
     {
         throw_with_line_number("The sizes of " + name1 + " (" + std::to_string(size1) +
-            ") and " + name2 + " (" + std::to_string(size2) + ") must match.")
+            ") and " + name2 + " (" + std::to_string(size2) + ") must match.");
     }
 }
 
@@ -154,7 +154,7 @@ inline void require_key(const Map& container, const Key& key, const std::string&
 {
     if (!contains(container, key))
     {
-        throw_with_line_number("Key not found in " + container_name)
+        throw_with_line_number("Key not found in " + container_name);
     }
 }
 
@@ -175,7 +175,7 @@ inline void require_string_key(const Map& container, const std::string& key,
 {
     if (container.find(key) == container.end())
     {
-        throw_with_line_number("Key '" + key + "' not found in " + container_name)
+        throw_with_line_number("Key '" + key + "' not found in " + container_name);
     }
 }
 
@@ -204,7 +204,7 @@ inline void validate_mask(double* mask, int size, double tolerance = 1e-7)
         else
         {
             throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0, got: " +
-                std::to_string(mask[i]))
+                std::to_string(mask[i]));
         }
     }
 }

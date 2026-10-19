@@ -23,7 +23,7 @@ cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 make -j8 && make install && ctest -L basic
 ```
 

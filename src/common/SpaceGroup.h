@@ -240,6 +240,12 @@ public:
      */
     bool get_z_mirror_translation(double& t_z, double tol = 1e-10) const;
 
+    /// Enable one physical basis (None restores the irreducible basis).
+    void enable_physical_basis(PhysicalBasis basis);
+    PhysicalBasis physical_basis() const { return physical_basis_; }
+    /// Human-readable name of the active basis ("irreducible", "pmmm", "m3", "z-mirror").
+    std::string physical_basis_name() const;
+
     /**
      * @brief Enable Pmmm physical basis (1/8 grid) mapping.
      *
@@ -247,12 +253,6 @@ public:
      * (first octant, size Nx/2 * Ny/2 * Nz/2). Requires 3D even grid
      * and mirror planes along x, y, z.
      */
-    /// Enable one physical basis (None restores the irreducible basis).
-    void enable_physical_basis(PhysicalBasis basis);
-    PhysicalBasis physical_basis() const { return physical_basis_; }
-    /// Human-readable name of the active basis ("irreducible", "pmmm", "m3", "z-mirror").
-    std::string physical_basis_name() const;
-
     void enable_pmmm_physical_basis();
     bool using_pmmm_physical_basis() const { return physical_basis_ == PhysicalBasis::Pmmm; }
 
@@ -264,6 +264,14 @@ public:
      * and valid 3m translations.
      */
     void enable_m3_physical_basis();
+    /**
+     * @brief Whether the recursive 3m CrysFFT is feasible on this grid.
+     *
+     * The m3 physical basis only pays off with that transform (even grid,
+     * nz >= 16, compatible translation parity); SCFT checks this before
+     * enabling the basis and otherwise uses the Pmmm basis.
+     */
+    bool m3_crysfft_feasible() const;
     bool using_m3_physical_basis() const { return physical_basis_ == PhysicalBasis::M3; }
 
     /**

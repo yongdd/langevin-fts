@@ -164,7 +164,6 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         {
             std::string key = item.first;
             auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
-            int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
 
             if(this->propagator_at_check_point.find(std::make_tuple(key, 0)) == this->propagator_at_check_point.end())
             {
@@ -181,12 +180,6 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                     this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)], N);
                 }
             }
-
-            #ifndef NDEBUG
-            this->propagator_finished[key] = new bool[max_n_segment];
-            for(int i=0; i<max_n_segment;i++)
-                this->propagator_finished[key][i] = false;
-            #endif
         }
 
         // Find the total sum of segments and allocate temporary memory for recalculating propagators
@@ -806,79 +799,6 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
     }
 }
 template <typename T>
-std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalculate_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
-{
-    try
-    {
-        const int N_grid = this->cb->get_n_basis();
-        int prev = 0;
-        int next = 1;
-
-        // Get ds_index from the propagator key
-        int ds_index = PropagatorCode::get_ds_index_from_key(key);
-
-        // Reset solver internal state when starting propagator recalculation
-        // (needed for Global Richardson method)
-        this->propagator_solver->reset_internal_state(0);
-
-        // An array of pointers for q_out (use dynamic container to avoid VLA/stack overflow)
-        std::vector<T*> q_out(this->total_max_n_segment + 1);
-
-        // If a propagator is in this->propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
-        for(int n=0; n<=N_RIGHT; n++)
-        {
-            auto it = this->propagator_at_check_point.find(std::make_tuple(key, N_START+n));
-            if(it != this->propagator_at_check_point.end())
-            {
-                q_out[n] = it->second;
-                #ifndef NDEBUG
-                std::cout << "Use this->propagator_at_check_point if exists: (phi, left) " << key << ", " << N_START+n << std::endl;
-                #endif
-            }
-            else
-            {
-                q_out[n] = this->q_recal[n];
-            }
-        }
-        // Copy propagators from host to device
-        gpu_error_check(cudaMemcpy(this->d_q_one[0][prev], q_out[0], sizeof(T)*N_grid, cudaMemcpyHostToDevice));
-
-        // Compute the q_out
-        for(int n=0; n<=N_RIGHT; n++)
-        {
-            // MEMORY STREAM: copy memory from device to host
-            if (n > 0)
-            {
-                // Use this->propagator_at_check_point if exists
-                if(this->propagator_at_check_point.find(std::make_tuple(key, N_START+n)) == this->propagator_at_check_point.end())
-                {
-                    gpu_error_check(cudaMemcpyAsync(
-                        q_out[n], this->d_q_one[0][prev],
-                        sizeof(T)*N_grid, cudaMemcpyDeviceToHost, this->streams[0][1]));
-                }
-            }
-            // KERNEL STREAM: calculate propagator
-            if ((n+1 < N_RIGHT) ||
-                // Compute the last, if the q_out[N_START+N_RIGHT] is not in this->propagator_at_check_point
-                (n+1 == N_RIGHT && this->propagator_at_check_point.find(std::make_tuple(key, N_START+N_RIGHT)) == this->propagator_at_check_point.end()))
-            {
-                this->propagator_solver->advance_propagator(
-                    0,
-                    this->d_q_one[0][prev],   // q_out[n]
-                    this->d_q_one[0][next],   // q_out[n+1]
-                    monomer_type, this->d_q_mask, ds_index);
-            }
-            std::swap(prev, next);
-            cudaDeviceSynchronize();
-        }
-        return q_out;
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
 void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
     T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM)
 {
@@ -1039,7 +959,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
         const int k = this->checkpoint_interval;
 
         const int N_STRESS = 6;
-        std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>> block_dq_dl[this->n_streams];
+        std::vector<std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>>> block_dq_dl(this->n_streams);
 
         // Reset stress map
         for(const auto& item: this->phi_block)
@@ -1085,9 +1005,12 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             // cross-term slots are sized, transferred, and accumulated.
             const bool is_ortho = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
             const int N_STRESS_DIM = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
-            CuDeviceData<T> *d_segment_stress;
-            T segment_stress[6];
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS_DIM));
+            // Per-stream device scratch (allocated once in CudaComputationCommon).
+            // Zero it so slots the solver leaves untouched (e.g. the cross term of an
+            // orthogonal 2D box) read as zero rather than stale data.
+            CuDeviceData<T> *d_segment_stress = this->d_segment_stress_[STREAM];
+            T segment_stress[6];  // Max size to avoid VLA issues
+            gpu_error_check(cudaMemsetAsync(d_segment_stress, 0, sizeof(T)*6, this->streams[STREAM][0]));
 
             // Number of blocks
             const int num_blocks = (N_RIGHT + k) / k;
@@ -1234,7 +1157,6 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             for(int d=0; d<N_STRESS_DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
 
-            cudaFree(d_segment_stress);
         }
         gpu_error_check(cudaDeviceSynchronize());
 

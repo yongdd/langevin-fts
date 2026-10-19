@@ -116,18 +116,6 @@ private:
     void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right,
         const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM);
 
-    /**
-     * @brief Recalculate propagator from nearest checkpoint.
-     *
-     * @param key          Propagator key
-     * @param N_START      Starting segment (from checkpoint)
-     * @param N_RIGHT      Ending segment
-     * @param monomer_type Monomer type
-     * @return Vector of recalculated propagator pointers
-     */
-    std::vector<T*> recalculate_propagator(std::string key,
-        const int N_START, const int N_RIGHT, std::string monomer_type);
-
 public:
     /**
      * @brief Construct memory-efficient GPU computation.

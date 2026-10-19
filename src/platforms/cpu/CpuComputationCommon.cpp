@@ -4,6 +4,8 @@
  */
 
 #include <cmath>
+#include <climits>
+#include <cstdlib>
 
 #include "CpuComputationCommon.h"
 #include "PropagatorCode.h"
@@ -22,6 +24,39 @@ CpuComputationCommon<T>::CpuComputationCommon(
 }
 
 template <typename T>
+CpuComputationCommon<T>::~CpuComputationCommon()
+{
+    for(const auto& item: phi_block)
+        delete[] item.second;
+    for(const auto& item: phi_solvent)
+        delete[] item;
+}
+
+template <typename T>
+int CpuComputationCommon<T>::n_streams_from_env(int default_n_streams)
+{
+    const char* env = std::getenv("OMP_NUM_THREADS");
+    if (env == nullptr || *env == '\0')
+        return default_n_streams;
+
+    // Leading integer of the value (OMP_NUM_THREADS may be a nested list "4,2")
+    char* end = nullptr;
+    const long value = std::strtol(env, &end, 10);
+    if (end == env || value <= 0 || value > INT_MAX)
+        return default_n_streams;
+    return static_cast<int>(value);
+}
+
+template <typename T>
+void CpuComputationCommon<T>::compute_statistics(
+    std::map<std::string, const T*> w_input,
+    std::map<std::string, const T*> q_init)
+{
+    this->compute_propagators(w_input, q_init);
+    this->compute_concentrations();
+}
+
+template <typename T>
 void CpuComputationCommon<T>::update_laplacian_operator()
 {
     try
@@ -37,14 +72,10 @@ void CpuComputationCommon<T>::update_laplacian_operator()
 template <typename T>
 T CpuComputationCommon<T>::get_total_partition(int polymer)
 {
-    try
-    {
-        return this->single_polymer_partitions[polymer];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    const int P = this->molecules->get_n_polymer_types();
+    if (polymer < 0 || polymer > P-1)
+        throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
+    return this->single_polymer_partitions[polymer];
 }
 
 template <typename T>
@@ -174,7 +205,10 @@ void CpuComputationCommon<T>::get_block_concentration(int p, T *phi)
             if (key_left < key_right)
                 key_left.swap(key_right);
 
-            T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
+            auto block_it = phi_block.find(std::make_tuple(p, key_left, key_right));
+            if (block_it == phi_block.end())
+                throw_with_line_number("Block (" + std::to_string(p) + ", " + key_left + ", " + key_right + ") is not in phi_block.");
+            const T* _essential_phi_block = block_it->second;
 
             for(int i=0; i<N; i++)
                 phi[i+b*N] = _essential_phi_block[i];
@@ -189,14 +223,10 @@ void CpuComputationCommon<T>::get_block_concentration(int p, T *phi)
 template <typename T>
 T CpuComputationCommon<T>::get_solvent_partition(int s)
 {
-    try
-    {
-        return this->single_solvent_partitions[s];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    const int S = this->molecules->get_n_solvent_types();
+    if (s < 0 || s > S-1)
+        throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
+    return this->single_solvent_partitions[s];
 }
 
 template <typename T>

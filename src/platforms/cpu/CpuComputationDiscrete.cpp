@@ -76,12 +76,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             this->propagator_solver->set_space_group(space_group);
 
         // The number of parallel streams for propagator computation
-        const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
-        std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
-        if (env_omp_num_threads.empty())
-            this->n_streams = 4;
-        else
-            this->n_streams = std::stoi(env_omp_num_threads);
+        this->n_streams = this->n_streams_from_env(/*default_n_streams=*/4);
         #ifndef NDEBUG
         std::cout << "The number of CPU threads: " << this->n_streams << std::endl;
         #endif
@@ -215,24 +210,11 @@ CpuComputationDiscrete<T>::~CpuComputationDiscrete()
         }
         delete[] item.second;
     }
-    
-    for(const auto& item: this->phi_block)
-        delete[] item.second;
-    for(const auto& item: this->phi_solvent)
-        delete[] item; 
 
     #ifndef NDEBUG
     for(const auto& item: this->propagator_finished)
         delete[] item.second;
     #endif
-}
-template <typename T>
-void CpuComputationDiscrete<T>::compute_statistics(
-    std::map<std::string, const T*> w_input,
-    std::map<std::string, const T*> q_init)
-{
-    this->compute_propagators(w_input, q_init);
-    this->compute_concentrations();
 }
 template <typename T>
 void CpuComputationDiscrete<T>::compute_propagators(

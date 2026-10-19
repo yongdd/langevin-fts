@@ -71,8 +71,8 @@ def validate_system_params(params: Dict[str, Any]) -> None:
     if abs(total_volume_fraction - 1.0) > 1e-10:
         raise ValidationError(f"Sum of volume fractions must be 1.0, got {total_volume_fraction}")
 
-    if "platform" in params and params["platform"] not in ("cuda", "cpu-fftw", "cpu-mkl"):
-        raise ValidationError(f"'platform' must be 'cuda', 'cpu-fftw', or 'cpu-mkl', got '{params['platform']}'")
+    if "platform" in params and params["platform"] not in ("auto", "cuda", "cpu-fftw", "cpu-mkl"):
+        raise ValidationError(f"'platform' must be 'auto', 'cuda', 'cpu-fftw' or 'cpu-mkl', got '{params['platform']}'")
 
 
 def validate_lfts_params(params: Dict[str, Any]) -> None:

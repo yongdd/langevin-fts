@@ -130,7 +130,7 @@ public:
     /**
      * @brief Update Boltzmann factors from potential fields.
      *
-     * @param device  Memory location of w_input ("device" or "host")
+     * @param device  Memory location of w_input ("gpu" or "cpu")
      * @param w_input Map of potential fields by monomer type
      */
     virtual void update_dw(std::string device, std::map<std::string, const T*> w_input) = 0;

@@ -27,10 +27,6 @@ private:
     DFTI_DESCRIPTOR_HANDLE plan_fft_forward_xy_{nullptr};
     DFTI_DESCRIPTOR_HANDLE plan_fft_backward_xy_{nullptr};
 
-    double* io_buffer_{nullptr};
-    double* temp_buffer_{nullptr};
-    std::complex<double>* complex_buffer_{nullptr};
-
     std::vector<double> dct_cos_;
     std::vector<double> dct_sin_;
     double dct_scale_fwd_{1.0};

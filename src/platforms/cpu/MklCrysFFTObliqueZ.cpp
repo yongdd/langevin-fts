@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "MklCrysFFTObliqueZ.h"
+#include "MklStatusCheck.h"
 #include "Exception.h"
 
 #ifndef M_PI
@@ -40,10 +41,6 @@ MklCrysFFTObliqueZ::~MklCrysFFTObliqueZ()
     if (plan_dct_backward_z_) DftiFreeDescriptor(&plan_dct_backward_z_);
     if (plan_fft_forward_xy_) DftiFreeDescriptor(&plan_fft_forward_xy_);
     if (plan_fft_backward_xy_) DftiFreeDescriptor(&plan_fft_backward_xy_);
-
-    delete[] io_buffer_;
-    delete[] temp_buffer_;
-    delete[] complex_buffer_;
 }
 
 //------------------------------------------------------------------------------
@@ -51,36 +48,27 @@ MklCrysFFTObliqueZ::~MklCrysFFTObliqueZ()
 //------------------------------------------------------------------------------
 void MklCrysFFTObliqueZ::initFFTPlans()
 {
-    io_buffer_ = new double[M_physical_];
-    temp_buffer_ = new double[M_physical_];
-    complex_buffer_ = new std::complex<double>[M_complex_];
-
-    if (!io_buffer_ || !temp_buffer_ || !complex_buffer_)
-        throw_with_line_number("Failed to allocate MKL buffers for MklCrysFFTObliqueZ.");
-
-    MKL_LONG status;
-
     // DCT via FFT: 1D FFT along z of size Nz for each (x,y) column
     // Data layout: [Nx*Ny][Nz] with contiguous z-columns
     const int Nz = nx_logical_[2];
     const int howmany_z = nx_logical_[0] * nx_logical_[1];
     const MKL_LONG Nz_long = Nz;
 
-    status = DftiCreateDescriptor(&plan_dct_forward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long);
-    status = DftiSetValue(plan_dct_forward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_dct_forward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z));
-    status = DftiSetValue(plan_dct_forward_z_, DFTI_INPUT_DISTANCE, Nz_long);
-    status = DftiSetValue(plan_dct_forward_z_, DFTI_OUTPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1));
-    status = DftiSetValue(plan_dct_forward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiCommitDescriptor(plan_dct_forward_z_);
+    mkl_dfti_check(DftiCreateDescriptor(&plan_dct_forward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long), "DftiCreateDescriptor (z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_INPUT_DISTANCE, Nz_long), "DftiSetValue(DFTI_INPUT_DISTANCE, z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_OUTPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue(DFTI_OUTPUT_DISTANCE, z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, z forward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_dct_forward_z_), "DftiCommitDescriptor (z forward)");
 
-    status = DftiCreateDescriptor(&plan_dct_backward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long);
-    status = DftiSetValue(plan_dct_backward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_dct_backward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z));
-    status = DftiSetValue(plan_dct_backward_z_, DFTI_INPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1));
-    status = DftiSetValue(plan_dct_backward_z_, DFTI_OUTPUT_DISTANCE, Nz_long);
-    status = DftiSetValue(plan_dct_backward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiCommitDescriptor(plan_dct_backward_z_);
+    mkl_dfti_check(DftiCreateDescriptor(&plan_dct_backward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long), "DftiCreateDescriptor (z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_INPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue(DFTI_INPUT_DISTANCE, z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_OUTPUT_DISTANCE, Nz_long), "DftiSetValue(DFTI_OUTPUT_DISTANCE, z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, z backward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_dct_backward_z_), "DftiCommitDescriptor (z backward)");
 
     // 2D Real-to-complex FFT along X,Y for each Z slice (batched, strided)
     // Data layout after DCT: [Nx][Ny][Nz/2] where z varies fastest
@@ -93,25 +81,25 @@ void MklCrysFFTObliqueZ::initFFTPlans()
     MKL_LONG input_strides_xy[3] = {0, static_cast<MKL_LONG>(nx_logical_[1]) * stride_xy, stride_xy};
     MKL_LONG output_strides_xy[3] = {0, static_cast<MKL_LONG>(nx_logical_[1] / 2 + 1) * stride_xy, stride_xy};
 
-    status = DftiCreateDescriptor(&plan_fft_forward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy));
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_DISTANCE, 1);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_DISTANCE, 1);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_STRIDES, input_strides_xy);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_STRIDES, output_strides_xy);
-    status = DftiSetValue(plan_fft_forward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiCommitDescriptor(plan_fft_forward_xy_);
+    mkl_dfti_check(DftiCreateDescriptor(&plan_fft_forward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_DISTANCE, 1), "DftiSetValue(DFTI_INPUT_DISTANCE, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_DISTANCE, 1), "DftiSetValue(DFTI_OUTPUT_DISTANCE, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_STRIDES, input_strides_xy), "DftiSetValue(DFTI_INPUT_STRIDES, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_STRIDES, output_strides_xy), "DftiSetValue(DFTI_OUTPUT_STRIDES, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy forward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_fft_forward_xy_), "DftiCommitDescriptor (xy forward)");
 
-    status = DftiCreateDescriptor(&plan_fft_backward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy));
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_DISTANCE, 1);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_DISTANCE, 1);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_STRIDES, output_strides_xy);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_STRIDES, input_strides_xy);
-    status = DftiSetValue(plan_fft_backward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    status = DftiCommitDescriptor(plan_fft_backward_xy_);
+    mkl_dfti_check(DftiCreateDescriptor(&plan_fft_backward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_DISTANCE, 1), "DftiSetValue(DFTI_INPUT_DISTANCE, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_DISTANCE, 1), "DftiSetValue(DFTI_OUTPUT_DISTANCE, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_STRIDES, output_strides_xy), "DftiSetValue(DFTI_INPUT_STRIDES, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_STRIDES, input_strides_xy), "DftiSetValue(DFTI_OUTPUT_STRIDES, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy backward)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_fft_backward_xy_), "DftiCommitDescriptor (xy backward)");
 
     if (!plan_dct_forward_z_ || !plan_dct_backward_z_ || !plan_fft_forward_xy_ || !plan_fft_backward_xy_)
         throw_with_line_number("Failed to create MKL DFTI plans for MklCrysFFTObliqueZ.");
@@ -130,8 +118,6 @@ void MklCrysFFTObliqueZ::initFFTPlans()
 
     // Calibrate DCT scaling to match FFTW's native DCT behavior
     calibrateDCTScale();
-
-    (void)status;
 }
 
 //------------------------------------------------------------------------------
@@ -176,12 +162,12 @@ void MklCrysFFTObliqueZ::calibrateDCTScale()
     // Single forward FFT for calibration
     DFTI_DESCRIPTOR_HANDLE plan_calib = nullptr;
     MKL_LONG Nz_calib = 2 * N;
-    DftiCreateDescriptor(&plan_calib, DFTI_DOUBLE, DFTI_REAL, 1, Nz_calib);
-    DftiSetValue(plan_calib, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-    DftiSetValue(plan_calib, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-    DftiCommitDescriptor(plan_calib);
+    mkl_dfti_check(DftiCreateDescriptor(&plan_calib, DFTI_DOUBLE, DFTI_REAL, 1, Nz_calib), "DftiCreateDescriptor (calibration)");
+    mkl_dfti_check(DftiSetValue(plan_calib, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, calibration)");
+    mkl_dfti_check(DftiSetValue(plan_calib, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, calibration)");
+    mkl_dfti_check(DftiCommitDescriptor(plan_calib), "DftiCommitDescriptor (calibration)");
 
-    DftiComputeForward(plan_calib, z_extended.data(), z_freq.data());
+    mkl_dfti_check(DftiComputeForward(plan_calib, z_extended.data(), z_freq.data()), "DftiComputeForward (calibration)");
 
     // Extract FFT-based DCT-II (without calibration)
     std::vector<double> dct_fft(N);
@@ -216,7 +202,7 @@ void MklCrysFFTObliqueZ::calibrateDCTScale()
     z_freq[N] = std::complex<double>(0.0, 0.0);
 
     // Backward FFT
-    DftiComputeBackward(plan_calib, z_freq.data(), z_extended.data());
+    mkl_dfti_check(DftiComputeBackward(plan_calib, z_freq.data(), z_extended.data()), "DftiComputeBackward (calibration)");
 
     // Extract DCT-III result
     std::vector<double> idct_fft(N);
@@ -296,7 +282,7 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
     }
 
     // Batched FFT along z
-    DftiComputeForward(plan_dct_forward_z_, buffers.z_extended.get(), buffers.z_freq.get());
+    mkl_dfti_check(DftiComputeForward(plan_dct_forward_z_, buffers.z_extended.get(), buffers.z_freq.get()), "DftiComputeForward (z DCT-II)");
 
     // Extract DCT-II coefficients with twiddle factors and calibration
     for (int ixy = 0; ixy < howmany; ++ixy)
@@ -366,7 +352,7 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
     }
 
     // Batched backward FFT along z
-    DftiComputeBackward(plan_dct_backward_z_, buffers.z_freq.get(), buffers.z_extended.get());
+    mkl_dfti_check(DftiComputeBackward(plan_dct_backward_z_, buffers.z_freq.get(), buffers.z_extended.get()), "DftiComputeBackward (z DCT-III)");
 
     // Extract first half (DCT-III result) with normalization and backward calibration
     // IFFT returns 2N values, we take the first N
@@ -418,14 +404,14 @@ void MklCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
     applyDCT2ForwardZ(buffers.real_in.get(), buffers.real_tmp.get());
 
     // Step 3: Batched 2D FFT along XY (strided)
-    DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get());
+    mkl_dfti_check(DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get()), "DftiComputeForward (xy)");
 
     // Step 4: Apply Boltzmann factor
     for (int i = 0; i < M_complex_; ++i)
         buffers.complex.get()[i] *= state.boltz_current[i];
 
     // Step 5: Batched 2D IFFT along XY (strided)
-    DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get());
+    mkl_dfti_check(DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get()), "DftiComputeBackward (xy)");
 
     // Step 6: DCT-III along Z
     applyDCT3BackwardZ(buffers.real_tmp.get(), buffers.real_in.get());
@@ -471,14 +457,14 @@ void MklCrysFFTObliqueZ::apply_multiplier(const double* q_in, double* q_out, con
     applyDCT2ForwardZ(buffers.real_in.get(), buffers.real_tmp.get());
 
     // Step 3: Batched 2D FFT along XY (strided)
-    DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get());
+    mkl_dfti_check(DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get()), "DftiComputeForward (xy)");
 
     // Step 4: Apply multiplier
     for (int i = 0; i < M_complex_; ++i)
         buffers.complex.get()[i] *= multiplier[i];
 
     // Step 5: Batched 2D IFFT along XY (strided)
-    DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get());
+    mkl_dfti_check(DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get()), "DftiComputeBackward (xy)");
 
     // Step 6: DCT-III along Z
     applyDCT3BackwardZ(buffers.real_tmp.get(), buffers.real_in.get());

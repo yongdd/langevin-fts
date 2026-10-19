@@ -35,6 +35,7 @@
 #include <numbers>
 #include <stdexcept>
 #include "MklFFT.h"
+#include "MklStatusCheck.h"
 
 //------------------------------------------------------------------------------
 // Constructor (periodic BC, backward compatible)
@@ -171,8 +172,6 @@ void MklFFT<T, DIM>::initPeriodicFFT()
         for (int i = 0; i < DIM; i++)
             NX[i] = nx_[i];
 
-        MKL_LONG status{0};
-
         // Strides describe data layout in real and conjugate-even domain
         MKL_LONG rs[DIM + 1] = {0};
         MKL_LONG cs[DIM + 1] = {0};
@@ -201,35 +200,32 @@ void MklFFT<T, DIM>::initPeriodicFFT()
 
         if (DIM == 1)
         {
-            status = DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, dtype, 1, NX[0]);
-            status = DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, dtype, 1, NX[0]);
+            mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, dtype, 1, NX[0]), "DftiCreateDescriptor (forward)");
+            mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, dtype, 1, NX[0]), "DftiCreateDescriptor (backward)");
         }
         else
         {
-            status = DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, dtype, DIM, NX);
-            status = DftiSetValue(hand_forward_, DFTI_INPUT_STRIDES, rs);
-            status = DftiSetValue(hand_forward_, DFTI_OUTPUT_STRIDES, cs);
+            mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, dtype, DIM, NX), "DftiCreateDescriptor (forward)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_INPUT_STRIDES, rs), "DftiSetValue(DFTI_INPUT_STRIDES, forward)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_OUTPUT_STRIDES, cs), "DftiSetValue(DFTI_OUTPUT_STRIDES, forward)");
 
-            status = DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, dtype, DIM, NX);
-            status = DftiSetValue(hand_backward_, DFTI_INPUT_STRIDES, cs);
-            status = DftiSetValue(hand_backward_, DFTI_OUTPUT_STRIDES, rs);
+            mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, dtype, DIM, NX), "DftiCreateDescriptor (backward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_INPUT_STRIDES, cs), "DftiSetValue(DFTI_INPUT_STRIDES, backward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_OUTPUT_STRIDES, rs), "DftiSetValue(DFTI_OUTPUT_STRIDES, backward)");
         }
 
-        status = DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-        status = DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+        mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, forward)");
+        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, backward)");
 
         if (is_real)
         {
-            status = DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
+            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, forward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, backward)");
         }
 
-        status = DftiCommitDescriptor(hand_forward_);
-        status = DftiSetValue(hand_backward_, DFTI_BACKWARD_SCALE, 1.0 / static_cast<double>(total_grid_));
-        status = DftiCommitDescriptor(hand_backward_);
-
-        if (status != 0)
-            std::cerr << "MKL FFT init, status: " << status << std::endl;
+        mkl_dfti_check(DftiCommitDescriptor(hand_forward_), "DftiCommitDescriptor (forward)");
+        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_BACKWARD_SCALE, 1.0 / static_cast<double>(total_grid_)), "DftiSetValue(DFTI_BACKWARD_SCALE, backward)");
+        mkl_dfti_check(DftiCommitDescriptor(hand_backward_), "DftiCommitDescriptor (backward)");
     }
     catch (std::exception& exc)
     {
@@ -253,23 +249,19 @@ void MklFFT<T, DIM>::initNonPeriodicFFT()
         for (int dim = 0; dim < DIM; ++dim)
         {
             int n = nx_[dim];
-            MKL_LONG status;
 
             // Forward FFT for DCT-III (D2Z equivalent)
-            status = DftiCreateDescriptor(&dct_fft_forward_[dim], DFTI_DOUBLE, DFTI_REAL, 1, n);
-            status = DftiSetValue(dct_fft_forward_[dim], DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(dct_fft_forward_[dim], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiCommitDescriptor(dct_fft_forward_[dim]);
+            mkl_dfti_check(DftiCreateDescriptor(&dct_fft_forward_[dim], DFTI_DOUBLE, DFTI_REAL, 1, n), "DftiCreateDescriptor (DCT/DST forward)");
+            mkl_dfti_check(DftiSetValue(dct_fft_forward_[dim], DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, DCT/DST forward)");
+            mkl_dfti_check(DftiSetValue(dct_fft_forward_[dim], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, DCT/DST forward)");
+            mkl_dfti_check(DftiCommitDescriptor(dct_fft_forward_[dim]), "DftiCommitDescriptor (DCT/DST forward)");
 
             // Backward FFT for DCT-II (Z2D equivalent)
             // NOTE: No scaling - cuHelmholtz algorithm expects unscaled IFFT
-            status = DftiCreateDescriptor(&dct_fft_backward_[dim], DFTI_DOUBLE, DFTI_REAL, 1, n);
-            status = DftiSetValue(dct_fft_backward_[dim], DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(dct_fft_backward_[dim], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiCommitDescriptor(dct_fft_backward_[dim]);
-
-            if (status != 0)
-                throw_with_line_number("MKL FFT plan creation failed for dimension " + std::to_string(dim));
+            mkl_dfti_check(DftiCreateDescriptor(&dct_fft_backward_[dim], DFTI_DOUBLE, DFTI_REAL, 1, n), "DftiCreateDescriptor (DCT/DST backward)");
+            mkl_dfti_check(DftiSetValue(dct_fft_backward_[dim], DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, DCT/DST backward)");
+            mkl_dfti_check(DftiSetValue(dct_fft_backward_[dim], DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, DCT/DST backward)");
+            mkl_dfti_check(DftiCommitDescriptor(dct_fft_backward_[dim]), "DftiCommitDescriptor (DCT/DST backward)");
         }
 
         // Precompute twiddle factors for each dimension
@@ -284,13 +276,6 @@ void MklFFT<T, DIM>::initNonPeriodicFFT()
 //------------------------------------------------------------------------------
 // Precompute twiddle factors for O(N log N) DCT/DST
 //------------------------------------------------------------------------------
-template <typename T, int DIM>
-void MklFFT<T, DIM>::precomputeTrigTables()
-{
-    // This function is now renamed to precomputeTwiddleFactors
-    precomputeTwiddleFactors();
-}
-
 template <typename T, int DIM>
 void MklFFT<T, DIM>::precomputeTwiddleFactors()
 {
@@ -392,11 +377,10 @@ void MklFFT<T, DIM>::applyDCT2Forward(double* data, double* temp, int dim)
 
             // Inverse FFT (c2r)
             // Cast complex to double* for MKL DFTI interface
-            MKL_LONG status = DftiComputeBackward(dct_fft_backward_[dim],
-                                                   reinterpret_cast<double*>(fft_in.data()),
-                                                   fft_out.data());
-            if (status != 0)
-                throw_with_line_number("MKL DCT-II backward failed, status: " + std::to_string(status));
+            mkl_dfti_check(DftiComputeBackward(dct_fft_backward_[dim],
+                                               reinterpret_cast<double*>(fft_in.data()),
+                                               fft_out.data()),
+                           "DftiComputeBackward (DCT-II)");
 
             // DCT-II postprocessing: apply twiddle factors
             // Based on cuHelmholtz postOp_dct2
@@ -476,7 +460,8 @@ void MklFFT<T, DIM>::applyDCT3Backward(double* data, double* temp, int dim)
             }
 
             // Forward FFT (r2c)
-            DftiComputeForward(dct_fft_forward_[dim], fft_in.data(), fft_out.data());
+            mkl_dfti_check(DftiComputeForward(dct_fft_forward_[dim], fft_in.data(), fft_out.data()),
+                           "DftiComputeForward (DCT-III)");
 
             // DCT-III postprocessing: rearrange complex to real
             // Based on cuHelmholtz postOp_dct3
@@ -567,11 +552,10 @@ void MklFFT<T, DIM>::applyDST2Forward(double* data, double* temp, int dim)
             }
 
             // Inverse FFT (c2r)
-            MKL_LONG status = DftiComputeBackward(dct_fft_backward_[dim],
-                                                   reinterpret_cast<double*>(fft_in.data()),
-                                                   fft_out.data());
-            if (status != 0)
-                throw_with_line_number("MKL DST-II backward failed, status: " + std::to_string(status));
+            mkl_dfti_check(DftiComputeBackward(dct_fft_backward_[dim],
+                                               reinterpret_cast<double*>(fft_in.data()),
+                                               fft_out.data()),
+                           "DftiComputeBackward (DST-II)");
 
             // DST-II postprocessing: apply twiddle factors
             // Based on cuHelmholtz kernel_dst2_postOp
@@ -616,14 +600,9 @@ void MklFFT<T, DIM>::applyDST2Forward(double* data, double* temp, int dim)
                 if (k < n - k)
                     temp[offset + (n - k - 1) * stride] = result_nk;
             }
-            // Handle middle element for even n (k = n/2)
-            if (n % 2 == 0)
-            {
-                // When k = n/2, we have pin[n/2] already set above
-                // and pin[N - n/2] = pin[n/2] is the same element
-                // Actually for k = n/2, k = n - k when n is even
-                // So result_k == result_nk at k = n/2
-            }
+            // Middle element for even n (k = n/2): k = n - k, so pin[n/2] and
+            // pin[N - n/2] are the same element (result_k == result_nk) and the
+            // loop above has already written it once.
             // Handle pin[N] = fft_out[0] * 2 -> y[N-1]
             // This is the last coefficient
             temp[offset + (n - 1) * stride] = fft_out[0];  // CUDA has *2, scale by 0.5 = *1
@@ -731,15 +710,12 @@ void MklFFT<T, DIM>::applyDST3Backward(double* data, double* temp, int dim)
                 if (k < n - k)
                     fft_in[n - k] = Ta * sin_tbl[k] - Tb * cos_tbl[k];
             }
-            // Handle middle element for even n
-            if (n % 2 == 0)
-            {
-                // When k = n/2, k = n-k, so we only set fft_in[n/2] once
-                // Already handled in the loop
-            }
+            // Middle element for even n: when k = n/2, k = n-k, so fft_in[n/2]
+            // is set exactly once by the loop above; nothing else to do.
 
             // Forward FFT (r2c)
-            DftiComputeForward(dct_fft_forward_[dim], fft_in.data(), fft_out.data());
+            mkl_dfti_check(DftiComputeForward(dct_fft_forward_[dim], fft_in.data(), fft_out.data()),
+                           "DftiComputeForward (DST-III)");
 
             // DST-III postprocessing: extract real output from complex FFT
             // Based on cuHelmholtz kernel_dst3_postOp
@@ -804,9 +780,7 @@ void MklFFT<T, DIM>::forward(T *rdata, std::complex<double> *cdata)
                               "Use forward(T*, double*) for non-periodic BC.");
     }
 
-    int status = DftiComputeForward(hand_forward_, rdata, cdata);
-    if (status != 0)
-        throw_with_line_number("MKL forward, status: " + std::to_string(status));
+    mkl_dfti_check(DftiComputeForward(hand_forward_, rdata, cdata), "DftiComputeForward (periodic)");
 }
 
 //------------------------------------------------------------------------------
@@ -821,9 +795,7 @@ void MklFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
                               "Use backward(double*, T*) for non-periodic BC.");
     }
 
-    int status = DftiComputeBackward(hand_backward_, cdata, rdata);
-    if (status != 0)
-        throw_with_line_number("MKL backward, status: " + std::to_string(status));
+    mkl_dfti_check(DftiComputeBackward(hand_backward_, cdata, rdata), "DftiComputeBackward (periodic)");
 }
 
 //------------------------------------------------------------------------------
@@ -838,9 +810,7 @@ void MklFFT<T, DIM>::forward(T *rdata, double *cdata)
         {
             // Use MKL DFTI (treat double* as complex<double>*)
             std::complex<double>* cdata_complex = reinterpret_cast<std::complex<double>*>(cdata);
-            int status = DftiComputeForward(hand_forward_, rdata, cdata_complex);
-            if (status != 0)
-                throw_with_line_number("MKL forward, status: " + std::to_string(status));
+            mkl_dfti_check(DftiComputeForward(hand_forward_, rdata, cdata_complex), "DftiComputeForward (periodic)");
         }
         else
         {
@@ -913,9 +883,7 @@ void MklFFT<T, DIM>::backward(double *cdata, T *rdata)
         {
             // Use MKL DFTI (treat double* as complex<double>*)
             std::complex<double>* cdata_complex = reinterpret_cast<std::complex<double>*>(cdata);
-            int status = DftiComputeBackward(hand_backward_, cdata_complex, rdata);
-            if (status != 0)
-                throw_with_line_number("MKL backward, status: " + std::to_string(status));
+            mkl_dfti_check(DftiComputeBackward(hand_backward_, cdata_complex, rdata), "DftiComputeBackward (periodic)");
         }
         else
         {

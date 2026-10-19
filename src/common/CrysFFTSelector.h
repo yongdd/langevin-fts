@@ -25,35 +25,28 @@ struct CrysFFTSelection
     double oblique_z_translation = 0.0;
 };
 
-inline CrysFFTSelection select_crysfft_mode(
+/// Grid feasibility of the recursive 3m CrysFFT, and therefore of the m3
+/// physical basis that relies on it: even grid, nz/2 >= 8, and a translation-
+/// parity permutation that makes psi bijective (compute_m3_fold_permutation).
+/// The proof that the psi-bijectivity test is equivalent to m3-basis
+/// feasibility, and the grids it was verified on, are in
+/// docs/theory/SpaceGroup.md (section "Recursive 3m fold parity").
+/// On success trans_part holds the translations the engines must use (they
+/// may be composed with a centering translation, see below).
+inline bool crysfft_recursive_3m_feasible(
     const SpaceGroup* sg,
     const std::array<int, 3>& nx,
-    int dim,
-    bool is_periodic,
-    bool is_orthogonal,
-    bool z_axis_orthogonal)
+    std::array<double, 9>& trans_part)
 {
-    CrysFFTSelection selection;
-
-    if (sg == nullptr || dim != 3 || !is_periodic)
-        return selection;
-
-    const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
-    const bool even_z = (nx[2] % 2 == 0);
-
-    std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-    const bool has_3m = sg->get_m3_translations(trans_part);
-    const bool has_pmmm = sg->has_mirror_planes_xyz();
-    // Recursive3m grid condition: even grid, nz/2 >= 8, and a valid translation-
-    // parity permutation (compute_m3_fold_permutation). The proof that the
-    // psi-bijectivity test below is equivalent to m3-basis feasibility, and the
-    // grids it was verified on, are in docs/theory/SpaceGroup.md
-    // (section "Recursive 3m fold parity").
+    trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (!sg->get_m3_translations(trans_part))
+        return false;
     const bool even_all = (nx[0] % 2 == 0) && (nx[1] % 2 == 0) && (nx[2] % 2 == 0);
+    if (!even_all || (nx[2] / 2) < 8)
+        return false;
     std::array<int, 8> fold_perm{};
-    bool fold_ok = has_3m &&
-        compute_m3_fold_permutation(trans_part, nx, fold_perm);
-    if (has_3m && even_all && !fold_ok)
+    bool fold_ok = compute_m3_fold_permutation(trans_part, nx, fold_perm);
+    if (!fold_ok)
     {
         // Minimal-norm representatives give a singular psi. Search coset
         // representatives composed with the pure (centering) translations;
@@ -87,7 +80,28 @@ inline CrysFFTSelection select_crysfft_mode(
             }
         }
     }
-    const bool recursive_ok = even_all && ((nx[2] / 2) >= 8) && fold_ok;
+    return fold_ok;
+}
+
+inline CrysFFTSelection select_crysfft_mode(
+    const SpaceGroup* sg,
+    const std::array<int, 3>& nx,
+    int dim,
+    bool is_periodic,
+    bool is_orthogonal,
+    bool z_axis_orthogonal)
+{
+    CrysFFTSelection selection;
+
+    if (sg == nullptr || dim != 3 || !is_periodic)
+        return selection;
+
+    const bool even_grid = (nx[0] % 2 == 0 && nx[1] % 2 == 0 && nx[2] % 2 == 0);
+    const bool even_z = (nx[2] % 2 == 0);
+
+    std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    const bool recursive_ok = crysfft_recursive_3m_feasible(sg, nx, trans_part);
+    const bool has_pmmm = sg->has_mirror_planes_xyz();
 
     selection.can_pmmm = has_pmmm;
 
@@ -136,7 +150,7 @@ inline CrysFFTSelection select_crysfft_mode(
 
     if (sg->using_m3_physical_basis())
     {
-        if (has_3m && recursive_ok)
+        if (recursive_ok)
         {
             selection.mode = CrysFFTChoice::Recursive3m;
             selection.m3_translations = trans_part;
@@ -153,7 +167,7 @@ inline CrysFFTSelection select_crysfft_mode(
     if (!even_grid)
         return selection;
 
-    if (has_3m && recursive_ok)
+    if (recursive_ok)
     {
         selection.mode = CrysFFTChoice::Recursive3m;
         selection.m3_translations = trans_part;

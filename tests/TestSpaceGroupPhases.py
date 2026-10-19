@@ -283,7 +283,7 @@ def test_phase(phase_name, platform, reduce_memory):
 
     lx, w_A, w_B = load_mat_fields(mat_file, phase_def["nx"])
     if lx is None:
-        return "SKIPPED", None, f"{phase_def['mat_file']} not found or invalid", 0.0
+        return "FAILED", None, f"{phase_def['mat_file']} not found or invalid", 0.0
 
     params = build_params(phase_def, lx, platform, reduce_memory)
 

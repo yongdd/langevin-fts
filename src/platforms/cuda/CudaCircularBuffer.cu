@@ -48,7 +48,7 @@ CudaCircularBuffer<T>::CudaCircularBuffer(int length, int width)
     }
 }
 template<typename T>
-CudaCircularBuffer<T>::~CudaCircularBuffer<double>()
+CudaCircularBuffer<T>::~CudaCircularBuffer()
 {
     for(int i=0; i<length; i++)
         cudaFree(d_elems[i]);

@@ -273,8 +273,6 @@ private:
 
     int dim;                     ///< Dimensionality (1, 2, or 3)
 
-    std::string chain_model;     ///< Chain model type
-    bool reduce_memory;      ///< Checkpointing mode flag
     int n_streams;               ///< Number of parallel streams
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]

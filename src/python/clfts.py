@@ -23,11 +23,11 @@ from .propagator_solver import PropagatorSolver
 from .validation import validate_system_params, ValidationError
 from .utils import (
     parse_chi_n,
-    validate_polymers,
     process_polymer_blocks,
     process_random_copolymer,
+    draw_polymer_architectures,
+    calculate_sigma,
 )
-from .lfts import calculate_sigma
 
 # OpenMP environment variables
 os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
@@ -71,6 +71,8 @@ class CLFTS:
         for key in ("langevin", "recording", "verbose_level"):
             if key not in params:
                 raise ValidationError(f"Missing required parameter for CLFTS: '{key}'")
+        if params["verbose_level"] not in (0, 1, 2):
+            raise ValidationError(f"'verbose_level' must be 0, 1 or 2, got {params['verbose_level']}")
 
         # Monomer types and statistical segment lengths
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -88,7 +90,6 @@ class CLFTS:
         self.zeta_n = 100.0 if params.get("zeta_n", None) is None else params["zeta_n"]
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
-        validate_polymers(self.distinct_polymers)
         for polymer in self.distinct_polymers:
             polymer["blocks_input"] = process_polymer_blocks(polymer)
         self.random_fraction = {}
@@ -100,6 +101,9 @@ class CLFTS:
                 self.segment_lengths[random_type] = effective_segment_length
                 self.random_fraction[random_type] = fraction
 
+        # Draw the chain architectures (polymer_<id>.png in the current directory)
+        draw_polymer_architectures(self.distinct_polymers, params["ds"], self.segment_lengths)
+
         # Boundary conditions (default: periodic)
         bc = params.get("bc", None)
         if bc is None:
@@ -108,10 +112,8 @@ class CLFTS:
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, self.zeta_n)
 
-        # The numbers of real and imaginary fields
+        # The number of monomer types
         M = len(self.monomer_types)
-        R = len(self.mpt.aux_fields_real_idx)
-        I = len(self.mpt.aux_fields_imag_idx)
 
         # Complex-valued propagator solver (complex Langevin fields)
         self.prop_solver = PropagatorSolver(
@@ -130,11 +132,10 @@ class CLFTS:
                                          polymer.get("initial_conditions", None))
         self.prop_solver.display_platform_info()
 
-        # (C++ class) Computation box, molecules, optimizer and propagator solver
+        # (C++ class) Computation box; molecules, optimizer and propagator computation
+        # are used through prop_solver (aliases at the end of __init__ for scripts
+        # that reach the C++ objects directly)
         self.cb = self.prop_solver.computation_box
-        molecules = self.prop_solver.molecules
-        propagator_computation_optimizer = self.prop_solver.propagator_optimizer
-        self.solver = self.prop_solver.propagator_computation
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(
@@ -171,11 +172,12 @@ class CLFTS:
 
         print("---------- Simulation Parameters ----------")
         print("Platform:", self.prop_solver.platform)
-        print("Box Dimension: %d" % (self.cb.get_dim()))
-        print("Nx:", self.cb.get_nx())
-        print("Lx:", self.cb.get_lx())
-        print("dx:", self.cb.get_dx())
-        print("Volume: %f" % (self.cb.get_volume()))
+        print("Box Dimension: %d" % (self.prop_solver.dim))
+        print("Nx:", self.prop_solver.nx)
+        print("Lx [a, b, c]:", self.prop_solver.get_lx())
+        print("Angles [alpha, beta, gamma]:", list(self.prop_solver.get_angles_degrees()))
+        print("dx:", self.prop_solver.get_dx())
+        print("Volume: %f" % (self.prop_solver.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
         print("Segment lengths:\n\t", list(self.segment_lengths.items()))
@@ -184,13 +186,13 @@ class CLFTS:
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1],
                                    self.segment_lengths[monomer_pair[0]] / self.segment_lengths[monomer_pair[1]]))
 
-        print("chi_n:")
+        print("χN:")
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
         print("zeta_n: %f" % (self.zeta_n))
 
-        molecules.display_architectures()
+        self.prop_solver.display_architectures()
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
@@ -198,7 +200,7 @@ class CLFTS:
         print("Dynamical stabilization constant: %f" % (self.alpha_ds))
         print("Random Number Generator:", self.random_bg.state)
 
-        propagator_computation_optimizer.display_statistics()
+        self.prop_solver.display_statistics()
 
         # Save internal variables
         self.params = params
@@ -210,13 +212,15 @@ class CLFTS:
         self.verbose_level = params["verbose_level"]
         self.recording = params["recording"].copy()
 
-        self.molecules = molecules
-        self.propagator_computation_optimizer = propagator_computation_optimizer
+        # Aliases of the C++ objects inside prop_solver (for scripts that use them directly)
+        self.solver = self.prop_solver.propagator_computation
+        self.molecules = self.prop_solver.molecules
+        self.propagator_computation_optimizer = self.prop_solver.propagator_optimizer
 
         # Initialize smearing (must be after self.cb is set)
         self.smearing = Smearing(
-            self.cb.get_nx(),
-            self.cb.get_lx(),
+            self.prop_solver.nx,
+            self.prop_solver.get_lx(),
             params.get("smearing", None)
         )
 
@@ -247,7 +251,7 @@ class CLFTS:
         # Make a dictionary for input fields
         w_input = {self.monomer_types[i]: w[i] for i in range(M)}
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
+            w_input[random_polymer_name] = np.zeros(self.prop_solver.n_grid, dtype=np.complex128)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type] * fraction
 
@@ -258,22 +262,33 @@ class CLFTS:
 
         # For the given fields, compute propagators
         time_solver_start = time.time()
-        self.solver.compute_propagators(w_input_for_propagator)
+        self.prop_solver.compute_propagators(w_input_for_propagator)
         elapsed_time["solver"] = time.time() - time_solver_start
 
         # Compute concentrations for each monomer type
         time_phi_start = time.time()
         phi = {}
-        self.solver.compute_concentrations()
+        self.prop_solver.compute_concentrations()
         for monomer_type in self.monomer_types:
-            phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
+            phi[monomer_type] = self.prop_solver.get_concentration(monomer_type)
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
+            phi[random_polymer_name] = self.prop_solver.get_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name] * fraction
         elapsed_time["phi"] = time.time() - time_phi_start
+
+        # Material conservation: mean(sum phi) must stay 1 (a numerical blow-up shows up here first)
+        mass_error = self.prop_solver.mean(sum(phi[m] for m in self.monomer_types) - 1.0)
+        if abs(mass_error) > 5e-8:
+            raise ValidationError(f"Material conservation failed: mean(sum(phi) - 1) = {mass_error:.3e}")
+
+        # Partition consistency check (forward vs backward propagators), once per run
+        if not getattr(self, "_partition_checked", False):
+            self._partition_checked = True
+            if not self.prop_solver.check_total_partition():
+                raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         return phi, elapsed_time
 
@@ -296,9 +311,9 @@ class CLFTS:
         # Make dictionary for data
         mdic = {
             "initial_params": self.params,
-            "dim": self.cb.get_dim(),
-            "nx": self.cb.get_nx(),
-            "lx": self.cb.get_lx(),
+            "dim": self.prop_solver.dim,
+            "nx": self.prop_solver.nx,
+            "lx": self.prop_solver.get_lx(),
             "monomer_types": self.monomer_types,
             "chi_n": self.chi_n,
             "chain_model": self.chain_model,
@@ -396,11 +411,14 @@ class CLFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
+        # Check the partition consistency on the first field of this run
+        self._partition_checked = False
+
         # Simulation data directory
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields (convert to complex if needed)
-        w = np.array([np.reshape(initial_fields[m], self.cb.get_total_grid()).astype(np.complex128)
+        w = np.array([np.reshape(initial_fields[m], self.prop_solver.n_grid).astype(np.complex128)
                       for m in self.monomer_types])
 
         # Convert monomer chemical potential fields into auxiliary fields
@@ -418,12 +436,15 @@ class CLFTS:
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
             sf_average[type_pair] = np.zeros_like(
-                np.fft.fftn(np.reshape(w[0], self.cb.get_nx())), np.complex128
+                np.fft.fftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128
             )
 
         # Create an empty array for field update algorithm
+        # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
         if normal_noise_prev is None:
-            normal_noise_prev = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
+            normal_noise_prev = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+        else:
+            normal_noise_prev = np.reshape(np.asarray(normal_noise_prev, dtype=np.float64), [M, self.prop_solver.n_grid])
 
         if start_langevin_step is None:
             start_langevin_step = 1
@@ -432,6 +453,7 @@ class CLFTS:
         time_start = time.time()
 
         # Langevin iteration begins here
+        langevin_step = start_langevin_step - 1   # stays when max_step < start_langevin_step
         for langevin_step in range(start_langevin_step, self.langevin["max_step"] + 1):
 
             # Compute total concentrations
@@ -461,7 +483,7 @@ class CLFTS:
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(
-                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()]
+                0.0, self.langevin["sigma"], [M, self.prop_solver.n_grid]
             )
             for i in range(M):
                 scaling = self.dt_scaling[i]
@@ -483,8 +505,8 @@ class CLFTS:
             error_level_array = np.std(h_deriv, axis=1)
 
             # Calculate Hamiltonian
-            total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+            total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
+            hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
             # Print progress
             if self.verbose_level >= 1:
@@ -530,13 +552,13 @@ class CLFTS:
                 for i in range(M):
                     key = self.monomer_types[i]
                     phi_fourier[key] = np.fft.fftn(
-                        np.reshape(phi[self.monomer_types[i]], self.cb.get_nx())
-                    ) / self.cb.get_total_grid()
+                        np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx)
+                    ) / self.prop_solver.n_grid
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(M - 1):
                         mu_fourier[key] += (
-                            np.fft.fftn(np.reshape(w_aux[k], self.cb.get_nx())) *
-                            self.mpt.matrix_a_inv[k, i] / self.mpt.eigenvalues[k] / self.cb.get_total_grid()
+                            np.fft.fftn(np.reshape(w_aux[k], self.prop_solver.nx)) *
+                            self.mpt.matrix_a_inv[k, i] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
                         )
                 # Accumulate S_ij(K)
                 for key in sf_average:
@@ -551,9 +573,9 @@ class CLFTS:
                     monomer_pair = sorted(key.split(","))
                     chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
                 mdic = {
-                    "dim": self.cb.get_dim(),
-                    "nx": self.cb.get_nx(),
-                    "lx": self.cb.get_lx(),
+                    "dim": self.prop_solver.dim,
+                    "nx": self.prop_solver.nx,
+                    "lx": self.prop_solver.get_lx(),
                     "chi_n": chi_n_mat,
                     "chain_model": self.chain_model,
                     "ds": self.ds,
@@ -566,7 +588,7 @@ class CLFTS:
                     sf_scaled = (
                         sf_average[key] *
                         self.recording["sf_computing_period"] / self.recording["sf_recording_period"] *
-                        self.cb.get_volume() * np.sqrt(self.langevin["nbar"])
+                        self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     )
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(sf_scaled)
@@ -590,5 +612,5 @@ class CLFTS:
         # Estimate execution time
         time_duration = time.time() - time_start
 
-        print("total time: %f, time per step: %f" %
-              (time_duration, time_duration / (langevin_step + 1 - start_langevin_step)))
+        n_steps = max(langevin_step + 1 - start_langevin_step, 1)
+        print("total time: %f, time per step: %f" % (time_duration, time_duration / n_steps))

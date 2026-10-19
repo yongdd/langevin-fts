@@ -41,7 +41,6 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         this->cb = cb;
         this->molecules = molecules;
         this->pseudo = nullptr;
-        this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         this->dim_ = cb->get_dim();
         this->q_full_in_factor_ = q_full_in_factor;
@@ -73,7 +72,6 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         crysfft_mode_ = CudaCrysFFTMode::None;
         crysfft_identity_map_ = false;
         crysfft_physical_size_ = 0;
-        crysfft_reduced_size_ = 0;
         d_crysfft_phys_to_reduced_ = nullptr;
         d_crysfft_reduced_to_phys_ = nullptr;
         d_crysfft_orbit_counts_ = nullptr;
@@ -232,10 +230,10 @@ void CudaSolverPseudoBase<T>::init_fft()
         {
             for (int b = 0; b < max_fft_batch_; b++)
             {
-                cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1);
-                cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1);
-                cufftSetStream(plan_for_[i][b], streams[i][0]);
-                cufftSetStream(plan_bak_[i][b], streams[i][0]);
+                cufft_error_check(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1));
+                cufft_error_check(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1));
+                cufft_error_check(cufftSetStream(plan_for_[i][b], streams[i][0]));
+                cufft_error_check(cufftSetStream(plan_bak_[i][b], streams[i][0]));
             }
         }
     }
@@ -271,13 +269,13 @@ void CudaSolverPseudoBase<T>::init_fft()
 template <typename T>
 void CudaSolverPseudoBase<T>::fft_forward(int stream, CuDeviceData<T>* d_in, cuDoubleComplex* d_out, int batch)
 {
-    cufft_exec_forward(plan_for_[stream][batch - 1], d_in, d_out);
+    cufft_error_check(cufft_exec_forward(plan_for_[stream][batch - 1], d_in, d_out));
 }
 
 template <typename T>
 void CudaSolverPseudoBase<T>::fft_backward(int stream, cuDoubleComplex* d_in, CuDeviceData<T>* d_out, int batch)
 {
-    cufft_exec_backward(plan_bak_[stream][batch - 1], d_in, d_out);
+    cufft_error_check(cufft_exec_backward(plan_bak_[stream][batch - 1], d_in, d_out));
 }
 
 template <typename T>
@@ -287,7 +285,6 @@ void CudaSolverPseudoBase<T>::cleanup_crysfft()
     crysfft_mode_ = CudaCrysFFTMode::None;
     crysfft_identity_map_ = false;
     crysfft_physical_size_ = 0;
-    crysfft_reduced_size_ = 0;
 
     if (d_crysfft_phys_to_reduced_ != nullptr)
     {
@@ -437,7 +434,6 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
     CudaCrysFFTMode mode, const CrysFFTBasisMapping& map, const std::array<double, 9>& m3_translations)
 {
     crysfft_physical_size_ = map.M_phys;
-    crysfft_reduced_size_ = map.M_reduced;
     crysfft_identity_map_ = map.identity;
 
     // Index maps are needed only when the physical grid is not the reduced basis itself

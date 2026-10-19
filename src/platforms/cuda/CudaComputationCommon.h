@@ -43,6 +43,15 @@ protected:
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
+    /**
+     * @brief Per-stream device scratch for one segment's stress components (6 values).
+     *
+     * compute_stress() hands d_segment_stress_[STREAM] to
+     * CudaSolver::compute_single_segment_stress() on that stream, so no two
+     * streams share a buffer. Allocated once here, freed in the destructor.
+     */
+    CuDeviceData<T> *d_segment_stress_[MAX_STREAMS];
+
     CuDeviceData<T> *d_q_unity;  ///< Unity array for propagator initialization
     double *d_q_mask;            ///< Mask for impenetrable regions (nanoparticles)
 
@@ -61,7 +70,16 @@ public:
     CudaComputationCommon(ComputationBox<T>* cb, Molecules *molecules,
                           PropagatorComputationOptimizer* propagator_computation_optimizer,
                           int n_streams);
-    virtual ~CudaComputationCommon() {}
+    virtual ~CudaComputationCommon();
+
+    /**
+     * @brief Number of propagator streams from OMP_NUM_THREADS.
+     *
+     * Returns the leading integer of OMP_NUM_THREADS when it is positive, and
+     * `default_n_streams` when the variable is unset, empty, or not a positive
+     * integer (same rule as the CPU side).
+     */
+    static int n_streams_from_env(int default_n_streams);
 
     /// Update the solver for new box dimensions.
     void update_laplacian_operator() override;

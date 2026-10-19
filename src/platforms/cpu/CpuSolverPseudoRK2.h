@@ -145,13 +145,5 @@ public:
      * @param monomer_type Ignored
      */
     void advance_propagator_half_bond_step(T *, T *, std::string) override {};
-
-    /**
-     * @brief Update Laplacian operator and re-register local ds values.
-     *
-     * Overrides base class to ensure local_ds values are re-registered
-     * when the grid changes (e.g., during box size optimization).
-     */
-    void update_laplacian_operator() override;
 };
 #endif

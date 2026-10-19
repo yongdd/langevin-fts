@@ -4,12 +4,10 @@
  *
  * This header provides CpuComputationBase, a common base class that
  * consolidates shared functionality between CpuComputationContinuous
- * and CpuComputationDiscrete, including:
- *
- * - Common member variable declarations
- * - Shared concentration query methods
- * - Partition function accessors
- * - Laplacian operator updates
+ * and CpuComputationDiscrete: the full propagator storage (every contour
+ * step kept in memory). The solver and scheduler handles, the concentration
+ * and partition accessors, compute_statistics() and the Laplacian operator
+ * update live in CpuComputationCommon.
  *
  * **Design Decision:**
  *
@@ -42,19 +40,10 @@
  * @class CpuComputationBase
  * @brief Common base class for CPU propagator computation.
  *
- * Consolidates shared code between continuous and discrete chain
- * computation classes, including concentration queries and
- * partition function accessors.
+ * Holds the full propagator storage shared by the continuous and discrete
+ * chain computation classes (see CpuComputationCommon for the accessors).
  *
  * @tparam T Numeric type (double or std::complex<double>)
- *
- * **Shared Functionality:**
- *
- * - Laplacian operator updates
- * - Total concentration queries (by monomer type, by polymer)
- * - Block concentration retrieval
- * - Solvent partition and concentration accessors
- * - Grand canonical ensemble concentration
  *
  * **Virtual Methods:**
  *

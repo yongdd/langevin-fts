@@ -93,7 +93,7 @@ conda activate polymerfts
 ```bash
 # Initial build (from repository root)
 mkdir build && cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON
+cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 make -j8
 
 # Install Python modules to conda environment (for examples/tutorials; tests use the build tree)
@@ -106,15 +106,15 @@ ctest -L basic
 ctest
 
 # Clean build (if needed)
-cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON && make -j8 && make install
+cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX && make -j8 && make install
 ```
 
 ### Important Build Notes
 
 - Requires C++20 standard (set in CMakeLists.txt)
 - CUDA Toolkit 11.8+ required for GPU support
-- Set `CUDA_ARCHITECTURES` in CMakeLists.txt based on target GPU (default includes compute capabilities 60-90)
-- If encountering "Unsupported gpu architecture" errors, remove higher compute capabilities from `CUDA_ARCHITECTURES`
+- Compute capabilities 60-90 are compiled by default; pass `-DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"` to compile for other GPUs
+- If encountering "Unsupported gpu architecture" errors, drop the unsupported capabilities from that list
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 - `-DPOLYMERFTS_WERROR=ON` turns host C++ warnings into errors (CI builds with it); keep new C++ warning-free under GCC 13
 - The build links libraries by absolute path and passes the CUDA directories explicitly; it does not depend on `CPLUS_INCLUDE_PATH` or `LIBRARY_PATH` of the shell. Configure with `-DCMAKE_PREFIX_PATH=$CONDA_PREFIX`
@@ -153,8 +153,8 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | ~57 | ~1 min | Installation verification |
-| **Full** | `ctest` | ~82 | ~6 min | Development validation |
+| **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
+| **Full** | `ctest` | 86 | ~7 min | Development validation |
 
 ### Running Tests
 
@@ -393,7 +393,7 @@ The `platform` parameter controls which computational backend is used:
 | Problem | Solution |
 |---------|----------|
 | **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
-| **GPU architecture errors** | Edit `CUDA_ARCHITECTURES` in CMakeLists.txt to remove unsupported compute capabilities |
+| **GPU architecture errors** | Configure with `-DPOLYMERFTS_CUDA_ARCHITECTURES=...` listing only supported compute capabilities |
 | **Memory issues** | Set `"reduce_memory": True` in parameters |
 | **Single CPU core usage** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports |
 

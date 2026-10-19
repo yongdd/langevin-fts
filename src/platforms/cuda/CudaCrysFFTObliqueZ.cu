@@ -343,7 +343,7 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
     const int blocks = (M_complex_xy_ + threads - 1) / threads;
 
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
-    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_DETAIL") != nullptr);
+    static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_DETAIL") != nullptr);
     static std::atomic<bool> prof_once{false};
     const bool profile_this = do_profile && !prof_once.exchange(true);
 

@@ -11,10 +11,10 @@ from .propagator_solver import PropagatorSolver
 from .validation import validate_lfts_params, ValidationError
 from .utils import (
     parse_chi_n,
-    validate_polymers,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
+    calculate_sigma,
 )
 from .smearing import Smearing
 from .wtmd import WTMD
@@ -23,36 +23,6 @@ from .wtmd import WTMD
 os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
 
-def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
-    """Calculate Langevin noise strength for L-FTS simulations.
-
-    Computes the standard deviation of Gaussian noise to be added at each
-    Langevin step, ensuring correct statistical weighting of field configurations
-    in the field-theoretic ensemble.
-
-    Parameters
-    ----------
-    langevin_nbar : float
-        Average polymerization index N̄ for the Langevin scheme. Related to
-        the prefactor of the Hamiltonian. Typical values: 1-100.
-    langevin_dt : float
-        Langevin time step size Δt. Controls the magnitude of field updates.
-        Typical values: 0.001-0.1.
-    n_grids : int
-        Total number of grid points M (product of nx dimensions).
-    volume : float
-        System volume V in units of (a_Ref * N_Ref^0.5)³.
-
-    Returns
-    -------
-    sigma : float
-        Standard deviation of Gaussian noise for each field component.
-    """
-    return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
-
-# =============================================================================
-# Field compressors for the saddle-point search of the imaginary fields
-# =============================================================================
 
 class LR:
     """Linear Response (LR) field compressor for L-FTS.
@@ -88,10 +58,6 @@ class LR:
         self.nx = nx
         self.lx = lx
         self.jk = jk.copy()
-
-        # self.jk_array_shape = nx.copy()
-        # self.jk_array_shape[-1] = self.jk_array_shape[-1]//2 + 1
-        # self.jk = np.zeros(self.jk_array_shape)
 
     def reset_count(self,):
         """Reset compressor state (no-op for LR).
@@ -244,6 +210,8 @@ class LFTS:
         for key in ("compressor", "saddle", "recording", "verbose_level"):
             if key not in params:
                 raise ValidationError(f"Missing required parameter for LFTS: '{key}'")
+        if params["verbose_level"] not in (0, 1, 2):
+            raise ValidationError(f"'verbose_level' must be 0, 1 or 2, got {params['verbose_level']}")
 
         # Monomer types and statistical segment lengths
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -261,7 +229,6 @@ class LFTS:
         self.zeta_n = params.get("zeta_n", None)
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
-        validate_polymers(self.distinct_polymers)
         for polymer in self.distinct_polymers:
             polymer["blocks_input"] = process_polymer_blocks(polymer)
         self.random_fraction = {}
@@ -284,10 +251,8 @@ class LFTS:
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
 
-        # The numbers of real and imaginary fields, respectively
+        # The number of monomer types
         M = len(self.monomer_types)
-        R = len(self.mpt.aux_fields_real_idx)
-        I = len(self.mpt.aux_fields_imag_idx)
 
         # Propagator solver: the C++ computation box, molecules and solver live inside it
         self.prop_solver = PropagatorSolver(
@@ -354,7 +319,7 @@ class LFTS:
 
         # Fields Relaxation using Linear Response Method
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
-            if I != 1:
+            if len(self.mpt.aux_fields_imag_idx) != 1:
                 raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
 
             # Baseline: h_deriv at w=0
@@ -382,7 +347,9 @@ class LFTS:
         elif params["compressor"]["name"] == "lr":
             self.compressor = lr
         elif params["compressor"]["name"] == "lram":
-            self.compressor = LRAM(lr, am)            
+            self.compressor = LRAM(lr, am)
+        else:
+            raise ValidationError(f"compressor['name'] must be 'am', 'lr' or 'lram', got '{params['compressor']['name']}'")
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
@@ -400,7 +367,7 @@ class LFTS:
         self.random = np.random.Generator(self.random_bg)
         
         print("---------- Simulation Parameters ----------")
-        print("Platform :", self.prop_solver.platform)
+        print("Platform:", self.prop_solver.platform)
         print("Box Dimension: %d" % (self.prop_solver.dim))
         print("Nx:", self.prop_solver.nx)
         print("Lx [a, b, c]:", self.prop_solver.get_lx())
@@ -513,7 +480,7 @@ class LFTS:
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
             if not self.prop_solver.check_total_partition():
-                print("Warning: partition consistency check failed (forward/backward mismatch).")
+                raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         return phi, elapsed_time
 
@@ -562,7 +529,6 @@ class LFTS:
         for name in self.monomer_types:
             mdic["phi_" + name] = phi[name]
 
-        # Add WTMD state if enabled
         # Add WTMD state if enabled (same format as deep-langevin-fts)
         if self.wtmd is not None:
             mdic["wtmd_u"] = self.wtmd.u * self.wtmd.CV
@@ -644,8 +610,7 @@ class LFTS:
         4. Records fields, Hamiltonian, and structure function data
         5. Saves checkpoint periodically
 
-        The simulation continues for langevin.max_step iterations or until
-        total_recorded_iterations snapshots are recorded.
+        The simulation continues for langevin.max_step iterations.
 
         Parameters
         ----------
@@ -659,7 +624,8 @@ class LFTS:
             Default: None (initialized as zeros). Used when continuing from checkpoint.
         start_langevin_step : int, optional
             Starting Langevin iteration number. Default: 1.
-            Used when continuing from checkpoint.
+            Used when continuing from checkpoint; a value above 1 assumes the
+            fields are already at the saddle point, as a checkpoint stores them.
         """
 
         print("---------- Run  ----------")
@@ -671,6 +637,10 @@ class LFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
+        # Check the partition consistency on the first field of this run
+        # (the LR/LRAM setup already called compute_concentrations on w = 0)
+        self._partition_checked = False
+
         # Simulation data directory
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
@@ -681,9 +651,17 @@ class LFTS:
         # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
 
-        # Find saddle point
+        if start_langevin_step is None:
+            start_langevin_step = 1
+
+        # Find the saddle point of the initial fields. A continued run loads fields
+        # that are already at the saddle point; solving again would change the
+        # trajectory slightly, so the loop's own solve is the first one then.
         print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
-        phi, _, _, _, = self.find_saddle_point(w_aux=w_aux)
+        if start_langevin_step == 1:
+            phi, _, _, _, = self.find_saddle_point(w_aux=w_aux)
+        else:
+            phi, _ = self.compute_concentrations(w_aux)
 
         # For compressible models, pin mean(W+) to the initial saddle value.
         # Without this, mean drifts slowly (tau~170) because the LRAM k=0
@@ -706,11 +684,12 @@ class LFTS:
             sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128)
 
         # Create an empty array for field update algorithm
+        # (a checkpoint loaded with squeeze_me drops the leading axis when R == 1)
         if normal_noise_prev is None:
             normal_noise_prev = np.zeros([R, self.prop_solver.n_grid], dtype=np.float64)
+        else:
+            normal_noise_prev = np.reshape(np.asarray(normal_noise_prev, dtype=np.float64), [R, self.prop_solver.n_grid])
 
-        if start_langevin_step is None:
-            start_langevin_step = 1
 
         # The number of times that 'find_saddle_point' has failed to find a saddle point
         saddle_fail_count = 0
@@ -722,6 +701,7 @@ class LFTS:
         time_start = time.time()
 
         # Langevin iteration begins here
+        langevin_step = start_langevin_step - 1   # stays when max_step < start_langevin_step
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
 
@@ -859,11 +839,10 @@ class LFTS:
         # Estimate execution time
         time_duration = time.time() - time_start
 
-        print("total time: %f, time per step: %f" %
-            (time_duration, time_duration/(langevin_step+1-start_langevin_step)) )
-        
+        n_steps = max(langevin_step + 1 - start_langevin_step, 1)
+        print("total time: %f, time per step: %f" % (time_duration, time_duration/n_steps))
         print("Total iterations for saddle points: %d, Iterations per Langevin step: %f" %
-            (total_saddle_iter, total_saddle_iter/(langevin_step+1-start_langevin_step)))
+            (total_saddle_iter, total_saddle_iter/n_steps))
 
     def find_saddle_point(self, w_aux):
         """Find saddle point of imaginary auxiliary fields.
@@ -922,15 +901,14 @@ class LFTS:
             error_level_array = np.std(h_deriv, axis=1)
             error_level = np.max(error_level_array)
 
-            # Print iteration # and error levels
-            if(self.verbose_level == 2 or self.verbose_level == 1 and
-            (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
-
-                # Calculate Hamiltonian
+            # Hamiltonian on the last iteration (every iteration when verbose_level == 2)
+            is_last = error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"]
+            if self.verbose_level == 2 or is_last:
                 total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
                 hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
-                # Check the mass conservation
+            # Print iteration # and error levels
+            if self.verbose_level == 2 or (self.verbose_level == 1 and is_last):
                 mass_error = self.cb.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for Q in total_partitions:

@@ -47,8 +47,8 @@ jobs:
           python=3.12 cmake pybind11 \
           numpy scipy pandas matplotlib spglib \
           make git pip pyyaml \
-          jupyter networkx pygments plotly nbformat \
-          mkl mkl-devel mkl-include fftw
+          jupyter networkx plotly \
+          mkl mkl-devel mkl-include fftw liblapacke
 
     - name: Configure CMake
       shell: bash -l {0}
@@ -69,8 +69,6 @@ jobs:
       shell: bash -l {0}
       run: |
         cd build
-        export LIBRARY_PATH=$CONDA_PREFIX/lib:$LIBRARY_PATH
-        export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
         make -j$(nproc)
 
     - name: Install Python module

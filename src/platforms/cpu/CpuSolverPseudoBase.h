@@ -17,8 +17,9 @@
  *
  * All simulations are conducted in fixed dimensions (1D, 2D, or 3D).
  * The FFT object is stored as `FFT<T>* fft_` which points to FftwFFT<T, DIM>
- * based on the dimensionality. This avoids maintaining separate fft_1d,
- * fft_2d, fft_3d pointers when only one is ever used per solver.
+ * or MklFFT<T, DIM> based on the backend and the dimensionality. This avoids
+ * maintaining separate fft_1d, fft_2d, fft_3d pointers when only one is ever
+ * used per solver.
  *
  * **Stress Array Convention (Voigt Notation):**
  *
@@ -95,7 +96,7 @@ protected:
     /**
      * @brief Spectral transform object for FFT/DCT/DST (handles all BCs).
      *
-     * Points to FftwFFT<T, DIM> or FftwFFT<T, DIM> based on the selected
+     * Points to FftwFFT<T, DIM> or MklFFT<T, DIM> based on the selected
      * backend, where DIM is 1, 2, or 3 based on the simulation dimension.
      * All simulations are conducted in fixed dimensions, so only one
      * transform object is needed per solver instance.
@@ -105,7 +106,7 @@ protected:
      */
     FFT<T>* fft_;
 
-    FFTBackend fft_backend_;  ///< Selected FFT backend (FFTW)
+    FFTBackend fft_backend_;  ///< Selected FFT backend (FFTW or MKL)
 
     Pseudo<T>* pseudo;           ///< Pseudo-spectral operator helper
 
@@ -114,15 +115,6 @@ protected:
 
     /// Space group for reduced basis operations (nullptr if not used).
     SpaceGroup* space_group_;
-
-    /**
-     * @brief Full grid buffers for FFT operations with space group.
-     *
-     * When space group is set, propagators are stored in reduced basis
-     * but FFT requires full grid. These buffers are used for expand/reduce.
-     */
-    std::vector<T> q_full_in_;   ///< Input buffer for full grid FFT
-    std::vector<T> q_full_out_;  ///< Output buffer for full grid FFT
 
     enum class CrysFFTMode
     {
@@ -343,6 +335,24 @@ protected:
     /// Store a physical-grid <-> reduced-basis map when it is usable (see crysfft_mapping_usable()).
     bool adopt_crysfft_mapping(const CrysFFTBasisMapping& map, bool physical_basis_enabled, const char* mismatch_message);
 
+    // ---- update_dw() helper --------------------------------------------------
+    /**
+     * @brief Bring the update_dw() input fields onto the grid the Boltzmann factors live on.
+     *
+     * With a space group and the standard FFT path the reduced-basis fields are
+     * expanded to the full grid into `w_full_cache` (real fields only; complex
+     * fields throw). Without a space group, or on the CrysFFT path where exp_dw
+     * stays in the reduced basis, the input pointers are used as they are.
+     * `w_use` maps each monomer type to the field pointer to read, and the
+     * return value is the number of grid points each exp_dw array must hold.
+     *
+     * Serial use only: called from update_dw(), never from the OpenMP
+     * propagator loops.
+     */
+    int expand_w_for_update_dw(const std::map<std::string, const T*>& w_input,
+                               std::map<std::string, std::vector<T>>& w_full_cache,
+                               std::map<std::string, const T*>& w_use) const;
+
     // ---- compute_single_segment_stress() helpers ----------------------------
     /**
      * @brief Diagonal stress sums through the CrysFFT fast path.
@@ -391,15 +401,6 @@ public:
     double get_effective_diffusion_coeff(
         const std::string& monomer_type, int ds_index, bool half_step) const;
 
-protected:
-    /**
-     * @brief Apply crystallographic FFT diffusion on a full grid.
-     *
-     * Requires Pmmm mirror symmetry and 3D periodic BC.
-     */
-    void fill_crysfft_from_reduced(const double* reduced_in, double* phys_out) const;
-    void reduce_crysfft_to_reduced(const double* phys_in, double* reduced_out) const;
-
     /**
      * @brief Update Fourier-space operators.
      *
@@ -408,8 +409,19 @@ protected:
      *
      * - Continuous chains: diffusion propagator
      * - Discrete chains: bond function ĝ(k)
+     *
+     * Shared by all three pseudo-spectral solvers (none overrides it).
      */
     void update_laplacian_operator() override;
+
+protected:
+    /**
+     * @brief Apply crystallographic FFT diffusion on a full grid.
+     *
+     * Requires Pmmm mirror symmetry and 3D periodic BC.
+     */
+    void fill_crysfft_from_reduced(const double* reduced_in, double* phys_out) const;
+    void reduce_crysfft_to_reduced(const double* phys_in, double* reduced_out) const;
 
     /**
      * @brief Compute stress contribution from a single segment.

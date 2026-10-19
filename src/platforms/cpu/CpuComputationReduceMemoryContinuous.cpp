@@ -103,6 +103,11 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             else
                 throw_with_line_number("Currently, the realspace this->method is only available for double precision.");
         }
+
+        // Set space group on solver for internal expand/reduce handling
+        if (space_group != nullptr)
+            this->propagator_solver->set_space_group(space_group);
+
         // The number of parallel streams is always 1 to reduce the memory usage
         this->n_streams = 1;
         #ifndef NDEBUG
@@ -255,10 +260,6 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), 1);
 
         this->propagator_solver->update_laplacian_operator();
-
-        // Set space group on solver for reduced basis expand/reduce
-        if (space_group != nullptr)
-            this->propagator_solver->set_space_group(space_group);
     }
     catch(std::exception& exc)
     {
@@ -282,10 +283,6 @@ CpuComputationReduceMemoryContinuous<T>::~CpuComputationReduceMemoryContinuous()
 
     for(const auto& item: this->propagator_at_check_point)
         delete[] item.second;
-    for(const auto& item: this->phi_block)
-        delete[] item.second;
-    for(const auto& item: this->phi_solvent)
-        delete[] item;
 
     #ifndef NDEBUG
     for(const auto& item: this->propagator_finished)

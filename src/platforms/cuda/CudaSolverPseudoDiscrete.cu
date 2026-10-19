@@ -80,12 +80,16 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         {
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
-            // Real-valued buffers for non-periodic BC stress calculation (DCT/DST)
+        }
+        if (!is_periodic_)
+        {
+            // Real-valued buffers for the non-periodic BC (DCT/DST) propagator and stress paths.
             // For complex fields the DCT/DST coefficients of the real and
             // imaginary parts are stored interleaved (complex pairs).
+            const int rk_size = std::is_same<T, std::complex<double>>::value
+                                ? 2 * M_COMPLEX : M_COMPLEX;
+            for(int i=0; i<n_streams; i++)
             {
-                const int rk_size = std::is_same<T, std::complex<double>>::value
-                                    ? 2 * M_COMPLEX : M_COMPLEX;
                 gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*rk_size));
                 gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*rk_size));
             }
@@ -107,8 +111,8 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
     {
         cudaFree(d_qk_in_1_one[i]);
         cudaFree(d_qk_in_1_two[i]);
-        cudaFree(d_rk_in_1_one[i]);
-        cudaFree(d_rk_in_2_one[i]);
+        if (d_rk_in_1_one[i] != nullptr) cudaFree(d_rk_in_1_one[i]);
+        if (d_rk_in_2_one[i] != nullptr) cudaFree(d_rk_in_2_one[i]);
     }
 
 }
@@ -230,12 +234,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
             // Multiply exp(-k^2 ds/6) in fourier space
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
 
             // Execute a backward FFT
             fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
 
             // Evaluate exp(-w*ds) in real space (1/M normalization from unnormalized cuFFT)
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
+            gpu_error_check(cudaPeekAtLastError());
         }
         else
         {
@@ -280,6 +286,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 }
             }
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
         }
 
         // Reduce full grid → reduced basis

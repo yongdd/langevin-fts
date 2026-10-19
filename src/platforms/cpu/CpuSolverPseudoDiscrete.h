@@ -181,13 +181,5 @@ public:
      * @param monomer_type Monomer type for bond function
      */
     void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) override;
-
-    /**
-     * @brief Update Laplacian operator and re-register local ds values.
-     *
-     * Overrides base class to register per-block local_ds values with Pseudo,
-     * ensuring correct bond functions for each block.
-     */
-    void update_laplacian_operator() override;
 };
 #endif
