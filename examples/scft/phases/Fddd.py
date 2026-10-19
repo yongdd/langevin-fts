@@ -42,7 +42,6 @@ params = {
     },
 
     "optimizer":{       
-        # "name":"adam",     # ADAM optimizer
         # "lr":1e-1,         # initial learning rate,
         # "gamma":0.9993,    # learning rate at Tth iteration is lr*γ^(T-1)
         

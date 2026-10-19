@@ -46,9 +46,18 @@ commits are omitted.
 
 ### Interface changes
 
-- New configuration layer: `parse_system()` returns an immutable `SystemSpec`
-  (`GridSpec`, `ChainSpec`), and `PropagatorSolver.from_spec()` builds a solver from it.
-  `SCFT`, `LFTS` and `CLFTS` are built on it (2026-10-19, 9e69f9e2).
+- The Python layer is organised for researchers: each simulation class reads its options
+  straight from the `params` dictionary, and the package has fewer files (`compressor.py`
+  merged into `lfts.py`; `config.py` and `io.py` into `utils.py`; `result.py` into
+  `scft.py`). `LR`, `LRAM`, `load_config`, `save_vtk`, `SCFTResult` and `IterationInfo`
+  stay importable from `polymerfts`. The `SystemSpec`/`*Options` layer tried during the
+  2026-10 cleanup was removed again before release.
+- Removed small features that carried disproportionate code: the ADAM optimizer
+  (`optimizer.name` must be `am`), the `validation_runtime` option of L-FTS (one partition
+  check per run now prints a warning) and `configure_logging` (the package prints).
+  `polymerfts.draw_polymer_architectures` redraws the architecture figures that the
+  constructors write. Docstrings were cut to the essentials; the parameter documentation
+  moved to docs/references/Parameters.md.
 - Complex Langevin FTS (`polymerfts.CLFTS`, `examples/clfts/`) promoted from the private
   development folder; dynamical stabilization follows Willis and Matsen.
 - Default `stress_interval` changed from 3 to 1 (2026-03-30, c05e3108).
@@ -60,13 +69,15 @@ commits are omitted.
   sinc correction (0e626ecd).
 - Removed deprecated helpers: the `Array` device-array class, `validate_scft_params`
   (use `validate_system_params`), `PropagatorSolver.set_space_group` (pass `space_group`
-  to the constructor or `from_spec`), the SCFT context manager, `LFTSResult`,
+  to the constructor), the SCFT context manager, `LFTSResult`,
   `save_config`/`create_template_config` (2026-10-19).
 - `SpaceGroup.physical_basis_name()` reports the active physical basis
   (`irreducible`, `pmmm`, `m3`, `z-mirror`).
 - Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
-  errors (on in CI). Packaging with pip (`pyproject.toml`), conda (`conda-recipe/`) and
+  errors (on in CI). The generated build no longer depends on `LIBRARY_PATH` or
+  `CPLUS_INCLUDE_PATH` of the configuring shell: libraries are linked by absolute path and
+  the CUDA toolkit directories are always passed explicitly. Packaging with pip (`pyproject.toml`), conda (`conda-recipe/`) and
   Docker (`docker/`) was added (2026-01-09, fe3a54df).
 
 ### Added
@@ -76,8 +87,10 @@ commits are omitted.
 - Crystal systems with angle optimization (monoclinic, triclinic, 2D oblique/hexagonal).
 - `TestSpaceGroupPhases` with 14 converged phase fixtures and
   `scripts/reconverge_phase_fixtures.py` to regenerate them.
-- Well-tempered metadynamics (`WTMD`) for L-FTS, `Smearing`, runtime validation options,
-  `SCFTResult`/`IterationInfo`, YAML/JSON configuration loading.
+- Well-tempered metadynamics (`WTMD`) for L-FTS, `Smearing`, `SCFTResult`/`IterationInfo`,
+  YAML/JSON parameter files (`load_config`, `SCFT.from_file`).
+- `scripts/install_versioned.sh`: wheel per version plus a per-version virtual environment,
+  for keeping several releases side by side (documented in Installation.md).
 
 ## [0.9.1] - 2025-05-02
 

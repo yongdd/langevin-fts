@@ -2,11 +2,6 @@
 
 This module provides the Smearing class for implementing finite-range
 interactions by convolving fields with a smearing function in Fourier space.
-
-References
-----------
-- Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016)
-- Matsen et al., J. Chem. Phys. 164, 014905 (2026)
 """
 
 import numpy as np
@@ -60,21 +55,6 @@ class Smearing:
         Magnitude of k vectors at each grid point.
     k_sq : ndarray or None
         Square of k magnitude at each grid point.
-
-    Examples
-    --------
-    >>> # Create Gaussian smearing
-    >>> smear = Smearing([32, 32, 32], [4.0, 4.0, 4.0],
-    ...                  {"type": "gaussian", "a_int": 0.1})
-    >>> w_smeared = smear.apply(w_field)
-
-    >>> # Create sigmoidal smearing
-    >>> smear = Smearing([32, 32, 32], [4.0, 4.0, 4.0],
-    ...                  {"type": "sigmoidal", "k_int": 10.0})
-
-    >>> # Disable smearing
-    >>> smear = Smearing([32, 32, 32], [4.0, 4.0, 4.0], None)
-    >>> assert not smear.enabled
     """
 
     def __init__(self, nx, lx, smearing_params):

@@ -10,9 +10,11 @@ This document provides a complete reference for all simulation parameters.
 2. [Chain Definition](#chain-definition)
 3. [Numerical Methods](#numerical-methods)
 4. [Platform](#platform)
-5. [Optimizer (SCFT)](#optimizer-scft)
-6. [Advanced Options](#advanced-options)
-7. [Example Configurations](#example-configurations)
+5. [SCFT Parameters](#scft-parameters)
+6. [L-FTS Parameters](#l-fts-parameters)
+7. [CL-FTS Parameters](#cl-fts-parameters)
+8. [Advanced Options](#advanced-options)
+9. [Example Configurations](#example-configurations)
 
 ---
 
@@ -66,7 +68,8 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `segment_lengths` | dict | Relative statistical segment lengths $b/b_{ref}$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$ | `{"A,B": 20.0}` |
+| `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$; pairs that are omitted do not interact (χN = 0) | `{"A,B": 20.0}` |
+| `zeta_n` | float | (Optional) Compressibility parameter $\zeta N$ of the compressible model. Omitted: incompressible ($\sum_i \phi_i = 1$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition
 
@@ -172,56 +175,73 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 - `"cpu-mkl"`: CPU (Intel MKL library)
 - `"cpu-fftw"`: CPU (FFTW library, GPL license)
 
-**Auto-selection logic:**
-- 1D simulations → CPU
+**Auto-selection logic** (same for `PropagatorSolver`, `SCFT`, `LFTS` and `CLFTS`):
+- 1D simulations → the first CPU backend of the build
 - 2D/3D simulations → `"cuda"` if available, else CPU
 
 ---
 
-## Optimizer (SCFT)
+## SCFT Parameters
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `optimizer` | dict | Optimizer configuration | See below |
+`SCFT(params)` reads the shared parameters above plus the keys below.
 
-### Anderson Mixing (`"name": "am"`)
+### Optimizer
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `optimizer` | dict | Anderson mixing configuration (the only optimizer) |
 
 | Key | Type | Description | Typical value |
 |-----|------|-------------|---------------|
-| `name` | str | Optimizer name | `"am"` |
+| `name` | str | Must be `"am"` | `"am"` |
 | `max_hist` | int | Maximum history length | `20` |
-| `start_error` | float | Error threshold to start Anderson mixing | `1e-1` |
+| `start_error` | float | Error threshold to start Anderson mixing (simple mixing before) | `1e-1` |
 | `mix_min` | float | Minimum mixing parameter | `0.1` |
 | `mix_init` | float | Initial mixing parameter | `0.1` |
 
-All keys are **required** when `"name": "am"` — there are no built-in defaults (omitting a key raises `KeyError`). The values above are typical starting points.
+All keys are **required** (omitting one raises `KeyError`). The values above are typical starting points; reduce `mix_min`/`mix_init` to `0.01` if the iteration diverges.
 
-**Example:**
 ```python
-"optimizer": {
-    "name": "am",
-    "max_hist": 20,
-    "start_error": 1e-1,
-    "mix_min": 0.1,
-    "mix_init": 0.1
-}
+"optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-1, "mix_min": 0.1, "mix_init": 0.1}
 ```
 
-### ADAM Optimizer (`"name": "adam"`)
-
-| Key | Type | Description | Typical value |
-|-----|------|-------------|---------------|
-| `name` | str | `"adam"` | |
-| `lr` | float | Learning rate (required) | `0.01` |
-| `gamma` | float | Learning rate decay factor (required) | `1.0` |
-
-Both `lr` and `gamma` are **required** when `"name": "adam"` (omitting either raises `KeyError`). The momentum parameters are fixed internally at β₁ = 0.9 and β₂ = 0.999; entries such as `"b1"` or `"b2"` in the optimizer dictionary are silently ignored.
-
-### SCFT Advanced Options
+### Convergence and Box Relaxation
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `stress_interval` | int or str | Stress computation interval. Integer for fixed interval, `"adaptive"` for automatic adjustment | `1` |
+| `max_iter` | int | Maximum number of SCFT iterations | `2000` |
+| `tolerance` | float | Stop when the self-consistency error (plus the stress norm when the box relaxes) is below this value | `1e-8` |
+| `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
+| `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
+| `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
+| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $F = -\chi N (f - 1/2)^2$ instead of 0) | `False` |
+
+Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
+
+### Crystal System
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `crystal_system` | str | Which lattice parameters may vary during box relaxation | `"Orthorhombic"` (see below) |
+
+| Value | Free lengths | Free angles |
+|-------|--------------|-------------|
+| `"Orthorhombic"` | a, b, c independently | none (all 90°) |
+| `"Tetragonal"` | a = b, c | none |
+| `"Cubic"` | a = b = c | none |
+| `"Hexagonal"` | a = b, c (3D only) | none (γ = 120°) |
+| `"Monoclinic"` | a, b, c (3D only) | β |
+| `"Triclinic"` | a, b, c (3D only) | α, β, γ |
+
+Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`.
+
+### Axis Ordering
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `axis_ordering` | list[str] | Order in which `nx`, `lx` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]` | `["a", "b", "c"]` |
+
+`space_group` and `smearing` are described under [Advanced Options](#advanced-options).
 
 ---
 
@@ -302,6 +322,21 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `verbose_level` | int | Output verbosity (1: per step, 2: per iteration) |
+| `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing) |
+
+`LFTS(params, random_seed=None)`: pass an integer `random_seed` for reproducible noise.
+
+---
+
+## CL-FTS Parameters
+
+`CLFTS(params, random_seed=None)` (complex Langevin) reads the shared parameters, `langevin`, `recording` and `verbose_level` exactly as L-FTS does (no `compressor` or `saddle`: all fields fluctuate), plus:
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value | `100.0` |
+| `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $i\,\alpha_{ds}\,\mathrm{Im}[W_-]$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Typical: 0.01–0.1 for $\bar{N} \ge 10^5$ | `0.0` |
+| `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability | none |
 
 ---
 
@@ -312,6 +347,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `reduce_memory` | bool | Enable checkpoint-based memory saving | `False` |
+| `aggregate_propagator_computation` | bool | Let the propagator optimizer merge equivalent propagators of branched/mixed systems (turn off only when per-block concentrations are needed from the C++ API) | `True` |
 
 When `True`:
 - Stores only checkpoints every ~$2\sqrt{N_{tot}}$ contour steps, i.e. ~$\sqrt{N_{tot}}/2$ checkpoints per propagator (where $N_{tot}$ is the total number of contour steps)
@@ -339,12 +375,22 @@ When `True`:
 
 See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 
+### Smearing
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `smearing` | dict | (Optional, SCFT/L-FTS/CL-FTS) Finite-range interactions: the fields are convolved with a smearing function before the propagators and the concentrations before the forces, $w_\Gamma(k) = w(k)\,\Gamma(k)$ |
+
+| Type | Keys | $\Gamma(k)$ |
+|------|------|--------------|
+| `{"type": "gaussian", "a_int": a}` | smearing length $a$ in units of $R_0$ (universality needs $a \lesssim 0.02 R_0$) | $\exp(-a^2 k^2 / 2)$ |
+| `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $k_c \gtrsim 20 / R_0$, transition width $dk$ (default 5.0) | $C_0 [1 - \tanh((k - k_c)/dk)]$ |
+
+Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
+
 ### Box Optimization
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `box_is_altering` | bool | Enable box size optimization (required key in SCFT — omitting it raises `KeyError`) | Required |
-| `scale_stress` | float | Stress scaling factor for box updates | `1.0` |
+`box_is_altering`, `scale_stress`, `stress_interval` and `crystal_system` are listed under [SCFT Parameters](#scft-parameters).
 
 **Restrictions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions for pseudo-spectral methods with real fields (complex fields with non-periodic boundaries are rejected), but is not implemented for the real-space `"cn-adi2"` method. Therefore `box_is_altering=True` requires a pseudo-spectral method. With non-periodic boundaries only box lengths can be optimized (angles stay at 90°); discrete-chain stress is exact against d(-lnQ)/dL, continuous-chain stress carries the contour-quadrature error (see docs/theory/StressTensor.md).
 

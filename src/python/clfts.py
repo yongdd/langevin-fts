@@ -1,67 +1,11 @@
-"""
-Complex Langevin Field-Theoretic Simulation (CL-FTS) module.
+"""Complex Langevin field-theoretic simulation (CL-FTS).
 
-This module implements Complex Langevin dynamics for polymer field theory,
-which extends field values to the complex plane to handle the sign problem
-in field-theoretic simulations.
-
-The Complex Langevin method evolves fields according to:
-    dw = -dH/dw * dt + sqrt(2*dt) * eta
-
-where w are complex-valued fields, H is the Hamiltonian, and eta is
-Gaussian white noise applied only to the real part of the field evolution.
-
-Key features:
-- Complex-valued auxiliary fields
-- Dynamical stabilization for numerical stability
-- Smearing interactions for improved stability (finite-range interactions)
-- Support for multi-component polymer systems
-- Structure function calculations
-
-Example usage:
-
-    from polymerfts import clfts
-    import numpy as np
-
-    params = {
-        "nx": [32, 32, 32],
-        "lx": [4.0, 4.0, 4.0],
-        "chain_model": "discrete",
-        "ds": 1/90,
-        "segment_lengths": {"A": 1.0, "B": 1.0},
-        "chi_n": {"A,B": 12.0},
-        "distinct_polymers": [{
-            "volume_fraction": 1.0,
-            "blocks": [
-                {"type": "A", "length": 0.5},
-                {"type": "B", "length": 0.5},
-            ],
-        }],
-        "langevin": {
-            "max_step": 10000,
-            "dt": 1.0,
-            "nbar": 10000,
-        },
-        "recording": {
-            "dir": "data",
-            "recording_period": 1000,
-            "sf_computing_period": 10,
-            "sf_recording_period": 1000,
-        },
-        "verbose_level": 1,
-        # Optional: Smearing for finite-range interactions
-        # "smearing": {"type": "gaussian", "a_int": 0.02},
-    }
-
-    simulation = clfts.CLFTS(params)
-    simulation.run(initial_fields={"A": w_A, "B": w_B})
-
-References:
-- Ganesan & Fredrickson, Europhys. Lett. 55, 814 (2001)
-- Lennon et al., Phys. Rev. Lett. 101, 138302 (2008)
-- Willis & Matsen, J. Chem. Phys. 161, 244903 (2024) - Dynamical stabilization
-- Matsen et al., J. Chem. Phys. 164, 014905 (2026) - Universal phase behavior with CL-FTS
-- Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016) - Smearing interactions
+All auxiliary fields are complex and fluctuate: real noise on the exchange
+fields, imaginary noise on the pressure field, with optional dynamical
+stabilization (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024)) and
+smearing (Matsen et al., J. Chem. Phys. 164, 014905 (2026)). Parameters are
+documented in docs/references/Parameters.md; a complete script is
+examples/clfts/Lamella.py.
 """
 
 import os
@@ -75,9 +19,14 @@ from scipy.io import savemat, loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
-from .system_spec import parse_system
-from .simulation_options import ClftsOptions
 from .propagator_solver import PropagatorSolver
+from .validation import validate_system_params, ValidationError
+from .utils import (
+    parse_chi_n,
+    validate_polymers,
+    process_polymer_blocks,
+    process_random_copolymer,
+)
 from .lfts import calculate_sigma
 
 # OpenMP environment variables
@@ -85,106 +34,76 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
 
 
-
 class CLFTS:
-    """Complex Langevin Field-Theoretic Simulation class.
-
-    This class implements Complex Langevin dynamics for polymer field theory
-    simulations. Unlike standard L-FTS which uses real-valued fields, CL-FTS
-    extends fields to the complex plane to handle systems where the action
-    has a non-zero imaginary part (sign problem).
+    """Complex Langevin field-theoretic simulation.
 
     Parameters
     ----------
     params : dict
-        Simulation parameters dictionary containing:
-        - nx : list of int - Grid points in each dimension
-        - lx : list of float - Box size in each dimension
-        - chain_model : str - "discrete" or "continuous"
-        - ds : float - Contour step size
-        - segment_lengths : dict - Statistical segment lengths
-        - chi_n : dict - Flory-Huggins parameters
-        - distinct_polymers : list - Polymer specifications
-        - langevin : dict - Langevin dynamics parameters
-        - recording : dict - Data recording parameters
-        - verbose_level : int - Output verbosity (1 or 2)
-        - dynamic_stabilization : float, optional - Stabilization coefficient αds
-          to prevent hot spots by adding iαds·Im[W] to exchange field forces.
-          Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
-        - alpha_ds : float, optional - Alias for dynamic_stabilization parameter
-        - smearing : dict, optional - Finite-range interaction parameters.
-          Smearing helps stabilize CL-FTS by using finite-range interactions
-          instead of contact forces. Supported types:
-
-          * Gaussian: {"type": "gaussian", "a_int": float}
-            Γ(k) = exp(-a_int² · k² / 2)
-            a_int is the smearing length in units of R₀ (unperturbed chain size).
-            Universality requires a_int ≲ 0.02·R₀.
-
-          * Sigmoidal: {"type": "sigmoidal", "k_int": float, "dk_int": float}
-            Γ(k) = C₀[1 - tanh((k - k_int) / Δk_int)]
-            k_int is the cutoff wavenumber, dk_int controls transition width.
-            Universality requires k_int ≳ 20/R₀. Default dk_int = 5.0.
-
-          Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        - platform : str, optional - "cuda", "cpu-mkl", or "cpu-fftw"
-        - reduce_memory : bool, optional
-            If True, store only propagator checkpoints instead of full histories,
-            recomputing propagators as needed (default: False).
+        Simulation parameters; see docs/references/Parameters.md (CL-FTS
+        section). Required: the SCFT system keys plus langevin, recording,
+        verbose_level. zeta_n defaults to 100.
     random_seed : int, optional
-        Random seed for reproducibility.
+        Seed of the PCG64 noise generator (None: non-reproducible).
 
     Attributes
     ----------
-    monomer_types : list
-        Sorted list of monomer type names.
-    chi_n : dict
-        Flory-Huggins interaction parameters.
+    prop_solver : PropagatorSolver
+        Complex-field propagator computation (C++ objects inside).
+    cb : ComputationBox
+        Grid, box and integrals (C++).
     mpt : SymmetricPolymerTheory
-        Multi-component polymer field theory handler.
+        Monomer <-> auxiliary field transformations.
+    alpha_ds : float
+        Dynamical stabilization constant.
 
     Examples
     --------
-    >>> params = {
-    ...     "nx": [32, 32],
-    ...     "lx": [4.0, 4.0],
-    ...     "chain_model": "discrete",
-    ...     "ds": 0.01,
-    ...     "segment_lengths": {"A": 1.0, "B": 1.0},
-    ...     "chi_n": {"A,B": 15.0},
-    ...     "distinct_polymers": [{
-    ...         "volume_fraction": 1.0,
-    ...         "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}],
-    ...     }],
-    ...     "langevin": {"max_step": 1000, "dt": 1.0, "nbar": 10000},
-    ...     "recording": {"dir": "data", "recording_period": 100,
-    ...                   "sf_computing_period": 10, "sf_recording_period": 100},
-    ...     "verbose_level": 1,
-    ... }
     >>> sim = CLFTS(params)
-    >>> sim.run(initial_fields={"A": np.zeros(1024), "B": np.zeros(1024)})
+    >>> sim.run(initial_fields={"A": w_A, "B": w_B})
     """
 
     def __init__(self, params, random_seed=None):
         """Initialize the Complex Langevin FTS simulation."""
 
-        # Shared system definition: grid, chain model, monomers, chi N, polymers, platform.
-        # parse_system validates the input exactly as SCFT and LFTS do.
-        spec = parse_system(params)
-        self.spec = spec
+        # Validate input parameters (same checks as SCFT and LFTS)
+        validate_system_params(params)
+        for key in ("langevin", "recording", "verbose_level"):
+            if key not in params:
+                raise ValidationError(f"Missing required parameter for CLFTS: '{key}'")
 
-        # Method-specific options (defaults live in simulation_options.py)
-        options = ClftsOptions.from_params(params)
-        self.options = options
-        self.monomer_types = list(spec.monomer_types)
-        self.segment_lengths = dict(spec.chain.segment_lengths)
-        self.distinct_polymers = list(spec.polymers)
-        self.random_fraction = dict(spec.random_fraction)
-        self.chi_n = dict(spec.chi_n)
-        platform = spec.platform
+        # Monomer types and statistical segment lengths
+        self.monomer_types = sorted(list(params["segment_lengths"].keys()))
+        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
+        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
 
-        # Compressibility parameter (zeta_n); default high compressibility
-        self.zeta_n = spec.zeta_n if spec.zeta_n is not None else 100.0
+        # Flory-Huggins parameters chi N; pairs the user did not give do not interact
+        self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
+        for pair in itertools.combinations(self.monomer_types, 2):
+            key = ",".join(sorted(pair))
+            if key not in self.chi_n:
+                self.chi_n[key] = 0.0
+
+        # Compressibility parameter; complex Langevin needs a finite one (default: high compressibility)
+        self.zeta_n = 100.0 if params.get("zeta_n", None) is None else params["zeta_n"]
+
+        # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
+        validate_polymers(self.distinct_polymers)
+        for polymer in self.distinct_polymers:
+            polymer["blocks_input"] = process_polymer_blocks(polymer)
+        self.random_fraction = {}
+        for polymer in self.distinct_polymers:
+            result = process_random_copolymer(polymer, self.segment_lengths)
+            if result is not None:
+                random_type, effective_segment_length, fraction = result
+                polymer["block_monomer_types"] = [random_type]
+                self.segment_lengths[random_type] = effective_segment_length
+                self.random_fraction[random_type] = fraction
+
+        # Boundary conditions (default: periodic)
+        bc = params.get("bc", None)
+        if bc is None:
+            bc = ["periodic"] * (2 * len(params["nx"]))
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, self.zeta_n)
@@ -195,7 +114,20 @@ class CLFTS:
         I = len(self.mpt.aux_fields_imag_idx)
 
         # Complex-valued propagator solver (complex Langevin fields)
-        self.prop_solver = PropagatorSolver.from_spec(spec, field_type="complex")
+        self.prop_solver = PropagatorSolver(
+            nx=params["nx"], lx=params["lx"], ds=params["ds"],
+            bond_lengths=self.segment_lengths, bc=bc,
+            chain_model=params["chain_model"],
+            numerical_method=params.get("numerical_method", None),   # None: "rqm4"
+            platform=params.get("platform", "auto"),   # auto: CPU for 1D, CUDA for 2D/3D when available
+            reduce_memory=params.get("reduce_memory", False),
+            angles=params.get("angles", None),
+            aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
+            field_type="complex",
+        )
+        for polymer in self.distinct_polymers:
+            self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
+                                         polymer.get("initial_conditions", None))
         self.prop_solver.display_platform_info()
 
         # (C++ class) Computation box, molecules, optimizer and propagator solver
@@ -206,8 +138,8 @@ class CLFTS:
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(
-            options.langevin["nbar"],
-            options.langevin["dt"],
+            params["langevin"]["nbar"],
+            params["langevin"]["dt"],
             np.prod(params["nx"]),
             np.prod(params["lx"])
         )
@@ -218,7 +150,12 @@ class CLFTS:
         #   - "dynamic_stabilization": the combined coefficient αds (as in Willis & Matsen 2024)
         #   - "alpha_ds": alias for compatibility with reference codes
         # Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
-        self.alpha_ds = options.alpha_ds
+        if "dynamic_stabilization" in params:
+            self.alpha_ds = params["dynamic_stabilization"]
+        elif "alpha_ds" in params:
+            self.alpha_ds = params["alpha_ds"]
+        else:
+            self.alpha_ds = 0.0
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
@@ -233,7 +170,7 @@ class CLFTS:
         self.random = np.random.Generator(self.random_bg)
 
         print("---------- Simulation Parameters ----------")
-        print("Platform:", platform)
+        print("Platform:", self.prop_solver.platform)
         print("Box Dimension: %d" % (self.cb.get_dim()))
         print("Nx:", self.cb.get_nx())
         print("Lx:", self.cb.get_lx())
@@ -255,7 +192,7 @@ class CLFTS:
 
         molecules.display_architectures()
 
-        print("Invariant Polymerization Index (N_Ref): %d" % (options.langevin["nbar"]))
+        print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field:", self.dt_scaling)
         print("Dynamical stabilization constant: %f" % (self.alpha_ds))
@@ -267,11 +204,11 @@ class CLFTS:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.langevin = dict(options.langevin)
+        self.langevin = params["langevin"].copy()
         self.langevin.update({"sigma": langevin_sigma})
 
-        self.verbose_level = options.verbose_level
-        self.recording = dict(options.recording)
+        self.verbose_level = params["verbose_level"]
+        self.recording = params["recording"].copy()
 
         self.molecules = molecules
         self.propagator_computation_optimizer = propagator_computation_optimizer
@@ -280,7 +217,7 @@ class CLFTS:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            options.smearing
+            params.get("smearing", None)
         )
 
     def compute_concentrations(self, w_aux):
@@ -449,22 +386,6 @@ class CLFTS:
             Previous noise array for continuing simulation.
         start_langevin_step : int, optional
             Starting step number for continuing simulation.
-
-        Notes
-        -----
-        The Complex Langevin dynamics evolves fields according to
-        (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024), Eqs. 8-10):
-
-            W-(t+dt) = W-(t) - Λ-*dt + N(0,σ)      [real noise]
-            W+(t+dt) = W+(t) + Λ+*dt + i*N(0,σ)    [imaginary noise]
-
-        where:
-        - W- is the exchange/composition field (real-type auxiliary field)
-        - W+ is the pressure field (imaginary-type auxiliary field)
-        - Λ± are the deterministic forces including functional derivatives
-
-        Dynamical stabilization adds iαds·N·Im[W-] to Λ- to prevent
-        runaway solutions in the imaginary direction (hot spots).
         """
         print("---------- Run ----------")
 

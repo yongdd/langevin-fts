@@ -109,6 +109,44 @@ export PATH=/usr/local/cuda/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 ```
 
+## Keeping several versions side by side
+
+Python installs one version of a package per environment, so two versions of
+`polymerfts` cannot share one `site-packages`. The standard way to keep, say,
+the version a paper was computed with next to the current one is a wheel per
+version plus a small virtual environment per version:
+
+```bash
+conda activate polymerfts                 # provides CMake, CUDA, MKL/FFTW, spglib, LAPACKE
+scripts/install_versioned.sh              # builds ~/wheels/polymerfts-<version>-*.whl and
+                                          # installs it into ~/venvs/polymerfts-<version>
+```
+
+The venv is created with `--system-site-packages`, so NumPy, SciPy and the
+other dependencies are shared with the conda environment and the venv holds
+only `polymerfts` (a few tens of MB). Select a version per job:
+
+```bash
+source ~/venvs/polymerfts-0.10.0/bin/activate   # in an sbatch script: this line before python
+python Gyroid.py
+```
+
+Options: `--mkl ON|OFF`, `--fftw ON|OFF`, `--cuda ON|OFF` (default all ON),
+`-j N` build parallelism (default 4), `--wheel-dir`, `--venv-dir`,
+`--skip-build` to reinstall an already built wheel, `--no-build-isolation`
+when working offline (then `scikit-build-core`, `pybind11` and `numpy` must be
+installed in the conda environment). To keep an older release, check it out in
+a separate work tree and run the script from there:
+
+```bash
+git worktree add ../langevin-fts-0.9.1 v0.9.1
+(cd ../langevin-fts-0.9.1 && scripts/install_versioned.sh)
+```
+
+For quick comparisons during development, the package staged in
+`build/python` after every `make` can be used without installing anything:
+`PYTHONPATH=/path/to/build/python python script.py`.
+
 ## Uninstallation 😢
 
 ```bash

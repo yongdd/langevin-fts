@@ -310,7 +310,6 @@ The SCFT class supports several advanced features not covered in the basic examp
 
 | Feature | Parameter | Description |
 |---------|-----------|-------------|
-| ADAM optimizer | `"optimizer": {"name": "adam", ...}` | Alternative to Anderson mixing |
 | Space group symmetry | `"space_group": {"symbol": "Ia-3d"}` | Exploit crystallographic symmetry (beta) |
 | Smearing | `"smearing": {...}` | Finite-range interactions |
 | Random copolymers | `{"fraction": {"A": 0.3, "B": 0.7}}` | Statistical copolymer blocks |

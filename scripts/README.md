@@ -12,6 +12,7 @@ This directory contains development and utility scripts that are not part of the
 | `benchmark_space_group_speed.py` | Benchmark space group symmetry performance |
 | `generate_phase_fields.py` | Generate initial field configurations for various phases |
 | `reconverge_phase_fixtures.py` | Re-converge `tests/data/*.mat` under the current grid/symmetry convention and print the `expected_fe` values for `TestSpaceGroupPhases.py` |
+| `install_versioned.sh` | Build a wheel for the current version and install it into its own venv (`~/wheels`, `~/venvs/polymerfts-<version>`), so several versions can be kept side by side; see docs/getting-started/Installation.md |
 | `slurm_run.sh` | SLURM job submission template |
 
 ## Usage

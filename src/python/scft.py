@@ -1,6 +1,5 @@
 import os
 import time
-import logging
 import numpy as np
 import json
 import yaml
@@ -10,647 +9,263 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Union
 import scipy.io
 
+from dataclasses import dataclass
+from typing import List
+
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import validate_system_params
-from .system_spec import parse_system
-from .simulation_options import ScftOptions
-from .config import load_config
-from .result import SCFTResult, IterationInfo
+from .validation import validate_system_params, ValidationError
 from .utils import (
-    create_monomer_color_dict,
-    draw_polymer_architecture,
+    load_config,
+    parse_chi_n,
+    validate_polymers,
+    process_polymer_blocks,
+    process_random_copolymer,
+    draw_polymer_architectures,
 )
 from .smearing import Smearing
-
-# Module-level logger
-logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
 os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
 
-# For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
-class Adam:
-    """ADAM optimizer for SCFT field optimization.
+@dataclass
+class SCFTResult:
+    """Result object for SCFT simulations.
 
-    Implements the ADAM (Adaptive Moment Estimation) optimization algorithm
-    for finding saddle points in self-consistent field theory calculations.
-    This is an alternative to Anderson Mixing for field optimization.
-
-    The algorithm maintains first and second moment estimates of gradients
-    and uses them to adapt the learning rate for each parameter. This can
-    provide more stable convergence for some systems.
-
-    Parameters
-    ----------
-    total_grid : int
-        Total number of grid points (size of field arrays to optimize).
-    lr : float, optional
-        Initial learning rate, γ (default: 1e-2). Controls step size.
-    b1 : float, optional
-        Exponential decay rate for first moment estimates, β₁ (default: 0.9).
-        Should be in [0, 1).
-    b2 : float, optional
-        Exponential decay rate for second moment estimates, β₂ (default: 0.999).
-        Should be in [0, 1).
-    eps : float, optional
-        Small constant for numerical stability, ε (default: 1e-8).
-        Prevents division by zero.
-    gamma : float, optional
-        Learning rate decay factor (default: 1.0).
-        Learning rate at iteration T is lr * γ^(T-1).
+    Encapsulates all outputs from an SCFT simulation run, providing
+    a clean interface for accessing results.
 
     Attributes
     ----------
-    total_grid : int
-        Size of field arrays.
-    lr : float
-        Base learning rate.
-    b1, b2 : float
-        Moment decay rates.
-    eps : float
-        Numerical stability constant.
-    gamma : float
-        Learning rate decay factor.
-    count : int
-        Current iteration number.
-    m : ndarray
-        First moment estimates (moving average of gradients).
-    v : ndarray
-        Second moment estimates (moving average of squared gradients).
-
-    See Also
-    --------
-    SCFT : Main SCFT class that uses this optimizer.
-
-    Notes
-    -----
-    This implementation follows the ADAM algorithm from [1]_. The update rule is:
-
-    .. math::
-        m_t = β_1 m_{t-1} + (1-β_1) g_t
-
-        v_t = β_2 v_{t-1} + (1-β_2) g_t^2
-
-        \\hat{m}_t = m_t / (1 - β_1^t)
-
-        \\hat{v}_t = v_t / (1 - β_2^t)
-
-        w_t = w_{t-1} + γ_t \\hat{m}_t / (\\sqrt{\\hat{v}_t} + ε)
-
-    where g_t is the gradient (field difference) at iteration t.
-
-    References
-    ----------
-    .. [1] Kingma, D. P., & Ba, J. (2015). Adam: A method for stochastic
-           optimization. ICLR 2015.
-
-    .. [2] https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
-
-    Examples
-    --------
-    >>> # Create ADAM optimizer for 32x32x32 grid
-    >>> optimizer = Adam(total_grid=32*32*32, lr=1e-2)
-    >>>
-    >>> # In SCFT iteration loop
-    >>> w_new = optimizer.calculate_new_fields(w_current, w_diff,
-    ...                                        old_error, error_level)
+    converged : bool
+        Whether the simulation converged within tolerance.
+    free_energy : float
+        Final free energy per unit volume (dimensionless).
+    error_level : float
+        Final convergence error (L2 norm of field residuals).
+    iterations : int
+        Number of iterations performed.
+    phi : dict
+        Monomer concentration fields {monomer_type: array}.
+    w : np.ndarray
+        Potential fields, shape (M, total_grid).
+    partition_functions : list
+        Single-chain partition functions for each polymer type.
+    stress : np.ndarray or None
+        Stress tensor components (if box_is_altering was True).
+    lx : list
+        Final box dimensions.
+    nx : list
+        Grid dimensions.
+    monomer_types : list
+        List of monomer type labels.
+    params : dict
+        Original simulation parameters.
     """
-    def __init__(self, total_grid,
-                    lr = 1e-2,       # initial learning rate, γ
-                    b1 = 0.9,        # β1
-                    b2 = 0.999,      # β2
-                    eps = 1e-8,      # epsilon, small number to prevent dividing by zero
-                    gamma = 1.0,     # learning rate at Tth iteration is lr*γ^(T-1)
-                    ):
-        self.total_grid = total_grid
-        self.lr = lr
-        self.b1 = b1
-        self.b2 = b2
-        self.eps = eps
-        self.gamma = gamma
-        self.count = 1
-        
-        self.m = np.zeros(total_grid, dtype=np.float64) # first moment
-        self.v = np.zeros(total_grid, dtype=np.float64) # second moment
-        
-    def reset_count(self,):
-        """Reset optimizer state for a new optimization run.
+    converged: bool
+    free_energy: float
+    error_level: float
+    iterations: int
+    phi: Dict[str, np.ndarray]
+    w: np.ndarray
+    partition_functions: List[float]
+    lx: List[float]
+    nx: List[int]
+    monomer_types: List[str]
+    params: Dict[str, Any]
+    stress: Optional[np.ndarray] = None
+    angles: Optional[List[float]] = None
 
-        Resets the iteration counter to 1 and clears the moment estimates.
-        This should be called when starting a new SCFT run with different
-        initial conditions.
-
-        Notes
-        -----
-        This method reinitializes:
-        - Iteration counter (count) to 1
-        - First moment estimate (m) to zeros
-        - Second moment estimate (v) to zeros
-        """
-        self.count = 1
-        self.m[:] = 0.0
-        self.v[:] = 0.0        
-        
-    def calculate_new_fields(self, w_current, w_diff, old_error_level, error_level):
-        """Compute updated fields using ADAM optimization algorithm.
-
-        Performs one step of ADAM optimization to update the field values
-        based on the current fields and their gradients (field differences).
+    def get_concentration(self, monomer_type: str) -> np.ndarray:
+        """Get concentration field for a monomer type.
 
         Parameters
         ----------
-        w_current : ndarray
-            Current field values, shape (total_grid,) or (M, grid_size).
-        w_diff : ndarray
-            Field gradients (self-consistency error), same shape as w_current.
-        old_error_level : float
-            Error level from previous iteration (not used in ADAM, kept for
-            compatibility with Anderson Mixing interface).
-        error_level : float
-            Current error level (not used in ADAM, kept for compatibility).
+        monomer_type : str
+            Monomer type label (e.g., "A", "B").
 
         Returns
         -------
-        w_new : ndarray
-            Updated field values, same shape as w_current.
+        np.ndarray
+            Concentration field for the specified monomer.
 
-        Notes
-        -----
-        The ADAM update includes:
-
-        1. Decay learning rate: lr_t = lr * γ^(t-1)
-        2. Update biased first moment: m_t = β₁ m_{t-1} + (1-β₁) g_t
-        3. Update biased second moment: v_t = β₂ v_{t-1} + (1-β₂) g_t²
-        4. Bias correction: m̂_t = m_t/(1-β₁^t), v̂_t = v_t/(1-β₂^t)
-        5. Update fields: w_t = w_{t-1} + lr_t * m̂_t / (√v̂_t + ε)
-
-        The bias correction in steps 4 compensates for the initialization
-        of moment estimates at zero, particularly important in early iterations.
+        Raises
+        ------
+        KeyError
+            If monomer type not found.
         """
-        lr = self.lr*self.gamma**(self.count-1)
+        return self.phi[monomer_type]
 
-        self.m = self.b1*self.m + (1.0-self.b1)*w_diff
-        self.v = self.b2*self.v + (1.0-self.b2)*w_diff**2
-        m_hat = self.m/(1.0-self.b1**self.count)
-        v_hat = self.v/(1.0-self.b2**self.count)
+@dataclass
+class IterationInfo:
+    """Information about a single SCFT iteration.
 
-        w_new = w_current + lr*m_hat/(np.sqrt(v_hat) + self.eps)
+    Used for progress callbacks to provide iteration details.
 
-        self.count += 1
-        return w_new
+    Attributes
+    ----------
+    iteration : int
+        Current iteration number.
+    error_level : float
+        Current convergence error.
+    energy : float
+        Current free energy.
+    mass_error : float
+        Mass conservation error.
+    partition_functions : list
+        Partition functions for each polymer.
+    lx : list or None
+        Current box dimensions (if box_is_altering).
+    angles : list or None
+        Current lattice angles (if non-orthogonal).
+    """
+    iteration: int
+    error_level: float
+    energy: float
+    mass_error: float
+    partition_functions: List[float]
+    lx: Optional[List[float]] = None
+    angles: Optional[List[float]] = None
+
+
+# Which lattice parameters may vary during box relaxation (box_is_altering=True):
+#   lx_reduced : indices of the independent box lengths among [a, b, c]
+#   lx_full    : for each of a, b, c, the independent length it follows
+#   angles     : indices of the free angles among [alpha, beta, gamma]
+# "Orthorhombic" frees every box length in any dimension and is handled in the constructor.
+# To add a crystal system, add one row here (and, if it needs averaged stress
+# components like a = b, one case in SCFT._update_fields_and_box).
+CRYSTAL_SYSTEMS = {
+    "Orthorhombic": {"lx_reduced": None,      "lx_full": None,      "angles": []},
+    "Tetragonal":   {"lx_reduced": [0, 2],    "lx_full": [0, 0, 1], "angles": []},         # a = b != c
+    "Cubic":        {"lx_reduced": [0],       "lx_full": [0, 0, 0], "angles": []},         # a = b = c
+    "Hexagonal":    {"lx_reduced": [0, 2],    "lx_full": [0, 0, 1], "angles": []},         # a = b != c, gamma = 120
+    "Trigonal":     {"lx_reduced": [0, 2],    "lx_full": [0, 0, 1], "angles": []},         # hexagonal axes (space group only)
+    "Monoclinic":   {"lx_reduced": [0, 1, 2], "lx_full": [0, 1, 2], "angles": [1]},        # beta free
+    "Triclinic":    {"lx_reduced": [0, 1, 2], "lx_full": [0, 1, 2], "angles": [0, 1, 2]},  # all free
+    "Hexagonal2D":  {"lx_reduced": [0],       "lx_full": [0, 0],    "angles": []},         # a = b, gamma = 120
+    "Oblique2D":    {"lx_reduced": [0, 1],    "lx_full": [0, 1],    "angles": [2]},        # gamma free
+}
 
 class SCFT:
-    """Self-Consistent Field Theory solver for polymer systems.
+    """Self-consistent field theory (SCFT) of polymer melts and solutions.
 
-    This class implements SCFT calculations for arbitrary polymer architectures
-    including linear, branched, and random copolymers with multiple monomer types.
-    It supports both Anderson Mixing and ADAM optimization algorithms for finding
-    saddle points of the field-theoretic Hamiltonian.
-
-    The implementation uses a platform-independent interface to computational backends
-    (CUDA GPU or CPU with FFTW), automatic propagator computation optimization
-    for complex polymer architectures, and optional space group symmetry constraints.
+    Finds the saddle point of the field-theoretic Hamiltonian with Anderson
+    mixing for arbitrary polymer architectures (linear, branched, random
+    copolymers, mixtures), optionally relaxing the box (and the angles of
+    non-orthogonal cells) and using space-group symmetry.
 
     Parameters
     ----------
     params : dict
-        Simulation parameters dictionary containing:
-
-        **Grid and Box Parameters:**
-
-        - nx : list of int
-            Number of grid points in each dimension, e.g., [32, 32, 32] for 3D.
-        - lx : list of float
-            Box dimensions [a, b, c] following crystallographic convention.
-            Units: a_Ref * N_Ref^(1/2).
-        - angles : list of float, optional
-            Unit cell angles [alpha, beta, gamma] in degrees (default: [90, 90, 90]).
-            Following crystallographic convention:
-
-            - alpha = angle between axes b and c (indices 1,2)
-            - beta = angle between axes a and c (indices 0,2)
-            - gamma = angle between axes a and b (indices 0,1)
-
-            Common systems:
-
-            - Orthorhombic: [90, 90, 90] (default)
-            - Hexagonal: [90, 90, 120] with a = b
-            - Monoclinic: [90, beta, 90] with beta != 90
-            - Triclinic: all angles can vary
-
-        - axis_ordering : list of str, optional
-            Specifies the ordering of axes in lx and angles arrays.
-            Default: ["a", "b", "c"] (standard crystallographic convention).
-            Example: ["b", "a", "c"] means lx = [b, a, c] and angles are reordered
-            accordingly. The code internally converts to [a, b, c] ordering.
-
-        - box_is_altering : bool
-            If True, optimize box size along with fields to minimize stress.
-
-        **Chain Model Parameters:**
-
-        - chain_model : {'discrete', 'continuous'}
-            Chain propagation model. 'discrete' for discrete Gaussian chains,
-            'continuous' for continuous Gaussian chains (pseudo-spectral method).
-        - ds : float
-            Contour step size, typically 1/N_Ref where N_Ref is the reference
-            polymerization index.
-
-        **Monomer and Interaction Parameters:**
-
-        - segment_lengths : dict
-            Relative statistical segment lengths, {monomer_type: length}.
-            Example: {"A": 1.0, "B": 1.0} for symmetric AB diblock.
-        - chi_n : dict
-            Flory-Huggins interaction parameters × N_Ref,
-            {monomer_pair: chi*N_Ref}. Example: {"A,B": 15.0}.
-            Self-interactions (e.g., "A,A") should not be included.
-
-        **Polymer Architecture:**
-
-        - distinct_polymers : list of dict
-            List of polymer chain specifications. Each dict contains:
-
-            - volume_fraction : float
-                Volume fraction of this polymer species.
-            - blocks : list of dict
-                Block definitions. Each block has:
-
-                - type : str
-                    Monomer type label.
-                - length : float
-                    Block length (contour fraction).
-                - v, u : int (optional)
-                    Vertex indices for branched polymers.
-
-        **Platform Selection:**
-
-        - platform : {'cuda', 'cpu-mkl', 'cpu-fftw'}, optional
-            Computational backend. Auto-selected if not specified:
-            1D → CPU, 2D/3D → cuda (if available).
-        - reduce_memory : bool, optional
-            If True, store only propagator checkpoints instead of full histories,
-            recomputing propagators as needed (default: False).
-            Reduces memory usage but increases computation time by 2-4x.
-        - numerical_method : {'rqm4', 'rk2', 'cn-adi2'}, optional
-            Numerical algorithm for propagator computation (default: 'rqm4'):
-
-            - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
-            - 'rk2': Pseudo-spectral with 2nd-order operator splitting
-            - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
-
-        **Optimization Parameters:**
-
-        - optimizer : dict
-            Optimizer configuration:
-
-            For Anderson Mixing (name='am'):
-
-            - name : str
-                'am' for Anderson Mixing.
-            - max_hist : int
-                Maximum number of history vectors (default: 20).
-            - start_error : float
-                Error threshold to switch from simple mixing to AM (default: 1e-1).
-            - mix_min : float
-                Minimum mixing parameter (default: 0.1).
-            - mix_init : float
-                Initial mixing parameter (default: 0.1).
-
-            For ADAM (name='adam'):
-
-            - name : str
-                'adam' for ADAM optimizer.
-            - lr : float
-                Learning rate (default: 1e-2).
-            - gamma : float
-                Learning rate decay (default: 1.0, no decay).
-
-        **Convergence Parameters:**
-
-        - max_iter : int, optional
-            Maximum number of iterations (default: 2000).
-        - tolerance : float, optional
-            Convergence tolerance for error_level (default: 1e-8).
-
-        **Advanced Options:**
-
-        - crystal_system : str, optional
-            Crystal system for box optimization constraints. Determines which
-            lattice parameters can vary independently during box relaxation.
-            Options:
-
-            - 'Orthorhombic' (default): a, b, c independent; all angles = 90°
-            - 'Tetragonal': a = b ≠ c; all angles = 90°
-            - 'Cubic': a = b = c; all angles = 90°
-            - 'Hexagonal': a = b ≠ c; alpha = beta = 90°, gamma = 120°
-            - 'Monoclinic': a, b, c independent; alpha = gamma = 90°, beta varies
-            - 'Triclinic': all lengths and angles can vary independently
-
-        - space_group : dict, optional
-            Space group symmetry constraints (beta feature):
-
-            - symbol : str
-                Hermann-Mauguin symbol (e.g., 'Ia-3d' for gyroid).
-            - number : int, optional
-                Hall number for space group.
-
-        - scale_stress : float, optional
-            Scaling factor for stress in box relaxation (default: 1.0).
-        - aggregate_propagator_computation : bool, optional
-            Enable propagator aggregation optimization (default: True).
+        Simulation parameters; every key is documented in
+        docs/references/Parameters.md. Required: nx, lx, chain_model, ds,
+        segment_lengths, chi_n, distinct_polymers, optimizer, box_is_altering.
 
     Attributes
     ----------
-    monomer_types : list of str
-        Sorted list of monomer type labels.
-    segment_lengths : dict
-        Statistical segment lengths for each monomer type.
-    chi_n : dict
-        Flory-Huggins interaction parameters (sorted pairs).
-    distinct_polymers : list
-        Polymer specifications with block information.
+    prop_solver : PropagatorSolver
+        Propagator computation (C++ objects inside).
     cb : ComputationBox
-        Computation box managing grid, FFT, and integrals.
-    molecules : Molecules
-        C++ Molecules object containing polymer chain definitions.
-    solver : PropagatorComputation
-        C++ propagator solver object.
-    field_optimizer : AndersonMixing or Adam
-        Field optimization algorithm instance.
+        Grid, box and integrals (C++).
     mpt : SymmetricPolymerTheory
-        Multi-monomer field theory transformations.
-    matrix_chi : ndarray
-        Interaction parameter matrix (M×M).
-    matrix_p : ndarray
-        Projection matrix for field residuals (M×M).
-    phi : dict
-        Final monomer concentration fields {monomer_type: array}.
-    w : ndarray
-        Final potential fields, shape (M, total_grid).
-    free_energy : float
-        Final free energy per unit volume.
-    error_level : float
-        Final convergence error.
-    iter : int
-        Number of iterations performed.
-
-    Raises
-    ------
-    AssertionError
-        If parameter validation fails (e.g., volume fractions don't sum to 1,
-        invalid monomer types in chi_n, etc.).
-    ValueError
-        If invalid space group or optimizer name is specified.
-
-    See Also
-    --------
-    LFTS : Langevin field-theoretic simulation class.
-    SymmetricPolymerTheory : Multi-monomer field theory transformations.
-    Adam : ADAM optimizer for field updates.
-
-    Notes
-    -----
-    **Units and Conventions:**
-
-    - Length unit: a_Ref * N_Ref^(1/2) where a_Ref is reference statistical
-      segment length, N_Ref is reference polymerization index.
-    - Fields w are "per reference chain" potentials. Multiply by ds for
-      "per segment" potentials.
-    - Free energy is reported as βF/V (dimensionless free energy per volume).
-
-    **Computational Details:**
-
-    - Pseudo-spectral methods: RQM4 (4th-order Richardson) or RK2 (2nd-order splitting).
-    - Real-space methods: CN-ADI2 (2nd-order Crank-Nicolson ADI).
-    - Propagators use dynamic programming to avoid redundant calculations for
-      branched polymers (see [1]_).
-    - Anderson Mixing accelerates SCFT convergence by mixing field history.
-    - ADAM can be more stable than Anderson Mixing for some systems.
-
-    **Random Copolymers:**
-
-    Define random copolymers by adding "fraction" dict to a single-block polymer:
-
-    .. code-block:: python
-
-        {
-            "volume_fraction": 0.5,
-            "blocks": [{
-                "type": "Random_AB",
-                "length": 1.0,
-                "fraction": {"A": 0.3, "B": 0.7}
-            }]
-        }
-
-    **Performance:**
-
-    - 1D simulations: CPU is recommended
-    - 2D/3D simulations: cuda provides 10-20x speedup over CPU
-    - Memory usage: ~500MB for 64³ grid (standard), ~50MB (reduce_memory)
-
-    References
-    ----------
-    .. [1] Yong, D.; Kim, J. U. "Dynamic Programming for Chain Propagator
-           Computation of Branched Block Copolymers in Polymer Field Theory
-           Simulations." J. Chem. Theory Comput. 2025, 21, 3676.
-    .. [2] Morse, D.; Yong, D.; Chen, K. "Polymer Field Theory for
-           Multimonomer Incompressible Models: Symmetric Formulation and ABC
-           Systems." Macromolecules 2025, 58, 816.
+        Monomer <-> auxiliary field transformations.
+    phi, w, free_energy, error_level, iter
+        Set by run(): concentrations {type: array}, fields (M, n_grid),
+        free energy per volume, final error and iteration count.
 
     Examples
     --------
-    **AB Diblock Copolymer Lamellar Phase:**
+    >>> calc = SCFT(params)                       # params: see docs/references/Parameters.md
+    >>> calc.run(initial_fields={"A": w_A, "B": w_B})
+    >>> calc.save_results("fields.mat")
+    >>> calc.free_energy, calc.phi["A"], calc.w[0]
 
-    >>> import numpy as np
-    >>> from polymerfts import scft
-    >>>
-    >>> # Define parameters
-    >>> params = {
-    ...     "nx": [32, 32, 32],
-    ...     "lx": [4.36, 4.36, 4.36],
-    ...     "chain_model": "discrete",
-    ...     "ds": 1/90,
-    ...     "segment_lengths": {"A": 1.0, "B": 1.0},
-    ...     "chi_n": {"A,B": 15.0},
-    ...     "distinct_polymers": [{
-    ...         "volume_fraction": 1.0,
-    ...         "blocks": [
-    ...             {"type": "A", "length": 0.5},
-    ...             {"type": "B", "length": 0.5}
-    ...         ]
-    ...     }],
-    ...     "optimizer": {
-    ...         "name": "am",
-    ...         "max_hist": 20,
-    ...         "start_error": 1e-1,
-    ...         "mix_min": 0.1,
-    ...         "mix_init": 0.1
-    ...     },
-    ...     "max_iter": 2000,
-    ...     "tolerance": 1e-8,
-    ...     "box_is_altering": False
-    ... }
-    >>>
-    >>> # Initialize SCFT solver
-    >>> calc = scft.SCFT(params)
-    >>>
-    >>> # Prepare initial fields (small random perturbation)
-    >>> nx_total = np.prod(params["nx"])
-    >>> w_init = {
-    ...     "A": 0.01 * np.random.normal(size=nx_total),
-    ...     "B": 0.01 * np.random.normal(size=nx_total)
-    ... }
-    >>>
-    >>> # Run SCFT iteration
-    >>> calc.run(initial_fields=w_init)
-    >>>
-    >>> # Save results
-    >>> calc.save_results("scft_lamellar.mat")
-    >>>
-    >>> # Access final fields and concentrations
-    >>> print(f"Free energy: {calc.free_energy:.6f}")
-    >>> print(f"Error level: {calc.error_level:.3e}")
-    >>> phi_A = calc.phi["A"]  # Concentration field for monomer A
-    >>> w_A = calc.w[0]        # Potential field for monomer A
-
-    **ABC Triblock Copolymer:**
-
-    >>> params_abc = {
-    ...     "nx": [64, 64, 64],
-    ...     "lx": [8.0, 8.0, 8.0],
-    ...     "chain_model": "continuous",
-    ...     "ds": 1/100,
-    ...     "segment_lengths": {"A": 1.0, "B": 1.0, "C": 1.0},
-    ...     "chi_n": {"A,B": 20.0, "B,C": 20.0, "A,C": 20.0},
-    ...     "distinct_polymers": [{
-    ...         "volume_fraction": 1.0,
-    ...         "blocks": [
-    ...             {"type": "A", "length": 0.33},
-    ...             {"type": "B", "length": 0.34},
-    ...             {"type": "C", "length": 0.33}
-    ...         ]
-    ...     }],
-    ...     "optimizer": {"name": "adam", "lr": 1e-2, "gamma": 0.999},
-    ...     "box_is_altering": False
-    ... }
-    >>> calc_abc = scft.SCFT(params_abc)
-
-    For complete working examples, see:
-
-    - examples/scft/Lamella3D.py - Lamellar phase
-    - examples/scft/Gyroid.py - Gyroid phase with box relaxation
-    - examples/scft/ABC_Triblock_Sphere3D.py - Spherical phase
-    - examples/scft/phases/ - Various morphologies
+    Complete scripts: examples/scft/ (Lamella3D.py, Gyroid.py, phases/).
     """
     @staticmethod
     def _apply_axis_ordering(params):
-        """Reorder nx/lx/angles in ``params`` from the user's axis ordering to [a, b, c].
-
-        Returns ``(axis_ordering, axis_perm)``; both are None when no
-        ``axis_ordering`` was given. ``params`` is modified in place.
+        """Reorder nx/lx/angles in ``params`` (in place) from the user's axis ordering
+        to the standard [a, b, c]. Returns (axis_ordering, perm); both None when the
+        option is absent. perm[i] is the position of standard axis i in the user's arrays.
         """
-        # Handle axis ordering (convert user ordering to standard [a, b, c])
-        angles = params.get("angles", None)
         axis_ordering = params.get("axis_ordering", None)
-
-        if axis_ordering is not None:
-            dim = len(params["nx"])
-            if len(axis_ordering) != dim:
-                raise ValueError(f"axis_ordering length ({len(axis_ordering)}) must match dimension ({dim})")
-
-            # Validate axis labels
-            valid_labels = ["a", "b", "c"][:dim]
-            if sorted(axis_ordering) != valid_labels:
-                raise ValueError(f"axis_ordering must contain exactly {valid_labels}, got {axis_ordering}")
-
-            # Compute permutation from user ordering to standard [a, b, c]
-            # e.g., ["b", "a", "c"] -> permutation [1, 0, 2] means:
-            #   user[0] (b) goes to standard[1]
-            #   user[1] (a) goes to standard[0]
-            #   user[2] (c) goes to standard[2]
-            perm = [axis_ordering.index(label) for label in valid_labels]
-            axis_perm = perm  # perm[i] = index in user array for standard axis i
-
-            # Reorder nx and lx from user ordering to standard [a, b, c]
-            nx_reordered = [params["nx"][perm[i]] for i in range(dim)]
-            lx_reordered = [params["lx"][perm[i]] for i in range(dim)]
-
-            # Reorder angles if provided (3D only)
-            # angles = [alpha, beta, gamma] where:
-            #   alpha = angle between b,c (axes 1,2)
-            #   beta = angle between a,c (axes 0,2)
-            #   gamma = angle between a,b (axes 0,1)
-            # When axes are permuted, angles must be remapped
-            if angles is not None and dim == 3:
-                # Build mapping: which original angle corresponds to which new angle
-                # After permutation, the angle between new axes i,j is the angle
-                # that was between original axes perm[i], perm[j]
-                def angle_index(i, j):
-                    """Return angle array index for angle between axes i and j"""
-                    if (i, j) == (1, 2) or (i, j) == (2, 1):
-                        return 0  # alpha
-                    elif (i, j) == (0, 2) or (i, j) == (2, 0):
-                        return 1  # beta
-                    else:  # (0, 1) or (1, 0)
-                        return 2  # gamma
-
-                angles_reordered = [0.0, 0.0, 0.0]
-                # New alpha (angle between new b,c) = old angle between perm[1], perm[2]
-                angles_reordered[0] = angles[angle_index(perm[1], perm[2])]
-                # New beta (angle between new a,c) = old angle between perm[0], perm[2]
-                angles_reordered[1] = angles[angle_index(perm[0], perm[2])]
-                # New gamma (angle between new a,b) = old angle between perm[0], perm[1]
-                angles_reordered[2] = angles[angle_index(perm[0], perm[1])]
-                angles = angles_reordered
-
-            # Update params for PropagatorSolver creation
-            params["nx"] = nx_reordered
-            params["lx"] = lx_reordered
-            # Keep params consistent with the reordering: later code (e.g. the
-            # space-group block) re-reads params["angles"] and must see the
-            # reordered values, not the user's original ordering.
-            if angles is not None:
-                params["angles"] = angles
-
-            print(f"Axis ordering: {axis_ordering} -> reordered to [a, b, c]")
-            print(f"  nx: {params['nx']}, lx: {params['lx']}")
-            if angles is not None:
-                print(f"  angles: {angles}")
-        else:
-            axis_perm = None
-
-        return axis_ordering, axis_perm
+        if axis_ordering is None:
+            return None, None
+        dim = len(params["nx"])
+        labels = ["a", "b", "c"][:dim]
+        if len(axis_ordering) != dim:
+            raise ValueError(f"axis_ordering length ({len(axis_ordering)}) must match dimension ({dim})")
+        if sorted(axis_ordering) != labels:
+            raise ValueError(f"axis_ordering must contain exactly {labels}, got {axis_ordering}")
+        perm = [axis_ordering.index(label) for label in labels]
+        params["nx"] = [params["nx"][perm[i]] for i in range(dim)]
+        params["lx"] = [params["lx"][perm[i]] for i in range(dim)]
+        angles = params.get("angles", None)
+        if angles is not None and dim == 3:
+            # angles = [alpha, beta, gamma] are the angles between axes (b,c), (a,c), (a,b);
+            # the new angle between axes i and j is the old angle between perm[i] and perm[j]
+            angle_index = {(1, 2): 0, (0, 2): 1, (0, 1): 2}
+            params["angles"] = [angles[angle_index[tuple(sorted((perm[i], perm[j])))]]
+                                for (i, j) in ((1, 2), (0, 2), (0, 1))]
+        print(f"Axis ordering: {axis_ordering} -> reordered to [a, b, c]")
+        print(f"  nx: {params['nx']}, lx: {params['lx']}")
+        if params.get("angles", None) is not None:
+            print(f"  angles: {params['angles']}")
+        return axis_ordering, perm
 
     def __init__(self, params):
 
         # Validate input parameters
         validate_system_params(params)
+        for key in ("optimizer", "box_is_altering"):
+            if key not in params:
+                raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
         params = copy.deepcopy(params)
         params.pop("space_group_basis", None)
 
-        # Method-specific options (defaults live in simulation_options.py)
-        options = ScftOptions.from_params(params)
-        self.options = options
-
-        # Handle axis ordering (convert user ordering to standard [a, b, c]).
-        # This rewrites nx/lx/angles in `params` before the shared parser runs.
+        # Handle axis ordering (convert user ordering to standard [a, b, c]);
+        # this rewrites nx/lx/angles in `params`.
         self.axis_ordering, self._axis_perm = self._apply_axis_ordering(params)
 
-        # Shared system definition: grid, chain model, monomers, chi N, polymers, platform
-        spec = parse_system(params, validate=False)   # validated above
-        self.spec = spec
-        self.monomer_types = list(spec.monomer_types)
-        self.segment_lengths = dict(spec.chain.segment_lengths)
-        self.distinct_polymers = list(spec.polymers)
-        self.random_fraction = dict(spec.random_fraction)
-        self.chi_n = dict(spec.chi_n)
-        self.zeta_n = spec.zeta_n
-        platform = spec.platform
-        angles = list(spec.grid.angles) if spec.grid.angles is not None else None
+        # Monomer types and statistical segment lengths
+        self.monomer_types = sorted(list(params["segment_lengths"].keys()))
+        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
+        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
+
+        # Flory-Huggins parameters chi N; pairs the user did not give do not interact
+        self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
+        for pair in itertools.combinations(self.monomer_types, 2):
+            key = ",".join(sorted(pair))
+            if key not in self.chi_n:
+                self.chi_n[key] = 0.0
+
+        # Compressibility parameter (None: incompressible)
+        self.zeta_n = params.get("zeta_n", None)
+
+        # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
+        validate_polymers(self.distinct_polymers)
+        for polymer in self.distinct_polymers:
+            polymer["blocks_input"] = process_polymer_blocks(polymer)
+        self.random_fraction = {}
+        for polymer in self.distinct_polymers:
+            result = process_random_copolymer(polymer, self.segment_lengths)
+            if result is not None:
+                random_type, effective_segment_length, fraction = result
+                polymer["block_monomer_types"] = [random_type]
+                self.segment_lengths[random_type] = effective_segment_length
+                self.random_fraction[random_type] = fraction
+
+        # Draw the chain architectures (polymer_<id>.png in the current directory)
+        draw_polymer_architectures(self.distinct_polymers, params["ds"], self.segment_lengths)
+
+        # Boundary conditions (default: periodic) and lattice angles [alpha, beta, gamma] in degrees
+        bc = params.get("bc", None)
+        if bc is None:
+            bc = ["periodic"] * (2 * len(params["nx"]))
+        angles = params.get("angles", None)
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
@@ -670,20 +285,12 @@ class SCFT:
         matrix_chi_inv = np.linalg.inv(matrix_chi)
         self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
 
-        # Make a monomer color dictionary
-        dict_color = create_monomer_color_dict(self.segment_lengths)
-        logger.debug(f"Monomer color: {dict_color}")
-
-        # Draw polymer chain architectures
-        for idx, polymer in enumerate(self.distinct_polymers):
-            draw_polymer_architecture(polymer, idx, spec.chain.ds, dict_color)
-
         # Create space group object early (before PropagatorSolver) if specified
-        if options.space_group is not None:
-            if "number" in options.space_group:
-                self.sg = _core.SpaceGroup(params["nx"], options.space_group["symbol"], options.space_group["number"])
+        if params.get("space_group", None) is not None:
+            if "number" in params["space_group"]:
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
             else:
-                self.sg = _core.SpaceGroup(params["nx"], options.space_group["symbol"])
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
             # Auto-enable physical basis when possible (m3 → pmmm → z-mirror).
             # NOTE: reuse the (possibly axis_ordering-reordered) local `angles`;
             # missing angles means an orthogonal cell for classification, while
@@ -722,17 +329,30 @@ class SCFT:
         else:
             self.sg = None
 
-        # Create the propagator solver from the validated system definition
-        self.prop_solver = PropagatorSolver.from_spec(spec, space_group=self.sg)
+        # Propagator solver: the C++ computation box, molecules and solver live inside it
+        self.prop_solver = PropagatorSolver(
+            nx=params["nx"], lx=params["lx"], ds=params["ds"],
+            bond_lengths=self.segment_lengths, bc=bc,
+            chain_model=params["chain_model"],
+            numerical_method=params.get("numerical_method", None),   # None: "rqm4"
+            platform=params.get("platform", "auto"),   # auto: CPU for 1D, CUDA for 2D/3D when available
+            reduce_memory=params.get("reduce_memory", False),
+            space_group=self.sg,
+            angles=angles,
+            aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
+        )
+        for polymer in self.distinct_polymers:
+            self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
+                                         polymer.get("initial_conditions", None))
+
+        # Computation box as a public attribute (this creates the C++ objects)
+        self.cb = self.prop_solver.computation_box
 
         # Display factory info
         self.prop_solver.display_platform_info()
 
-        # Expose computation box as public attribute (documented in class docstring)
-        self.cb = self.prop_solver.computation_box
-
         # Initialize smearing (must be after self.cb is set)
-        if options.smearing is not None and self.sg is not None:
+        if params.get("smearing", None) is not None and self.sg is not None:
             # Smearing operates on full-grid fields, but with a space group the
             # fields live in the reduced basis; Smearing.apply would reshape a
             # reduced-basis array to the full grid and crash (or corrupt data).
@@ -742,132 +362,57 @@ class SCFT:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            options.smearing
+            params.get("smearing", None)
         )
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
-        self.scale_stress = options.scale_stress
+        self.scale_stress = params.get("scale_stress", 1)
 
-        # Space group symmetry operations (self.sg was created above)
+        # Which lattice parameters may vary during box relaxation (table CRYSTAL_SYSTEMS)
+        dim = len(params["nx"])
         if self.sg is not None:
+            # The space group fixes the crystal system; angles never vary
             crystal_system = self.sg.get_crystal_system()
             if not crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
                 raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
                     "The current crystal system is " + crystal_system + ".")
-
-            if crystal_system == "Orthorhombic":
-                self.lx_reduced_indices = [0, 1, 2]
-                self.lx_full_indices = [0, 1, 2]
-            elif crystal_system == "Tetragonal":
-                # Standard tetragonal: a = b ≠ c (4-fold axis along z)
-                self.lx_reduced_indices = [0, 2]  # a and c as independent
-                self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
-            elif crystal_system == "Cubic":
-                self.lx_reduced_indices = [0]
-                self.lx_full_indices = [0, 0, 0]
-            elif crystal_system == "Hexagonal" or crystal_system == "Trigonal":
-                # Hexagonal: a = b ≠ c, α = β = 90°, γ = 120°
-                self.lx_reduced_indices = [0, 2]  # Only a and c can vary independently
-                self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
-
-            # For space groups, angles are fixed by the crystal system
-            self.angles_reduced_indices = []
-            self.angles_full_indices = []
-
-            # Total number of variables to be adjusted to minimize the Hamiltonian
-            # Using reduced basis from space group symmetry
-            n_reduced = self.sg.get_n_reduced_basis_full()
-            if options.box_is_altering:
-                n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
-            else :
-                n_var = len(self.monomer_types)*n_reduced
+            n_field_var = len(self.monomer_types) * self.sg.get_n_reduced_basis_full()
         else:
-
-            # Crystal system determines which lattice parameters can be optimized
-            # Default: all box lengths can vary, angles are fixed at their initial values
-            dim = len(params["nx"])
-
-            # Auto-detect crystal system from angles for 2D non-orthogonal systems
-            if options.crystal_system is None and dim == 2 and "angles" in params:
-                # For 2D, angles can be [gamma] or [alpha, beta, gamma]
-                angles = params["angles"]
-                gamma = angles[0] if len(angles) == 1 else angles[2]
+            # The user chooses; a 2D cell without "crystal_system" is classified from gamma
+            if params.get("crystal_system", None) is None and dim == 2 and "angles" in params:
+                gamma = params["angles"][0] if len(params["angles"]) == 1 else params["angles"][2]
                 if abs(gamma - 120.0) < 1e-6:
-                    # Hexagonal 2D: gamma = 120°, a = b
                     crystal_system = "Hexagonal2D"
                 elif abs(gamma - 90.0) > 1e-6:
-                    # General oblique 2D: gamma ≠ 90°
                     crystal_system = "Oblique2D"
                 else:
                     crystal_system = "Orthorhombic"
             else:
-                crystal_system = options.crystal_system if options.crystal_system is not None else "Orthorhombic"
-
+                crystal_system = params.get("crystal_system", None) or "Orthorhombic"
             self.crystal_system = crystal_system
 
-            # Non-orthogonal 3D crystal systems require 3D
             if crystal_system in ["Monoclinic", "Triclinic", "Hexagonal"] and dim != 3:
                 raise ValueError(f"Crystal system '{crystal_system}' requires 3D simulation (nx must have 3 elements).")
-
-            if crystal_system == "Hexagonal2D":
-                # 2D hexagonal: γ = 120°, a = b (single lattice parameter)
-                self.lx_reduced_indices = [0]  # Only a (b = a enforced)
-                self.lx_full_indices = [0, 0]  # a, a
-                self.angles_reduced_indices = []  # γ fixed at 120°
-                self.angles_full_indices = []
-            elif crystal_system == "Oblique2D":
-                # 2D oblique: γ ≠ 90°, a and b can vary independently, γ is optimized
-                self.lx_reduced_indices = [0, 1]  # a and b
-                self.lx_full_indices = [0, 1]  # a, b
-                self.angles_reduced_indices = [2]  # γ is at index 2 in full angles array
-                self.angles_full_indices = [2]  # Maps to γ (third angle)
-            elif crystal_system == "Orthorhombic":
-                # α = β = γ = 90°, a, b, c can all vary
-                self.lx_reduced_indices = list(range(len(params["lx"])))
-                self.lx_full_indices = list(range(len(params["lx"])))
-                self.angles_reduced_indices = []  # No angles to optimize
-                self.angles_full_indices = []
-            elif crystal_system == "Tetragonal":
-                # α = β = γ = 90°, a = b ≠ c
-                self.lx_reduced_indices = [0, 2]  # a and c
-                self.lx_full_indices = [0, 0, 1]  # a, a, c
-                self.angles_reduced_indices = []
-                self.angles_full_indices = []
-            elif crystal_system == "Cubic":
-                # α = β = γ = 90°, a = b = c
-                self.lx_reduced_indices = [0]
-                self.lx_full_indices = [0, 0, 0]
-                self.angles_reduced_indices = []
-                self.angles_full_indices = []
-            elif crystal_system == "Hexagonal":
-                # α = β = 90°, γ = 120°, a = b ≠ c
-                self.lx_reduced_indices = [0, 2]  # a and c
-                self.lx_full_indices = [0, 0, 1]  # a, a, c
-                self.angles_reduced_indices = []  # γ fixed at 120°
-                self.angles_full_indices = []
-            elif crystal_system == "Monoclinic":
-                # α = γ = 90°, β ≠ 90°, a, b, c can all vary
-                # β is the angle between a and c axes (index 1 in [α, β, γ])
-                self.lx_reduced_indices = [0, 1, 2]  # a, b, c
-                self.lx_full_indices = [0, 1, 2]
-                self.angles_reduced_indices = [1]  # Only β can vary
-                self.angles_full_indices = [1]  # Maps to β
-            elif crystal_system == "Triclinic":
-                # All angles and lengths can vary
-                self.lx_reduced_indices = [0, 1, 2]
-                self.lx_full_indices = [0, 1, 2]
-                self.angles_reduced_indices = [0, 1, 2]  # α, β, γ
-                self.angles_full_indices = [0, 1, 2]
-            else:
+            if crystal_system not in CRYSTAL_SYSTEMS or crystal_system == "Trigonal":
                 raise ValueError(f"Unknown crystal system: {crystal_system}. " +
                     "Choose from: Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic, Triclinic.")
+            n_field_var = len(self.monomer_types) * np.prod(params["nx"])
 
-            # Total number of variables to be adjusted to minimize the Hamiltonian
-            n_angles = len(self.angles_reduced_indices)
-            if options.box_is_altering:
-                n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
-            else :
-                n_var = len(self.monomer_types)*np.prod(params["nx"])
+        row = CRYSTAL_SYSTEMS[crystal_system]
+        if crystal_system == "Orthorhombic":    # every box length is free, in any dimension
+            self.lx_reduced_indices = list(range(dim))
+            self.lx_full_indices = list(range(dim))
+        else:
+            self.lx_reduced_indices = list(row["lx_reduced"])
+            self.lx_full_indices = list(row["lx_full"])
+        self.angles_reduced_indices = [] if self.sg is not None else list(row["angles"])
+        self.angles_full_indices = list(self.angles_reduced_indices)
+
+        # Number of variables the optimizer adjusts: the fields, plus the free box lengths and angles
+        if params["box_is_altering"]:
+            n_var = n_field_var + len(self.lx_reduced_indices) + len(self.angles_reduced_indices)
+        else:
+            n_var = n_field_var
 
         # Enable off-diagonal (cross-term) stress computation when angle
         # optimization is active. Without this explicit opt-in, a run started
@@ -877,26 +422,18 @@ class SCFT:
         if len(self.angles_reduced_indices) > 0:
             self.prop_solver.set_force_off_diagonal_stress(True)
 
-        # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
-        # (C++ class) Anderson Mixing method for finding saddle point
-        optimizer = options.optimizer
-        if optimizer["name"] == "am":
-            self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
-                optimizer["max_hist"],     # maximum number of history
-                optimizer["start_error"],  # when switch to AM from simple mixing
-                optimizer["mix_min"],      # minimum mixing rate of simple mixing
-                optimizer["mix_init"])     # initial mixing rate of simple mixing
-
-        # (Python class) ADAM optimizer for finding saddle point
-        elif optimizer["name"] == "adam":
-            self.field_optimizer = Adam(total_grid = n_var,
-                lr = optimizer["lr"],
-                gamma = optimizer["gamma"])
-        else:
-            raise ValueError(f"Invalid optimizer name: {optimizer['name']}. Choose among 'am' and 'adam'.")
+        # Anderson mixing (C++ class) for the saddle-point iteration
+        optimizer = params["optimizer"]
+        if optimizer["name"] != "am":
+            raise ValueError(f"Invalid optimizer name: {optimizer['name']}. Only 'am' (Anderson mixing) is available.")
+        self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
+            optimizer["max_hist"],     # maximum number of history
+            optimizer["start_error"],  # when switch to AM from simple mixing
+            optimizer["mix_min"],      # minimum mixing rate of simple mixing
+            optimizer["mix_init"])     # initial mixing rate of simple mixing
 
         print("---------- Simulation Parameters ----------")
-        print("Platform :", platform)
+        print("Platform :", self.prop_solver.platform)
         print("Box Dimension: %d" % (self.prop_solver.dim))
         print("Nx:", self.prop_solver.nx)
         print("Lx [a, b, c]:", self.prop_solver.get_lx())
@@ -926,21 +463,20 @@ class SCFT:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.box_is_altering = options.box_is_altering
+        self.box_is_altering = params["box_is_altering"]
 
         # Stress computation interval: an integer (every N iterations) or
         # "adaptive" (more often while the error is high, see run()).
-        self.stress_interval = options.stress_interval
+        self.stress_interval = params.get("stress_interval", 1)
 
-        self.max_iter = options.max_iter
-        self.tolerance = options.tolerance
+        self.max_iter = params.get("max_iter", 2000)       # maximum number of iterations
+        self.tolerance = params.get("tolerance", 1e-8)     # stop when the self-consistency error is below this
 
         # FTS-consistent energy convention: pin the field means to the saddle point
         # so the SCFT free energy matches the field-theoretic Hamiltonian used in
         # L-FTS/CL-FTS (F_dis = -chi_N*(f-1/2)^2 for the disordered phase).
         # Off: mean = 0 convention (F_dis = 0 for the disordered phase).
-        self.fts_consistent_energy = options.fts_consistent_energy
-
+        self.fts_consistent_energy = params.get("fts_consistent_energy", False)
 
     # =========================================================================
     # Class Methods
@@ -964,19 +500,10 @@ class SCFT:
         -------
         SCFT
             Configured SCFT instance.
-
-        Examples
-        --------
-        >>> calc = SCFT.from_file("simulation.yaml")
-        >>> calc.run(initial_fields)
-
-        >>> # Override specific parameters
-        >>> calc = SCFT.from_file("base.yaml", max_iter=500, tolerance=1e-7)
         """
         params = load_config(path)
         params.update(overrides)
         return cls(params)
-
 
     def compute_concentrations(self, w, q_init=None):
         """Compute monomer concentration fields for given potential fields.
@@ -1008,51 +535,6 @@ class SCFT:
                 Time (seconds) for propagator computation.
             - 'phi' : float
                 Time (seconds) for concentration integration.
-
-        Notes
-        -----
-        **Propagator Computation:**
-
-        For each polymer chain, solves the modified diffusion equation:
-
-        .. math::
-            \\frac{\\partial q}{\\partial s} = \\frac{a^2}{6} \\nabla^2 q - w q
-
-        where q(r,s) is the chain propagator, a is the statistical segment
-        length, w(r) is the potential field, and s is the contour variable.
-
-        **Concentration Calculation:**
-
-        Monomer concentration at position r is computed by integrating
-        propagators over chain contours:
-
-        .. math::
-            \\phi_A(\\mathbf{r}) = \\frac{V}{Q} \\int_0^{\\alpha_A} ds \\, q(\\mathbf{r},s) q^\\dagger(\\mathbf{r},s)
-
-        where Q is the single-chain partition function, V is volume, and
-        q†(r,s) is the complementary propagator.
-
-        **Random Copolymers:**
-
-        For random copolymers, the effective field is computed as:
-
-        .. math::
-            w_{\\text{random}} = \\sum_i f_i w_i
-
-        where f_i is the fraction of monomer type i in the random copolymer.
-        Concentrations are then distributed to individual monomer types
-        according to these fractions.
-
-        **Performance:**
-
-        - Propagator computation dominates runtime (~95% of total).
-        - CUDA: ~0.5s for 32³ grid, 100 segments.
-        - CPU-FFTW: ~5s for 32³ grid, 100 segments.
-
-        See Also
-        --------
-        run : Main SCFT iteration loop that calls this method.
-        SCFT.solver.compute_propagators : C++ method for propagator computation.
         """
         M = len(self.monomer_types)
         elapsed_time = {}
@@ -1125,86 +607,6 @@ class SCFT:
         ------
         ValueError
             If file extension is not .mat, .json, or .yaml.
-
-        Notes
-        -----
-        **Saved Data Structure:**
-
-        The output file contains a dictionary with these keys:
-
-        - initial_params : dict
-            Original params dict passed to __init__.
-        - dim, nx, lx : int, list, list
-            Grid dimension, grid points, box sizes.
-        - monomer_types : list of str
-            Monomer type labels.
-        - chi_n : dict
-            Flory-Huggins interaction parameters.
-        - chain_model : str
-            'discrete' or 'continuous'.
-        - ds : float
-            Contour step size.
-        - eigenvalues : ndarray
-            Eigenvalues of interaction matrix (from field theory).
-        - matrix_a, matrix_a_inverse : ndarray
-            Eigenvector matrices for field transformations.
-        - w_{monomer_type} : ndarray
-            Potential field for each monomer type.
-        - phi_{monomer_type} : ndarray
-            Concentration field for each monomer type.
-        - space_group_symbol, space_group_hall_number : str, int (optional)
-            Space group information if symmetry constraints were used.
-
-        **File Formats:**
-
-        *MATLAB (.mat):*
-        - Binary format, compact, fast I/O
-        - Compatible with MATLAB and Python (scipy.io)
-        - Recommended for large datasets
-
-        *JSON (.json):*
-        - Text format, human-readable
-        - Easy to inspect and parse
-        - Larger file size than .mat
-
-        *YAML (.yaml):*
-        - Text format, most human-readable
-        - Preserves structure well
-        - Good for configuration files
-
-        **Loading Results:**
-
-        .. code-block:: python
-
-            # MATLAB format
-            import scipy.io
-            data = scipy.io.loadmat("scft_results.mat")
-            w_A = data["w_A"]
-            phi_A = data["phi_A"]
-
-            # JSON format
-            import json
-            with open("scft_results.json", "r") as f:
-                data = json.load(f)
-
-            # YAML format
-            import yaml
-            with open("scft_results.yaml", "r") as f:
-                data = yaml.safe_load(f)
-
-        See Also
-        --------
-        run : Main SCFT iteration that produces results to save.
-
-        Examples
-        --------
-        >>> # After running SCFT
-        >>> calc.run(initial_fields=w_init)
-        >>>
-        >>> # Save in different formats
-        >>> calc.save_results("lamellar.mat")    # MATLAB format
-        >>> calc.save_results("lamellar.json")   # JSON format
-        >>> calc.save_results("lamellar.yaml")   # YAML format
         """
         # Make a dictionary for chi_n
         chi_n_mat = {}
@@ -1271,47 +673,15 @@ class SCFT:
             raise ValueError("Invalid output file extension. Use .mat, .json, or .yaml.")
 
     # =========================================================================
-    # run() helpers
+    # run() helpers (used more than once, or long enough to stand on their own)
     # =========================================================================
-
-    def _initial_fields_to_working_basis(self, initial_fields):
-        """Stack the user's full-grid initial fields into the (M, n_grid) array
-        the optimizer works on. With a space group the fields are symmetrized
-        and converted to the irreducible basis."""
-        M = len(self.monomer_types)
-        if self.sg is not None:
-            w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
-            for i in range(M):
-                w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
-            w_full = self.sg.symmetrize(w_full)
-            w = self.sg.to_reduced_basis(w_full)
-            try:
-                w = self.sg.reduced_to_irreducible(w)
-            except Exception:
-                pass
-            return w
-        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
-        for i in range(M):
-            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
-        return w
-
-    def _initial_chi_phi_mean(self):
-        """χ·mean(φ) from the chain composition: mean(φ_i) = Σ_p f_p Σ_{blocks of type i} length."""
-        M = len(self.monomer_types)
-        phi_mean = np.zeros(M)
-        for polymer in self.distinct_polymers:
-            vf = polymer["volume_fraction"]
-            for block in polymer["blocks"]:
-                idx = self.monomer_types.index(block["type"])
-                phi_mean[idx] += vf * block["length"]
-        return self.matrix_chi @ phi_mean
 
     def _pin_field_means(self, w, chi_phi_mean, xi=0.0):
         """Normalize the field means in place (mean() works in the reduced basis
         when a space group is set).
 
         fts_consistent_energy: pin the means to the saddle point,
-        mean(w_i) = Σ_j χ_ij mean(φ_j) + ξ. For incompressible systems only the
+        mean(w_i) = sum_j chi_ij mean(phi_j) + xi. For incompressible systems only the
         P-projected mean is pinned; mean(W+) is a gauge freedom that P annihilates.
         Otherwise (mean = 0 convention) incompressible fields are shifted to zero
         mean and compressible fields are left as they are.
@@ -1332,83 +702,34 @@ class SCFT:
             for i in range(M):
                 w[i] -= self.prop_solver.mean(w[i])
 
-    def _compute_error_level(self, w, w_diff):
-        """Relative distance between input and output fields,
-        sqrt(Σ_i <w_diff_i²> / (1 + Σ_i <w_i²>))."""
-        error_level = 0.0
-        error_normal = 1.0  # add 1.0 to prevent divergence
-        for i in range(len(self.monomer_types)):
-            error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i])
-            error_normal += self.prop_solver.inner_product(w[i], w[i])
-        return np.sqrt(error_level/error_normal)
-
-    @staticmethod
-    def _angle_stress_map(dim):
-        """Angle index in [α, β, γ] -> index in the stress array.
-
-        Stress array layout: 3D [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα],
-        2D [dH/dL1, dH/dL2, dH/dγ, 0, 0, 0]."""
-        return {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
-
-    def _effective_stress_interval(self, error_level):
-        """Stress computation interval; "adaptive" computes the stress more often
-        while the error is high and less often as the box converges."""
-        if self.stress_interval == "adaptive":
-            if error_level > 1e-2:
-                return 1
-            elif error_level > 1e-4:
-                return 2
-            return 4
-        return self.stress_interval
-
-    def _stress_error_contribution(self, stress_array, dim):
-        """Norm of the stress components that are optimized: the box lengths of
-        the existing dimensions and, when angles are optimized, their derivatives."""
-        diagonal_stress = stress_array[0:dim]
-        angle_stress_map = self._angle_stress_map(dim)
-        angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
-        off_diagonal_stress = stress_array[angle_stress_indices] if angle_stress_indices else np.array([])
-        relevant_stress = np.concatenate([diagonal_stress, off_diagonal_stress])
-        return np.sqrt(np.sum(relevant_stress**2))
-
-    def _print_iteration(self, iter, mass_error, total_partitions, energy_total, error_level):
-        print("%8d %12.3E " % (iter, mass_error), end=" [ ")
-        for Q in total_partitions:
-            print("%13.7E " % (Q), end=" ")
-        print("] %15.9f %15.7E " % (energy_total, error_level), end=" " if self.box_is_altering else "\n")
-        if self.box_is_altering:
-            print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
-            if len(self.angles_reduced_indices) > 0:
-                print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")
-            print()
-
-    def _reduced_box_gradient(self, stress_array):
-        """-dH/dL for the independent box lengths. Lengths tied by the crystal
-        system (a = b, or a = b = c) use the averaged derivative."""
-        dlx_full = -stress_array[0:3]
-        crystal_system = getattr(self, 'crystal_system', None)   # not set when a space group fixes the system
-        if crystal_system == "Hexagonal2D":
-            return np.array([0.5 * (dlx_full[0] + dlx_full[1])])
-        if crystal_system == "Tetragonal" or (crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
-            return np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
-        if crystal_system == "Cubic":
-            return np.array([np.mean(dlx_full)])
-        return dlx_full[self.lx_reduced_indices]
-
     def _update_fields_and_box(self, w, w_diff, stress_array, old_error_level, error_level):
         """One optimizer step on the concatenated (fields, box lengths, angles)
         vector. Applies the new lattice parameters to the solver and returns the
         new fields. Length changes are limited to 10 % and angle changes to
-        5 degrees per step."""
+        5 degrees per step.
+        """
         M = len(self.monomer_types)
         dim = self.prop_solver.dim
 
-        dlx_reduced = self._reduced_box_gradient(stress_array)
-        # get_stress() returns +dH/d(parameter) for angles as well as lengths
-        # (the d(cosγ)/dγ = -sinγ factor is already applied in the C++
-        # compute_stress post-processing), so gradient descent uses the same
-        # negative sign as for the box lengths.
-        angle_stress_map = self._angle_stress_map(dim)
+        # -dH/dL for the independent box lengths; lengths tied by the crystal
+        # system (a = b, or a = b = c) use the averaged derivative
+        dlx_full = -stress_array[0:3]
+        crystal_system = getattr(self, 'crystal_system', None)   # not set when a space group fixes the system
+        if crystal_system == "Hexagonal2D":
+            dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
+        elif crystal_system == "Tetragonal" or (crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
+            dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
+        elif crystal_system == "Cubic":
+            dlx_reduced = np.array([np.mean(dlx_full)])
+        else:
+            dlx_reduced = dlx_full[self.lx_reduced_indices]
+
+        # Stress array layout: 3D [dH/dL1, dH/dL2, dH/dL3, dH/dgamma, dH/dbeta, dH/dalpha],
+        # 2D [dH/dL1, dH/dL2, dH/dgamma, 0, 0, 0]. get_stress() returns +dH/d(parameter)
+        # for angles as well as lengths (the d(cos gamma)/d gamma = -sin gamma factor is
+        # already applied in the C++ compute_stress post-processing), so gradient
+        # descent uses the same negative sign as for the box lengths.
+        angle_stress_map = {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
         dangle = -np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
 
         current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
@@ -1462,7 +783,7 @@ class SCFT:
 
         1. Computes monomer concentrations φ for current fields w
         2. Calculates self-consistency error and free energy
-        3. Updates fields using optimizer (Anderson Mixing or ADAM)
+        3. Updates fields using optimizer (Anderson mixing)
         4. Optionally adjusts box size to minimize stress (if box_is_altering=True)
 
         The iteration continues until the error_level falls below tolerance or
@@ -1499,152 +820,6 @@ class SCFT:
             Final convergence error (L2 norm of field residuals).
         iter : int
             Number of iterations performed.
-
-        Notes
-        -----
-        **SCFT Equations:**
-
-        The self-consistent field equations to be solved are:
-
-        .. math::
-            w_A(\\mathbf{r}) = \\sum_B \\chi_{AB} N_{\\text{ref}} \\phi_B(\\mathbf{r}) + \\xi(\\mathbf{r})
-
-            \\sum_A \\phi_A(\\mathbf{r}) = 1
-
-        where χ_AB is the Flory-Huggins parameter, N_Ref is the reference
-        polymerization index, and ξ(r) is a Lagrange multiplier field enforcing
-        incompressibility.
-
-        **Convergence Criterion:**
-
-        Iteration stops when:
-
-        .. math::
-            \\text{error\\_level} = \\sqrt{\\frac{\\sum_i \\langle (w_{\\text{new},i} - w_{\\text{old},i})^2 \\rangle}{1 + \\sum_i \\langle w_{\\text{old},i}^2 \\rangle}} < \\text{tolerance}
-
-        where <·> denotes spatial averaging and i ranges over monomer types.
-
-        **Free Energy:**
-
-        The free energy per volume is computed from the field-theoretic Hamiltonian:
-
-        .. math::
-            \\frac{\\beta F}{V} = -\\sum_p \\frac{\\phi_p}{\\alpha_p} \\ln Q_p + \\mathbf{w}^T \\mathbf{A}^{-1} \\mathbf{w}
-
-        where p indexes polymer types, φ_p is volume fraction, α_p is relative
-        chain length, Q_p is the single-chain partition function, and A is related
-        to the interaction matrix.
-
-        **Box Relaxation:**
-
-        If box_is_altering=True, the code simultaneously optimizes box dimensions
-        to minimize stress:
-
-        .. math::
-            \\sigma_{ij} = -\\frac{\\partial (\\beta F/V)}{\\partial L_{ij}}
-
-        Box size updates are restricted to |ΔL_x / L_x| < 0.1 per iteration for
-        stability.
-
-        **Optimization Algorithms:**
-
-        *Anderson Mixing:*
-        - Accelerates convergence by mixing history of previous iterations
-        - More robust for most polymer systems
-        - Parameters: mix_min, mix_init, max_hist, start_error
-
-        *ADAM:*
-        - Adaptive learning rate optimization
-        - Can be more stable for difficult cases
-        - Parameters: lr (learning rate), gamma (decay factor)
-
-        **Performance Tips:**
-
-        - Start with small mix_min/mix_init (0.01-0.1) for stability
-        - Use good initial guess (e.g., from similar parameters) for faster convergence
-        - For box relaxation, start with fixed box, then restart with box_is_altering=True
-        - CUDA is 10-20x faster than CPU for 2D/3D systems
-
-        **Common Issues:**
-
-        *Non-convergence:*
-        - Reduce mixing parameters (mix_min, mix_init)
-        - Try different optimizer (AM ↔ ADAM)
-        - Improve initial guess
-        - Check for phase coexistence (try different box sizes)
-
-        *Negative concentrations:*
-        - Reduce ds (contour step size)
-        - Check chi_n parameters are reasonable
-        - Indicates numerical instability
-
-        *Slow convergence:*
-        - Increase mixing parameters (if stable)
-        - Use better initial guess
-        - For symmetric systems, use space group symmetry
-
-        See Also
-        --------
-        compute_concentrations : Compute φ for given w.
-        save_results : Save converged results to file.
-        Adam : ADAM optimizer details.
-
-        Examples
-        --------
-        **Basic SCFT run:**
-
-        >>> import numpy as np
-        >>> from polymerfts import scft
-        >>>
-        >>> # Initialize (params defined earlier)
-        >>> calc = scft.SCFT(params)
-        >>>
-        >>> # Random initial fields
-        >>> nx_total = np.prod(params["nx"])
-        >>> w_init = {
-        ...     "A": 0.01 * np.random.normal(size=nx_total),
-        ...     "B": 0.01 * np.random.normal(size=nx_total)
-        ... }
-        >>>
-        >>> # Run SCFT
-        >>> calc.run(initial_fields=w_init)
-        >>>
-        >>> # Check convergence
-        >>> if calc.error_level < calc.tolerance:
-        ...     print(f"Converged in {calc.iter} iterations")
-        ...     print(f"Free energy: {calc.free_energy:.6f}")
-        ... else:
-        ...     print(f"Not converged after {calc.max_iter} iterations")
-
-        **Restarting from previous results:**
-
-        >>> # Load previous results
-        >>> import scipy.io
-        >>> data = scipy.io.loadmat("previous_run.mat")
-        >>>
-        >>> # Use previous fields as initial guess
-        >>> w_restart = {
-        ...     "A": data["w_A"].flatten(),
-        ...     "B": data["w_B"].flatten()
-        ... }
-        >>>
-        >>> # Run with new parameters
-        >>> calc_new = scft.SCFT(params_new)
-        >>> calc_new.run(initial_fields=w_restart)
-
-        **Box relaxation workflow:**
-
-        >>> # Step 1: Fixed box SCFT
-        >>> params["box_is_altering"] = False
-        >>> calc1 = scft.SCFT(params)
-        >>> calc1.run(initial_fields=w_init)
-        >>>
-        >>> # Step 2: Box relaxation from converged state
-        >>> params["box_is_altering"] = True
-        >>> calc2 = scft.SCFT(params)
-        >>> w_converged = {m: calc1.w[i] for i, m in enumerate(calc1.monomer_types)}
-        >>> calc2.run(initial_fields=w_converged)
-        >>> print(f"Optimized box: {calc2.prop_solver.get_lx()}")
         """
 
         M = len(self.monomer_types)
@@ -1660,27 +835,52 @@ class SCFT:
         print("iteration, mass error, total_partitions, energy_total, error_level", end="")
         print(", box size" if self.box_is_altering else "")
 
-        # Working fields: irreducible basis when a space group is set, full grid otherwise
-        w = self._initial_fields_to_working_basis(initial_fields)
-        self._pin_field_means(w, self._initial_chi_phi_mean() if self.fts_consistent_energy else None)
+        # ---- 1. Initial fields -> working array of shape (M, n_grid) ----
+        # With a space group the fields are symmetrized and converted to the irreducible basis.
+        if self.sg is not None:
+            w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
+            for i in range(M):
+                w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
+            w_full = self.sg.symmetrize(w_full)
+            w = self.sg.to_reduced_basis(w_full)
+            try:
+                w = self.sg.reduced_to_irreducible(w)
+            except Exception:
+                pass
+        else:
+            w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+            for i in range(M):
+                w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
+        # Normalize the initial field means. With fts_consistent_energy the target is
+        # chi N . mean(phi) from the chain composition: mean(phi_i) = sum_p f_p sum_{blocks of type i} length
+        if self.fts_consistent_energy:
+            phi_mean = np.zeros(M)
+            for polymer in self.distinct_polymers:
+                for block in polymer["blocks"]:
+                    phi_mean[self.monomer_types.index(block["type"])] += polymer["volume_fraction"] * block["length"]
+            self._pin_field_means(w, self.matrix_chi @ phi_mean)
+        else:
+            self._pin_field_means(w, None)
+
+        # ---- 2. Iteration ----
+        # Stress array layout: 3D [dH/dL1, dH/dL2, dH/dL3, dH/dgamma, dH/dbeta, dH/dalpha],
+        # 2D [dH/dL1, dH/dL2, dH/dgamma, 0, 0, 0]; the angle index in [alpha, beta, gamma]
+        # maps to the stress index through angle_stress_map
+        dim = self.prop_solver.dim
+        angle_stress_map = {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
+        angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
         stress_array = None
         time_iter_start = time.time()
         for iter in range(1, self.max_iter+1):
 
-            # Compute total concentration for each monomer type
+            # Concentrations for the current fields
             phi, runtime_info = self.compute_concentrations(w, q_init=q_init)
             if runtime_info.get("partition_ok", 1.0) < 0.5:
-                logger.warning(
-                    "Partition consistency check reported a mismatch at iteration %d (method=%s).",
-                    iter,
-                    self.prop_solver.numerical_method,
-                )
+                print(f"Warning: partition consistency check reported a mismatch at iteration {iter}.")
 
-            # Convert monomer fields to auxiliary fields
+            # Total energy from the auxiliary fields and the partition functions
             w_aux = self.mpt.to_aux_fields(w)
-
-            # Calculate the total energy
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
             if self.sg is not None and self.sg.get_n_reduced_basis_full() != self.sg.get_n_reduced_basis():
                 w_aux_energy = self.sg.irreducible_to_reduced(w_aux)
@@ -1694,7 +894,7 @@ class SCFT:
                 include_const_term=False
             )
 
-            # Calculate difference between current total density and target density
+            # Deviation of the total density from 1
             phi_total = sum(phi[m] for m in self.monomer_types)
             phi_diff = phi_total - 1.0
 
@@ -1707,19 +907,45 @@ class SCFT:
             for i in range(M):
                 w_diff[i] -= self.prop_solver.mean(w_diff[i])
 
+            # Error level: relative distance between the input and output fields,
+            # sqrt( sum_i <w_diff_i^2> / (1 + sum_i <w_i^2>) )
             old_error_level = error_level
-            error_level = self._compute_error_level(w, w_diff)
+            error_level = 0.0
+            error_normal = 1.0  # add 1.0 to prevent divergence
+            for i in range(M):
+                error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i])
+                error_normal += self.prop_solver.inner_product(w[i], w[i])
+            error_level = np.sqrt(error_level/error_normal)
             mass_error = self.prop_solver.mean(phi_diff)
 
             if self.box_is_altering:
-                # The stress costs ~30 % of an iteration; compute it every
-                # stress_interval iterations and reuse it in between.
-                if (iter == 1) or (iter % self._effective_stress_interval(error_level) == 0):
+                # The stress costs ~30 % of an iteration: compute it every stress_interval
+                # iterations ("adaptive": every 1, 2 or 4 as the error drops) and reuse it in between
+                if self.stress_interval == "adaptive":
+                    stress_interval = 1 if error_level > 1e-2 else (2 if error_level > 1e-4 else 4)
+                else:
+                    stress_interval = self.stress_interval
+                if (iter == 1) or (iter % stress_interval == 0):
                     self.prop_solver.compute_stress()
                     stress_array = np.array(self.prop_solver.get_stress())
-                error_level += self._stress_error_contribution(stress_array, self.prop_solver.dim)
+                # The stress components being optimized (box lengths of the existing
+                # dimensions and, if active, the angles) count towards the error
+                relevant_stress = np.concatenate([stress_array[0:dim],
+                                                  stress_array[angle_stress_indices] if angle_stress_indices else np.array([])])
+                error_level += np.sqrt(np.sum(relevant_stress**2))
 
-            self._print_iteration(iter, mass_error, total_partitions, energy_total, error_level)
+            # Print this iteration
+            print("%8d %12.3E " % (iter, mass_error), end=" [ ")
+            for Q in total_partitions:
+                print("%13.7E " % (Q), end=" ")
+            if self.box_is_altering:
+                print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
+                print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
+                if len(self.angles_reduced_indices) > 0:
+                    print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")
+                print()
+            else:
+                print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # Call progress callback if provided
             if on_iteration is not None:
@@ -1736,7 +962,7 @@ class SCFT:
                 )
                 callback_result = on_iteration(info)
                 if callback_result is False:
-                    logger.info(f"Iteration stopped by callback at iteration {iter}")
+                    print(f"Iteration stopped by callback at iteration {iter}")
                     break
 
             # Conditions to end the iteration

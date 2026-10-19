@@ -75,9 +75,15 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 # spglib: space group symmetry. SpaceGroup.cpp is always compiled and includes
 # spglib.h, so a missing spglib must stop configuration here rather than
 # failing mid-compile.
+# Libraries are always linked by absolute path (pkg-config's *_LINK_LIBRARIES,
+# find_library results): the generated link commands must not depend on
+# LIBRARY_PATH or -L directories that happen to be set in the developer's shell.
 FIND_PACKAGE(PkgConfig QUIET)
 IF(PkgConfig_FOUND)
     PKG_CHECK_MODULES(SPGLIB QUIET spglib)
+    IF(SPGLIB_FOUND)
+        SET(SPGLIB_LIBRARIES "${SPGLIB_LINK_LIBRARIES}")
+    ENDIF()
 ENDIF()
 IF(NOT SPGLIB_FOUND)
     FIND_LIBRARY(SPGLIB_LIBRARIES NAMES symspg spglib HINTS ENV SPGLIB_ROOT PATH_SUFFIXES lib lib64)
@@ -157,6 +163,9 @@ SET(BUILD_CPU_FFTW_LIB FALSE)
 IF(POLYMERFTS_USE_FFTW)
     IF(PkgConfig_FOUND)
         PKG_CHECK_MODULES(FFTW3 QUIET fftw3)
+        IF(FFTW3_FOUND)
+            SET(FFTW3_LIBRARIES "${FFTW3_LINK_LIBRARIES}")
+        ENDIF()
     ENDIF()
     IF(NOT FFTW3_FOUND)
         FIND_LIBRARY(FFTW3_LIBRARIES NAMES fftw3 HINTS ENV FFTW_ROOT PATH_SUFFIXES lib lib64)
@@ -173,18 +182,6 @@ IF(POLYMERFTS_USE_FFTW)
     SET(BUILD_CPU_FFTW_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
-    # Put the FFTW library directory on the linker search path so short-form
-    # (-lfftw3) references from pkg-config resolve without relying on
-    # LIBRARY_PATH in the shell.
-    IF(FFTW3_LIBRARY_DIRS)
-        LINK_DIRECTORIES(${FFTW3_LIBRARY_DIRS})
-    ENDIF()
-    FOREACH(_fftw_lib ${FFTW3_LIBRARIES})
-        IF(EXISTS "${_fftw_lib}")
-            GET_FILENAME_COMPONENT(_fftw_dir "${_fftw_lib}" DIRECTORY)
-            LINK_DIRECTORIES(${_fftw_dir})
-        ENDIF()
-    ENDFOREACH()
 
     MESSAGE(WARNING
         "================================================================================\n"
@@ -265,25 +262,34 @@ ENDIF()
 
 IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     ENABLE_LANGUAGE(CUDA)
+    MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: ${CUDAToolkit_TARGET_DIR}")
+
+    # A developer's shell often exports the toolkit directories in
+    # CPLUS_INCLUDE_PATH and LIBRARY_PATH (e.g. `module load cuda`). CMake then
+    # records them as compiler-implicit directories and omits the -I flag for
+    # cufft.h in host code and the -L flag the CUDA runtime (-lcudart_static,
+    # -lcudadevrt) needs, so the generated build only works inside that shell.
+    # Remove the toolkit directories from the implicit lists so the flags are
+    # always emitted and the build tree is self-contained.
+    GET_FILENAME_COMPONENT(_cuda_root "${CUDAToolkit_TARGET_DIR}" REALPATH)
+    FOREACH(_dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+        GET_FILENAME_COMPONENT(_real "${_dir}" REALPATH)
+        STRING(FIND "${_real}" "${_cuda_root}" _pos)
+        IF(_pos EQUAL 0)
+            LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${_dir}")
+        ENDIF()
+    ENDFOREACH()
+    FOREACH(_dir ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
+        GET_FILENAME_COMPONENT(_real "${_dir}" REALPATH)
+        STRING(FIND "${_real}" "${_cuda_root}" _pos)
+        IF(_pos EQUAL 0)
+            LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "${_dir}")
+        ENDIF()
+    ENDFOREACH()
+
     # Host-compiled sources (PlatformSelector.cpp, the pybind module, tests)
     # include cufft.h, so the toolkit headers go on the C++ include path too.
-    # CMake drops -I flags for directories it believes the compiler searches
-    # implicitly; if CPLUS_INCLUDE_PATH contained the CUDA include directory at
-    # configure time, the flag would be silently omitted and the build would
-    # depend on that environment variable. Remove the directory from the
-    # implicit list so the flag is always emitted.
-    FOREACH(_cuda_inc ${CUDAToolkit_INCLUDE_DIRS})
-        GET_FILENAME_COMPONENT(_cuda_inc_real "${_cuda_inc}" REALPATH)
-        LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${_cuda_inc}" "${_cuda_inc_real}")
-    ENDFOREACH()
-    MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: include ${CUDAToolkit_INCLUDE_DIRS}")
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
-    # Put the CUDA toolkit library directory on the linker search path so the
-    # static runtime references (-lcudart_static, -lcudadevrt) resolve without
-    # relying on LIBRARY_PATH in the shell (e.g. from `module load cuda`).
-    IF(CUDAToolkit_LIBRARY_DIR)
-        LINK_DIRECTORIES(${CUDAToolkit_LIBRARY_DIR})
-    ENDIF()
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
@@ -330,11 +336,13 @@ ADD_LIBRARY(factory
 # ============================================================================
 #  Python module (pybind11)
 # ============================================================================
-FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development NumPy REQUIRED)
+# Development.Module (not Development): an extension module needs the headers
+# but no libpython to embed, which some environments (manylinux, venvs) lack.
+# pybind11/numpy.h talks to NumPy through its Python API, so no NumPy headers.
+FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development.Module REQUIRED)
 FIND_PACKAGE(pybind11 2.13 REQUIRED)
 
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
 ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)

@@ -1,50 +1,6 @@
-"""
-PropagatorSolver - A simple interface for polymer propagator calculations.
-
-This module provides a user-friendly wrapper around the low-level factory-based
-API, hiding implementation details from users who are not familiar with
-programming patterns like abstract factories.
-
-Example usage:
-
-    from polymerfts import PropagatorSolver
-    import numpy as np
-
-    # Create a solver for 1D problem with reflecting boundaries
-    solver = PropagatorSolver(
-        nx=[64], lx=[4.0],
-        ds=0.01,
-        bond_lengths={"A": 1.0},
-        bc=["reflecting", "reflecting"],
-        chain_model="continuous",
-        numerical_method="rqm4",  # optional, defaults to "rqm4"
-        platform="cpu-mkl"
-    )
-
-    # For discrete chain model, numerical_method is not needed
-    # (discrete chain has its own solver)
-    solver_discrete = PropagatorSolver(
-        nx=[32, 32, 32], lx=[4.0, 4.0, 4.0],
-        ds=0.01,
-        bond_lengths={"A": 1.0, "B": 1.0},
-        bc=["periodic"] * 6,
-        chain_model="discrete"
-    )
-
-    # Add a homopolymer
-    solver.add_polymer(volume_fraction=1.0, blocks=[["A", 1.0, 0, 1]])
-
-    # Compute all propagators
-    solver.compute_propagators({"A": np.zeros(64)})
-
-    # Get propagator at specific contour position
-    q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
-
-    # Get partition function
-    Q = solver.get_partition_function(polymer=0)
-
-    # Compute and get concentrations
-    phi_A = solver.get_concentration("A")
+"""PropagatorSolver: chain propagators, partition functions and concentrations
+for a given set of potential fields, without touching the C++ factory API.
+Used directly in the tutorials and by SCFT, LFTS and CLFTS.
 """
 
 from __future__ import annotations
@@ -57,106 +13,52 @@ from . import _core
 
 
 class PropagatorSolver:
-    """
-    High-level interface for polymer propagator calculations.
+    """Propagator computation for a polymer system on a grid.
 
-    This class provides a simplified API for computing chain propagators
-    using either pseudo-spectral (FFT/DCT/DST) or real-space (Crank-Nicolson)
-    methods. It automatically handles platform selection and hides the
-    factory pattern from users.
+    Create the solver, add the polymers with add_polymer(), then call
+    compute_propagators(w) and read get_propagator(), get_partition_function()
+    and get_concentration(). The C++ objects are created on first use.
 
     Parameters
     ----------
-    nx : list of int
-        Number of grid points in each dimension. Length determines dimensionality.
-    lx : list of float
-        Box size in each dimension.
+    nx, lx : list
+        Grid points and box lengths per dimension (1D, 2D or 3D).
     ds : float
-        Contour step size for chain discretization (e.g., 0.01 for N=100 segments).
+        Contour step (1/N).
     bond_lengths : dict
-        Statistical segment lengths for each monomer type, e.g., {"A": 1.0, "B": 1.0}.
+        Statistical segment length per monomer type, e.g. {"A": 1.0, "B": 1.0}.
     bc : list of str
-        Boundary conditions. Format depends on dimensionality:
-        - 1D: [x_low, x_high]
-        - 2D: [x_low, x_high, y_low, y_high]
-        - 3D: [x_low, x_high, y_low, y_high, z_low, z_high]
-        Options: "periodic", "reflecting", "absorbing"
+        Boundary conditions, two per dimension in the order
+        [x_low, x_high, y_low, y_high, z_low, z_high]: "periodic",
+        "reflecting" or "absorbing".
     chain_model : str
-        Chain model type: "continuous" or "discrete".
+        "continuous" or "discrete".
     numerical_method : str, optional
-        Numerical algorithm for propagator computation.
-        Only applicable for continuous chain model (default: 'rqm4'):
-        - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation
-        - "rk2": Pseudo-spectral with 2nd-order operator splitting
-        - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
-        Note: Discrete chain model has its own solver; this parameter is ignored.
+        "rqm4" (default), "rk2" or "cn-adi2"; continuous chains only.
     platform : str, optional
-        Computational platform (default: "auto"):
-        - "auto": Auto-select (cpu-mkl for 1D, cuda for 2D/3D if available)
-        - "cuda": NVIDIA GPU with cuFFT
-        - "cpu-mkl": CPU with Intel MKL
-        - "cpu-fftw": CPU with FFTW
+        "cuda", "cpu-mkl", "cpu-fftw" or "auto" (CPU for 1D, CUDA for 2D/3D).
     reduce_memory : bool
-        If True, store only propagator checkpoints instead of full histories,
-        recomputing propagators as needed. Reduces memory usage but increases
-        computation time by 2-4x.
-    mask : numpy.ndarray, optional
-        Mask array defining accessible (1) and impenetrable (0) regions.
-        After each propagation step, the propagator is multiplied by the mask.
-        Useful for simulating polymers around nanoparticles or in confined geometries.
+        Store propagator checkpoints only (less memory, 2-4x slower).
+    mask : ndarray, optional
+        Accessible-volume mask on the full grid (1 inside, 0 impenetrable).
     space_group : SpaceGroup, optional
-        Space group symmetry for reduced basis representation.
-
-    Attributes
-    ----------
-    nx : list of int
-        Grid dimensions
-    lx : list of float
-        Box dimensions
-    dim : int
-        Number of spatial dimensions
-    n_grid : int
-        Total number of grid points
+        Space group for the reduced-basis computation.
+    angles : list of float, optional
+        Lattice angles [alpha, beta, gamma] in degrees.
+    aggregate_propagator_computation : bool
+        Let the optimizer merge equivalent propagators (default True).
+    field_type : str
+        "real" or "complex" fields.
 
     Examples
     --------
-    Simple 1D propagator with reflecting boundaries (continuous chain):
-
-    >>> solver = PropagatorSolver(
-    ...     nx=[64], lx=[4.0],
-    ...     ds=0.01,
-    ...     bond_lengths={"A": 1.0},
-    ...     bc=["reflecting", "reflecting"],
-    ...     chain_model="continuous",
-    ...     numerical_method="rqm4",
-    ...     platform="cpu-fftw"
-    ... )
+    >>> solver = PropagatorSolver(nx=[64], lx=[4.0], ds=0.01, bond_lengths={"A": 1.0},
+    ...                           bc=["reflecting", "reflecting"], chain_model="continuous",
+    ...                           platform="cpu-mkl")
     >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
     >>> solver.compute_propagators({"A": np.zeros(64)})
     >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
     >>> Q = solver.get_partition_function(polymer=0)
-
-    Discrete chain model (numerical_method not needed):
-
-    >>> solver = PropagatorSolver(
-    ...     nx=[32, 32, 32], lx=[4.0, 4.0, 4.0],
-    ...     ds=0.01,
-    ...     bond_lengths={"A": 1.0, "B": 1.0},
-    ...     bc=["periodic"] * 6,
-    ...     chain_model="discrete"
-    ... )
-
-    2D thin film with real-space CN-ADI2 method (continuous only):
-
-    >>> solver = PropagatorSolver(
-    ...     nx=[32, 24], lx=[4.0, 3.0],
-    ...     ds=0.01,
-    ...     bond_lengths={"A": 1.0},
-    ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
-    ...     chain_model="continuous",
-    ...     numerical_method="cn-adi2",
-    ...     platform="cuda"
-    ... )
     """
 
     # Map numerical methods to solver types
@@ -184,8 +86,9 @@ class PropagatorSolver:
 
         ``angles`` (lattice angles in degrees), ``aggregate_propagator_computation``
         (let the optimizer merge equivalent propagators) and ``field_type``
-        (``"real"`` or ``"complex"`` fields) are optional; see
-        :meth:`from_spec` for building a solver from a :class:`SystemSpec`.
+        (``"real"`` or ``"complex"`` fields) are optional. After construction,
+        add the polymers with :meth:`add_polymer`; the C++ objects are created
+        on first use.
         """
 
         # Store grid parameters
@@ -278,7 +181,8 @@ class PropagatorSolver:
         """Return (method, numerical_method) for the chain model.
 
         The discrete chain model has its own bond-convolution solver and ignores
-        ``numerical_method``; continuous chains default to RQM4."""
+        ``numerical_method``; continuous chains default to RQM4.
+        """
         if chain_model == "discrete":
             if numerical_method is not None:
                 print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
@@ -297,7 +201,8 @@ class PropagatorSolver:
     def _auto_platform(dim):
         """Platform for ``platform="auto"``: CPU for 1D (GPU overhead outweighs
         the gain), CUDA for 2D/3D when available, otherwise the first CPU
-        backend of this build."""
+        backend of this build.
+        """
         avail = _core.PlatformSelector.avail_platforms()
         cpu_platforms = [p for p in avail if p.startswith("cpu")]
         if dim == 1 and cpu_platforms:
@@ -315,7 +220,8 @@ class PropagatorSolver:
         platforms, verified against each other to machine precision in 1D/2D/3D
         for continuous and discrete chains. Mixing periodic with non-periodic
         directions is not supported by the spectral transform, so it fails
-        loudly instead of silently switching solvers."""
+        loudly instead of silently switching solvers.
+        """
         bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(b in ["reflecting", "absorbing"] for b in bc_lower)
         has_periodic = any(b == "periodic" for b in bc_lower)
@@ -335,57 +241,6 @@ class PropagatorSolver:
                 "solver (continuous chains only), or use uniform boundary "
                 "conditions in all directions."
             )
-
-    @classmethod
-    def from_spec(
-        cls,
-        spec: "SystemSpec",
-        space_group: Optional[Any] = None,
-        mask: Optional[NDArray[np.floating]] = None,
-        field_type: str = "real",
-    ) -> "PropagatorSolver":
-        """Build a fully initialized solver from a validated :class:`SystemSpec`.
-
-        This is the constructor used by :class:`SCFT`, :class:`LFTS` and
-        :class:`CLFTS`: it creates the solver, adds every polymer of the spec
-        (including grafting-point initial conditions) and initializes the
-        C++ propagator computation, so no private member has to be touched.
-
-        Parameters
-        ----------
-        spec : SystemSpec
-            Output of :func:`polymerfts.parse_system`.
-        space_group : SpaceGroup, optional
-            Space group for the reduced-basis computation.
-        mask : ndarray, optional
-            Accessible-volume mask on the full grid.
-        field_type : {"real", "complex"}
-            Field type; CL-FTS uses complex fields.
-        """
-        solver = cls(
-            nx=list(spec.grid.nx),
-            lx=list(spec.grid.lx),
-            ds=spec.chain.ds,
-            bond_lengths=spec.chain.segment_lengths,
-            bc=list(spec.grid.bc),
-            chain_model=spec.chain.model,
-            numerical_method=spec.chain.numerical_method,
-            platform=spec.platform,
-            reduce_memory=spec.reduce_memory,
-            mask=mask,
-            space_group=space_group,
-            angles=list(spec.grid.angles) if spec.grid.angles is not None else None,
-            aggregate_propagator_computation=spec.aggregate_propagator_computation,
-            field_type=field_type,
-        )
-        for polymer in spec.polymers:
-            solver.add_polymer(
-                polymer["volume_fraction"],
-                polymer["blocks_input"],
-                polymer.get("initial_conditions", None),
-            )
-        solver._initialize_solver()
-        return solver
 
     # -------------------- Access to the underlying C++ objects --------------------
 
@@ -439,8 +294,7 @@ class PropagatorSolver:
         blocks: List[List[Union[str, float, int]]],
         grafting_points: Optional[Dict[int, str]] = None
     ) -> None:
-        """
-        Add a polymer species to the system.
+        """Add a polymer species to the system.
 
         Parameters
         ----------
@@ -459,20 +313,6 @@ class PropagatorSolver:
             Custom initial conditions for specific nodes.
             Keys are node indices (int), values are string labels for q_init.
             Example: {0: "G"} means node 0 uses q_init["G"] as initial condition.
-
-        Examples
-        --------
-        Add an AB diblock copolymer:
-
-        >>> solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
-
-        Add a homopolymer:
-
-        >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
-
-        Add a homopolymer with grafting point at node 0:
-
-        >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]], grafting_points={0: "G"})
         """
         if self._propagator_computation is not None:
             raise RuntimeError(
@@ -529,8 +369,7 @@ class PropagatorSolver:
         w_fields: Dict[str, NDArray[np.floating]],
         q_init: Optional[Dict[str, NDArray[np.floating]]] = None
     ) -> None:
-        """
-        Compute all chain propagators for the given potential fields.
+        """Compute all chain propagators for the given potential fields.
 
         This must be called after adding polymers. It computes all chain
         propagators using the specified potential fields.
@@ -546,20 +385,6 @@ class PropagatorSolver:
             Keys are string labels matching those in grafting_points.
             Values are numpy arrays of shape matching the grid.
             Example: {"G": delta_function_array}
-
-        Examples
-        --------
-        Compute propagators with zero fields:
-
-        >>> solver.compute_propagators({"A": np.zeros(64)})
-
-        Compute propagators for AB diblock:
-
-        >>> solver.compute_propagators({"A": w_A, "B": w_B})
-
-        Compute propagators with custom initial condition:
-
-        >>> solver.compute_propagators({"A": w_A}, q_init={"G": q_init_array})
         """
         self._initialize_solver()
 
@@ -583,8 +408,7 @@ class PropagatorSolver:
         self._fields_set = True
 
     def get_propagator(self, polymer: int, v: int, u: int, step: int) -> NDArray[np.floating]:
-        """
-        Get the chain propagator at a specific contour position.
+        """Get the chain propagator at a specific contour position.
 
         Parameters
         ----------
@@ -601,12 +425,6 @@ class PropagatorSolver:
         -------
         numpy.ndarray
             Propagator field q(r, s) at the specified contour position.
-
-        Examples
-        --------
-        Get propagator at step 50 for a homopolymer:
-
-        >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
         """
         if not self._fields_set:
             raise RuntimeError(
@@ -616,8 +434,7 @@ class PropagatorSolver:
         return self._propagator_computation.get_chain_propagator(polymer, v, u, step)
 
     def get_partition_function(self, polymer: int) -> float:
-        """
-        Get the single-chain partition function.
+        """Get the single-chain partition function.
 
         Parameters
         ----------
@@ -628,10 +445,6 @@ class PropagatorSolver:
         -------
         float
             Partition function Q for the specified polymer.
-
-        Examples
-        --------
-        >>> Q = solver.get_partition_function(polymer=0)
         """
         if not self._fields_set:
             raise RuntimeError(
@@ -641,8 +454,7 @@ class PropagatorSolver:
         return self._propagator_computation.get_total_partition(polymer)
 
     def check_total_partition(self) -> bool:
-        """
-        Check forward/backward partition function consistency.
+        """Check forward/backward partition function consistency.
 
         Returns
         -------
@@ -656,17 +468,10 @@ class PropagatorSolver:
         return bool(self._propagator_computation.check_total_partition())
 
     def compute_concentrations(self) -> None:
-        """
-        Compute ensemble-averaged concentrations.
+        """Compute ensemble-averaged concentrations.
 
         Must be called after compute_propagators(). Computes the segment density
         for each monomer type.
-
-        Examples
-        --------
-        >>> solver.compute_propagators({"A": w_A, "B": w_B})
-        >>> solver.compute_concentrations()
-        >>> phi_A = solver.get_concentration("A")
         """
         if not self._fields_set:
             raise RuntimeError(
@@ -676,8 +481,7 @@ class PropagatorSolver:
         self._propagator_computation.compute_concentrations()
 
     def get_concentration(self, monomer_type: str) -> NDArray[np.floating]:
-        """
-        Get the total concentration for a monomer type.
+        """Get the total concentration for a monomer type.
 
         Must be called after compute_concentrations().
 
@@ -690,11 +494,6 @@ class PropagatorSolver:
         -------
         numpy.ndarray
             Concentration field phi(r) for the specified monomer type.
-
-        Examples
-        --------
-        >>> solver.compute_concentrations()
-        >>> phi_A = solver.get_concentration("A")
         """
         if not self._fields_set:
             raise RuntimeError(
@@ -704,8 +503,7 @@ class PropagatorSolver:
         return self._propagator_computation.get_total_concentration(monomer_type)
 
     def get_grid_points(self) -> Tuple[NDArray[np.floating], ...]:
-        """
-        Get the coordinates of grid points.
+        """Get the coordinates of grid points.
 
         Returns
         -------
@@ -713,13 +511,6 @@ class PropagatorSolver:
             Coordinate arrays for each dimension. For 1D returns (x,),
             for 2D returns (x, y), for 3D returns (x, y, z).
             Each array has shape matching the grid.
-
-        Examples
-        --------
-        Get coordinates for a 2D grid:
-
-        >>> x, y = solver.get_grid_points()
-        >>> r_squared = x**2 + y**2
         """
         coords = []
         for d in range(self.dim):
@@ -743,8 +534,7 @@ class PropagatorSolver:
         center: Optional[List[float]] = None,
         sigma: float = 0.4
     ) -> NDArray[np.floating]:
-        """
-        Create a Gaussian initial condition for the propagator.
+        """Create a Gaussian initial condition for the propagator.
 
         Parameters
         ----------
@@ -760,16 +550,6 @@ class PropagatorSolver:
             Gaussian field with unit peak amplitude (NOT normalized to unit
             integral; divide by `np.sum(q) * solver.get_dv()` if a normalized
             distribution is needed).
-
-        Examples
-        --------
-        Create centered Gaussian:
-
-        >>> q_init = solver.gaussian_initial_condition()
-
-        Create off-center Gaussian:
-
-        >>> q_init = solver.gaussian_initial_condition(center=[1.0, 2.0])
         """
         if center is None:
             center = [L / 2 for L in self.lx]
@@ -782,8 +562,7 @@ class PropagatorSolver:
         return np.exp(-r_squared / (2 * sigma**2))
 
     def get_dv(self) -> float:
-        """
-        Get the volume element (grid cell volume).
+        """Get the volume element (grid cell volume).
 
         This is useful for normalizing delta-function initial conditions.
 
@@ -791,14 +570,6 @@ class PropagatorSolver:
         -------
         float
             Volume of each grid cell: dv = (Lx/Nx) * (Ly/Ny) * ...
-
-        Examples
-        --------
-        Create normalized delta function at origin:
-
-        >>> dv = solver.get_dv()
-        >>> q_init = np.zeros(solver.nx)
-        >>> q_init[0, 0, 0] = 1.0 / dv  # Normalized delta function
         """
         dv = 1.0
         for i in range(self.dim):
@@ -807,8 +578,7 @@ class PropagatorSolver:
 
     @property
     def n_grid(self):
-        """
-        Number of grid points for field operations.
+        """Number of grid points for field operations.
 
         Returns n_reduced when space group is set on the propagator
         computation, otherwise returns total_grid.
@@ -824,8 +594,7 @@ class PropagatorSolver:
 
     @property
     def total_grid(self):
-        """
-        Total number of grid points (always full grid, ignoring space group).
+        """Total number of grid points (always full grid, ignoring space group).
 
         Returns
         -------
@@ -836,8 +605,7 @@ class PropagatorSolver:
 
     @property
     def info(self):
-        """
-        Get a summary of the solver configuration.
+        """Get a summary of the solver configuration.
 
         Returns
         -------
@@ -867,8 +635,7 @@ class PropagatorSolver:
     # -------------------- Box operations --------------------
 
     def get_volume(self) -> float:
-        """
-        Get the total volume of the simulation box.
+        """Get the total volume of the simulation box.
 
         Returns
         -------
@@ -879,8 +646,7 @@ class PropagatorSolver:
         return self._computation_box.get_volume()
 
     def integral(self, field: NDArray[np.floating]) -> float:
-        """
-        Compute the volume integral of a field.
+        """Compute the volume integral of a field.
 
         Parameters
         ----------
@@ -897,8 +663,7 @@ class PropagatorSolver:
         return self._computation_box.integral(field_use)
 
     def mean(self, field: NDArray[np.floating]) -> float:
-        """
-        Compute the spatial average (mean) of a field.
+        """Compute the spatial average (mean) of a field.
 
         Parameters
         ----------
@@ -919,8 +684,7 @@ class PropagatorSolver:
         field1: NDArray[np.floating],
         field2: NDArray[np.floating]
     ) -> float:
-        """
-        Compute the inner product of two fields.
+        """Compute the inner product of two fields.
 
         Parameters
         ----------
@@ -945,8 +709,7 @@ class PropagatorSolver:
         fields1: NDArray[np.floating],
         fields2: NDArray[np.floating]
     ) -> float:
-        """
-        Compute the inner product of multiple field pairs.
+        """Compute the inner product of multiple field pairs.
 
         Parameters
         ----------
@@ -968,8 +731,7 @@ class PropagatorSolver:
         return self._computation_box.multi_inner_product(n_fields, fields1_use, fields2_use)
 
     def zero_mean(self, field: NDArray[np.floating]) -> None:
-        """
-        Subtract the spatial mean from a field in-place.
+        """Subtract the spatial mean from a field in-place.
 
         Parameters
         ----------
@@ -1018,8 +780,7 @@ class PropagatorSolver:
         return fields
 
     def set_lx(self, lx: List[float]) -> None:
-        """
-        Update the box dimensions.
+        """Update the box dimensions.
 
         Parameters
         ----------
@@ -1031,8 +792,7 @@ class PropagatorSolver:
         self.lx = list(lx)
 
     def set_lattice_parameters(self, lx: List[float], angles: List[float]) -> None:
-        """
-        Update the lattice parameters (box dimensions and angles).
+        """Update the lattice parameters (box dimensions and angles).
 
         Parameters
         ----------
@@ -1063,8 +823,7 @@ class PropagatorSolver:
     # -------------------- Stress computation --------------------
 
     def compute_stress(self) -> None:
-        """
-        Compute the stress tensor for box relaxation.
+        """Compute the stress tensor for box relaxation.
 
         Must be called after compute_propagators().
         """
@@ -1075,8 +834,7 @@ class PropagatorSolver:
         self._propagator_computation.compute_stress()
 
     def get_stress(self) -> List[float]:
-        """
-        Get the computed stress tensor.
+        """Get the computed stress tensor.
 
         Must be called after compute_stress().
 
@@ -1094,8 +852,7 @@ class PropagatorSolver:
         return self._propagator_computation.get_stress()
 
     def update_laplacian_operator(self) -> None:
-        """
-        Update the Laplacian operator after changing box dimensions.
+        """Update the Laplacian operator after changing box dimensions.
 
         Must be called after set_lattice_parameters() when using pseudospectral method.
         """
@@ -1105,8 +862,7 @@ class PropagatorSolver:
     # -------------------- Space Group / Reduced Basis --------------------
 
     def to_reduced_basis(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
-        """
-        Convert full grid field to reduced basis.
+        """Convert full grid field to reduced basis.
 
         Parameters
         ----------
@@ -1120,14 +876,13 @@ class PropagatorSolver:
         """
         if self._space_group is None:
             raise RuntimeError(
-                "Space group not set. Pass space_group= to PropagatorSolver() or from_spec()."
+                "Space group not set. Pass space_group= to PropagatorSolver()."
             )
         field_2d = np.reshape(field, (1, -1))
         return self._space_group.to_reduced_basis(field_2d)[0]
 
     def from_reduced_basis(self, field_reduced: NDArray[np.floating]) -> NDArray[np.floating]:
-        """
-        Convert reduced basis field to full grid.
+        """Convert reduced basis field to full grid.
 
         Parameters
         ----------
@@ -1141,7 +896,7 @@ class PropagatorSolver:
         """
         if self._space_group is None:
             raise RuntimeError(
-                "Space group not set. Pass space_group= to PropagatorSolver() or from_spec()."
+                "Space group not set. Pass space_group= to PropagatorSolver()."
             )
         field_2d = np.reshape(field_reduced, (1, -1))
         return self._space_group.from_reduced_basis(field_2d)[0]
@@ -1149,8 +904,7 @@ class PropagatorSolver:
     # -------------------- Molecule information --------------------
 
     def get_n_polymer_types(self) -> int:
-        """
-        Get the number of polymer types.
+        """Get the number of polymer types.
 
         Returns
         -------
@@ -1160,8 +914,7 @@ class PropagatorSolver:
         return self._molecules.get_n_polymer_types()
 
     def get_polymer(self, polymer_id: int) -> Any:
-        """
-        Get polymer object for a specific polymer type.
+        """Get polymer object for a specific polymer type.
 
         Parameters
         ----------
@@ -1176,8 +929,7 @@ class PropagatorSolver:
         return self._molecules.get_polymer(polymer_id)
 
     def get_model_name(self) -> str:
-        """
-        Get the chain model name.
+        """Get the chain model name.
 
         Returns
         -------
@@ -1196,8 +948,7 @@ class PropagatorSolver:
         mix_min: float,
         mix_init: float
     ) -> Any:
-        """
-        Create an Anderson Mixing optimizer.
+        """Create an Anderson Mixing optimizer.
 
         Parameters
         ----------

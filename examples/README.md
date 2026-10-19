@@ -2,44 +2,24 @@
 
 This directory contains example scripts demonstrating polymer field theory simulations.
 
-## Getting Started
+## SCFT (`scft/`)
 
-### Recommended Learning Path
+Mean-field saddle point of the field-theoretic Hamiltonian.
 
-**1. Start with SCFT (Self-Consistent Field Theory)**
+| Example | Description |
+|---------|-------------|
+| `scft/Lamella3D.py` | AB diblock lamellar phase |
+| `scft/Cylinder3D.py` | Cylindrical phase |
+| `scft/Gyroid.py` | Gyroid phase with box optimization |
+| `scft/GyroidNoBoxChange.py` | Gyroid without box optimization (discrete chains, space group) |
+| `scft/ABA_Triblock1D.py` | Symmetric ABA triblock copolymer |
+| `scft/ABC_Triblock_Sphere3D.py` | ABC triblock terpolymer spheres |
+| `scft/Star3Arms1D.py` | 3-arm star polymer (1D) |
+| `scft/Star9ArmsGyroid.py` | 9-arm star polymer gyroid |
+| `scft/BottleBrushLamella3D.py` | Bottle-brush copolymer |
+| `scft/MixtureBlockRandom.py` | Block + random copolymer mixture |
 
-SCFT finds the mean-field saddle point of the field-theoretic Hamiltonian. Begin here to understand the basics.
-
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `scft/Lamella3D.py` | AB diblock lamellar phase - simplest starting point | Beginner |
-| `scft/Cylinder3D.py` | Cylindrical phase | Beginner |
-| `scft/Gyroid.py` | Gyroid phase with box optimization | Intermediate |
-| `scft/GyroidNoBoxChange.py` | Gyroid without box optimization | Beginner |
-
-**2. Complex Polymer Architectures**
-
-After mastering simple diblocks, explore more complex chain architectures.
-
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `scft/ABA_Triblock1D.py` | Symmetric ABA triblock copolymer | Intermediate |
-| `scft/ABC_Triblock_Sphere3D.py` | ABC triblock terpolymer spheres | Intermediate |
-| `scft/Star3Arms1D.py` | 3-arm star polymer (1D) | Intermediate |
-| `scft/Star9ArmsGyroid.py` | 9-arm star polymer gyroid | Advanced |
-| `scft/BottleBrushLamella3D.py` | Bottle-brush copolymer | Advanced |
-
-**3. Polymer Mixtures and Random Copolymers**
-
-Explore multi-component systems and random copolymers.
-
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `scft/MixtureBlockRandom.py` | Block + random copolymer mixture | Intermediate |
-
-**4. SCFT Phase Library**
-
-Reference implementations for various morphologies (in `scft/phases/`):
+**Phase library** (`scft/phases/`, space-group symmetry):
 
 - **Lamellar**: `Lamella1D.py`
 - **Cylindrical**: `Cylinder2D.py`
@@ -47,24 +27,24 @@ Reference implementations for various morphologies (in `scft/phases/`):
 - **Spherical**: `BCC.py`, `FCC.py`, `HCP_Hexagonal.py`, `SC.py`, `A15.py`, `Sigma.py`
 - **Other**: `DD.py` (double diamond), `PL_Hexagonal.py` (perforated lamella), `Fddd.py`, `SD.py`, `SP.py`, `DP.py`
 
-**5. L-FTS (Langevin Field-Theoretic Simulation)**
+## L-FTS (`lfts/`)
 
-L-FTS includes compositional fluctuations via Langevin dynamics. Start after mastering SCFT.
+Compositional fluctuations via Langevin dynamics.
 
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `lfts/Lamella.py` | Lamellar phase with fluctuations | Intermediate |
-| `lfts/Gyroid.py` | Gyroid with fluctuations | Advanced |
-| `lfts/MixtureBlockRandom.py` | Mixture with fluctuations | Advanced |
-| `lfts/ABC_Triblock_Sphere3D.py` | ABC triblock with fluctuations | Advanced |
+| Example | Description |
+|---------|-------------|
+| `lfts/Lamella.py` | Lamellar phase with fluctuations |
+| `lfts/Gyroid.py` | Gyroid with fluctuations |
+| `lfts/MixtureBlockRandom.py` | Mixture with fluctuations |
+| `lfts/ABC_Triblock_Sphere3D.py` | ABC triblock with fluctuations |
 
-**6. Complex Langevin FTS**
+## CL-FTS (`clfts/`)
 
-For systems where standard L-FTS has convergence issues.
+Complex Langevin dynamics, for systems where the partial saddle-point approximation of L-FTS is not adequate.
 
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `clfts/Lamella.py` | Complex Langevin dynamics | Advanced |
+| Example | Description |
+|---------|-------------|
+| `clfts/Lamella.py` | Complex Langevin dynamics |
 
 ## Running Examples
 

@@ -117,6 +117,17 @@ where $z_\infty$ is the renormalization factor from the discrete chain model.
 
 ---
 
+### 1.4 Polymer Architecture Drawing
+
+`SCFT(params)` and `LFTS(params)` draw the chain architectures as graphs (vertices = chain ends and junctions, edges = blocks labelled with their segment numbers) into `polymer_0.png`, `polymer_1.png`, ... in the current directory. To redraw them later, or for CL-FTS:
+
+```python
+from polymerfts import draw_polymer_architectures
+draw_polymer_architectures(calc.distinct_polymers, calc.ds, calc.segment_lengths)
+```
+
+Uses networkx and matplotlib; a graphviz layout is used when pygraphviz is installed.
+
 ## 2. PSCF Interoperability
 
 Tools for converting between langevin-fts and [PSCF](https://github.com/dmorse/pscfpp) formats.
@@ -279,6 +290,10 @@ Simulation output files (`fields_XXXXXX.mat`) contain:
 | `phi_A`, `phi_B`, ... | float array | Monomer density fields (flattened) |
 | `matrix_a` | float matrix | Transformation matrix $\mathbf{A}$ |
 | `matrix_a_inverse` | float matrix | Inverse transformation matrix $\mathbf{A}^{-1}$ |
+
+L-FTS and CL-FTS checkpoints additionally hold `initial_params`, `langevin_step`, `dt`, `eigenvalues`, `aux_fields_real`/`aux_fields_imag`, the noise array `normal_noise_prev` and the random-generator state (`random_generator`, `random_state_state`, `random_state_inc`), which `continue_run()` restores. CL-FTS stores complex fields as `w_A_real`/`w_A_imag` and `phi_A_real`/`phi_A_imag`.
+
+**SCFT results** (`SCFT.save_results(path)`, `.mat`, `.json` or `.yaml` by extension) contain `initial_params`, `dim`, `nx`, `lx`, `monomer_types`, `chi_n`, `chain_model`, `ds`, `eigenvalues`, `matrix_a`, `matrix_a_inverse`, `w_<type>` and `phi_<type>` on the full grid (expanded from the reduced basis when a space group was used), and `space_group_symbol`/`space_group_hall_number` if one was used. Load `.json` with `json.load` and `.yaml` with `yaml.safe_load`; arrays are stored as lists there.
 
 ### 5.2 Reading Files
 

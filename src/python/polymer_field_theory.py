@@ -66,88 +66,6 @@ class SymmetricPolymerTheory:
         Derivatives of h_coef_mu1 w.r.t. χN parameters.
     h_coef_mu2_deriv_chin : dict
         Derivatives of h_coef_mu2 w.r.t. χN parameters.
-
-    Notes
-    -----
-    **Field Theory Formulation:**
-
-    The multi-monomer Hamiltonian is:
-
-    .. math::
-        H = \\sum_{i<j} \\frac{\\chi_{ij} N}{V} \\int \\phi_i(\\mathbf{r}) \\phi_j(\\mathbf{r}) d\\mathbf{r}
-
-    Eigenvalue decomposition transforms this to:
-
-    .. math::
-        H = \\sum_k \\frac{\\lambda_k}{V} \\int w_k(\\mathbf{r})^2 d\\mathbf{r} + \\text{const}
-
-    where λ_k are eigenvalues and w_k are auxiliary fields.
-
-    **Field Classification:**
-
-    - **Real auxiliary fields** (λ < 0): Fluctuate in L-FTS
-    - **Imaginary auxiliary fields** (λ > 0): Compressed to saddle point
-    - **Pressure field** (incompressible): Enforces Σφ_i = 1
-
-    **Transformation Matrices:**
-
-    Monomer ↔ auxiliary transformations:
-
-    .. math::
-        \\mathbf{w} = \\mathbf{A} \\mathbf{w}_{\\text{aux}}
-
-        \\mathbf{w}_{\\text{aux}} = \\mathbf{A}^{-1} \\mathbf{w}
-
-    where A is the eigenvector matrix scaled by √M.
-
-    **Warning for Multiple Imaginary Fields:**
-
-    If I > 1 (multiple positive eigenvalues), some field fluctuations
-    cannot be sampled in L-FTS. This occurs for certain χN parameter sets
-    and may affect accuracy.
-
-    See Also
-    --------
-    SCFT : Uses this class for multi-monomer SCFT calculations.
-    LFTS : Uses this class for multi-monomer L-FTS calculations.
-
-    References
-    ----------
-    .. [1] Delaney Vigil, D. L., et al. "Multimonomer Field Theory of
-           Conformationally Asymmetric Polymer Blends." Macromolecules 2025,
-           58, 816.
-    .. [2] Lee, W.-B., et al. "Fluctuation Effects in Ternary AB+A+B Polymeric
-           Emulsions." Macromolecules 2013, 46, 8037.
-
-    Examples
-    --------
-    **AB Diblock (2 monomer types):**
-
-    >>> monomer_types = ["A", "B"]
-    >>> chi_n = {"A,B": 15.0}
-    >>> mpt = SymmetricPolymerTheory(monomer_types, chi_n, zeta_n=None)
-    >>> print(f"Eigenvalues: {mpt.eigenvalues}")
-    >>> print(f"Real fields: {mpt.aux_fields_real_idx}")
-    >>> print(f"Imaginary fields: {mpt.aux_fields_imag_idx}")
-
-    **ABC Triblock (3 monomer types):**
-
-    >>> monomer_types = ["A", "B", "C"]
-    >>> chi_n = {"A,B": 20.0, "B,C": 20.0, "A,C": 20.0}
-    >>> mpt = SymmetricPolymerTheory(monomer_types, chi_n, zeta_n=None)
-    >>> # Transform monomer fields to auxiliary fields
-    >>> w_aux = mpt.to_aux_fields(w_monomer)
-    >>> # Transform back
-    >>> w_monomer_restored = mpt.to_monomer_fields(w_aux)
-
-    **Field transformation in practice:**
-
-    >>> # In SCFT/LFTS, monomer potential fields w are converted to auxiliary
-    >>> w_dict = {"A": w_A_array, "B": w_B_array}
-    >>> w_aux = mpt.to_aux_fields(w_dict)  # Returns ndarray shape (M, grid)
-    >>>
-    >>> # Compute Hamiltonian from auxiliary fields
-    >>> H = mpt.compute_hamiltonian(molecules, w_aux, total_partitions, cb)
     """
     def __init__(self, monomer_types, chi_n, zeta_n):
         self.monomer_types = monomer_types
@@ -265,15 +183,6 @@ class SymmetricPolymerTheory:
         -------
         w_aux : ndarray
             Auxiliary potential fields, shape (M, total_grid).
-
-        Notes
-        -----
-        The transformation uses matrix_a_inv = O^T / M where O is the
-        orthogonal eigenvector matrix and M is the number of monomer types.
-
-        See Also
-        --------
-        to_monomer_fields : Inverse transformation (auxiliary → monomer).
         """
         if isinstance(w, dict):
             # Make an array of w
@@ -303,11 +212,6 @@ class SymmetricPolymerTheory:
         w : ndarray
             Monomer potential fields, shape (M, total_grid) in sorted
             monomer_types order.
-
-        See Also
-        --------
-        to_aux_fields : Forward transformation (monomer → auxiliary).
-        to_monomer_fields_dict : Same transformation returning dict.
         """
         return np.matmul(self.matrix_a, w_aux)
 
@@ -325,10 +229,6 @@ class SymmetricPolymerTheory:
         -------
         w : dict
             Monomer potential fields, {monomer_type: field_array}.
-
-        See Also
-        --------
-        to_monomer_fields : Same transformation returning ndarray.
         """
         w_temp = np.matmul(self.matrix_a, w_aux)
         w = {}
@@ -469,29 +369,6 @@ class SymmetricPolymerTheory:
         -------
         hamiltonian : float
             Field-theoretic Hamiltonian value (dimensionless).
-
-        Notes
-        -----
-        **Hamiltonian Components:**
-
-        .. math::
-            H = H_{\\text{partition}} + H_{\\text{fields}} + H_{\\text{const}}
-
-        where:
-
-        - H_partition = -Σ_p (φ_p / α_p) ln(Q_p)
-        - H_fields = Σ_i h_coef_mu2[i] ⟨w_aux[i]²⟩ + h_coef_mu1[i] ⟨w_aux[i]⟩
-        - H_const = reference energy (only if include_const_term=True)
-
-        **Usage:**
-
-        - SCFT: Reports H without const term (relative free energy)
-        - L-FTS: Uses H with const term for Boltzmann weighting
-
-        See Also
-        --------
-        compute_func_deriv : Compute δH/δw for field updates.
-        compute_h_deriv_chin : Compute dH/dχN for parameter sweeps.
         """
         M = len(self.monomer_types)
 
@@ -537,34 +414,6 @@ class SymmetricPolymerTheory:
         h_deriv : ndarray
             Functional derivatives δH/δw_aux, shape (len(indices), total_grid).
             For imaginary fields, the sign is flipped (returns -δH/δw).
-
-        Notes
-        -----
-        **Functional Derivative Formula:**
-
-        For auxiliary field i:
-
-        .. math::
-            \\frac{\\delta H}{\\delta w_i} = 2 h_{\\mu2,i} w_i + h_{\\mu1,i} + \\sum_j A_{ji} \\phi_j
-
-        where A is the transformation matrix and φ_j are monomer concentrations.
-
-        **Sign Convention:**
-
-        - Real fields (λ < 0): Returns +δH/δw
-        - Imaginary fields (λ > 0): Returns -δH/δw
-
-        This convention ensures that field updates move toward the saddle point.
-
-        **Usage:**
-
-        - SCFT: Computes self-consistency error from δH/δw
-        - L-FTS compression: Finds saddle point where δH/δw_imag = 0
-
-        See Also
-        --------
-        compute_hamiltonian : Compute H value.
-        LFTS.find_saddle_point : Uses this for field compression.
         """
         M = len(self.monomer_types)
 
@@ -599,34 +448,6 @@ class SymmetricPolymerTheory:
         -------
         dH : dict
             Derivatives {monomer_pair: dH/dχN_value}.
-
-        Notes
-        -----
-        **Derivative Calculation:**
-
-        Uses finite difference of Hamiltonian coefficients computed during
-        initialization:
-
-        .. math::
-            \\frac{dH}{d\\chi_{ij}N} = \\frac{dH_{\\text{const}}}{d\\chi_{ij}N} +
-            \\sum_k \\left[ \\frac{dh_{\\mu2,k}}{d\\chi_{ij}N} \\langle w_k^2 \\rangle +
-            \\frac{dh_{\\mu1,k}}{d\\chi_{ij}N} \\langle w_k \\rangle \\right]
-
-        **Applications:**
-
-        - Parameter sensitivity analysis
-        - Estimating phase boundaries (dH/dχN changes sign at transitions)
-        - Optimizing χN values to target specific morphologies
-
-        **Accuracy:**
-
-        Derivatives are computed by finite difference with ε = 10^-5 during
-        initialization. For higher accuracy, reduce epsilon in __init__.
-
-        See Also
-        --------
-        compute_hamiltonian : Hamiltonian calculation.
-        LFTS.run : Records dH/dχN history during simulation.
         """
         M = len(self.monomer_types)
 

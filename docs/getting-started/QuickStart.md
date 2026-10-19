@@ -129,6 +129,50 @@ If SCFT doesn't converge, reduce the mixing parameters:
 }
 ```
 
+## Making Your Own Variant
+
+The simulation classes are written so that one file is enough to change. To
+try a different iteration scheme, a new observable, or an extra term in the
+free energy, copy the file you want to change next to your script and edit the
+copy; the installed package keeps providing the C++ core and the shared modules.
+
+1. Copy the file (`scft.py`, `lfts.py` or `clfts.py`):
+   ```bash
+   cp src/python/scft.py ~/my_project/my_scft.py
+   ```
+2. In the copy, point the imports at the installed package instead of the
+   relative `.`:
+   ```bash
+   sed -i -E 's/^from \. import _core/from polymerfts import _core/; s/^from \.([a-z_]+) import/from polymerfts.\1 import/' ~/my_project/my_scft.py
+   ```
+   The result looks like
+   ```python
+   from polymerfts import _core
+   from polymerfts.polymer_field_theory import SymmetricPolymerTheory
+   from polymerfts.propagator_solver import PropagatorSolver
+   from polymerfts.validation import validate_system_params, ValidationError
+   from polymerfts.utils import (...)
+   from polymerfts.smearing import Smearing
+   ```
+3. Use the copy in your script:
+   ```python
+   import my_scft as scft          # instead of: from polymerfts import scft
+   calculation = scft.SCFT(params)
+   ```
+
+Everything else stays the same; no rebuild and no reinstall. Edit `run()` or
+`__init__()` in the copy as you like, and keep several variants as separate
+files (`my_scft_v2.py`, ...).
+
+Other options:
+
+- To change a single method, subclass instead of copying:
+  `class MySCFT(scft.SCFT): def compute_concentrations(self, w, q_init=None): ...`
+- To change the whole package, including C++ code, clone the repository,
+  run `make` (no `make install`) and point `PYTHONPATH` at `build/python`;
+  `make` re-stages the Python files in seconds after each edit.
+- If the change is worth sharing, work on a git branch and open a pull request.
+
 ## Next Steps
 
 - **Tutorials**: Start with notebooks in `tutorials/` (see `tutorials/README.md` for order)

@@ -4,100 +4,23 @@ This module provides common utility functions and constants used across
 the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
-import logging
+import json
 import os
 import re
-import sys
-from typing import Dict, List, Any, Optional, Tuple
+import warnings
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Tuple, Union
 
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
+import yaml
 
 from .validation import ValidationError
 
-# Module-level logger
-logger = logging.getLogger(__name__)
-
 
 # =============================================================================
-# Logging Configuration
+# Polymer architecture drawing (SCFT/LFTS draw at construction; draw_polymer_architectures redraws)
 # =============================================================================
 
-def configure_logging(
-    level: Optional[str] = None,
-    format_string: Optional[str] = None,
-    stream: Any = None
-) -> None:
-    """Configure logging for the polymerfts package.
-
-    Sets up logging based on parameters, environment variables, or defaults.
-    Priority: parameters > environment variables > defaults.
-
-    Parameters
-    ----------
-    level : str, optional
-        Logging level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
-        If not specified, reads from POLYMERFTS_LOG_LEVEL env var,
-        defaults to "WARNING".
-    format_string : str, optional
-        Log message format string.
-        If not specified, reads from POLYMERFTS_LOG_FORMAT env var.
-    stream : file-like, optional
-        Output stream. Defaults to sys.stderr.
-
-    Examples
-    --------
-    >>> from polymerfts.utils import configure_logging
-    >>> configure_logging(level="DEBUG")  # Enable debug output
-    >>> configure_logging(level="ERROR")  # Only show errors
-
-    >>> # Or via environment variable before running
-    >>> # export POLYMERFTS_LOG_LEVEL=DEBUG
-    """
-    # Determine level
-    if level is None:
-        level = os.environ.get("POLYMERFTS_LOG_LEVEL", "WARNING")
-
-    level_map = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
-
-    if level.upper() not in level_map:
-        raise ValueError(
-            f"Invalid log level: {level}. "
-            f"Choose from: {', '.join(level_map.keys())}"
-        )
-
-    log_level = level_map[level.upper()]
-
-    # Determine format
-    if format_string is None:
-        format_string = os.environ.get(
-            "POLYMERFTS_LOG_FORMAT",
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-
-    # Configure root logger for polymerfts
-    pkg_logger = logging.getLogger("polymerfts")
-    pkg_logger.setLevel(log_level)
-
-    # Remove existing handlers
-    pkg_logger.handlers.clear()
-
-    # Add new handler
-    handler = logging.StreamHandler(stream or sys.stderr)
-    handler.setLevel(log_level)
-    handler.setFormatter(logging.Formatter(format_string))
-    pkg_logger.addHandler(handler)
-
-
-
-# Default colors for monomer visualization
 DEFAULT_MONOMER_COLORS: List[str] = [
     "red", "blue", "green", "cyan", "magenta", "yellow"
 ]
@@ -131,8 +54,18 @@ def create_monomer_color_dict(
         else:
             dict_color[monomer_type] = np.random.rand(3,)
 
-    logger.debug(f"Monomer color mapping: {dict_color}")
     return dict_color
+
+
+def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer"):
+    """Draw every polymer of a simulation to ``<prefix>_<id>.png`` in the current directory.
+
+    Example: ``draw_polymer_architectures(calc.distinct_polymers, calc.ds, calc.segment_lengths)``
+    after ``calc = SCFT(params)`` (or LFTS / CLFTS).
+    """
+    dict_color = create_monomer_color_dict(segment_lengths)
+    for idx, polymer in enumerate(polymers):
+        draw_polymer_architecture(polymer, idx, ds, dict_color, output_file=f"{prefix}_{idx}.png")
 
 
 def draw_polymer_architecture(
@@ -164,6 +97,9 @@ def draw_polymer_architecture(
         Resolution in dots per inch. Defaults to 100.
     """
     # Make a graph
+    import networkx as nx               # imported here: only the drawing needs them
+    import matplotlib.pyplot as plt
+
     G = nx.Graph()
     for block in polymer["blocks_input"]:
         monomer_type = block[0]
@@ -371,3 +307,158 @@ def process_random_copolymer(
         )
 
     return (random_type_string, statistical_segment_length, polymer["blocks"][0]["fraction"])
+
+
+# =============================================================================
+# Parameter files (YAML / JSON)
+# =============================================================================
+
+class ConfigError(Exception):
+    """Exception raised for configuration file errors."""
+    pass
+
+
+def load_config(path: Union[str, Path]) -> Dict[str, Any]:
+    """Load simulation parameters from a configuration file.
+
+    Supports YAML (.yaml, .yml) and JSON (.json) formats.
+    Automatically detects format from file extension.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to configuration file.
+
+    Returns
+    -------
+    dict
+        Simulation parameters dictionary.
+
+    Raises
+    ------
+    ConfigError
+        If file format is not supported or file cannot be read.
+    FileNotFoundError
+        If configuration file does not exist.
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+
+    suffix = path.suffix.lower()
+
+    try:
+        with open(path, 'r') as f:
+            if suffix in ('.yaml', '.yml'):
+                params = yaml.safe_load(f)
+            elif suffix == '.json':
+                params = json.load(f)
+            else:
+                raise ConfigError(
+                    f"Unsupported configuration file format: {suffix}. "
+                    "Use .yaml, .yml, or .json"
+                )
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Invalid YAML syntax in {path}: {e}")
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"Invalid JSON syntax in {path}: {e}")
+
+    if params is None:
+        raise ConfigError(f"Configuration file is empty: {path}")
+
+    if not isinstance(params, dict):
+        raise ConfigError(f"Configuration must be a dictionary, got {type(params).__name__}")
+
+    # Process special values (e.g., numpy expressions)
+    params = _process_config_values(params)
+
+    return params
+
+
+def _process_config_values(obj: Any) -> Any:
+    """Process configuration values, evaluating special expressions.
+
+    Handles:
+    - String expressions like "4.0*np.sqrt(3)/2" for lx
+    - Nested dictionaries and lists
+
+    Parameters
+    ----------
+    obj : Any
+        Configuration value to process.
+
+    Returns
+    -------
+    Any
+        Processed value.
+    """
+    if isinstance(obj, dict):
+        return {k: _process_config_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_process_config_values(item) for item in obj]
+    elif isinstance(obj, str):
+        # Try to evaluate numpy expressions
+        if 'np.' in obj or 'numpy.' in obj:
+            try:
+                # Safe evaluation with only numpy functions
+                result = eval(obj, {"np": np, "numpy": np, "__builtins__": {}})
+                return result
+            except Exception as e:
+                # A string that LOOKS like a numpy expression but fails to
+                # evaluate is almost certainly a typo in the config; passing
+                # it through silently would surface later as a confusing
+                # type error. Warn so the user can fix the expression.
+                warnings.warn(
+                    f"Config value {obj!r} looks like a numpy expression but "
+                    f"failed to evaluate ({e}); using the raw string instead.")
+                return obj  # Return original string if evaluation fails
+        return obj
+    else:
+        return obj
+
+
+# =============================================================================
+# VTK output for ParaView
+# =============================================================================
+
+def save_vtk(
+    path: Union[str, Path],
+    field: np.ndarray,
+    lx: List[float],
+    field_name: str = "phi"
+) -> None:
+    """Save 3D field as VTK file for ParaView visualization.
+
+    Parameters
+    ----------
+    path : str or Path
+        Output file path (should end with .vtk).
+    field : np.ndarray
+        3D field data, shape (nx, ny, nz).
+    lx : list of float
+        Box dimensions [lx, ly, lz].
+    field_name : str
+        Name for the scalar field (default: "phi").
+    """
+    if field.ndim != 3:
+        raise ValueError(f"Field must be 3D, got {field.ndim}D")
+
+    nx, ny, nz = field.shape
+
+    with open(path, 'w') as f:
+        f.write("# vtk DataFile Version 3.0\n")
+        f.write("Polymer field data\n")
+        f.write("ASCII\n")
+        f.write("DATASET STRUCTURED_POINTS\n")
+        f.write(f"DIMENSIONS {nx} {ny} {nz}\n")
+        f.write("ORIGIN 0 0 0\n")
+        f.write(f"SPACING {lx[0]/nx} {lx[1]/ny} {lx[2]/nz}\n")
+        f.write(f"POINT_DATA {nx*ny*nz}\n")
+        f.write(f"SCALARS {field_name} float 1\n")
+        f.write("LOOKUP_TABLE default\n")
+
+        for k in range(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    f.write(f"{field[i, j, k]:.6f}\n")

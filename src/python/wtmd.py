@@ -4,12 +4,6 @@ This module implements well-tempered metadynamics to enhance sampling
 in Langevin field-theoretic simulations of block copolymers.
 
 This implementation follows deep-langevin-fts exactly.
-
-References
-----------
-T. M. Beardsley and M. W. Matsen, "Well-tempered metadynamics applied to
-field-theoretic simulations of diblock copolymer melts",
-J. Chem. Phys. 157, 114902 (2022).
 """
 
 import os

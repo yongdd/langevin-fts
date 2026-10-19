@@ -276,7 +276,7 @@ Iterative solver for SCFT equations. Accelerates convergence by mixing field his
 
 - `src/python/scft.py`: SCFT simulation orchestrator
   - Handles field initialization, iteration loop, convergence checking
-  - Supports Anderson Mixing and ADAM optimizers
+  - Anderson mixing optimizer
   - Implements stress calculations for box size optimization
   - Space group symmetry constraints (beta)
 
@@ -286,8 +286,7 @@ Iterative solver for SCFT equations. Accelerates convergence by mixing field his
   - Field compressors (Anderson Mixing, Linear Response)
   - PCG64 random number generator
 
-- `src/python/system_spec.py`: Shared configuration layer. `parse_system(params)` validates the grid, chain model, monomer types, χN and polymer definitions once and returns an immutable `SystemSpec`; SCFT, LFTS and CLFTS build their `PropagatorSolver` from it via `PropagatorSolver.from_spec()`.
-- `src/python/simulation_options.py`: Method-specific options. `ScftOptions`, `LftsOptions` and `ClftsOptions` are read once in each constructor via `from_params(params)` and kept as `self.options`; the defaults live there.
+- **Python layer rule**: researchers, not developers, edit `src/python`. Keep it script-like: each simulation class reads its options straight from the `params` dictionary in its constructor (defaults written where they are used), there are few files (one topic per file: `scft.py`, `lfts.py` with its field compressors, `clfts.py`, `propagator_solver.py`, `polymer_field_theory.py`, `smearing.py`, `wtmd.py`, `utils.py`, `validation.py`), and no dataclass/spec layers. Duplication between `scft.py`, `lfts.py` and `clfts.py` is acceptable when it keeps each file self-contained; shared mechanics (chi N parsing, block processing, random copolymers, parameter-file loading, VTK output) live in `utils.py`.
 
 - `src/python/polymer_field_theory.py`: Multi-monomer field theory transformations
   - Converts between monomer potential fields and auxiliary fields
