@@ -127,7 +127,7 @@ protected:
      * For continuous chains: diffusion propagator.
      * For discrete chains: bond function (Fourier transform of Gaussian).
      *
-     * ds_index is 1-based (from ContourLengthMapping).
+     * ds_index is 0-based (from ContourLengthMapping).
      */
     std::map<int, std::map<std::string, double*>> boltz_bond;
 
@@ -139,7 +139,7 @@ protected:
      * For continuous chains: half-step diffusion propagator.
      * For discrete chains: half-bond function (used at chain ends).
      *
-     * ds_index is 1-based (from ContourLengthMapping).
+     * ds_index is 0-based (from ContourLengthMapping).
      */
     std::map<int, std::map<std::string, double*>> boltz_bond_half;
 
@@ -147,7 +147,7 @@ protected:
      * @brief Unique ds values for each ds_index.
      *
      * ds_values[ds_index] = local_ds value for that index.
-     * ds_index is 1-based.
+     * ds_index is 0-based.
      */
     std::map<int, double> ds_values;
 

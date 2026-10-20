@@ -117,8 +117,8 @@ __global__ void ker_scale(double* data, double scale, int M)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
-    : nx_(nx), d_work_buffer_(nullptr), is_all_periodic_(true),
-      plan_forward_(0), plan_backward_(0), rt_forward_(nullptr), rt_backward_(nullptr)
+    : nx_(nx), is_all_periodic_(true), plan_forward_(0), plan_backward_(0),
+      d_work_buffer_(nullptr), rt_forward_(nullptr), rt_backward_(nullptr)
 {
     for (int d = 0; d < DIM; ++d)
         bc_[d] = BoundaryCondition::PERIODIC;
@@ -156,8 +156,8 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc)
-    : nx_(nx), bc_(bc), d_work_buffer_(nullptr),
-      plan_forward_(0), plan_backward_(0), rt_forward_(nullptr), rt_backward_(nullptr)
+    : nx_(nx), bc_(bc), plan_forward_(0), plan_backward_(0),
+      d_work_buffer_(nullptr), rt_forward_(nullptr), rt_backward_(nullptr)
 {
     try
     {

@@ -8,7 +8,7 @@
  *
  * **Boundary Conditions:**
  *
- * Supports all boundary conditions via the unified FftwFFT class:
+ * Supports all boundary conditions via the FFT<T> interface (FftwFFT or MklFFT):
  * - PERIODIC: Standard FFT (complex coefficients)
  * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
  * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
@@ -142,7 +142,7 @@ public:
     /**
      * @brief Update Boltzmann factors from potential fields.
      *
-     * Computes exp(-w) for each monomer type.
+     * Computes exp(-w·ds) for each monomer type.
      *
      * @param w_input Map of potential fields by monomer type
      */

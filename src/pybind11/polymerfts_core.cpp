@@ -46,6 +46,8 @@
 #include <tuple>
 #include <map>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -89,10 +91,13 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
  * - get_dv(): Volume element
  * - get_total_grid(): Total grid points
  * - get_volume(): Total box volume
+ * - get_angles(), get_angles_degrees(), is_orthogonal(), get_recip_metric(): Cell geometry
  * - set_lx(): Update box dimensions
  * - set_lattice_parameters(): Update box dimensions and angles
- * - integral(): Volume integral of field
- * - inner_product(): Inner product of two fields
+ * - set_space_group(), get_space_group(), get_n_basis(), get_orbit_counts(): Reduced basis
+ * - integral(), mean(): Volume integral / average of a field
+ * - inner_product(), inner_product_inverse_weight(), multi_inner_product(): Inner products
+ * - zero_mean(): Subtract the mean in place (C-contiguous array required)
  *
  * @tparam T Field type (double or std::complex<double>)
  * @param m Python module to add class to
@@ -194,7 +199,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
                 throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
             }
             obj.zero_mean(static_cast<T*>(buf_g.ptr));
-        });
+        }, py::arg("g").noconvert());
 }
 
 /**
@@ -219,6 +224,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - get_stress(): Retrieve computed stress
  * - get_stress_gce(): Grand canonical stress
  * - check_total_partition(): Validate partition function
+ * - set_force_off_diagonal_stress(), get_force_off_diagonal_stress(): Cross-term stress for orthogonal boxes
  *
  * When space group is set:
  * - compute_propagators() accepts reduced basis w (size: n_reduced)
@@ -567,6 +573,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  * - Polymer: Single polymer chain with topology
  * - Molecules: Container for all polymers and solvents
  * - PropagatorComputationOptimizer: Optimized propagator scheduling
+ * - SpaceGroup: Space-group symmetry and reduced bases
  * - PlatformSelector: Platform detection and factory creation
  *
  * Template classes (Real and Complex variants):
@@ -585,6 +592,30 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  *
  * The factory then creates all necessary platform-specific objects.
  */
+// Field conversions of SpaceGroup. The input holds n_fields fields of n_in values
+// each, either flat (1-D) or as (n_fields, n_in); the output keeps the layout of
+// the input: a 1-D input gives a 1-D output, a 2-D input an (n_fields, n_out) array.
+static int sg_field_count(const py::buffer_info& in, int n_in, const char* n_in_name)
+{
+    if (in.ndim < 1)
+        throw_with_line_number("Input must be at least a 1-D array.");
+    py::ssize_t total = 1;
+    for (py::ssize_t i = 0; i < in.ndim; ++i)
+        total *= in.shape[i];
+    const int n_fields = static_cast<int>(total / n_in);
+    if (n_fields < 1 || total != static_cast<py::ssize_t>(n_fields) * n_in)
+        throw_with_line_number("Field size (" + std::to_string(total) + ") must be a multiple of " +
+                               n_in_name + " (" + std::to_string(n_in) + ").");
+    return n_fields;
+}
+
+static py::array_t<double> sg_output_like(const py::buffer_info& in, int n_fields, int n_out)
+{
+    if (in.ndim == 1)
+        return py::array_t<double>(static_cast<py::ssize_t>(n_fields) * n_out);
+    return py::array_t<double>({static_cast<py::ssize_t>(n_fields), static_cast<py::ssize_t>(n_out)});
+}
+
 PYBIND11_MODULE(_core, m)
 {
 
@@ -683,6 +714,9 @@ Example:
              "International space group number (1-230).")
         .def("get_spacegroup_symbol", &SpaceGroup::get_spacegroup_symbol,
              "ITA short symbol.")
+        .def("uses_hexagonal_axes", &SpaceGroup::uses_hexagonal_axes,
+             "True for hexagonal/trigonal groups in a hexagonal-axes setting (a = b, gamma = 120); "
+             "False for rhombohedral-axes settings (a = b = c, alpha = beta = gamma).")
         .def("get_crystal_system", &SpaceGroup::get_crystal_system,
              "Crystal system name.")
         .def("get_nx", &SpaceGroup::get_nx,
@@ -703,6 +737,8 @@ Example:
              "Number of equivalent points for each reduced-basis point.")
         .def("physical_basis_name", &SpaceGroup::physical_basis_name,
              "Name of the active physical basis: 'irreducible', 'pmmm', 'm3' or 'z-mirror'.")
+        .def("in_use", &SpaceGroup::in_use,
+             "True once a computation box or solver holds this group; the physical basis is then frozen.")
         .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,
              "Enable Pmmm physical basis (1/8 grid) mapping.")
         .def("using_pmmm_physical_basis", &SpaceGroup::using_pmmm_physical_basis,
@@ -720,125 +756,55 @@ Example:
         .def("to_reduced_basis", [](SpaceGroup& obj, array_in<double> full_field)
         {
             py::buffer_info buf = full_field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_total_grid();
-            if (total_size != n_fields * obj.get_total_grid())
-                throw_with_line_number("Field size must be multiple of total_grid");
-
-            py::array_t<double> reduced_field({n_fields, obj.get_n_reduced_basis()});
-            obj.to_reduced_basis(static_cast<double*>(buf.ptr),
-                                 static_cast<double*>(reduced_field.request().ptr),
-                                 n_fields);
-            return reduced_field;
-        }, "Convert full grid field to reduced basis. Returns (n_fields, n_reduced) array.")
-        .def("symmetrize_reduced_basis", [](SpaceGroup& obj, array_in<double> reduced_field)
+            const int n_fields = sg_field_count(buf, obj.get_total_grid(), "total_grid");
+            py::array_t<double> out = sg_output_like(buf, n_fields, obj.get_n_reduced_basis());
+            obj.to_reduced_basis(static_cast<double*>(buf.ptr), static_cast<double*>(out.request().ptr), n_fields);
+            return out;
+        }, "Full-grid field(s) -> reduced basis. A 1-D input gives a 1-D output, an (n_fields, total_grid) input an (n_fields, n_reduced) output.")
+        .def("symmetrize_reduced_basis", [](SpaceGroup& obj, py::array_t<double, 0> reduced_field)
         {
+            // Modified in place (like ComputationBox.zero_mean): a converted copy would
+            // leave the caller's array unchanged, so it must already be C-contiguous float64.
+            if (!(reduced_field.flags() & py::array::c_style))
+                throw_with_line_number("symmetrize_reduced_basis modifies the array in place; pass a C-contiguous float64 array.");
             py::buffer_info buf = reduced_field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_n_reduced_basis();
-            if (total_size != n_fields * obj.get_n_reduced_basis())
-                throw_with_line_number("Field size must be multiple of n_reduced_basis");
-
+            const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis(), "n_reduced_basis");
             obj.symmetrize_reduced_basis(static_cast<double*>(buf.ptr), n_fields);
             return reduced_field;
-        }, "Symmetrize reduced-basis fields in-place using full space-group orbits.")
-        .def("reduced_to_irreducible", [](SpaceGroup& obj, array_in<double> reduced_field) -> py::object
+        }, py::arg("reduced_field").noconvert(),
+           "Symmetrize reduced-basis field(s) in place over the full space-group orbits; returns the same array.")
+        .def("reduced_to_irreducible", [](SpaceGroup& obj, array_in<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_n_reduced_basis();
-            if (total_size != n_fields * obj.get_n_reduced_basis())
-                throw_with_line_number("Reduced field size must be multiple of n_reduced_basis");
-
-            py::array_t<double> irreducible_field({n_fields, obj.get_n_reduced_basis_full()});
-            obj.reduced_to_irreducible(static_cast<double*>(buf.ptr),
-                                       static_cast<double*>(irreducible_field.request().ptr),
-                                       n_fields);
-            if (n_fields == 1)
-                return py::reinterpret_steal<py::object>(irreducible_field.attr("__getitem__")(0).release());
-            return py::reinterpret_steal<py::object>(irreducible_field.release());
-        }, "Convert reduced-basis field to irreducible-basis field (full space-group orbits).")
-        .def("irreducible_to_reduced", [](SpaceGroup& obj, array_in<double> irreducible_field) -> py::object
+            const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis(), "n_reduced_basis");
+            py::array_t<double> out = sg_output_like(buf, n_fields, obj.get_n_reduced_basis_full());
+            obj.reduced_to_irreducible(static_cast<double*>(buf.ptr), static_cast<double*>(out.request().ptr), n_fields);
+            return out;
+        }, "Reduced-basis field(s) -> irreducible basis (one value per full-group orbit). A 1-D input gives a 1-D output, an (n_fields, n_reduced) input an (n_fields, n_irreducible) output.")
+        .def("irreducible_to_reduced", [](SpaceGroup& obj, array_in<double> irreducible_field)
         {
             py::buffer_info buf = irreducible_field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_n_reduced_basis_full();
-            if (total_size != n_fields * obj.get_n_reduced_basis_full())
-                throw_with_line_number("Irreducible field size must be multiple of n_irreducible_basis");
-
-            py::array_t<double> reduced_field({n_fields, obj.get_n_reduced_basis()});
-            obj.irreducible_to_reduced(static_cast<double*>(buf.ptr),
-                                       static_cast<double*>(reduced_field.request().ptr),
-                                       n_fields);
-            if (n_fields == 1)
-                return py::reinterpret_steal<py::object>(reduced_field.attr("__getitem__")(0).release());
-            return py::reinterpret_steal<py::object>(reduced_field.release());
-        }, "Convert irreducible-basis field to reduced-basis field (physical/irreducible basis).")
+            const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis_full(), "n_irreducible_basis");
+            py::array_t<double> out = sg_output_like(buf, n_fields, obj.get_n_reduced_basis());
+            obj.irreducible_to_reduced(static_cast<double*>(buf.ptr), static_cast<double*>(out.request().ptr), n_fields);
+            return out;
+        }, "Irreducible-basis field(s) -> reduced (physical) basis. A 1-D input gives a 1-D output, an (n_fields, n_irreducible) input an (n_fields, n_reduced) output.")
         .def("from_reduced_basis", [](SpaceGroup& obj, array_in<double> reduced_field)
         {
             py::buffer_info buf = reduced_field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_n_reduced_basis();
-            if (total_size != n_fields * obj.get_n_reduced_basis())
-                throw_with_line_number("Reduced field size must be multiple of n_reduced");
-
-            py::array_t<double> full_field({n_fields, obj.get_total_grid()});
-            obj.from_reduced_basis(static_cast<double*>(buf.ptr),
-                                   static_cast<double*>(full_field.request().ptr),
-                                   n_fields);
-            return full_field;
-        }, "Convert reduced basis field to full grid. Returns (n_fields, total_grid) array.")
+            const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis(), "n_reduced_basis");
+            py::array_t<double> out = sg_output_like(buf, n_fields, obj.get_total_grid());
+            obj.from_reduced_basis(static_cast<double*>(buf.ptr), static_cast<double*>(out.request().ptr), n_fields);
+            return out;
+        }, "Reduced-basis field(s) -> full grid. A 1-D input gives a 1-D output, an (n_fields, n_reduced) input an (n_fields, total_grid) output.")
         .def("symmetrize", [](SpaceGroup& obj, array_in<double> field)
         {
             py::buffer_info buf = field.request();
-            if (buf.ndim < 1)
-                throw_with_line_number("Input must be at least 1D array");
-
-            int total_size = 1;
-            for (int i = 0; i < buf.ndim; ++i)
-                total_size *= buf.shape[i];
-
-            int n_fields = total_size / obj.get_total_grid();
-            if (total_size != n_fields * obj.get_total_grid())
-                throw_with_line_number("Field size must be multiple of total_grid");
-
-            // Create output array with same shape
-            py::array_t<double> result(buf.shape);
-            obj.symmetrize(static_cast<double*>(buf.ptr),
-                          static_cast<double*>(result.request().ptr),
-                          n_fields);
+            const int n_fields = sg_field_count(buf, obj.get_total_grid(), "total_grid");
+            py::array_t<double> result(buf.shape);   // same shape as the input
+            obj.symmetrize(static_cast<double*>(buf.ptr), static_cast<double*>(result.request().ptr), n_fields);
             return result;
-        }, "Symmetrize field by averaging over orbits. Returns array with same shape.");
+        }, "Average field(s) over the space-group orbits. Returns an array of the same shape as the input.");
 
     // Bind ComputationBox
     bind_computation_box<double>(m, "Real");

@@ -30,7 +30,7 @@ modules that a newer version dropped. When upgrading across versions, remove the
 * **Anaconda**: https://www.anaconda.com/download
 * **C++ Compiler**: C++20 support (GCC 10+)
 * **spglib**: space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`)
-* **LAPACKE**: Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`)
+* **LAPACKE**: Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`; with MKL the header is `mkl_lapacke.h` from `mkl-include`)
 * **pybind11 2.13+**, **NumPy 2.0+**, **SciPy 1.14+**: Python bindings (all in `environment.yml`)
 * **At least one CPU FFT backend**: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`)
 
@@ -49,6 +49,7 @@ modules that a newer version dropped. When upgrading across versions, remove the
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
 | `POLYMERFTS_CUDA_ARCHITECTURES` | `60;61;70;75;80;86;89;90` | CUDA compute capabilities to compile for |
 | `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors (CI builds with it) |
+| `POLYMERFTS_INSTALL_HEADERS` | OFF | Install C++ headers and a CMake package config for downstream projects (experimental) |
 
 ### CPU Backends
 

@@ -8,19 +8,16 @@
  * **Common Functionality:**
  *
  * - Grid dimension validation and setup
- * - Thread-local Boltzmann factor caching
+ * - Per-thread Boltzmann factor caching (owned by the object)
  * - Cell parameter management
  * - Contour step management
  *
  * **CRTP Pattern:**
  *
  * Derived classes must implement:
- * - `void initFFTPlans_impl()` - Initialize backend-specific FFT plans
- * - `void cleanupFFTPlans_impl()` - Cleanup backend-specific FFT plans
+ * - `get_thread_local_buffers()` - Per-thread (io, temp) work buffers
  * - `void dct_forward_impl(double* io, double* temp)` - DCT-II forward
  * - `void dct_backward_impl(double* io, double* temp)` - DCT-III backward
- * - `double* allocate_buffer_impl(int size)` - Allocate aligned buffer
- * - `void free_buffer_impl(double* ptr)` - Free aligned buffer
  *
  * @see FftwCrysFFTPmmm for FFTW implementation
  * @see MklCrysFFTPmmm for MKL implementation
@@ -74,7 +71,7 @@ protected:
     double* temp_buffer_;
 
     //--------------------------------------------------------------------------
-    // Thread-local Boltzmann factor caching
+    // Per-thread Boltzmann factor caching (owned by the object)
     //--------------------------------------------------------------------------
     struct BoltzDeleter {
         void operator()(double* ptr) const { delete[] ptr; }
@@ -219,10 +216,7 @@ public:
     }
 
     /// Virtual destructor.
-    virtual ~CrysFFTPmmmBase()
-    {
-        freeBoltzmann();
-    }
+    virtual ~CrysFFTPmmmBase() = default;
 
     /// Update cell parameters.
     void set_cell_para(const std::array<double, 6>& cell_para)

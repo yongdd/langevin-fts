@@ -341,13 +341,6 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         for (int i = 0; i < M_out; ++i)
             q_out2[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 
-        // Apply mask if provided
-        if (q_mask != nullptr)
-        {
-            for (int i = 0; i < M_out; ++i)
-                q_out2[i] *= q_mask[i];
-        }
-
         // Reduce output to reduced basis if space_group is set
         if (this->space_group_ != nullptr)
         {
@@ -363,6 +356,16 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         {
             // No space group - copy result to output
             std::copy(q_out2.begin(), q_out2.end(), q_out);
+        }
+
+        // Apply the mask on the output. The computation box stores the mask in the
+        // basis of the propagators (reduced with a space group, full otherwise), so it
+        // is applied after the reduction; the mask is symmetric, so this equals masking
+        // on the full grid.
+        if (q_mask != nullptr)
+        {
+            for (int i = 0; i < M_reduced; ++i)
+                q_out[i] *= q_mask[i];
         }
     }
     catch (std::exception& exc)

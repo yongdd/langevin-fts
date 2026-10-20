@@ -264,6 +264,8 @@ class SCFT:
         if bc is None:
             bc = ["periodic"] * (2 * len(params["nx"]))
         angles = params.get("angles", None)
+        if angles is not None and len(params["nx"]) == 3 and len(angles) != 3:
+            raise ValidationError("angles must be [alpha, beta, gamma] (three entries) for a 3D box.")
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
@@ -334,6 +336,46 @@ class SCFT:
                     self.sg.enable_z_mirror_physical_basis()
                 except RuntimeError:
                     pass  # keep the irreducible (full-group) basis
+
+            # The cell must belong to the crystal system of the space group. Otherwise
+            # the symmetry operations are not isometries of the box and the run would
+            # silently converge to a constrained, unphysical state.
+            crystal_system_sg = self.sg.get_crystal_system()
+            lx_sg = [float(v) for v in params["lx"]]
+            angles_sg = [float(v) for v in angles] if angles is not None else [90.0, 90.0, 90.0]
+            same = lambda a, b: abs(a - b) <= 1e-6 * max(abs(a), abs(b), 1.0)
+            cell_ok, need = True, ""
+            if crystal_system_sg == "Cubic":
+                cell_ok = same(lx_sg[0], lx_sg[1]) and same(lx_sg[0], lx_sg[2]) and is_orthogonal
+                need = "lx[0] = lx[1] = lx[2] and angles [90, 90, 90]"
+            elif crystal_system_sg == "Tetragonal":
+                cell_ok = same(lx_sg[0], lx_sg[1]) and is_orthogonal
+                need = "lx[0] = lx[1] and angles [90, 90, 90]"
+            elif crystal_system_sg == "Orthorhombic":
+                cell_ok = is_orthogonal
+                need = "angles [90, 90, 90]"
+            elif crystal_system_sg == "Hexagonal":
+                cell_ok = same(lx_sg[0], lx_sg[1]) and z_axis_orthogonal and same(angles_sg[2], 120.0)
+                need = "lx[0] = lx[1] and angles [90, 90, 120]"
+            elif crystal_system_sg == "Trigonal":
+                # the axes setting is a property of the group (P and hexagonal-axes R
+                # settings: z-block-diagonal rotations; rhombohedral-axes R settings:
+                # 3-fold about [111]), not of the cell
+                if self.sg.uses_hexagonal_axes():
+                    cell_ok = same(lx_sg[0], lx_sg[1]) and z_axis_orthogonal and same(angles_sg[2], 120.0)
+                    need = "lx[0] = lx[1] and angles [90, 90, 120] (hexagonal-axes setting)"
+                else:
+                    cell_ok = (same(lx_sg[0], lx_sg[1]) and same(lx_sg[0], lx_sg[2])
+                               and same(angles_sg[0], angles_sg[1]) and same(angles_sg[0], angles_sg[2]))
+                    need = "lx[0] = lx[1] = lx[2] and alpha = beta = gamma (rhombohedral-axes setting)"
+                    if cell_ok and params.get("box_is_altering", False):
+                        # a = b = c and alpha = beta = gamma would have to vary together
+                        raise ValidationError("Box relaxation is not supported for rhombohedral-axes settings; "
+                                              "use the hexagonal-axes setting of the space group.")
+            if not cell_ok:
+                raise ValidationError(f"The cell does not match the {crystal_system_sg.lower()} crystal system of "
+                                      f"space group {params['space_group']['symbol']}: it needs {need}. "
+                                      f"Got lx = {lx_sg}, angles = {angles_sg}.")
 
         else:
             self.sg = None
@@ -636,16 +678,16 @@ class SCFT:
             m_dic["space_group_hall_number"] = self.sg.get_hall_number()
 
         def _field_to_full(field: np.ndarray) -> np.ndarray:
-            """Convert irreducible/reduced basis field to full grid if space group is set."""
+            """Expand an irreducible-basis field to the full grid if a space group is set."""
             if self.sg is None:
                 return field
-
-            n_reduced = self.sg.get_n_reduced_basis()
-            n_irreducible = self.sg.get_n_reduced_basis_full()
-            field_use = field
-            if n_reduced != n_irreducible and field.size == n_irreducible:
-                field_use = self.sg.irreducible_to_reduced(field)
-            return self.sg.from_reduced_basis(field_use)
+            # self.w and self.phi are stored in the irreducible basis. With a physical
+            # basis the reduced ordering differs even when the sizes coincide (mmm
+            # orthorhombic groups with the m3 basis), so the conversion is gated on
+            # the basis, not on the sizes.
+            if self.sg.physical_basis_name() != "irreducible":
+                field = self.sg.irreducible_to_reduced(field)
+            return self.sg.from_reduced_basis(field)
 
         # Add w fields to the dictionary (expand to full grid if space group is set)
         for i, name in enumerate(self.monomer_types):
@@ -744,7 +786,7 @@ class SCFT:
         crystal_system = self.crystal_system
         if crystal_system == "Hexagonal2D":
             dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
-        elif crystal_system == "Tetragonal" or (crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
+        elif crystal_system in ("Tetragonal", "Hexagonal", "Trigonal") and len(self.lx_reduced_indices) == 2:
             dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
         elif crystal_system == "Cubic":
             dlx_reduced = np.array([np.mean(dlx_full)])
@@ -903,7 +945,7 @@ class SCFT:
             # Total energy from the auxiliary fields and the partition functions
             w_aux = self.mpt.to_aux_fields(w)
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-            if self.sg is not None and self.sg.get_n_reduced_basis_full() != self.sg.get_n_reduced_basis():
+            if self.sg is not None and self.sg.physical_basis_name() != "irreducible":
                 w_aux_energy = self.sg.irreducible_to_reduced(w_aux)
             else:
                 w_aux_energy = w_aux

@@ -63,6 +63,7 @@ private:
 
     // Physical basis flags
     PhysicalBasis physical_basis_{PhysicalBasis::None};  ///< Active physical basis (at most one)
+    mutable bool in_use_{false};  ///< set once a computation box or solver holds this group
     int z_mirror_shift_{0};
     double z_mirror_translation_{0.0};
 
@@ -84,8 +85,9 @@ private:
     /// Validate grid compatibility with space group symmetry.
     void validate_grid_compatibility();
 
-    /// Get required grid divisor for this space group.
-    int get_required_grid_divisor() const;
+    /// Per axis: the grid size must be a multiple of the lcm of the denominators of
+    /// the translation components of all symmetry operations along that axis.
+    std::array<int, 3> get_required_grid_divisors() const;
 
 public:
     /**
@@ -175,6 +177,11 @@ public:
     int get_spacegroup_number() const { return spacegroup_number_; }
     const std::string& get_spacegroup_symbol() const { return spacegroup_symbol_; }
     const std::string& get_crystal_system() const { return crystal_system_; }
+    /// True for hexagonal/trigonal groups in a hexagonal-axes setting (every rotation
+    /// is z-block-diagonal: the cell needs a = b, gamma = 120); false for the
+    /// rhombohedral-axes settings of R groups (3-fold about [111]: a = b = c,
+    /// alpha = beta = gamma) and for every other crystal system.
+    bool uses_hexagonal_axes() const;
     const std::vector<int>& get_nx() const { return nx_; }
     int get_total_grid() const { return total_grid_; }
     int get_n_reduced_basis() const { return n_irreducible_; }
@@ -245,6 +252,11 @@ public:
     PhysicalBasis physical_basis() const { return physical_basis_; }
     /// Human-readable name of the active basis ("irreducible", "pmmm", "m3", "z-mirror").
     std::string physical_basis_name() const;
+    /// Called by the computation box and the solvers that take this group. Their
+    /// reduced-basis sizes and maps are snapshots, so the physical basis is frozen
+    /// afterwards (enable_*_physical_basis() throws).
+    void mark_in_use() const { in_use_ = true; }
+    bool in_use() const { return in_use_; }
 
     /**
      * @brief Enable Pmmm physical basis (1/8 grid) mapping.

@@ -8,7 +8,7 @@
  *
  * **Boundary Conditions:**
  *
- * Supports all boundary conditions via the unified FftwFFT class:
+ * Supports all boundary conditions via the FFT<T> interface (FftwFFT or MklFFT):
  * - PERIODIC: Standard FFT (complex coefficients)
  * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
  * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
@@ -64,7 +64,6 @@
  *
  * Per monomer type:
  * - exp_dw, exp_dw_half: Boltzmann factors (n_grid each)
- * - exp_k2_1, exp_k2_2: Fourier space diffusion operators
  * - Temporary arrays for FFT workspace
  *
  * **Performance:**
@@ -82,7 +81,7 @@
  * solver.update_dw(w_fields);
  *
  * // Advance propagator
- * solver.advance_propagator(q_in, q_out, "A", nullptr);
+ * solver.advance_propagator(q_in, q_out, "A", nullptr, 0);
  * @endcode
  */
 template <typename T>
@@ -100,7 +99,7 @@ public:
      * @param molecules Molecules container with monomer types
      * @param backend   FFT backend to use (FFTW, default: FFTW)
      *
-     * @note Supports both FFTW FFT implementations.
+     * @note Supports the FFTW and MKL backends.
      */
     CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::FFTW);
 
@@ -126,7 +125,7 @@ public:
      * @param q_out       Output propagator q(r,s+ds)
      * @param monomer_type Monomer type for Boltzmann factors
      * @param q_mask      Optional mask (set q=0 in masked regions)
-     * @param ds_index    Index for the ds value (1-based, default: 1 for global ds)
+     * @param ds_index    Index for the ds value (0-based, default: 0 for global ds)
      */
     void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index) override;
 

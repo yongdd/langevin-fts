@@ -82,7 +82,7 @@ public:
      * Key: (ds_index, monomer_type)
      * Value: Vector of size n_grid containing exp(-w[i]*ds)
      *
-     * ds_index is 1-based (from ContourLengthMapping).
+     * ds_index is 0-based (from ContourLengthMapping).
      * Used in the real-space method and discrete chain pseudo-spectral.
      */
     std::map<int, std::map<std::string, std::vector<T>>> exp_dw;
@@ -93,21 +93,10 @@ public:
      * Key: (ds_index, monomer_type)
      * Value: Vector of size n_grid containing exp(-w[i]*ds/2)
      *
-     * ds_index is 1-based (from ContourLengthMapping).
+     * ds_index is 0-based (from ContourLengthMapping).
      * Used in operator splitting schemes for symmetric time stepping.
      */
     std::map<int, std::map<std::string, std::vector<T>>> exp_dw_half;
-
-    /**
-     * @brief Boltzmann factor for quarter segment: exp(-w(r)·ds/4) per ds_index.
-     *
-     * Key: (ds_index, monomer_type)
-     * Value: Vector of size n_grid containing exp(-w[i]*ds/4)
-     *
-     * ds_index is 1-based (from ContourLengthMapping).
-     * Used in RQM4 Richardson extrapolation.
-     */
-    std::map<int, std::map<std::string, std::vector<T>>> exp_dw_quarter;
 
     /**
      * @brief Force off-diagonal (cross-term) stress accumulation for orthogonal boxes.
@@ -200,7 +189,7 @@ public:
      * @param q_out       Output propagator at contour s+ds (size n_grid or n_basis)
      * @param monomer_type Monomer type determining segment length and field
      * @param q_mask      Optional mask for impenetrable regions (nullptr if none)
-     * @param ds_index    Index for the ds value to use (1-based, default: 1 for global ds)
+     * @param ds_index    Index for the ds value to use (0-based, default: 0 for global ds)
      *
      * @note For continuous chains, ds is the contour discretization parameter.
      *       For discrete chains, this advances by one segment.

@@ -81,6 +81,12 @@ inline const char* getTransformName(CudaTransformType type) {
  *
  * For DCT-1/DST-1: Input size is N+1/N-1, output size is N+1/N-1.
  * For DCT-2/3/4 and DST-2/3/4: Input size is N, output size is N.
+ *
+ * Transform lengths (verified against FFTW): DCT-2/3/4, DST-1/4 and the 2D/3D DCT-1
+ * accept any N (the CrysFFT physical grid, half the logical grid, is odd whenever a
+ * logical size is 2 mod 4); the 1D DCT-1 takes the number of points N+1, which must
+ * be odd; DST-2 (all dimensions) and the 2D/3D DST-3 need even N. The constructors
+ * reject unsupported lengths.
  */
 class CudaRealTransform1D
 {

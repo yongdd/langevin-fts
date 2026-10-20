@@ -325,7 +325,7 @@ private:
 
     /**
      * @brief 3D ADI propagator advancement.
-     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,
@@ -334,7 +334,7 @@ private:
 
     /**
      * @brief 2D ADI propagator advancement.
-     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
@@ -343,7 +343,7 @@ private:
 
     /**
      * @brief 1D Crank-Nicolson propagator advancement.
-     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
@@ -418,7 +418,7 @@ public:
      * @param d_q_out      Output propagator (device)
      * @param monomer_type Monomer type
      * @param d_q_mask     Optional mask (device)
-     * @param ds_index     Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index     Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator(
         const int STREAM,

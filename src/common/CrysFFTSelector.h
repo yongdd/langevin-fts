@@ -6,6 +6,7 @@
 #include <vector>
 #include "Recursive3mFoldParity.h"
 #include "SpaceGroup.h"
+#include "Exception.h"
 
 enum class CrysFFTChoice
 {
@@ -42,6 +43,10 @@ inline bool crysfft_recursive_3m_feasible(
     if (!sg->get_m3_translations(trans_part))
         return false;
     const bool even_all = (nx[0] % 2 == 0) && (nx[1] % 2 == 0) && (nx[2] % 2 == 0);
+    // nz/2 >= 8 is a performance heuristic (small physical grids gain nothing from
+    // the fold); the engines are exact for any even grid with nz/2 >= 2 (the Fddd
+    // 8x8x16 case of tests/TestSpaceGroupPlatformEquivalence.py checks nx = ny = 8
+    // against the full-grid FFT).
     if (!even_all || (nx[2] / 2) < 8)
         return false;
     std::array<int, 8> fold_perm{};
@@ -102,6 +107,15 @@ inline CrysFFTSelection select_crysfft_mode(
     std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     const bool recursive_ok = crysfft_recursive_3m_feasible(sg, nx, trans_part);
     const bool has_pmmm = sg->has_mirror_planes_xyz();
+
+    // A physical basis enabled by hand (on a SpaceGroup passed to PropagatorSolver,
+    // or through the C++ API) must match the cell; scft.py checks the cell before
+    // enabling one. The Pmmm/m3 mirrors need an orthogonal cell and the z-mirror
+    // alpha = beta = 90 degrees.
+    if ((sg->using_pmmm_physical_basis() || sg->using_m3_physical_basis()) && !is_orthogonal)
+        throw_with_line_number("The " + sg->physical_basis_name() + " physical basis requires an orthogonal cell (all angles 90 degrees).");
+    if (sg->using_z_mirror_physical_basis() && !z_axis_orthogonal)
+        throw_with_line_number("The z-mirror physical basis requires alpha = beta = 90 degrees.");
 
     selection.can_pmmm = has_pmmm;
 

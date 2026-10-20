@@ -2,8 +2,7 @@
  * @file CudaSolverPseudoBase.cu
  * @brief Shared implementation of the CUDA pseudo-spectral solvers.
  *
- * See CudaSolverPseudoBase.h. The space-group / CrysFFT setup below used to be
- * triplicated in the RQM4, RK2 and discrete solvers.
+ * See CudaSolverPseudoBase.h.
  */
 
 #include <iostream>
@@ -374,6 +373,10 @@ void CudaSolverPseudoBase<T>::set_space_group(
         if (space_group_ != nullptr && dim_ == 3 && is_periodic_)
             init_crysfft();
     }
+
+    // The maps and CrysFFT setup above are snapshots: freeze the physical basis
+    if (sg != nullptr)
+        sg->mark_in_use();
 }
 
 template <typename T>

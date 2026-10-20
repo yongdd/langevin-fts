@@ -210,10 +210,11 @@ void SpaceGroup::validate_grid()
     }
 }
 
-int SpaceGroup::get_required_grid_divisor() const
+std::array<int, 3> SpaceGroup::get_required_grid_divisors() const
 {
-    // Compute required divisor from actual translation components in symmetry operations
-    // For each translation t, if t = p/q (in lowest terms), grid must be divisible by q
+    // Per axis: for every translation component t = p/q (in lowest terms) of a
+    // symmetry operation along that axis, the grid size of the axis must be divisible
+    // by q (a 1/2 translation along z alone, as in P6_3/mmc, constrains only nz).
 
     auto get_denominator = [](double t) -> int {
         // Normalize to [0, 1)
@@ -251,14 +252,14 @@ int SpaceGroup::get_required_grid_divisor() const
         return 1;  // Unknown fraction, assume no special requirement
     };
 
-    int result = 1;
+    std::array<int, 3> result = {1, 1, 1};
 
     for (int op = 0; op < n_symmetry_ops_; ++op)
     {
         for (int dim = 0; dim < 3; ++dim)
         {
             int denom = get_denominator(translations_[op][dim]);
-            result = std::lcm(result, denom);
+            result[dim] = std::lcm(result[dim], denom);
         }
     }
 
@@ -267,58 +268,50 @@ int SpaceGroup::get_required_grid_divisor() const
 
 void SpaceGroup::validate_grid_compatibility()
 {
-    int required_divisor = get_required_grid_divisor();
-
-    if (required_divisor <= 1)
-    {
-        return;  // No special requirement
-    }
+    const std::array<int, 3> divisors = get_required_grid_divisors();
 
     std::vector<int> incompatible;
     for (int dim = 0; dim < 3; ++dim)
     {
-        if (nx_[dim] % required_divisor != 0)
-        {
+        if (divisors[dim] > 1 && nx_[dim] % divisors[dim] != 0)
             incompatible.push_back(dim);
-        }
     }
+    if (incompatible.empty())
+        return;
 
-    if (!incompatible.empty())
+    const char* axis_names[] = {"x", "y", "z"};
+    std::string msg = "Grid [" + std::to_string(nx_[0]) + ", " +
+        std::to_string(nx_[1]) + ", " + std::to_string(nx_[2]) +
+        "] is incompatible with space group " + spacegroup_symbol_ +
+        " (No. " + std::to_string(spacegroup_number_) + ").\n";
+    msg += "The translation parts of the symmetry operations require:";
+    for (int dim : incompatible)
     {
-        std::string msg = "Grid [" + std::to_string(nx_[0]) + ", " +
-            std::to_string(nx_[1]) + ", " + std::to_string(nx_[2]) +
-            "] is incompatible with space group " + spacegroup_symbol_ +
-            " (No. " + std::to_string(spacegroup_number_) + ").\n";
-        msg += "Grid dimensions must be divisible by " + std::to_string(required_divisor) + ".\n";
-        msg += "Incompatible dimensions:";
-
-        const char* axis_names[] = {"x", "y", "z"};
-        for (int dim : incompatible)
-        {
-            msg += std::string(" ") + axis_names[dim] + "=" + std::to_string(nx_[dim]);
-        }
-
-        // Suggest valid grid sizes
-        msg += "\nSuggested grid: [";
-        for (int dim = 0; dim < 3; ++dim)
-        {
-            if (dim > 0) msg += ", ";
-            if (nx_[dim] % required_divisor == 0)
-            {
-                msg += std::to_string(nx_[dim]);
-            }
-            else
-            {
-                int lower = (nx_[dim] / required_divisor) * required_divisor;
-                int upper = lower + required_divisor;
-                int suggested = (upper - nx_[dim] < nx_[dim] - lower || lower == 0) ? upper : lower;
-                msg += std::to_string(suggested);
-            }
-        }
-        msg += "]";
-
-        throw_with_line_number(msg);
+        msg += std::string(" ") + axis_names[dim] + "=" + std::to_string(nx_[dim]) +
+            " (a multiple of " + std::to_string(divisors[dim]) + ")";
     }
+
+    // Suggest valid grid sizes
+    msg += "\nSuggested grid: [";
+    for (int dim = 0; dim < 3; ++dim)
+    {
+        if (dim > 0) msg += ", ";
+        const int d = divisors[dim];
+        if (d <= 1 || nx_[dim] % d == 0)
+        {
+            msg += std::to_string(nx_[dim]);
+        }
+        else
+        {
+            int lower = (nx_[dim] / d) * d;
+            int upper = lower + d;
+            int suggested = (upper - nx_[dim] < nx_[dim] - lower || lower == 0) ? upper : lower;
+            msg += std::to_string(suggested);
+        }
+    }
+    msg += "]";
+
+    throw_with_line_number(msg);
 }
 
 void SpaceGroup::determine_crystal_system()
@@ -943,6 +936,8 @@ void SpaceGroup::enable_pmmm_physical_basis()
 {
     if (physical_basis_ == PhysicalBasis::Pmmm)
         return;
+    if (in_use_)
+        throw_with_line_number("The physical basis cannot be changed after a computation box or solver was created with this SpaceGroup (their reduced-basis maps are snapshots); create a new SpaceGroup.");
 
     if (nx_.size() != 3)
         throw_with_line_number("Pmmm physical basis requires 3D grid.");
@@ -1027,6 +1022,8 @@ void SpaceGroup::enable_m3_physical_basis()
 {
     if (physical_basis_ == PhysicalBasis::M3)
         return;
+    if (in_use_)
+        throw_with_line_number("The physical basis cannot be changed after a computation box or solver was created with this SpaceGroup (their reduced-basis maps are snapshots); create a new SpaceGroup.");
 
     if (nx_.size() != 3)
         throw_with_line_number("M3 physical basis requires 3D grid.");
@@ -1046,10 +1043,12 @@ void SpaceGroup::enable_m3_physical_basis()
     const int Ny2 = Ny / 2;
     const int Nz2 = Nz / 2;
 
-    n_irreducible_ = Nx2 * Ny2 * Nz2;
-    reduced_basis_indices_.resize(n_irreducible_);
-    full_to_reduced_map_.assign(total_grid_, -1);
-    orbit_counts_.assign(n_irreducible_, 0);
+    // The basis is built in locals and committed at the end, so that a failed
+    // mapping below leaves the object in its previous state.
+    const int n_reduced = Nx2 * Ny2 * Nz2;
+    std::vector<int> reduced_basis_indices(n_reduced);
+    std::vector<int> full_to_reduced_map(total_grid_, -1);
+    std::vector<int> orbit_counts(n_reduced, 0);
 
     int idx = 0;
     for (int ix = 0; ix < Nx2; ++ix)
@@ -1062,7 +1061,7 @@ void SpaceGroup::enable_m3_physical_basis()
             {
                 const int fz = 2 * iz;
                 const int full_idx = (fx * Ny + fy) * Nz + fz;
-                reduced_basis_indices_[idx++] = full_idx;
+                reduced_basis_indices[idx++] = full_idx;
             }
         }
     }
@@ -1150,11 +1149,16 @@ void SpaceGroup::enable_m3_physical_basis()
                 if (reduced_idx < 0)
                     throw_with_line_number("Failed to map grid point to M3 physical basis.");
 
-                full_to_reduced_map_[full_idx] = reduced_idx;
-                orbit_counts_[reduced_idx] += 1;
+                full_to_reduced_map[full_idx] = reduced_idx;
+                orbit_counts[reduced_idx] += 1;
             }
         }
     }
+
+    n_irreducible_ = n_reduced;
+    reduced_basis_indices_ = std::move(reduced_basis_indices);
+    full_to_reduced_map_ = std::move(full_to_reduced_map);
+    orbit_counts_ = std::move(orbit_counts);
 
     if (!full_to_reduced_map_full_.empty())
     {
@@ -1178,6 +1182,8 @@ void SpaceGroup::enable_z_mirror_physical_basis()
 {
     if (physical_basis_ == PhysicalBasis::ZMirror)
         return;
+    if (in_use_)
+        throw_with_line_number("The physical basis cannot be changed after a computation box or solver was created with this SpaceGroup (their reduced-basis maps are snapshots); create a new SpaceGroup.");
 
     if (nx_.size() != 3)
         throw_with_line_number("Z-mirror physical basis requires 3D grid.");
@@ -1292,6 +1298,18 @@ void SpaceGroup::enable_physical_basis(PhysicalBasis basis)
         case PhysicalBasis::M3:      enable_m3_physical_basis(); break;
         case PhysicalBasis::ZMirror: enable_z_mirror_physical_basis(); break;
     }
+}
+
+bool SpaceGroup::uses_hexagonal_axes() const
+{
+    if (crystal_system_ != "Hexagonal" && crystal_system_ != "Trigonal")
+        return false;
+    for (const auto& R : rotations_)
+    {
+        if (R[0][2] != 0 || R[1][2] != 0 || R[2][0] != 0 || R[2][1] != 0 || std::abs(R[2][2]) != 1)
+            return false;   // 3-fold about [111]: rhombohedral axes
+    }
+    return true;
 }
 
 std::string SpaceGroup::physical_basis_name() const

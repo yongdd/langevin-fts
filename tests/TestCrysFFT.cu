@@ -18,6 +18,7 @@
 #include "FftwCrysFFTPmmm.h"
 #include "FftwCrysFFTRecursive3m.h"
 #ifdef USE_CPU_MKL
+#include "MklCrysFFTPmmm.h"
 #include "MklCrysFFTRecursive3m.h"
 #endif
 #include "SpaceGroup.h"
@@ -173,7 +174,8 @@ __global__ void ker_apply_boltzmann(
 // Test functions
 //==============================================================================
 
-bool test_cpu(int Nx, int Ny, int Nz, double ds)
+template <typename Engine>
+bool test_cpu_engine(const char* label, int Nx, int Ny, int Nz, double ds)
 {
     double Lx = 4.0, Ly = 4.0, Lz = 4.0;
     int M_logical = Nx * Ny * Nz;
@@ -199,27 +201,43 @@ bool test_cpu(int Nx, int Ny, int Nz, double ds)
     }
     expand_pmmm(q_phys.data(), q_logical.data(), Nx, Ny, Nz);
 
-    FftwCrysFFTPmmm crys({Nx, Ny, Nz}, {Lx, Ly, Lz, M_PI/2, M_PI/2, M_PI/2});
+    Engine crys({Nx, Ny, Nz}, {Lx, Ly, Lz, M_PI/2, M_PI/2, M_PI/2});
     crys.set_contour_step(ds);
     crys.diffusion(q_phys.data(), q_phys_out.data());
 
     diffusion_standard_fft(q_logical.data(), q_logical_out.data(), Nx, Ny, Nz, Lx, Ly, Lz, ds);
 
-    double max_rel = 0.0;
+    double max_abs = 0.0, max_ref = 0.0;
     for (int ix = 0; ix < Nx2; ++ix)
         for (int iy = 0; iy < Ny2; ++iy)
             for (int iz = 0; iz < Nz2; ++iz)
             {
                 double v1 = q_phys_out[(ix*Ny2+iy)*Nz2+iz];
                 double v2 = q_logical_out[(ix*Ny+iy)*Nz+iz];
-                double rel = std::abs(v1-v2) / (std::abs(v2)+1e-15);
-                if (rel > max_rel) max_rel = rel;
+                // error relative to the field scale: a pointwise ratio is undefined
+                // where the reference vanishes (the cosine zeros of an N = 2 mod 4 grid)
+                max_abs = std::max(max_abs, std::abs(v1 - v2));
+                max_ref = std::max(max_ref, std::abs(v2));
             }
+    const double max_rel = max_abs / max_ref;
 
-    bool ok = (max_rel < 1e-6);
-    printf("  CPU:  %.2e %s\n", max_rel, ok ? "OK" : "FAIL");
+    bool ok = (max_rel < 1e-10);
+    printf("  %-10s %.2e %s\n", label, max_rel, ok ? "OK" : "FAIL");
     return ok;
 }
+
+bool test_cpu(int Nx, int Ny, int Nz, double ds)
+{
+    return test_cpu_engine<FftwCrysFFTPmmm>("CPU-FFTW:", Nx, Ny, Nz, ds);
+}
+
+#ifdef USE_CPU_MKL
+// The MKL Pmmm engine against the same full-grid reference
+bool test_cpu_mkl(int Nx, int Ny, int Nz, double ds)
+{
+    return test_cpu_engine<MklCrysFFTPmmm>("CPU-MKL:", Nx, Ny, Nz, ds);
+}
+#endif
 
 bool test_cuda(int Nx, int Ny, int Nz, double ds)
 {
@@ -284,18 +302,21 @@ bool test_cuda(int Nx, int Ny, int Nz, double ds)
     cufftDestroy(fwd); cufftDestroy(bwd);
     cudaFree(d_full); cudaFree(d_freq);
 
-    double max_rel = 0.0;
+    double max_abs = 0.0, max_ref = 0.0;
     for (int ix = 0; ix < Nx2; ++ix)
         for (int iy = 0; iy < Ny2; ++iy)
             for (int iz = 0; iz < Nz2; ++iz)
             {
                 double v1 = h_crys_out[(ix*Ny2+iy)*Nz2+iz];
                 double v2 = h_std_out[(ix*Ny+iy)*Nz+iz];
-                double rel = std::abs(v1-v2) / (std::abs(v2)+1e-15);
-                if (rel > max_rel) max_rel = rel;
+                // error relative to the field scale: a pointwise ratio is undefined
+                // where the reference vanishes (the cosine zeros of an N = 2 mod 4 grid)
+                max_abs = std::max(max_abs, std::abs(v1 - v2));
+                max_ref = std::max(max_ref, std::abs(v2));
             }
+    const double max_rel = max_abs / max_ref;
 
-    bool ok = (max_rel < 1e-6);
+    bool ok = (max_rel < 1e-10);
     printf("  CUDA: %.2e %s\n", max_rel, ok ? "OK" : "FAIL");
     return ok;
 }
@@ -486,12 +507,15 @@ int main()
     printf("=== CrysFFT Test (CPU & CUDA) ===\n\n");
 
     bool all = true;
-    int sizes[][3] = {{16,16,16}, {32,32,32}, {64,64,64}};
+    int sizes[][3] = {{16,16,16}, {32,32,32}, {64,64,64}, {12,12,10}};   // 12x12x10: odd physical z (6x6x5)
 
     for (auto& s : sizes)
     {
         printf("Grid: %dx%dx%d\n", s[0], s[1], s[2]);
         all &= test_cpu(s[0], s[1], s[2], 0.01);
+#ifdef USE_CPU_MKL
+        all &= test_cpu_mkl(s[0], s[1], s[2], 0.01);
+#endif
         all &= test_cuda(s[0], s[1], s[2], 0.01);
     }
 

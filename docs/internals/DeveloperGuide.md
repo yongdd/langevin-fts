@@ -52,6 +52,7 @@ The abstract factory provides a unified interface for creating platform-specific
 AbstractFactory<T>                    [Abstract Base]
 ├── create_computation_box()          [pure virtual]
 ├── create_molecules_information()    [pure virtual]
+├── create_propagator_computation_optimizer(molecules, aggregate)  [concrete, platform-independent]
 ├── create_propagator_computation()   [pure virtual]
 ├── create_anderson_mixing()          [pure virtual]
 └── display_info()                    [pure virtual]
@@ -85,15 +86,16 @@ AbstractFactory<std::complex<double>>* factory_complex =
 
 **Notes:**
 
-- The only recognized platform strings are `"cpu-fftw"`, `"cpu-mkl"`, and `"cuda"`; any other name (including `"auto"`) throws `Could not find platform '...'`. Automatic platform selection (GPU for 2D/3D, CPU for 1D) is implemented purely in the Python layer (`src/python/propagator_solver.py`, `src/python/scft.py`), not in C++.
+- The only recognized platform strings are `"cpu-fftw"`, `"cpu-mkl"`, and `"cuda"`; any other name (including `"auto"`) throws `Could not find platform '...'`. Automatic platform selection (GPU for 2D/3D, CPU for 1D) is implemented purely in the Python layer, in `PropagatorSolver._auto_platform` (`src/python/propagator_solver.py`); `scft.py`, `lfts.py` and `clfts.py` just pass `platform="auto"` through to `PropagatorSolver`. It is not in C++.
 - The Python binding exposes a static `PlatformSelector.create_factory(platform_name, reduce_memory, type)` (with `type` = `"real"` or `"complex"`) that dispatches to `create_factory_real`/`create_factory_complex` (`src/pybind11/polymerfts_core.cpp`).
 
 ### Factory Methods
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `create_computation_box(nx, lx, bc)` | `ComputationBox<T>*` | Simulation grid with boundary conditions |
-| `create_computation_box(nx, lx, bc, mask)` | `ComputationBox<T>*` | Grid with impenetrable mask regions |
+| `create_computation_box(nx, lx, bc, mask=nullptr)` | `ComputationBox<T>*` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
+| `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `ComputationBox<T>*` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
+| `create_propagator_computation_optimizer(molecules, aggregate)` | `PropagatorComputationOptimizer*` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
 | `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
 | `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
@@ -206,7 +208,9 @@ CpuSolver<T>                                  [Abstract Base]
         │   ├── fft_               - FFT<T>* for transforms
         │   ├── transform_forward()
         │   ├── transform_backward()
-        │   └── update_laplacian_operator()
+        │   ├── update_laplacian_operator()
+        │   ├── compute_single_segment_stress()  [shared implementation]
+        │   └── get_stress_boltz_bond()          [virtual; base returns nullptr]
         │       │
         │       ├── CpuSolverPseudoRQM4<T>
         │       │   ├── update_dw(): exp(-w·ds/2)
@@ -219,7 +223,8 @@ CpuSolver<T>                                  [Abstract Base]
         │       └── CpuSolverPseudoDiscrete<T>
         │           ├── update_dw(): exp(-w·ds)
         │           ├── advance_propagator(): bond convolution
-        │           └── advance_propagator_half_bond_step()
+        │           ├── advance_propagator_half_bond_step()
+        │           └── get_stress_boltz_bond(): returns boltz_bond
         │
         └── CpuSolverCNADI<T>                  [Finite Difference]
             └── CN-ADI with tridiagonal solver
@@ -235,17 +240,22 @@ and implements `set_space_group()`, `update_laplacian_operator()` and the shared
 constructor argument) and per-stream DCT/DST objects (`fft_`) for non-periodic ones.
 The physical-grid ↔ reduced-basis maps of the CrysFFT fast path are built by the
 platform-independent `CrysFFTBasisMapping.h` and shared with the CPU solver.
+It also implements `compute_single_segment_stress()` once for the three solvers
+(as `CpuSolverPseudoBase` does on the CPU): the derived classes only lend their
+work buffers through `stress_scratch()`, and the discrete solver overrides
+`get_stress_boltz_bond()` (the base default, nullptr, is the continuous chain).
 `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` keep
-only their work buffers and the `advance_propagator()` /
-`compute_single_segment_stress()` algorithms;
-`CudaSolverCNADI` is the finite-difference solver. Mechanical real/complex
+their work buffers, `update_dw()`/`advance_propagator()` and the stress scratch they lend;
+`CudaSolverCNADI` is the finite-difference solver. The non-periodic DCT/DST
+objects are held through `CudaFFTBase<T>`, whose `forward_stream()` /
+`backward_stream()` run the transform on the propagator's stream. Mechanical real/complex
 differences (D2Z vs Z2Z transforms, CUB sum vs reduce) are hidden behind the overloads
 in `CudaTypeDispatch.h`, so a remaining `if constexpr` on the field type marks a genuine
 algorithmic difference or a real-only feature and is commented as such.
 
 ### 3.4 FFT Hierarchy
 
-**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`, `src/platforms/cpu/MklFFT.h`
+**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`, `src/platforms/cpu/MklFFT.h`, `src/platforms/cuda/CudaFFT.h`
 
 ```
 FFT<T>                                        [Abstract Base]
@@ -260,10 +270,13 @@ FFT<T>                                        [Abstract Base]
         ├── MklFFT<T, DIM>                     [CPU - MKL backend]
         │   └── DIM = 1, 2, or 3 (compile-time)
         │
-        └── CudaFFT<T, DIM>                   [GPU/cuFFT + CudaRealTransform]
-            ├── forward_stream(..., cudaStream_t)
-            ├── backward_stream(..., cudaStream_t)
-            └── Uses CudaRealTransform for non-periodic BC (DCT/DST)
+        └── CudaFFTBase<T>                    [GPU abstract base]
+            ├── forward_stream(..., cudaStream_t)   [pure virtual; double* and complex* overloads]
+            ├── backward_stream(..., cudaStream_t)  [pure virtual; double* and complex* overloads]
+            │
+            └── CudaFFT<T, DIM>               [GPU/cuFFT + CudaRealTransform]
+                ├── forward()/backward() call the stream versions on stream 0
+                └── Uses CudaRealTransform for non-periodic BC (DCT/DST)
 ```
 
 **Transform Types:**
@@ -284,7 +297,7 @@ AndersonMixing<T>                             [Abstract Base]
 ├── max_hist        - maximum history length
 ├── mix_min/mix_init - mixing parameter bounds
 ├── calculate_new_fields(w_new, w_current, w_deriv) [pure virtual]
-└── reset_count()   [pure virtual]
+└── reset_count()   [virtual, empty default; overridden by the platform classes]
         │
         ├── CpuAndersonMixing<T>              [CPU Implementation]
         │   └── Uses CircularBuffer for history
@@ -406,7 +419,7 @@ cd build && make -j8 && make install
 
 #### Python Changes
 
-Changes to `src/python/*.py` take effect after `make install` from build directory. No recompilation needed.
+Changes to `src/python/*.py` are picked up by the tests after a plain `make` from the build directory (the `polymerfts_stage` target copies them into `build/python/polymerfts`, which the tests import). `make install` is only needed to update the installed package used by the examples and tutorials. No recompilation needed.
 
 #### Running Tests
 

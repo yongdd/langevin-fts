@@ -137,7 +137,7 @@ public:
     /**
      * @brief Get full bond factor (device pointer).
      * @param monomer_type Monomer type
-     * @param ds_index Index for ds value (1-based)
+     * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/6)
      */
     double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond[ds_index][monomer_type]; };
@@ -145,7 +145,7 @@ public:
     /**
      * @brief Get half bond factor (device pointer).
      * @param monomer_type Monomer type
-     * @param ds_index Index for ds value (1-based)
+     * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/12)
      */
     double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type];};

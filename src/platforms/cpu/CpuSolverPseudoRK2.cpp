@@ -253,14 +253,6 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
                 fft_out[i] *= _exp_dw[i];
         }
 
-        // Apply mask if provided
-        if (q_mask != nullptr)
-        {
-            const int M_mask = (this->use_crysfft() && this->space_group_ != nullptr) ? M_reduced : M_full;
-            for (int i = 0; i < M_mask; ++i)
-                fft_out[i] *= q_mask[i];
-        }
-
         // Reduce full grid → reduced basis
         if (this->space_group_ != nullptr)
         {
@@ -271,6 +263,16 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
                 else
                     this->space_group_->to_reduced_basis(fft_out, q_out, 1);
             }
+        }
+
+        // Apply the mask on the output. The computation box stores the mask in the
+        // basis of the propagators (reduced with a space group, full otherwise), so it
+        // is applied after the reduction; the mask is symmetric, so this equals masking
+        // on the full grid.
+        if (q_mask != nullptr)
+        {
+            for (int i = 0; i < M_reduced; ++i)
+                q_out[i] *= q_mask[i];
         }
     }
     catch (std::exception& exc)

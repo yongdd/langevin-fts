@@ -108,18 +108,20 @@ ELSE()
         "(or apt install libsymspg-dev), or set SPGLIB_ROOT.")
 ENDIF()
 
-# LAPACKE: SVD solver of Anderson mixing (AndersonMixing.cpp includes lapacke.h,
-# falling back to MKL's mkl_lapacke.h). The library is linked into 'common', so
-# both the library and a header are required at configure time.
+# LAPACKE: SVD solver of Anderson mixing. AndersonMixing.cpp includes lapacke.h or,
+# failing that, MKL's mkl_lapacke.h; the library is linked into 'common', so the
+# library and one of the two headers are required at configure time. (conda-forge's
+# liblapacke built against MKL ships only the shared library; its header is
+# mkl_lapacke.h from mkl-include.)
 FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
-FIND_PATH(LAPACKE_INCLUDE_DIR lapacke.h HINTS ENV LAPACKE_ROOT PATH_SUFFIXES include)
+FIND_PATH(LAPACKE_INCLUDE_DIR NAMES lapacke.h mkl_lapacke.h HINTS ENV LAPACKE_ROOT ENV MKLROOT PATH_SUFFIXES include)
 IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${LAPACKE_INCLUDE_DIR})
     MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY} (${LAPACKE_INCLUDE_DIR})")
 ELSE()
-    MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h) is required but was not found. "
-        "Install with: conda install -c conda-forge liblapacke "
-        "(or apt install liblapacke-dev), or set LAPACKE_ROOT.")
+    MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h or mkl_lapacke.h) is required but was not found. "
+        "Install with: conda install -c conda-forge liblapacke (plus mkl-include for the MKL build), "
+        "or apt install liblapacke-dev, or set LAPACKE_ROOT.")
 ENDIF()
 
 # ============================================================================

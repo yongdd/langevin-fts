@@ -122,7 +122,7 @@ private:
      * @param q_in        Input propagator
      * @param q_out       Output propagator
      * @param monomer_type Monomer type for coefficients
-     * @param ds_index    Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index    Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,
@@ -130,7 +130,7 @@ private:
 
     /**
      * @brief Advance propagator in 2D using ADI splitting.
-     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
@@ -138,7 +138,7 @@ private:
 
     /**
      * @brief Advance propagator in 1D (direct solve).
-     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
+     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
@@ -277,7 +277,7 @@ public:
      * @param q_out       Output propagator
      * @param monomer_type Monomer type
      * @param q_mask      Optional mask (currently ignored for CN-ADI)
-     * @param ds_index    Index for the ds value (1-based) from ContourLengthMapping
+     * @param ds_index    Index for the ds value (0-based) from ContourLengthMapping
      */
     void advance_propagator(
                 double *q_in, double *q_out, std::string monomer_type, const double *q_mask, int ds_index) override;

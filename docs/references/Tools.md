@@ -119,7 +119,7 @@ where $z_\infty$ is the renormalization factor from the discrete chain model.
 
 ### 1.4 Polymer Architecture Drawing
 
-`SCFT(params)` and `LFTS(params)` draw the chain architectures as graphs (vertices = chain ends and junctions, edges = blocks labelled with their segment numbers) into `polymer_0.png`, `polymer_1.png`, ... in the current directory. To redraw them later, or for CL-FTS:
+`SCFT(params)`, `LFTS(params)` and `CLFTS(params)` draw the chain architectures as graphs (vertices = chain ends and junctions, edges = blocks labelled with their segment numbers) into `polymer_0.png`, `polymer_1.png`, ... in the current directory. To redraw them later:
 
 ```python
 from polymerfts import draw_polymer_architectures

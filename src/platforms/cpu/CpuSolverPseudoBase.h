@@ -83,7 +83,7 @@
  * - update_dw(): Different Boltzmann factor formulas
  * - advance_propagator(): Different propagation algorithms
  * - advance_propagator_half_bond_step(): Discrete-specific
- * - get_stress_boltz_bond(): Coefficient factor for stress
+ * - get_stress_boltz_bond() (optional): bond factor of the stress integrand; the base returns nullptr
  */
 template <typename T>
 class CpuSolverPseudoBase : public CpuSolver<T>
@@ -302,7 +302,7 @@ protected:
      *
      * @param cb Computation box
      * @param molecules Molecules container
-     * @param backend FFT backend to use (FFTW)
+     * @param backend FFT backend to use (FFTW or MKL)
      */
     void init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend);
 
@@ -416,9 +416,9 @@ public:
 
 protected:
     /**
-     * @brief Apply crystallographic FFT diffusion on a full grid.
+     * @brief Copy a reduced-basis field onto the CrysFFT physical grid, and back.
      *
-     * Requires Pmmm mirror symmetry and 3D periodic BC.
+     * Index-map copies (crysfft_reduced_to_phys_ / crysfft_phys_to_reduced_).
      */
     void fill_crysfft_from_reduced(const double* reduced_in, double* phys_out) const;
     void reduce_crysfft_to_reduced(const double* phys_in, double* reduced_out) const;

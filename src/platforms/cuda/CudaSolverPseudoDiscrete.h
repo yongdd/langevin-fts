@@ -71,14 +71,13 @@ class CudaSolverPseudoDiscrete : public CudaSolverPseudoBase<T>
 private:
     using Base = CudaSolverPseudoBase<T>;
     using Base::cb; using Base::molecules; using Base::pseudo;
-    using Base::n_streams; using Base::dim_; using Base::is_periodic_; using Base::streams;
-    using Base::temp_storage_bytes; using Base::d_temp_storage;
-    using Base::d_stress_sum; using Base::d_stress_sum_out; using Base::d_q_multi;
+    using Base::n_streams; using Base::is_periodic_; using Base::streams;
+
     using Base::space_group_; using Base::d_reduced_basis_indices_; using Base::d_full_to_reduced_map_;
     using Base::n_basis_; using Base::d_q_full_in_; using Base::d_q_full_out_;
-    using Base::use_crysfft_; using Base::crysfft_mode_; using Base::crysfft_identity_map_;
+    using Base::use_crysfft_; using Base::crysfft_identity_map_;
     using Base::crysfft_physical_size_;
-    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
+    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_;
     using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
     using Base::fft_; using Base::fft_forward; using Base::fft_backward;
 
@@ -99,7 +98,7 @@ public:
      * @param molecules           Molecules container
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
-     * @param reduce_memory   Checkpointing mode
+     * @param reduce_memory   Unused (kept for the factory signature)
      */
     CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
@@ -130,7 +129,7 @@ public:
      * @param d_q_out     Output propagator q(i+1)
      * @param monomer_type Monomer type
      * @param d_q_mask    Optional mask
-     * @param ds_index    Index for ds value (discrete chains use ds_index=1)
+     * @param ds_index    Index for ds value (discrete chains use ds_index=0)
      */
     void advance_propagator(
         const int STREAM,

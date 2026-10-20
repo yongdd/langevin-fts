@@ -4,6 +4,7 @@
  */
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -24,8 +25,6 @@ FftwCrysFFTObliqueZ::FftwCrysFFTObliqueZ(
 
 FftwCrysFFTObliqueZ::~FftwCrysFFTObliqueZ()
 {
-    freeBoltzmann();
-
     if (plan_dct_forward_z_) fftw_destroy_plan(plan_dct_forward_z_);
     if (plan_dct_backward_z_) fftw_destroy_plan(plan_dct_backward_z_);
     if (plan_fft_forward_xy_) fftw_destroy_plan(plan_fft_forward_xy_);
@@ -269,7 +268,7 @@ void FftwCrysFFTObliqueZ::dct3_execute(ThreadBuffers& buffers, const double* in,
 
     fftw_execute_dft_c2r(plan_fft_z_backward_, buffers.z_complex.get(), buffers.z_real.get());
 
-    const double scale = 1.0;   // the unnormalized c2r of the twiddled spectrum is REDFT01
+    // the unnormalized c2r of the twiddled spectrum is REDFT01 itself (no scale)
     for (int ix = 0; ix < nx_logical_[0]; ++ix)
     {
         for (int iy = 0; iy < nx_logical_[1]; ++iy)
@@ -277,7 +276,7 @@ void FftwCrysFFTObliqueZ::dct3_execute(ThreadBuffers& buffers, const double* in,
             const int base_half = (ix * nx_logical_[1] + iy) * Nz2;
             const int base_full = (ix * nx_logical_[1] + iy) * Nz;
             for (int iz = 0; iz < Nz2; ++iz)
-                out[base_half + iz] = buffers.z_real.get()[base_full + iz] * scale;
+                out[base_half + iz] = buffers.z_real.get()[base_full + iz];
         }
     }
 }

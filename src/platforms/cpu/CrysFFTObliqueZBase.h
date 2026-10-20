@@ -36,12 +36,10 @@
  * Provides common functionality:
  * - Reciprocal metric tensor computation
  * - Boltzmann factor generation and caching
- * - Thread-local state management
+ * - Per-thread state (owned by the object)
  *
- * Derived classes must implement:
- * - initFFTPlans(): Create platform-specific FFT/DCT plans
- * - diffusion(): Apply diffusion operator
- * - apply_multiplier(): Apply arbitrary multiplier in spectral space
+ * The derived classes (FftwCrysFFTObliqueZ, MklCrysFFTObliqueZ) provide the
+ * transforms: initFFTPlans(), diffusion(), apply_multiplier().
  *
  * @tparam Derived The derived class type (CRTP pattern)
  */
@@ -79,9 +77,6 @@ protected:
     /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
     /// owned by this object so that they are released together with it.
     mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
-
-    Derived& derived() { return static_cast<Derived&>(*this); }
-    const Derived& derived() const { return static_cast<const Derived&>(*this); }
 
     static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para)
     {

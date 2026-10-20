@@ -46,13 +46,29 @@ commits are omitted.
 - CUDA RK2 stress (2026-10-19): complex fields gathered q(-k) in place through the k -> -k
   map (a data race on grids larger than one kernel launch), and non-periodic 1D/2D boxes
   read the wrong basis tables (V11 = 0). RQM4 and the discrete chain were correct.
+- CUDA DCT-II of odd length (2026-10-20): the pre-op kernels applied the Nyquist branch to
+  the slot N/2 of odd sequences, so the CUDA CrysFFT (Pmmm and z-mirror bases) was wrong
+  whenever a logical grid size is 2 mod 4 (the physical grid is half the logical one), e.g.
+  Pmmm 12x12x10 or P6/mmm 24x24x30. Sizes divisible by 4, the CPU platforms and the
+  irreducible basis were correct. The 1D DCT-II also packed its spectrum in place into the
+  caller's N-double buffer, writing two doubles past its end (1D CUDA runs with reflecting
+  boundaries); it now packs into its own scratch buffer.
+- SCFT runs with an mmm orthorhombic group and the m3 basis (Pmmm, Pbca, Pnma, ... whenever
+  `m3_crysfft_feasible()` holds: even nx, nz >= 16 and a compatible translation parity,
+  e.g. Pmmm 10x10x18 or Pnma 12x12x16) saved scrambled full-grid fields: the
+  irreducible-to-reduced conversion was skipped because the two bases have the same size
+  there, although their orderings differ (2026-10-20). The iteration itself was correct.
+- CPU solvers with a space group but without a CrysFFT physical basis (for example a
+  hexagonal cell with the irreducible basis) multiplied the reduced-basis mask over the
+  full grid, reading past its end (NaN); the mask is now applied in the basis of the
+  propagator after the reduction, as on CUDA (2026-10-20).
 - Continuing an L-FTS run from a checkpoint restored the Langevin noise array with a
   squeezed shape when there is a single real field (every AB system), so the continued
   trajectory differed from an uninterrupted run; the continuation also no longer
   re-solves the saddle point of the loaded fields (2026-10-19). CL-FTS, whose noise array
   has one row per field, reshapes it the same way for safety.
 - SCFT box relaxation with a space group reduces the stress of lengths tied by the crystal
-  system (Cubic, Tetragonal, Hexagonal) by averaging the tied components, as runs without
+  system (Cubic, Tetragonal, Hexagonal, Trigonal) by averaging the tied components, as runs without
   a space group already did; the components agree to round-off for symmetrized fields, so
   converged results are unchanged but such runs are not byte-identical (2026-10-19).
 - `fts_consistent_energy`: the mean concentrations now include random-copolymer blocks and
@@ -94,6 +110,35 @@ commits are omitted.
   parity); SCFT enables the m3 basis only then and otherwise uses the Pmmm basis (or the
   irreducible basis for groups without xyz mirrors), instead of failing in the solver or
   silently running the m3 basis through the full-grid FFT on small grids.
+- SCFT checks that the box matches the crystal system of the space group (cubic: equal
+  lengths and 90-degree angles; tetragonal: a = b and 90-degree angles; orthorhombic:
+  90-degree angles; hexagonal/trigonal on hexagonal axes:
+  a = b and gamma = 120; rhombohedral axes: a = b = c and alpha = beta = gamma) and rejects
+  box relaxation for rhombohedral-axes settings (2026-10-20). A failed
+  `enable_m3_physical_basis()` leaves the `SpaceGroup` unchanged instead of half-updated
+  (which corrupted memory in the next `symmetrize`). The physical basis is frozen once a
+  computation box or solver holds the group (their reduced-basis maps are snapshots), the
+  CrysFFT selector rejects a Pmmm/m3 basis on a non-orthogonal cell and a z-mirror basis
+  with alpha or beta != 90 (reachable only when a physical basis is enabled by hand on a
+  `SpaceGroup` passed to `PropagatorSolver` or through the C++ API; `SCFT` checks the cell
+  before enabling one), and
+  `symmetrize_reduced_basis` requires a C-contiguous float64 array like `zero_mean`
+  because it works in place (both bindings now refuse dtype conversions, which would have
+  modified a copy). `SpaceGroup.uses_hexagonal_axes()` tells the axes setting of a
+  trigonal group, so the cell check requires the hexagonal cell for hexagonal-axes
+  settings and the rhombohedral cell for rhombohedral-axes settings; `angles` with other
+  than three entries is rejected for a 3D box.
+- The `SpaceGroup` field conversions (`to_reduced_basis`, `from_reduced_basis`,
+  `reduced_to_irreducible`, `irreducible_to_reduced`) keep the layout of their input: a
+  1-D input gives a 1-D output, an `(n_fields, n_in)` input an `(n_fields, n_out)` output
+  (before, two of them squeezed a single field and the other two always returned 2-D).
+  Grid compatibility with the translation parts of a space group is checked per axis: a
+  1/2 translation along z alone (P6_3/mmc) no longer forces even nx and ny (2026-10-20).
+- CUDA real transforms (`CudaRealTransform`): the lengths each type supports were
+  verified against FFTW (DCT-2/3/4, DST-1/4 and the 2D/3D DCT-1 accept any length; the
+  1D DCT-1 needs an odd number of points; DST-2 and the 2D/3D DST-3 need even lengths)
+  and the constructors now reject unsupported lengths instead of returning wrong
+  values; nothing in the library passes such lengths (2026-10-20).
 - The CPU stress of an orthogonal 2D box no longer computes the shear term (index 2) that
   the CUDA side and the 3D path skip unless `set_force_off_diagonal_stress(True)` is set
   (SCFT sets it when angles are optimized); the platforms now return identical vectors.
@@ -133,7 +178,8 @@ commits are omitted.
   tables in every worker thread).
 - Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
-  errors (on in CI); `POLYMERFTS_CUDA_ARCHITECTURES` selects the compute capabilities;
+  errors (on in CI); the LAPACKE header may be `mkl_lapacke.h` (conda-forge's MKL build of
+  liblapacke ships no `lapacke.h`); `POLYMERFTS_CUDA_ARCHITECTURES` selects the compute capabilities;
   the installed `_core.so` carries an RPATH to the libraries it was linked against; the
   staged package in `build/python` drops modules that no longer exist in the sources. The generated build no longer depends on `LIBRARY_PATH` or
   `CPLUS_INCLUDE_PATH` of the configuring shell: libraries are linked by absolute path and

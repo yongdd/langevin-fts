@@ -321,7 +321,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `verbose_level` | int | Output verbosity (1: per step, 2: per iteration) |
+| `verbose_level` | int | Output verbosity: 0 (only the Langevin step number), 1 (plus one saddle-point summary line per Langevin step), 2 (one line per saddle-point iteration). Other values raise `ValidationError` |
 | `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing) |
 
 `LFTS(params, random_seed=None)`: pass an integer `random_seed` for reproducible noise.
@@ -354,7 +354,7 @@ When `True`:
 - Reduces memory by ~90%
 - Increases computation time by 2-4x
 
-**Restriction:** `reduce_memory=True` is not supported for **discrete chains combined with a space group** — this combination raises an error.
+`reduce_memory=True` works with every chain model and with space-group symmetry, including **discrete chains combined with a space group**, on both CPU and CUDA (see [SpaceGroup.md](../theory/SpaceGroup.md)).
 
 ### Space Group Symmetry (Beta)
 
@@ -369,9 +369,10 @@ When `True`:
 }
 ```
 
-**Restrictions:**
-- **Discrete chains + space group** is supported on both CPU and CUDA platforms (standard mode).
-- **Discrete chains + space group + `reduce_memory=True`** is not supported on any platform (raises an error).
+The box must match the crystal system of the group: cubic groups need equal `lx` and 90° angles, tetragonal a = b with 90° angles, orthorhombic 90° angles, hexagonal and trigonal groups on hexagonal axes a = b with `"angles": [90, 90, 120]`, and rhombohedral-axes settings a = b = c with α = β = γ (box relaxation is not supported for them). `SCFT` raises `ValidationError` otherwise.
+
+**Platform support:**
+- **Discrete chains + space group** is supported on both CPU and CUDA platforms, in both standard and `reduce_memory=True` modes.
 
 See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 

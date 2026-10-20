@@ -39,23 +39,12 @@
 
 #include <iostream>
 #include <cmath>
-#include <numbers>
 #include <array>
-#include <thrust/reduce.h>
 
 #include "CudaPseudo.h"
 #include "CudaTypeDispatch.h"
 #include "CudaSolverPseudoDiscrete.h"
 #include "CudaCrysFFT.h"
-#include "CudaCrysFFTRecursive3m.h"
-#include "CudaCrysFFTObliqueZ.h"
-#include "CudaCrysFFTStress.h"
-#include "CrysFFTSelector.h"
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-#include "SpaceGroup.h"
 
 template <typename T>
 CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(

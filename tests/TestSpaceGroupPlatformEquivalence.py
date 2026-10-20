@@ -2,8 +2,14 @@
 """
 Space-group platform equivalence test.
 
-For each case (Pmmm on an anisotropic grid, Im-3m/BCC exercising the
-Recursive3m CrysFFT path since nz/2 = 8), each chain model (continuous and
+For each case (Pmmm on an anisotropic grid, Pmmm on a 12x12x10 grid whose
+CrysFFT physical grid 6x6x5 has an odd DCT length, Im-3m/BCC exercising the
+Recursive3m CrysFFT path since nz/2 = 8, and P6/mmm on a hexagonal 24x24x30
+cell exercising the z-mirror/ObliqueZ CrysFFT with an odd physical nz = 15,
+and P6_3/mmc on a 9x9x8 cell whose odd in-plane sizes are allowed because the
+grid check is per axis: only nz is constrained by the 6_3 screw, and Fddd on
+8x8x16, the recursive-3m fold with nx = ny below the selector's nz/2 >= 8
+heuristic axis), each chain model (continuous and
 discrete), and each available platform, this test verifies that turning
 space-group (SG) reduction on does not change the physics relative to a
 full-grid computation with the identical symmetrized field:
@@ -22,8 +28,9 @@ full-grid computation with the identical symmetrized field:
   4. Mask + space group, per the contract actually implemented (below).
 
 Both space-group basis modes are covered:
-  - "physical" basis (m3 -> pmmm auto-enable, mirroring scft.py), which uses
-    the CrysFFT PmmmDct / Recursive3m solvers, and
+  - "physical" basis (m3 -> pmmm auto-enable for orthogonal cells, z-mirror
+    for the hexagonal cell, mirroring scft.py), which uses the CrysFFT
+    PmmmDct / Recursive3m / ObliqueZ solvers, and
   - "irreducible" basis (no physical basis enabled).
 
 ACTUAL mask + space-group contract encoded by this test
@@ -95,6 +102,12 @@ def check(condition, message):
 def create_space_group(case_name, nx):
     if case_name == "Pmmm":
         return _core.SpaceGroup(nx, "Pmmm")
+    if case_name == "P6/mmm":
+        return _core.SpaceGroup(nx, "P6/mmm")
+    if case_name == "P6_3/mmc":
+        return _core.SpaceGroup(nx, "P6_3/mmc", 488)
+    if case_name == "Fddd":
+        return _core.SpaceGroup(nx, "Fddd", 336)
     return _core.SpaceGroup(nx, "Im-3m", 529)
 
 
@@ -103,8 +116,14 @@ def make_space_group(case_name, nx, physical):
     exactly like scft.py does for orthogonal cells (m3 -> pmmm)."""
     sg = create_space_group(case_name, nx)
     mode = "irreducible"
-    if physical:
+    if physical and case_name in ("P6/mmm", "P6_3/mmc"):
+        sg.enable_z_mirror_physical_basis()   # hexagonal cell: z-mirror / ObliqueZ CrysFFT
+        mode = "z-mirror-physical"
+    elif physical:
         try:
+            # like scft.py: the m3 basis only where the recursive 3m CrysFFT runs
+            if not sg.m3_crysfft_feasible():
+                raise RuntimeError("recursive 3m CrysFFT is not feasible on this grid")
             sg.enable_m3_physical_basis()
             mode = "m3-physical"
         except Exception:
@@ -162,25 +181,34 @@ def make_fields(nx, lx, sg, sg_full, seed=42):
 
 def make_mask(nx, lx, sg_full):
     """Exactly full-group-symmetric binary mask: spherical cavity,
-    orbit-averaged and thresholded so symmetrize(mask) == mask exactly."""
+    orbit-averaged and thresholded so symmetrize(mask) == mask exactly.
+    Groups whose translations move the cavity off itself (Fddd) leave the
+    majority-thresholded mask trivial; then the union of the orbit images is
+    blocked instead (invariant as well), with a smaller cavity if needed."""
     X, Y, Z = grid_coords(nx, lx)
     cx, cy, cz = [l / 2.0 for l in lx]
-    r = 0.3 * min(lx)
     d2 = (X - cx) ** 2 + (Y - cy) ** 2 + (Z - cz) ** 2
-    m = np.where(d2 < r * r, 0.0, 1.0).flatten()
-    m_avg = sg_full.symmetrize(m).flatten()
-    m = np.where(m_avg > 0.5, 1.0, 0.0)
+    for r_frac, rule in ((0.3, "majority"), (0.3, "union"), (0.2, "union"), (0.12, "union")):
+        r = r_frac * min(lx)
+        m = np.where(d2 < r * r, 0.0, 1.0).flatten()
+        m_avg = sg_full.symmetrize(m).flatten()
+        if rule == "majority":
+            m = np.where(m_avg > 0.5, 1.0, 0.0)
+        else:
+            m = np.where(m_avg < 1.0 - 1e-12, 0.0, 1.0)
+        n_blocked = int(np.sum(m == 0.0))
+        if 0 < n_blocked < m.size:
+            break
+    else:
+        raise RuntimeError("mask is trivial (all ones or all zeros) for every cavity tried")
     resid = np.max(np.abs(sg_full.symmetrize(m).flatten() - m))
     if resid != 0.0:
         raise RuntimeError(f"mask construction is not exactly symmetric: {resid}")
-    n_blocked = int(np.sum(m == 0.0))
-    if n_blocked == 0 or n_blocked == m.size:
-        raise RuntimeError("mask is trivial (all ones or all zeros)")
     return m
 
 
 def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                          use_sg, reduce_memory=False):
+                          use_sg, reduce_memory=False, angles=None):
     """Unmasked run through the public PropagatorSolver interface.
     Returns Q, expanded full-grid phi, check_total_partition, stress[0:3]."""
     solver = PropagatorSolver(
@@ -191,6 +219,7 @@ def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
         numerical_method="rqm4" if chain_model == "continuous" else None,
         platform=platform,
         reduce_memory=reduce_memory,
+        angles=angles,
         space_group=sg if use_sg else None,
     )
     solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
@@ -211,7 +240,7 @@ def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
 
 
 def run_masked(platform, chain_model, nx, lx, sg, w_full, w_reduced, mask,
-               use_sg):
+               use_sg, angles=None):
     """Masked run through the public PropagatorSolver wrapper, exercising the
     `mask=` constructor argument (masks are always passed on the full grid;
     ComputationBox reduces the stored mask when the space group is set)."""
@@ -219,7 +248,7 @@ def run_masked(platform, chain_model, nx, lx, sg, w_full, w_reduced, mask,
         nx=list(nx), lx=list(lx), ds=DS,
         bond_lengths=dict(BOND_LENGTHS), bc=list(BC),
         chain_model=chain_model, numerical_method="rqm4",
-        platform=platform, mask=np.asarray(mask).flatten(),
+        platform=platform, mask=np.asarray(mask).flatten(), angles=angles,
         space_group=sg if use_sg else None)
     solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
     w_in = w_reduced if use_sg else w_full
@@ -263,11 +292,19 @@ def main():
         print("NOTE: CUDA not available - CUDA subtests skipped.")
 
     cases = [
-        ("Pmmm", [32, 24, 16], [3.0, 2.0, 1.5]),
-        ("Im-3m", [16, 16, 16], [1.9, 1.9, 1.9]),  # Recursive3m: nz/2 = 8
+        ("Pmmm", [32, 24, 16], [3.0, 2.0, 1.5], None),
+        # physical grid 6x6x5: odd DCT length on CUDA (Pmmm basis; nz/2 < 8 so no m3)
+        ("Pmmm", [12, 12, 10], [1.2, 1.2, 1.0], None),
+        ("Im-3m", [16, 16, 16], [1.9, 1.9, 1.9], None),  # Recursive3m: nz/2 = 8
+        # Recursive3m with nx = ny = 8: the selector's nz/2 >= 8 bound is a heuristic
+        ("Fddd", [8, 8, 16], [1.0, 1.0, 2.0], None),
+        # hexagonal cell, z-mirror / ObliqueZ CrysFFT with an odd physical nz = 15
+        ("P6/mmm", [24, 24, 30], [2.0, 2.0, 2.5], [90.0, 90.0, 120.0]),
+        # odd in-plane sizes: the 6_3 screw constrains only nz (per-axis grid check)
+        ("P6_3/mmc", [9, 9, 8], [1.8, 1.8, 2.0], [90.0, 90.0, 120.0]),
     ]
 
-    for case_name, nx, lx in cases:
+    for case_name, nx, lx, angles in cases:
         # Full-group (irreducible-basis) instance used ONLY to symmetrize
         # fields/masks over the complete space group (see module docstring).
         sg_full = create_space_group(case_name, nx)
@@ -275,7 +312,7 @@ def main():
             sg, mode = make_space_group(case_name, nx, physical)
             n_reduced = sg.get_n_reduced_basis()
             total_grid = int(np.prod(nx))
-            print(f"\n=== Case {case_name} nx={nx} lx={lx} basis={mode} "
+            print(f"\n=== Case {case_name} nx={nx} lx={lx} angles={angles} basis={mode} "
                   f"(n_reduced={n_reduced}, total={total_grid}) ===")
             w_full, w_reduced = make_fields(nx, lx, sg, sg_full, seed=42)
             for m in ["A", "B"]:
@@ -291,10 +328,10 @@ def main():
                     tag = f"{case_name}/{mode}/{chain_model}/{platform}"
                     control = run_propagator_solver(
                         platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                        use_sg=False)
+                        use_sg=False, angles=angles)
                     sg_run = run_propagator_solver(
                         platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                        use_sg=True)
+                        use_sg=True, angles=angles)
                     results[platform] = (control, sg_run)
                     print(f"  -- {tag}: Q_off={control['Q']:.12e} "
                           f"Q_SG={sg_run['Q']:.12e}")
@@ -306,7 +343,7 @@ def main():
                     # standard SG run for both chain models on both platforms.
                     rm_run = run_propagator_solver(
                         platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                        use_sg=True, reduce_memory=True)
+                        use_sg=True, reduce_memory=True, angles=angles)
                     check(rm_run["chk"],
                           f"{tag}: SG-on reduce_memory check_total_partition()")
                     compare_runs(f"{tag}: SG-on reduce_memory vs standard",
@@ -342,9 +379,9 @@ def main():
                 for platform in platforms:
                     tag = f"{case_name}/{mode}/{chain_model}/{platform}/mask"
                     control = run_masked(platform, chain_model, nx, lx, sg,
-                                         w_full, w_reduced, mask, use_sg=False)
+                                         w_full, w_reduced, mask, use_sg=False, angles=angles)
                     sg_run = run_masked(platform, chain_model, nx, lx, sg,
-                                        w_full, w_reduced, mask, use_sg=True)
+                                        w_full, w_reduced, mask, use_sg=True, angles=angles)
                     check(control["chk"], f"{tag}: SG-off check_total_partition()")
                     check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
                     compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,

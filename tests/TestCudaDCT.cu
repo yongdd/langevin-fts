@@ -1148,6 +1148,27 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
 //==============================================================================
 // Main
 //==============================================================================
+// Supported lengths: DCT-2/3/4 and the 2D/3D DCT-1 accept odd lengths (verified
+// above against FFTW); the 1D DCT-1 takes the number of points and needs it odd.
+// Unsupported lengths must be refused in the constructor, not computed wrongly.
+bool test_odd_length_rejected()
+{
+    printf("Testing length checks: supported lengths accepted, unsupported rejected\n");
+    bool ok = true;
+    try
+    {
+        CudaDCT a(15, CUDA_DCT_2); CudaDCT3D b(6, 5, 7, CUDA_DCT_3); CudaDCT c(17, CUDA_DCT_1);
+        CudaDCT3D d(6, 6, 5, CUDA_DCT_1); CudaDCT2D e(5, 7, CUDA_DCT_4);
+    }
+    catch (const std::exception& e) { printf("  a supported length was rejected: %s\n", e.what()); ok = false; }
+    bool threw = false;
+    try { CudaDCT t(16, CUDA_DCT_1); }   // 16 points = odd logical N: unsupported
+    catch (const std::exception&) { threw = true; }
+    if (!threw) { printf("  1D DCT-1 with 16 points was NOT rejected\n"); ok = false; }
+    printf("  %s\n\n", ok ? "PASSED!" : "FAILED!");
+    return ok;
+}
+
 int main()
 {
     std::cout << "========== CUDA DCT vs FFTW Test ==========\n\n";
@@ -1165,12 +1186,15 @@ int main()
     all_passed &= test_dct2_1d(16);
     all_passed &= test_dct2_1d(32);
     all_passed &= test_dct2_1d(64);
+    all_passed &= test_dct2_1d(15);    // odd length: slot N/2 is an ordinary pair
+    all_passed &= test_dct2_1d(31);
 
     // Test 1D DCT-3
     std::cout << "--- 1D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
     all_passed &= test_dct3_1d(16);
     all_passed &= test_dct3_1d(32);
     all_passed &= test_dct3_1d(64);
+    all_passed &= test_dct3_1d(15);
 
     // Test 1D DCT-4
     std::cout << "--- 1D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
@@ -1189,12 +1213,16 @@ int main()
     all_passed &= test_dct2_2d(8, 8);
     all_passed &= test_dct2_2d(16, 16);
     all_passed &= test_dct2_2d(32, 32);
+    all_passed &= test_dct2_2d(6, 5);     // odd length along one axis
+    all_passed &= test_dct2_2d(5, 6);
+    all_passed &= test_dct2_2d(7, 9);
 
     // Test 2D DCT-3
     std::cout << "--- 2D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
     all_passed &= test_dct3_2d(8, 8);
     all_passed &= test_dct3_2d(16, 16);
     all_passed &= test_dct3_2d(32, 32);
+    all_passed &= test_dct3_2d(7, 9);
 
     // Test 2D DCT-4
     std::cout << "--- 2D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
@@ -1213,12 +1241,17 @@ int main()
     all_passed &= test_dct2_3d(8, 8, 8);
     all_passed &= test_dct2_3d(16, 16, 16);
     all_passed &= test_dct2_3d(32, 32, 32);
+    all_passed &= test_dct2_3d(6, 6, 5);  // odd physical z (logical 12x12x10 CrysFFT grid)
+    all_passed &= test_dct2_3d(6, 5, 6);
+    all_passed &= test_dct2_3d(5, 6, 6);
+    all_passed &= test_dct2_3d(5, 7, 9);
 
     // Test 3D DCT-3
     std::cout << "--- 3D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
     all_passed &= test_dct3_3d(8, 8, 8);
     all_passed &= test_dct3_3d(16, 16, 16);
     all_passed &= test_dct3_3d(32, 32, 32);
+    all_passed &= test_dct3_3d(5, 7, 9);
 
     // Test 3D DCT-4
     std::cout << "--- 3D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
@@ -1226,12 +1259,20 @@ int main()
     all_passed &= test_dct4_3d(16, 16, 16);
     all_passed &= test_dct4_3d(32, 32, 32);
 
+    // odd lengths of the other types (verified against FFTW)
+    all_passed &= test_dct1_2d(6, 5);
+    all_passed &= test_dct1_3d(5, 7, 9);
+    all_passed &= test_dct4_1d(15);
+    all_passed &= test_dct4_3d(5, 7, 9);
+    all_passed &= test_odd_length_rejected();
+
     // Test round-trip
     std::cout << "--- Round-trip Tests ---\n\n";
     all_passed &= test_dct1_roundtrip(32);
     all_passed &= test_cuda_dct1_roundtrip(32);
     all_passed &= test_cuda_dct1_3d_roundtrip(16, 16, 16);
     all_passed &= test_dct23_inverse(32);
+    all_passed &= test_dct23_inverse(15);
 
     // Test 2D Mixed DCT
     std::cout << "--- 2D Mixed DCT Tests ---\n\n";

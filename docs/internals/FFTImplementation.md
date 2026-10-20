@@ -265,7 +265,7 @@ The solver automatically selects the fastest compatible physical basis.
 | DD | Pn-3m (522) | ✓ | ✗ | |
 | SG | I4_132 (510) | ✗ | ✗ | |
 | HCP | P6_3/mmc (488) | ✗ | ✗ | ✓ |
-| PL | P6/mmm (485) | ✗ | ✗ | ✓ |
+| PL | P6_3/mmc (488) | ✗ | ✗ | ✓ |
 
 ---
 

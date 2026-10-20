@@ -75,8 +75,8 @@ class CudaCrysFFTBase;  // Forward declaration
  * **Memory per Stream:**
  *
  * - d_q_step_1_one, d_q_step_2_one: Full step workspace
- * - d_q_step_1_two, d_q_step_2_two: Half step workspace
- * - d_qk_in_*: Fourier space buffers
+ * - d_q_step_1_two: Half step workspace (2*M; also lent as the propagator pair of the stress)
+ * - d_qk_in_2_one, d_qk_in_1_two: Fourier space buffers
  */
 template <typename T>
 class CudaSolverPseudoRQM4 : public CudaSolverPseudoBase<T>
@@ -84,14 +84,13 @@ class CudaSolverPseudoRQM4 : public CudaSolverPseudoBase<T>
 private:
     using Base = CudaSolverPseudoBase<T>;
     using Base::cb; using Base::molecules; using Base::pseudo;
-    using Base::n_streams; using Base::dim_; using Base::is_periodic_; using Base::streams;
-    using Base::temp_storage_bytes; using Base::d_temp_storage;
-    using Base::d_stress_sum; using Base::d_stress_sum_out; using Base::d_q_multi;
+    using Base::n_streams; using Base::is_periodic_; using Base::streams;
+
     using Base::space_group_; using Base::d_reduced_basis_indices_; using Base::d_full_to_reduced_map_;
     using Base::n_basis_; using Base::d_q_full_in_; using Base::d_q_full_out_;
-    using Base::use_crysfft_; using Base::crysfft_mode_; using Base::crysfft_identity_map_;
+    using Base::use_crysfft_; using Base::crysfft_identity_map_;
     using Base::crysfft_physical_size_;
-    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_; using Base::d_crysfft_orbit_counts_;
+    using Base::d_crysfft_phys_to_reduced_; using Base::d_crysfft_reduced_to_phys_;
     using Base::crysfft_; using Base::d_crysfft_in_; using Base::d_crysfft_out_;
     using Base::fft_; using Base::fft_forward; using Base::fft_backward;
 
@@ -122,16 +121,16 @@ public:
      * @param molecules           Molecules container
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
-     * @param reduce_memory   Checkpointing mode (affects workspace allocation)
+     * @param reduce_memory   Unused (kept for the factory signature)
      */
     CudaSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
-    /// Destructor. Frees GPU memory and cuFFT plans.
+    /// Destructor. Frees the workspaces (the base class destroys the cuFFT plans).
     ~CudaSolverPseudoRQM4();
 
     /**
      * @brief Update Boltzmann factors.
-     * @param device  "device" or "host" for w_input location
+     * @param device  "gpu" or "cpu" for w_input location
      * @param w_input Potential fields
      */
     void update_dw(std::string device, std::map<std::string, const T*> w_input) override;
@@ -144,7 +143,7 @@ public:
      * @param d_q_out     Output propagator (device)
      * @param monomer_type Monomer type
      * @param d_q_mask    Optional mask (device, nullptr if none)
-     * @param ds_index    Index for ds value (1-based, for per-block ds support)
+     * @param ds_index    Index for ds value (0-based, for per-block ds support)
      */
     void advance_propagator(
         const int STREAM,

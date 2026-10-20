@@ -240,6 +240,8 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
 void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
 {
     set_stream(stream);
+    if (d_boltz_current_ == nullptr)
+        throw_with_line_number("CudaCrysFFT::set_contour_step must be called before diffusion().");
     int threads = 256;
     int blocks = (M_physical_ + threads - 1) / threads;
 

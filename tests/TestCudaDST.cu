@@ -1084,6 +1084,34 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDSTType type_x, CudaDSTType type_
 //==============================================================================
 // Main
 //==============================================================================
+// Supported lengths: DST-1, DST-4 and the 1D DST-3 accept odd lengths (verified
+// against FFTW); DST-2 and the 2D/3D DST-3 kernels assume even lengths, so odd
+// lengths must be refused in the constructor, not computed wrongly.
+bool test_odd_length_rejected()
+{
+    printf("Testing length checks: supported lengths accepted, unsupported rejected\n");
+    bool ok = true;
+    try { CudaDST a(15, CUDA_DST_1); CudaDST b(15, CUDA_DST_3); CudaDST3D c(5, 6, 6, CUDA_DST_4); }
+    catch (const std::exception& e) { printf("  a supported length was rejected: %s\n", e.what()); ok = false; }
+    const struct { int nx, ny, nz; CudaTransformType type; } rejected[] = {
+        {15, 0, 0, CUDA_DST_2}, {6, 5, 0, CUDA_DST_2}, {5, 6, 0, CUDA_DST_3},
+        {6, 6, 5, CUDA_DST_2}, {6, 5, 6, CUDA_DST_3} };
+    for (const auto& r : rejected)
+    {
+        bool threw = false;
+        try
+        {
+            if (r.ny == 0) { CudaDST t(r.nx, r.type); }
+            else if (r.nz == 0) { CudaDST2D t(r.nx, r.ny, r.type); }
+            else { CudaDST3D t(r.nx, r.ny, r.nz, r.type); }
+        }
+        catch (const std::exception&) { threw = true; }
+        if (!threw) { printf("  type %d with odd length (%d,%d,%d) was NOT rejected\n", (int)r.type, r.nx, r.ny, r.nz); ok = false; }
+    }
+    printf("  %s\n\n", ok ? "PASSED!" : "FAILED!");
+    return ok;
+}
+
 int main()
 {
     std::cout << "========== CUDA DST vs FFTW Test ==========\n\n";
@@ -1092,6 +1120,12 @@ int main()
 
     // Test 1D DST-1
     std::cout << "--- 1D DST-1 Tests (vs FFTW RODFT00) ---\n\n";
+    // odd lengths of the supported types (verified against FFTW)
+    all_passed &= test_dst1_1d(15);
+    all_passed &= test_dst3_1d(15);
+    all_passed &= test_dst1_3d(6, 6, 5);
+    all_passed &= test_dst4_3d(5, 7, 9);
+    all_passed &= test_odd_length_rejected();
     all_passed &= test_dst1_1d(16);
     all_passed &= test_dst1_1d(32);
     all_passed &= test_dst1_1d(64);

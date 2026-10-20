@@ -58,7 +58,7 @@ public:
     /**
      * @brief Full segment Boltzmann factor: exp(-w·ds) on GPU.
      *
-     * Outer key: ds_index (1-based)
+     * Outer key: ds_index (0-based)
      * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
@@ -67,7 +67,7 @@ public:
     /**
      * @brief Half segment Boltzmann factor: exp(-w·ds/2) on GPU.
      *
-     * Outer key: ds_index (1-based)
+     * Outer key: ds_index (0-based)
      * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
@@ -143,7 +143,7 @@ public:
      * @param d_q_out     Output propagator (device pointer)
      * @param monomer_type Monomer type for Boltzmann factor
      * @param d_q_mask    Optional mask for impenetrable regions (device)
-     * @param ds_index    Index for ds value (1-based, for per-block ds support)
+     * @param ds_index    Index for ds value (0-based, for per-block ds support)
      */
     virtual void advance_propagator(
         const int STREAM,
@@ -166,7 +166,7 @@ public:
      * @brief Compute stress contribution from one segment.
      *
      * @param STREAM           CUDA stream index
-     * @param d_q_pair         Forward × backward propagator product (device)
+     * @param d_q_pair         Forward and backward propagators, contiguous (device)
      * @param d_segment_stress Output stress array (device)
      * @param monomer_type     Monomer type
      * @param is_half_bond_length Whether using half bond (discrete)

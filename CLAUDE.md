@@ -102,7 +102,7 @@ make install
 # Run basic tests (installation verification, ~1 min)
 ctest -L basic
 
-# Run full tests (development validation, ~6 min)
+# Run full tests (development validation, ~7 min)
 ctest
 
 # Clean build (if needed)
@@ -195,16 +195,14 @@ Use the provided SLURM template `scripts/slurm_run.sh` (adjust the Python script
 sbatch scripts/slurm_run.sh
 ```
 
-**Benchmark output:**
-- Convergence analysis (Q vs ds) following Stasiak & Matsen methodology
-- Performance comparison (time vs N) following Song et al. methodology
-- Cross-platform consistency verification (CPU vs CUDA)
-- Results saved to `benchmark_results.json`
+**What the scripts measure:**
+- `benchmark_crysfft_triplet.py`: times only the propagator computation of a single AB diblock in a BCC (Im-3m) field, once with the space group on (CrysFFT physical basis auto-selected) and once off, and reports the per-iteration time of both runs (`iter_sec`), the `speedup` and `percent` (CPU-FFTW only; the platform is hard-coded). Options: `--nx`, `--lx`, `--ds`, `--fa`, `--iters`, `--warmup`, `--fields`.
+- `benchmark_space_group_speed.py`: runs a fixed number of SCFT iterations for one phase (`--phase BCC|DG|Sigma|HCP`) on one platform (`--platform cpu-fftw|cuda`) with `--space-group on|off` and reports `elapsed_sec`, `iter_sec` and the final `Q`; submit one SLURM job per combination.
+- Both print a JSON summary to stdout and write the same JSON to the file given by `--output` (nothing is written when `--output` is omitted).
 
 **Key metrics to verify:**
-- RQM4 convergence order ≈ 4.0
-- CN-ADI2 convergence order ≈ 2.0
-- CPU vs CUDA results identical within machine precision (~10⁻¹³)
+- Space-group on/off speedup (`speedup` in the triplet JSON; ratio of `iter_sec` between matching speed-benchmark runs). Reference timings are tabulated in `docs/internals/FFTImplementation.md` (Performance Benchmarks).
+- Convergence orders are not measured by these scripts; they are guarded by `tests/TestConvergenceOrderLite.py` (RQM4 order > 3.0, 1.5 < RK2 order < 2.5).
 
 ### Testing Guidelines for Numerical Methods
 
@@ -338,7 +336,7 @@ The `examples/scft/phases/` directory contains examples using space group symmet
 
 - **Reduced basis representation**: Fields stored only at irreducible mesh points (e.g., 48-192x reduction for cubic space groups)
 - **Memory savings**: Proportional to grid reduction ratio
-- **Speedup**: ~5-10% from smaller field operations (propagator computation still uses full grid FFT)
+- **Speedup**: when the group allows it, the propagator itself is computed on the reduced physical sub-grid through the crystallographic FFT (CrysFFT) fast path — Pmmm DCT (mirror planes in x/y/z), recursive 3m (3m translations) or ObliqueZ (z-mirror, any cell with α = β = 90°, e.g. hexagonal) — instead of the full-grid FFT; otherwise only the field operations shrink. Measured speedups (e.g. 3-5x for Im-3m through the 3m path, 1.1-1.4x for hexagonal groups through ObliqueZ) are tabulated in `docs/internals/FFTImplementation.md` (CrysFFT and Performance Benchmarks sections)
 
 **Hexagonal/trigonal support**: Hexagonal and trigonal space groups (e.g., P6₃/mmc) are fully supported. Historically they produced X-shaped artifacts and biased free energies (~10⁻³) because cell-centered grid points `(i+0.5)/N` map to cell boundaries under hexagonal rotations (row sum = 0 annihilates the 0.5 offset). This was resolved in the main branch by (1) a hybrid orbit convention for hexagonal-axes settings — node-centered in-plane coordinates `i/N` with cell-centered z — making every symmetry map an exact integer operation, and (2) a group-invariant (first-Brillouin-zone, minimal-metric-form) alias representative for the k-space diffusion and stress operators, which restores exact point-group symmetry of the discretized operators on oblique cells. Space-group on/off results now agree to machine precision for all supported crystal systems. Rhombohedral-axes R settings require `nx = ny = nz` (violations are rejected with an explicit error). The `star` branch's Fourier star basis is an alternative approach and is no longer required for correctness.
 
@@ -414,7 +412,7 @@ Reduce mixing parameters:
 
 1. **Run with verbose output**: `ctest -V -R <test_name>`
 2. **Check for NaN/Inf**: Add `np.isnan(result).any()` checks
-3. **Verify partition function**: Call `solver.check_total_partition()` - should be ~1.0
+3. **Verify partition function**: Call `solver.check_total_partition()` - should return `True` (every forward/backward propagator pair yields the same Q)
 4. **Compare platforms**: Run same test on both `cuda` and CPU to isolate platform-specific issues
 5. **Check material conservation**: Verify `np.mean(sum(phi_species))` ≈ 1.0
 
@@ -422,10 +420,12 @@ Reduce mixing parameters:
 
 | Error Message | Likely Cause | Solution |
 |---------------|--------------|----------|
-| `Partition function is negative` | Numerical instability, field too strong | Reduce `ds` or field amplitude |
-| `Forward and backward Q mismatch` | Material conservation violated | Check FFT implementation, boundary conditions |
-| `cuFFT error` | GPU memory issue or invalid transform | Check GPU memory with `nvidia-smi`, reduce grid size |
-| `FFTW plan failed` | Memory allocation failure | Reduce grid size or increase available RAM |
+| `Material conservation failed: mean(sum(phi) - 1) = ...` (`ValidationError`, L-FTS/CL-FTS) | Total monomer concentration drifted from 1: field too strong, `ds` too coarse, or a propagator/FFT bug | Reduce the field amplitude or `ds`; compare CPU vs CUDA results |
+| `Partition consistency check failed (forward/backward mismatch).` (`ValidationError`, from `check_total_partition()`) | Forward and backward propagators give different Q, i.e. the solver violates material conservation | Check the FFT implementation and boundary conditions; run the same case on the other platform |
+| `cuFFT error code ...`, `Failed to create cuFFT D2Z plan` | GPU memory exhausted or invalid transform size | Check GPU memory with `nvidia-smi`, reduce the grid size or set `reduce_memory=True` |
+| `FFTW plan creation failed`, `FFTW memory allocation failed` | Host memory allocation failure | Reduce the grid size or increase available RAM |
+| `No available platform` / `Could not find platform '...'` | The build has no backend (or a CUDA-only build runs on a node without a visible GPU), or `platform` is not one of `cuda`, `cpu-mkl`, `cpu-fftw` (`auto` is resolved in Python before reaching C++) | Rebuild with a backend enabled; check the `platform` parameter |
+| `Size of input w[...] (...) and 'n_grid' (...) must match.` | A field array does not have one value per grid point (or per reduced-basis point with a space group) | Flatten the field to `n_grid` (or `n_reduced_basis`) entries |
 
 ### Where to Look When Things Go Wrong
 
@@ -591,7 +591,10 @@ Derived classes implement chain-model-specific behavior:
         ↑
    FftwFFT<T, DIM>        (CPU: FFTW for FFT, DCT, DST)
    MklFFT<T, DIM>         (CPU: MKL for FFT, DCT, DST)
-   CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
+   CudaFFTBase<T>         (GPU abstract base, src/platforms/cuda/CudaFFT.h: adds pure virtual
+        ↑                  forward_stream/backward_stream(..., cudaStream_t) overloads)
+   CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST; forward()/backward()
+                           call the stream versions on stream 0)
 ```
 
 **FFT Implementation Rules** (CRITICAL - frequently violated, causes subtle bugs):
@@ -623,7 +626,7 @@ Violating these rules causes tests to fail with garbage values (e.g., partition 
 - `forward_stream(T*, double*, cudaStream_t)` / `backward_stream(double*, T*, cudaStream_t)`
 - `forward_stream(T*, complex<double>*, cudaStream_t)` / `backward_stream(complex<double>*, T*, cudaStream_t)`
 
-Solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimension-specific casting.
+CPU solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimension-specific casting; the CUDA solvers hold their DCT/DST objects as `CudaFFTBase<T>*` and call `forward_stream()`/`backward_stream()` with the propagator's stream.
 
 ### When Modifying Python Code
 
@@ -647,7 +650,7 @@ Results must match:
 ## Documentation and Learning
 
 - **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
-- **Examples**: `examples/scft/` and `examples/lfts/` contain runnable simulation scripts
+- **Examples**: `examples/scft/`, `examples/lfts/` and `examples/clfts/` contain runnable simulation scripts
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 

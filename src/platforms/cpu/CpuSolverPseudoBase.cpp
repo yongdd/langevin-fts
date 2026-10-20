@@ -188,6 +188,9 @@ void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
         if (dim_ == 3)
             init_crysfft();
     }
+
+    // The CrysFFT maps above are snapshots: freeze the physical basis
+    sg->mark_in_use();
 }
 
 template <typename T>
@@ -960,7 +963,12 @@ void CpuSolverPseudoBase<T>::accumulate_stress_nonperiodic(
             const double coeff = kernel(i);
             stress[0] += coeff * kk_yy[i];  // V₁₁
             stress[1] += coeff * kk_zz[i];  // V₂₂
-            stress[2] += coeff * kk_yz[i];  // V₁₂
+        }
+        // V₁₂ only for non-orthogonal boxes (the mixed-BC tables are zero anyway)
+        if (!is_orthogonal)
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+                stress[2] += kernel(i) * kk_yz[i];
         }
     }
     else if (DIM == 1)

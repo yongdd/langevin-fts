@@ -300,6 +300,83 @@ def test_save_results_full_grid():
     print("  PASSED\n")
 
 
+def test_save_results_m3_same_size():
+    """save_results with an mmm group whose m3 basis has the same size as the
+    irreducible basis (Pmmm 16^3: both N^3/8) but a different ordering. The
+    irreducible -> reduced conversion must not be skipped on a size comparison,
+    otherwise the saved full-grid fields are scrambled."""
+    print("Test 5: save_results with the m3 basis of the same size as the irreducible basis")
+    print("-" * 50)
+
+    params = {
+        "platform": get_platform(),
+        "nx": [16, 16, 16],
+        "lx": [3.2, 2.8, 2.4],
+        "chain_model": "continuous",
+        "ds": 0.01,
+        "segment_lengths": {"A": 1.0, "B": 1.0},
+        "chi_n": {"A,B": 20.0},
+        "distinct_polymers": [{
+            "volume_fraction": 1.0,
+            "blocks": [
+                {"type": "A", "length": 0.4},
+                {"type": "B", "length": 0.6}
+            ]
+        }],
+        "optimizer": {
+            "name": "am",
+            "max_hist": 20,
+            "start_error": 1e-1,
+            "mix_min": 0.1,
+            "mix_init": 0.1
+        },
+        "max_iter": 5,
+        "tolerance": 1e-8,
+        "box_is_altering": False,
+        "space_group": {"symbol": "Pmmm"}
+    }
+    total_grid = int(np.prod(params["nx"]))
+
+    calc = SCFT(params)
+    # The case this test is about: a physical basis of the same size as the irreducible one
+    assert calc.sg.physical_basis_name() == "m3", f"expected the m3 basis, got {calc.sg.physical_basis_name()}"
+    assert calc.sg.get_n_reduced_basis() == calc.sg.get_n_reduced_basis_full(), \
+        "this test needs equal basis sizes (Pmmm 16^3: both N^3/8)"
+
+    np.random.seed(7)
+    w_init = {
+        "A": np.random.randn(total_grid) * 0.1,
+        "B": np.random.randn(total_grid) * 0.1
+    }
+    calc.run(initial_fields=w_init)
+
+    with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as f:
+        save_path = f.name
+    try:
+        calc.save_results(save_path)
+        data = scipy.io.loadmat(save_path)
+        # Reference: the full-group (irreducible-basis) instance expands calc.w / calc.phi,
+        # which scft.py keeps in the irreducible basis, independently of the m3 ordering.
+        # (A scrambled m3 expansion is still mirror-symmetric, so a symmetry check alone
+        # cannot catch the bug; the values differ from this reference by O(1).)
+        sg_full = _core.SpaceGroup(params["nx"], "Pmmm")
+        irreducible = {"w_A": calc.w[0], "w_B": calc.w[1], "phi_A": calc.phi["A"], "phi_B": calc.phi["B"]}
+        for name in ["w_A", "w_B", "phi_A", "phi_B"]:
+            field = data[name].flatten()
+            assert len(field) == total_grid, f"Saved {name} should be full grid"
+            ref = np.asarray(sg_full.from_reduced_basis(np.asarray(irreducible[name]).flatten())).flatten()
+            err = np.max(np.abs(field - ref))
+            assert err < 1e-10, f"Saved {name} differs from the full-group expansion by {err:.3e}"
+            print(f"  {name}: full grid, max |saved - full-group expansion| = {err:.2e}")
+        mean_phi = np.mean(data["phi_A"].flatten() + data["phi_B"].flatten())
+        assert abs(mean_phi - 1.0) < 0.01, f"Material not conserved in saved file: {mean_phi}"
+        print(f"  Material conservation in saved file: {mean_phi:.6f}")
+    finally:
+        os.unlink(save_path)
+
+    print("  PASSED\n")
+
+
 def main():
     print("=" * 60)
     print("Space Group Reduced Basis Tests")
@@ -310,6 +387,7 @@ def main():
         test_computation_box_reduced_basis()
         test_scft_with_space_group()
         test_save_results_full_grid()
+        test_save_results_m3_same_size()
 
         print("=" * 60)
         print("All tests PASSED")

@@ -37,7 +37,7 @@ avoid gather/scatter mapping during diffusion steps. See
 | SP | Pm-3m | 221 | 517 | 48 | Cubic | nx = ny = nz |
 | Sigma | P4_2/mnm | 136 | 419 | 16 | Tetragonal | nx = ny |
 | HCP | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
-| PL | P6/mmm | 191 | 485 | 24 | Hexagonal | nx = ny |
+| PL | P6_3/mmc | 194 | 488 | 24 | Hexagonal | nx = ny |
 | Fddd | Fddd | 70 | 336 | 32 | Orthorhombic | none |
 
 ## Mathematical Foundation
@@ -257,6 +257,11 @@ grid to be divisible by 4).
 | `to_reduced_basis(fields)` | Convert full fields to irreducible representation |
 | `from_reduced_basis(reduced)` | Reconstruct full fields from reduced |
 | `symmetrize(fields)` | Average fields over orbits for perfect symmetry |
+| `symmetrize_reduced_basis(reduced)` | Average a reduced-basis field in place over the full space-group orbits (a physical basis can hold several representatives of one orbit) |
+| `reduced_to_irreducible(reduced)` | Map a reduced-basis (physical sub-grid) field to the irreducible-orbit representation |
+| `irreducible_to_reduced(irreducible)` | Map an irreducible-orbit field back to the reduced (physical) basis |
+
+The conversions accept one field (1-D) or several (`(n_fields, n_in)`) and keep that layout: a 1-D input gives a 1-D output, a 2-D input an `(n_fields, n_out)` array; `symmetrize` returns the shape of its input and `symmetrize_reduced_basis` works in place (C-contiguous float64 array).
 
 ## Accessor Methods
 
@@ -268,8 +273,15 @@ Metadata is exposed through getter methods (not attributes):
 | `get_spacegroup_number()` | International space group number (1-230) |
 | `get_spacegroup_symbol()` | ITA short symbol |
 | `get_crystal_system()` | Crystal system name |
+| `uses_hexagonal_axes()` | True for hexagonal/trigonal groups in a hexagonal-axes setting (a = b, γ = 120°); False for rhombohedral-axes R settings (a = b = c, α = β = γ) |
 | `get_n_symmetry_ops()` | Number of symmetry operations |
-| `get_n_reduced_basis()` | Number of irreducible mesh points |
+| `get_n_reduced_basis()` | Number of reduced-basis points (irreducible mesh points, or the physical sub-grid size when a physical basis is enabled) |
+| `get_n_reduced_basis_full()` | Number of irreducible-orbit points of the full space group (equals `get_n_reduced_basis()` unless a physical basis is active) |
+| `physical_basis_name()` | Active physical basis: `'irreducible'`, `'pmmm'`, `'m3'` or `'z-mirror'` |
+| `m3_crysfft_feasible()` | True when the recursive 3m CrysFFT (required by the m3 basis) is feasible on this grid |
+| `enable_pmmm_physical_basis()` / `using_pmmm_physical_basis()` | Switch the reduced basis to the Pmmm physical sub-grid (1/8 grid) / query whether it is active |
+| `enable_m3_physical_basis()` / `using_m3_physical_basis()` | Switch to the M3 physical sub-grid (1/8 even-index grid) / query whether it is active |
+| `enable_z_mirror_physical_basis()` / `using_z_mirror_physical_basis()` | Switch to the z-mirror physical basis (half grid along z) / query whether it is active |
 | `get_reduced_basis_indices()` | Flat grid indices of the irreducible points |
 | `get_full_to_reduced_map()` | Map from full grid to irreducible point index |
 | `get_orbit_counts()` | Orbit size for each irreducible point |
@@ -412,22 +424,25 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 ## Limitations
 
 - Only **periodic boundary conditions** supported
-- Grid must be compatible with space group symmetry
+- Grid must be compatible with space group symmetry: along each axis, a translation
+  part p/q of a symmetry operation requires that axis to be a multiple of q (checked
+  per axis, so a 6_3 screw constrains only nz)
+- The box must match the crystal system of the group (cubic: a = b = c and 90° angles;
+  tetragonal: a = b and 90° angles; orthorhombic: 90° angles; hexagonal/trigonal on
+  hexagonal axes: a = b and γ = 120°;
+  rhombohedral axes: a = b = c and α = β = γ, without box relaxation). `SCFT` raises a
+  `ValidationError` otherwise.
 - Beta feature - validate results carefully
 - Requires `spglib` library
-- **Initial-field symmetry and stress**: input fields are projected onto the
-  *enabled* symmetry basis, which may be a physical-basis **subgroup** (m3,
-  Pmmm mirrors, or z-mirror) of the full space group. A field that is
-  subgroup-symmetric but not fully symmetric still yields correct partition
-  functions and concentrations, but the space-group **stress** path assumes
-  full-group symmetry of the propagators, so early box-relaxation steps can
-  be distorted. In practice this is self-correcting: the SCFT iteration
-  converges to the fully symmetric saddle point, and the stress becomes
-  exact as the fields converge. Analytic initial guesses built with the
+- **Initial-field symmetry**: input fields are projected onto the **full**
+  space group (orbit average over all operations) before the first iteration,
+  and the optimizer works in the irreducible basis, so propagators,
+  concentrations and the space-group stress are consistent with the full
+  symmetry from the first step. Analytic initial guesses built with the
   corner convention `round(x*nx)` are index-shifted relative to the
-  cell-centered `(i+0.5)/N` orbit map and are therefore never exactly
-  symmetric — this is harmless for the converged answer, but supply fully
-  symmetric fields if the early box-size trajectory matters.
+  cell-centered `(i+0.5)/N` orbit map; the projection removes their
+  asymmetric part, which changes only the starting point, not the converged
+  answer.
 - **Discrete chains**: space group symmetry is supported on both **CPU and CUDA**,
   in both standard and `reduce_memory=True` modes
 - **Hexagonal/trigonal groups (hexagonal-axes settings)** are fully

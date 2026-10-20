@@ -734,9 +734,8 @@ class PropagatorSolver:
             self._computation_box.zero_mean(field)
             return
 
-        n_reduced = self._space_group.get_n_reduced_basis()
         n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if n_reduced != n_irreducible and field.size == n_irreducible:
+        if self._physical_basis_active() and field.size == n_irreducible:
             # Compute mean in reduced basis, apply shift in irreducible basis.
             field_reduced = self._space_group.irreducible_to_reduced(field)
             mean_val = self._computation_box.mean(field_reduced)
@@ -744,13 +743,21 @@ class PropagatorSolver:
         else:
             self._computation_box.zero_mean(field)
 
+    def _physical_basis_active(self) -> bool:
+        """True when a physical basis (m3, Pmmm or z-mirror) is enabled.
+
+        The reduced basis then differs from the irreducible basis in ordering even
+        when the two have the same size (mmm orthorhombic groups with the m3
+        basis), so the conversion must never be skipped on a size comparison.
+        """
+        return self._space_group is not None and self._space_group.physical_basis_name() != "irreducible"
+
     def _maybe_to_reduced(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
         """Convert irreducible-basis field to reduced basis when physical basis is active."""
         if self._space_group is None:
             return field
-        n_reduced = self._space_group.get_n_reduced_basis()
         n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if n_reduced != n_irreducible and field.size == n_irreducible:
+        if self._physical_basis_active() and field.size == n_irreducible:
             return self._space_group.irreducible_to_reduced(field)
         return field
 
@@ -764,7 +771,7 @@ class PropagatorSolver:
             return fields
         n_reduced = self._space_group.get_n_reduced_basis()
         n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if n_reduced != n_irreducible and fields.size == n_fields * n_irreducible:
+        if self._physical_basis_active() and fields.size == n_fields * n_irreducible:
             reshaped = fields.reshape((n_fields, n_irreducible))
             reduced = self._space_group.irreducible_to_reduced(reshaped)
             return reduced.reshape((n_fields * n_reduced,))

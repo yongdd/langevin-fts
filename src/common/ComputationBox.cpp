@@ -760,13 +760,17 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
         orbit_counts_ = sg->get_orbit_counts();
         n_basis_ = sg->get_n_reduced_basis();
 
-        // Convert mask to reduced basis
-        if (!mask.empty())
+        // Convert mask to reduced basis (once: a second call with the same group
+        // finds it reduced already)
+        if (!mask.empty() && static_cast<int>(mask.size()) == total_grid)
         {
             std::vector<double> mask_reduced(n_basis_);
             sg->to_reduced_basis(mask.data(), mask_reduced.data(), 1);
             mask = std::move(mask_reduced);
         }
+
+        // The sizes and maps above are snapshots: freeze the physical basis
+        sg->mark_in_use();
     }
     else
     {

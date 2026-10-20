@@ -205,27 +205,25 @@ __global__ void kernel_dct1_postOp(double* pin, double* px1, int N)
     }
 }
 
-__global__ void kernel_dct2_preOp(double* data, int N)
+// Packs the N real samples into the N/2+1 complex slots of the half-length FFT.
+// Out of place: the packed spectrum occupies up to N+2 doubles, more than the
+// caller's N-double buffer holds.
+__global__ void kernel_dct2_preOp(const double* __restrict__ in, double* __restrict__ out, int N)
 {
-    extern __shared__ double sh_in[];
     int itx = threadIdx.x;
-
-    if (itx < N / 2) {
-        sh_in[itx] = data[itx];
-        sh_in[itx + N / 2] = data[itx + N / 2];
-    }
-    __syncthreads();
 
     if (itx < N / 2 + 1) {
         if (itx == 0) {
-            data[0] = sh_in[0];
-            data[1] = 0;
-        } else if (itx == N / 2) {
-            data[N] = sh_in[N - 1];
-            data[N + 1] = 0;
+            out[0] = in[0];
+            out[1] = 0;
+        } else if (itx == N / 2 && N % 2 == 0) {
+            // Nyquist slot of an even-length sequence. For odd N the slot N/2 is
+            // an ordinary pair (2k = N-1) and takes the general branch below.
+            out[N] = in[N - 1];
+            out[N + 1] = 0;
         } else {
-            data[itx * 2] = (sh_in[itx * 2] + sh_in[itx * 2 - 1]) / 2;
-            data[itx * 2 + 1] = -((sh_in[itx * 2 - 1] - sh_in[itx * 2]) / 2);
+            out[itx * 2] = (in[itx * 2] + in[itx * 2 - 1]) / 2;
+            out[itx * 2 + 1] = -((in[itx * 2 - 1] - in[itx * 2]) / 2);
         }
     }
 }
@@ -237,10 +235,9 @@ __global__ void kernel_dct2_postOp(double* data, int N,
     extern __shared__ double sh_in[];
     int itx = threadIdx.x;
 
-    if (itx < N / 2) {
-        sh_in[itx] = data[itx];
-        sh_in[itx + N / 2] = data[itx + N / 2];
-    }
+    // Stage every sample (N may be odd, so the input is not split into halves)
+    for (int i = itx; i < N; i += blockDim.x)
+        sh_in[i] = data[i];
     __syncthreads();
 
     if (itx < N / 2 + 1) {
@@ -663,7 +660,7 @@ __global__ void kernel_dct2_2d_preOp_y(
         if (iy_half == 0) {
             out[out_idx].x = in[ix * Ny];
             out[out_idx].y = 0.0;
-        } else if (iy_half == Ny / 2) {
+        } else if (iy_half == Ny / 2 && Ny % 2 == 0) {  // even N only; odd N: ordinary pair below
             out[out_idx].x = in[ix * Ny + Ny - 1];
             out[out_idx].y = 0.0;
         } else {
@@ -722,7 +719,7 @@ __global__ void kernel_dct2_2d_preOp_x(
         if (ix_half == 0) {
             out[out_idx].x = in[iy];
             out[out_idx].y = 0.0;
-        } else if (ix_half == Nx / 2) {
+        } else if (ix_half == Nx / 2 && Nx % 2 == 0) {  // even N only; odd N: ordinary pair below
             out[out_idx].x = in[(Nx - 1) * Ny + iy];
             out[out_idx].y = 0.0;
         } else {
@@ -1780,7 +1777,7 @@ __global__ void kernel_dct2_3d_preOp_z(
         if (iz_half == 0) {
             out[out_idx].x = in[in_base];
             out[out_idx].y = 0.0;
-        } else if (iz_half == Nz / 2) {
+        } else if (iz_half == Nz / 2 && Nz % 2 == 0) {  // even N only; odd N: ordinary pair below
             out[out_idx].x = in[in_base + Nz - 1];
             out[out_idx].y = 0.0;
         } else {
@@ -1925,7 +1922,7 @@ __global__ void kernel_dct2_3d_preOp_y(
         if (iy_half == 0) {
             out[out_idx].x = in[(ix * Ny) * Nz + iz];
             out[out_idx].y = 0.0;
-        } else if (iy_half == Ny / 2) {
+        } else if (iy_half == Ny / 2 && Ny % 2 == 0) {  // even N only; odd N: ordinary pair below
             out[out_idx].x = in[(ix * Ny + Ny - 1) * Nz + iz];
             out[out_idx].y = 0.0;
         } else {
@@ -2014,7 +2011,7 @@ __global__ void kernel_dct2_3d_preOp_x(
         if (ix_half == 0) {
             out[out_idx].x = in[iy * Nz + iz];
             out[out_idx].y = 0.0;
-        } else if (ix_half == Nx / 2) {
+        } else if (ix_half == Nx / 2 && Nx % 2 == 0) {  // even N only; odd N: ordinary pair below
             out[out_idx].x = in[((Nx - 1) * Ny + iy) * Nz + iz];
             out[out_idx].y = 0.0;
         } else {
@@ -3501,9 +3498,53 @@ __global__ void kernel_dst4_3d_postOp_x(
 // CudaRealTransform1D Implementation
 //==============================================================================
 
+
+//------------------------------------------------------------------------------
+// Supported transform lengths, verified against FFTW (tests/TestCudaDCT.cu and
+// tests/TestCudaDST.cu, including odd lengths): DCT-2/3/4, DST-1/4 and the 2D/3D
+// DCT-1 accept any length; the 1D DCT-1 takes the number of points N+1, which must
+// be odd (even logical N); the DST-2 kernels (all dimensions) and the 2D/3D DST-3
+// kernels assume even lengths. Unsupported lengths are refused here instead of
+// returning wrong values (nothing in the library reaches them: CudaFFT rejects odd
+// non-periodic grids and the CrysFFT uses DCT-2/3 only).
+//------------------------------------------------------------------------------
+static const char* transform_type_name(CudaTransformType type)
+{
+    switch (type)
+    {
+        case CUDA_DCT_1: return "DCT-1";
+        case CUDA_DCT_2: return "DCT-2";
+        case CUDA_DCT_3: return "DCT-3";
+        case CUDA_DCT_4: return "DCT-4";
+        case CUDA_DST_1: return "DST-1";
+        case CUDA_DST_2: return "DST-2";
+        case CUDA_DST_3: return "DST-3";
+        case CUDA_DST_4: return "DST-4";
+    }
+    return "unknown";
+}
+
+static void check_transform_length(CudaTransformType type, int N, const char* axis, int dim)
+{
+    const bool even = (N % 2 == 0);
+    const bool unsupported =
+        (type == CUDA_DCT_1 && dim == 1 && even) ||
+        (type == CUDA_DST_2 && !even) ||
+        (type == CUDA_DST_3 && dim >= 2 && !even);
+    if (!unsupported)
+        return;
+    std::string msg = std::string("CudaRealTransform: ") + transform_type_name(type) + " does not support an " +
+                      (even ? "even" : "odd") + " length in " + std::to_string(dim) + "D; got " + axis + " = " +
+                      std::to_string(N);
+    if (type == CUDA_DCT_1)
+        msg += " (the 1D DCT-1 takes the number of points N+1, which must be odd)";
+    throw std::runtime_error(msg);
+}
+
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
     : N_(N), type_(type), initialized_(false), d_work_(nullptr), d_x1_(nullptr)
 {
+    check_transform_length(type_, N_, "N", 1);
     int fftSize = getFFTSize(type_, N_);
     bool z2z = usesZ2Z(type_);
 
@@ -3635,8 +3676,9 @@ void CudaRealTransform1D::execute(double* d_data)
             break;
         }
         case CUDA_DCT_2: {
-            kernel_dct2_preOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(d_data, N_);
-            cufftExecZ2D(plan_, (cufftDoubleComplex*)d_data, d_work_);
+            // packed spectrum (N/2+1 complex) into d_x1_, which has room for it
+            kernel_dct2_preOp<<<1, nThread, 0, stream_>>>(d_data, d_x1_, N_);
+            cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_x1_), d_work_);
             kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
@@ -3757,6 +3799,8 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
     if ((isType1(type_x_) || isType1(type_y_)) && type_x_ != type_y_) {
         throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types");
     }
+    check_transform_length(type_x_, Nx_, "Nx", 2);
+    check_transform_length(type_y_, Ny_, "Ny", 2);
 
     init();
     set_stream(stream_);
@@ -4288,6 +4332,9 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
     if (hasType1 && !allSameType1) {
         throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types in 3D");
     }
+    check_transform_length(type_x_, Nx_, "Nx", 3);
+    check_transform_length(type_y_, Ny_, "Ny", 3);
+    check_transform_length(type_z_, Nz_, "Nz", 3);
 
     init();
     set_stream(stream_);

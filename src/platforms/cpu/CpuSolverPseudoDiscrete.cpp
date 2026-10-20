@@ -235,25 +235,11 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
             this->transform_backward(k_q_in.data(), fft_out);
         }
 
-        // Evaluate exp(-w*ds) in real space and apply mask if provided
-        // Combined into single loop to reduce memory traffic
+        // Evaluate exp(-w*ds) in real space (the CrysFFT path applied it on the physical grid)
         if (!(this->use_crysfft() && this->space_group_ != nullptr))
         {
-            if (q_mask != nullptr)
-            {
-                for (int i = 0; i < M_full; ++i)
-                    fft_out[i] *= _exp_dw[i] * q_mask[i];
-            }
-            else
-            {
-                for (int i = 0; i < M_full; ++i)
-                    fft_out[i] *= _exp_dw[i];
-            }
-        }
-        else if (q_mask != nullptr)
-        {
-            for (int i = 0; i < M_reduced; ++i)
-                fft_out[i] *= q_mask[i];
+            for (int i = 0; i < M_full; ++i)
+                fft_out[i] *= _exp_dw[i];
         }
 
         // Reduce full grid → reduced basis
@@ -261,11 +247,21 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         {
             if constexpr (std::is_same_v<T, double>)
             {
-            if (this->use_crysfft())
+                if (this->use_crysfft())
                     std::copy(fft_out, fft_out + M_reduced, q_out);
                 else
                     this->space_group_->to_reduced_basis(fft_out, q_out, 1);
             }
+        }
+
+        // Apply the mask on the output. The computation box stores the mask in the
+        // basis of the propagators (reduced with a space group, full otherwise), so it
+        // is applied after the reduction; the mask is symmetric, so this equals masking
+        // on the full grid.
+        if (q_mask != nullptr)
+        {
+            for (int i = 0; i < M_reduced; ++i)
+                q_out[i] *= q_mask[i];
         }
     }
     catch (std::exception& exc)

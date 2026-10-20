@@ -201,6 +201,37 @@ def main():
         print("FAILED: SCFT space group")
         ok = False
 
+    # ---- the cell must match the crystal system of the space group
+    params = base_params(); params["space_group"] = {"symbol": "Im-3m"}; params["lx"] = [4.0, 4.0, 3.0]
+    ok &= expect_error(SCFT, params, "cubic space group with unequal box lengths")
+    params = base_params(); params["space_group"] = {"symbol": "Im-3m"}; params["angles"] = [90.0, 90.0, 120.0]
+    ok &= expect_error(SCFT, params, "cubic space group with a 120-degree angle")
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}
+    ok &= expect_error(SCFT, params, "hexagonal space group without a 120-degree angle")
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}
+    params["angles"] = [90.0, 90.0, 120.0]
+    if build(SCFT, params).crystal_system != "Hexagonal":
+        print("FAILED: SCFT hexagonal space group with a hexagonal cell")
+        ok = False
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}; params["angles"] = [120.0]
+    ok &= expect_error(SCFT, params, "3D box with a single angle")
+    # trigonal groups: the axes setting of the group decides which cell is valid
+    params = base_params(); params["space_group"] = {"symbol": "P-3m1"}
+    ok &= expect_error(SCFT, params, "hexagonal-axes trigonal group on a cube")
+    params = base_params(); params["space_group"] = {"symbol": "P-3m1"}; params["angles"] = [90.0, 90.0, 120.0]
+    if build(SCFT, params).crystal_system != "Trigonal":
+        print("FAILED: SCFT hexagonal-axes trigonal group with a hexagonal cell")
+        ok = False
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [90.0, 90.0, 120.0]
+    ok &= expect_error(SCFT, params, "rhombohedral-axes group on a hexagonal cell")
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [80.0, 80.0, 80.0]
+    if build(SCFT, params).crystal_system != "Trigonal":
+        print("FAILED: SCFT rhombohedral-axes group on a rhombohedral cell")
+        ok = False
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [80.0, 80.0, 80.0]
+    params["box_is_altering"] = True
+    ok &= expect_error(SCFT, params, "box relaxation with a rhombohedral-axes setting")
+
     # ---- changing the user's dictionary after construction does not affect the object
     params = base_params()
     calc = build(SCFT, params)
