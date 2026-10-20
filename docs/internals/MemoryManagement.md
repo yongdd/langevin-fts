@@ -37,15 +37,19 @@ Memory usage depends on:
 
 ## CUDA (GPU) Platform
 
+The two modes are implemented once, in `src/common/ComputationContinuous.cpp`,
+`ComputationDiscrete.cpp` and the `ComputationReduceMemory*.cpp` classes; the
+platform backends only decide where the arrays live.
+
 ### Standard Mode
 
 All propagators are stored in **GPU device memory**:
 
 ```
 GPU Device Memory:
-├── d_propagator[key][n]           # All segment propagators
-├── d_propagator_half_steps[key][n] # Junction half-bonds
-├── d_phi_block[key]               # Block concentrations
+├── propagator[key][n]             # All segment propagators
+├── propagator_half_steps[key][n]  # Junction half-bonds (discrete chains)
+├── phi_block[key]                 # Block concentrations
 └── Solver workspace               # FFT, Boltzmann factors
 ```
 
@@ -53,25 +57,27 @@ GPU Device Memory:
 
 ### Memory-Saving Mode (Checkpointing)
 
-Checkpoints stored in **pinned host memory**, minimal GPU workspace:
+Checkpoints stored in **pinned host memory**; the GPU holds the recomputation workspace:
 
 ```
-GPU Device Memory (Fixed ~10-20 arrays):
-├── d_q_one[2]           # Current/next propagator (ping-pong)
-├── d_q_block_v/u[2]     # Concentration computation
-├── d_phi                # Temporary concentration
+GPU Device Memory (about 2√N + 10 arrays):
+├── q_recal[0..2√N]      # Recomputed consecutive segments of one propagator
+├── q_work[2]            # Propagator being advanced (ping-pong)
+├── q_right[2]           # The other propagator of a block
+├── phi_block[key]       # Block concentrations
 ├── d_q_pair[2]          # Stress computation
 └── Solver workspace     # FFT, Boltzmann factors
 
 Pinned Host Memory (Checkpoints):
-├── propagator_at_check_point[(key, n)]      # Segment checkpoints at 2√N intervals
-├── propagator_half_steps_at_check_point     # Junction checkpoints
-├── q_recal[0..2√N]                          # Recomputation workspace
-├── phi_block[key]                           # Block concentrations
-└── q_pair[2]                                # Ping-pong buffers
+├── checkpoint[(key, n)]         # Segments every 2√N steps and where other propagators start
+└── half_checkpoint[(key, n)]    # Junction half-bond states (discrete chains)
 ```
 
-**Memory usage**: GPU memory is nearly constant; checkpoints stored in host RAM.
+**Memory usage**: GPU memory grows as $\sqrt{N}$; the checkpoints are stored in host RAM.
+A segment recomputed from a checkpoint is identical to the one the propagator
+computation produced, and both modes sum the same segment pairs in the same order, so
+the memory-saving mode gives the same results as the standard mode (bit for bit on every
+platform in the regression runs of the 2026-10 unification).
 
 ## CPU Platform
 
@@ -82,22 +88,22 @@ All propagators stored in **system RAM**:
 ```
 System RAM:
 ├── propagator[key][n]              # All segment propagators
-├── propagator_half_steps[key][n]   # Junction half-bonds
+├── propagator_half_steps[key][n]   # Junction half-bonds (discrete chains)
 ├── phi_block[key]                  # Block concentrations
 └── Solver workspace                # FFT plans, Boltzmann factors
 ```
 
 ### Memory-Saving Mode (Checkpointing)
 
-Same checkpointing strategy as CUDA, but all in system RAM:
+Same checkpointing strategy and code as CUDA, all in system RAM:
 
 ```
 System RAM (Reduced):
-├── propagator_at_check_point[(key, n)]      # Segment checkpoints at 2√N intervals
-├── propagator_half_steps_at_check_point     # Junction checkpoints
-├── q_recal[0..2√N]                          # Recomputation workspace
-├── phi_block[key]                           # Block concentrations
-└── q_pair[2]                                # Ping-pong buffers
+├── checkpoint[(key, n)]         # Segments every 2√N steps and where other propagators start
+├── half_checkpoint[(key, n)]    # Junction half-bond states (discrete chains)
+├── q_recal[0..2√N]              # Recomputation workspace
+├── q_work[2], q_right[2]        # Ping-pong buffers
+└── phi_block[key]               # Block concentrations
 ```
 
 ## Benchmark Results
@@ -127,6 +133,18 @@ System RAM (Reduced):
 - Checkpoints stored in pinned host RAM for async transfers
 - Computation **3.8x slower** due to recomputation from checkpoints
 - Standard mode for $200^3$ would require ~60 GB GPU memory (infeasible)
+
+These numbers predate the 2026-10 unification of the CPU and CUDA code, which keeps the
+$2\sqrt{N}$ recomputation buffers on the GPU instead of round-tripping every recomputed
+segment through pinned host memory. Same configuration at $96^3$, same A10, propagators
+plus concentrations per iteration:
+
+| Version | GPU memory | Host memory (peak RSS) | Time/iter |
+|---------|------------|------------------------|-----------|
+| Before | 438 MiB | 860 MiB | 2.36 s |
+| After | 854 MiB | 451 MiB | 1.52 s |
+
+The stress computation of the same system went from 2.09 s to 1.21 s.
 
 ### CPU Results
 

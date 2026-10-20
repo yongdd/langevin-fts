@@ -110,7 +110,8 @@ constexpr double PARTITION_TOLERANCE = 1e-7;
  * using the schedule from PropagatorComputationOptimizer. On CUDA, this
  * uses multiple streams for concurrent kernel execution.
  *
- * @see CpuComputationContinuous, CudaComputationContinuous for implementations
+ * @see ComputationContinuous, ComputationDiscrete and the ComputationReduceMemory
+ *      classes for implementations (platform neutral, see ComputationBackend)
  */
 template <typename T>
 class PropagatorComputation

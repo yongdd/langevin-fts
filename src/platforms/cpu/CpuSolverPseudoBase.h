@@ -307,9 +307,11 @@ protected:
     void init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend);
 
     /**
-     * @brief Clean up shared components in destructor.
+     * @brief Clean up shared components.
      *
-     * Properly deletes FFT object with correct type cast and Pseudo object.
+     * Deletes the FFT object and the Pseudo object and resets both pointers
+     * (idempotent). Called by ~CpuSolverPseudoBase, which also runs when a
+     * derived constructor throws after init_shared().
      */
     void cleanup_shared();
 
@@ -378,8 +380,8 @@ public:
     /// Default constructor.
     CpuSolverPseudoBase() : fft_(nullptr), pseudo(nullptr), is_periodic_(true), dim_(0), space_group_(nullptr) {}
 
-    /// Virtual destructor.
-    virtual ~CpuSolverPseudoBase() {}
+    /// Virtual destructor. Frees the shared components (FFT, Pseudo).
+    virtual ~CpuSolverPseudoBase() { cleanup_shared(); }
 
     /**
      * @brief Set space group for reduced basis operations.

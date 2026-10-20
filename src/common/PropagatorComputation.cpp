@@ -3,9 +3,9 @@
  * @brief Implementation of PropagatorComputation base class.
  *
  * Provides the base implementation for computing chain propagators and
- * partition functions in polymer field theory. Platform-specific solvers
- * (CpuComputationContinuous, CudaComputationDiscrete, etc.) derive from
- * this class to implement the actual propagator integration.
+ * partition functions in polymer field theory. The platform-neutral
+ * computations (ComputationContinuous, ComputationDiscrete and their
+ * reduce-memory variants) derive from this class.
  *
  * **Propagator Computation:**
  *
@@ -29,8 +29,8 @@
  * - PropagatorComputation<double>: Real fields (periodic boundaries)
  * - PropagatorComputation<std::complex<double>>: Complex fields
  *
- * @see CpuComputationContinuous for CPU implementation
- * @see CudaComputationContinuous for GPU implementation
+ * @see ComputationContinuous for the continuous-chain implementation
+ * @see ComputationBackend for the CPU and CUDA operations
  */
 
 #include <iostream>

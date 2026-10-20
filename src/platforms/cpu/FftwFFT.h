@@ -73,14 +73,17 @@ private:
     fftw_plan plan_backward_ = nullptr;            ///< Backward (c2r) transform
 
     // FFTW plans for non-periodic DCT/DST (dimension-by-dimension)
-    std::array<fftw_plan, DIM> plan_dct_forward_;  ///< DCT-II plans per dimension
-    std::array<fftw_plan, DIM> plan_dct_backward_; ///< DCT-III plans per dimension
-    std::array<fftw_plan, DIM> plan_dst_forward_;  ///< DST-II plans per dimension
-    std::array<fftw_plan, DIM> plan_dst_backward_; ///< DST-III plans per dimension
+    std::array<fftw_plan, DIM> plan_dct_forward_{};  ///< DCT-II plans per dimension
+    std::array<fftw_plan, DIM> plan_dct_backward_{}; ///< DCT-III plans per dimension
+    std::array<fftw_plan, DIM> plan_dst_forward_{};  ///< DST-II plans per dimension
+    std::array<fftw_plan, DIM> plan_dst_backward_{}; ///< DST-III plans per dimension
 
     // Buffers for FFTW (FFTW requires aligned memory)
     double* work_buffer_ = nullptr;                ///< Work buffer for transforms
     fftw_complex* complex_buffer_ = nullptr;       ///< Complex buffer for r2c/c2r
+
+    /// Destroy the plans and free the buffers (also after a failed construction); idempotent.
+    void release();
 
     /// Initialize FFTW plans for periodic FFT.
     void initPeriodicFFT();

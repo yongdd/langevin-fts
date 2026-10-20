@@ -48,6 +48,13 @@ CudaPseudo<T>::CudaPseudo(
     std::array<double, 9> recip_vec)
         : Pseudo<T>(bond_lengths, bc, nx, dx, recip_metric, recip_vec)
 {
+    // Null every device pointer before anything can throw (see release())
+    d_fourier_basis_x = nullptr;
+    d_fourier_basis_y = nullptr;
+    d_fourier_basis_z = nullptr;
+    d_fourier_basis_xy = nullptr;
+    d_fourier_basis_xz = nullptr;
+    d_fourier_basis_yz = nullptr;
     d_negative_k_idx = nullptr;
     try
     {
@@ -81,34 +88,53 @@ CudaPseudo<T>::CudaPseudo(
     }
     catch(std::exception& exc)
     {
+        // The Pseudo<T> base destructor still frees the host arrays
+        release();
         throw_without_line_number(exc.what());
+    }
+    catch(...)
+    {
+        release();
+        throw;
     }
 }
 //----------------- Destructor -----------------------------
 template <typename T>
 CudaPseudo<T>::~CudaPseudo()
 {
+    release();
+}
+
+//----------------- Release (pointers are nullptr until allocated) -----------------------------
+template <typename T>
+void CudaPseudo<T>::release()
+{
     // Free GPU memory for nested maps: d_boltz_bond[ds_index][monomer_type]
     for (const auto& ds_entry : d_boltz_bond)
         for (const auto& item : ds_entry.second)
-            cudaFree(item.second);
+            if (item.second != nullptr)
+                cudaFree(item.second);
     for (const auto& ds_entry : d_boltz_bond_half)
         for (const auto& item : ds_entry.second)
-            cudaFree(item.second);
+            if (item.second != nullptr)
+                cudaFree(item.second);
+    d_boltz_bond.clear();
+    d_boltz_bond_half.clear();
 
     // For stress calculation: compute_stress()
-    // Diagonal terms
-    cudaFree(d_fourier_basis_x);
-    cudaFree(d_fourier_basis_y);
-    cudaFree(d_fourier_basis_z);
-    // Cross-terms
-    cudaFree(d_fourier_basis_xy);
-    cudaFree(d_fourier_basis_xz);
-    cudaFree(d_fourier_basis_yz);
+    // Diagonal terms, then cross-terms
+    for (double** d_ptr : {&d_fourier_basis_x, &d_fourier_basis_y, &d_fourier_basis_z,
+                           &d_fourier_basis_xy, &d_fourier_basis_xz, &d_fourier_basis_yz})
+    {
+        if (*d_ptr != nullptr)
+            cudaFree(*d_ptr);
+        *d_ptr = nullptr;
+    }
 
-    if constexpr (std::is_same<T, std::complex<double>>::value)
-        if (d_negative_k_idx != nullptr)
-            cudaFree(d_negative_k_idx);
+    // Allocated for complex fields with periodic BC only
+    if (d_negative_k_idx != nullptr)
+        cudaFree(d_negative_k_idx);
+    d_negative_k_idx = nullptr;
 }
 
 //----------------- Upload Boltzmann factors to GPU -----------------------------
@@ -207,12 +233,14 @@ void CudaPseudo<T>::finalize_ds_values()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            // Check if GPU memory already exists for this ds_index/monomer_type
-            if (d_boltz_bond.find(ds_index) == d_boltz_bond.end() ||
-                d_boltz_bond[ds_index].find(monomer_type) == d_boltz_bond[ds_index].end())
+            // Allocate only if no GPU memory exists for this ds_index/monomer_type.
+            // The slot is inserted as nullptr and set only after cudaMalloc succeeds.
+            double*& d_slot = d_boltz_bond[ds_index][monomer_type];
+            if (d_slot == nullptr)
             {
-                d_boltz_bond[ds_index][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_boltz_bond[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+                double* d_ptr = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(double)*M_COMPLEX));
+                d_slot = d_ptr;
             }
         }
     }
@@ -222,12 +250,13 @@ void CudaPseudo<T>::finalize_ds_values()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            // Check if GPU memory already exists for this ds_index/monomer_type
-            if (d_boltz_bond_half.find(ds_index) == d_boltz_bond_half.end() ||
-                d_boltz_bond_half[ds_index].find(monomer_type) == d_boltz_bond_half[ds_index].end())
+            // Allocate only if no GPU memory exists for this ds_index/monomer_type
+            double*& d_slot = d_boltz_bond_half[ds_index][monomer_type];
+            if (d_slot == nullptr)
             {
-                d_boltz_bond_half[ds_index][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+                double* d_ptr = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(double)*M_COMPLEX));
+                d_slot = d_ptr;
             }
         }
     }

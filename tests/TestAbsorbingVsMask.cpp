@@ -50,29 +50,18 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
+#include "TestComputationFactory.h"
 
 #ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
 #endif
 
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
 #endif
 
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaComputationContinuous.h"
-#endif
-
-// Type trait to detect CUDA computation types
-template<template<typename> class T>
-struct is_cuda_computation : std::false_type {};
-
-#ifdef USE_CUDA
-template<>
-struct is_cuda_computation<CudaComputationContinuous> : std::true_type {};
 #endif
 
 /**
@@ -140,14 +129,14 @@ std::vector<double> create_boundary_mask(const std::vector<int>& nx)
 /**
  * @brief Run comparison test for a given platform.
  */
-template<template<typename> class ComputationBox, template<typename> class ComputationContinuous>
+template<template<typename> class ComputationBox>
 bool run_comparison(const std::string& platform_name,
                     const std::vector<int>& nx,
                     const std::vector<double>& lx,
                     Molecules* molecules,
                     PropagatorComputationOptimizer* prop_opt,
                     double tolerance,
-                    FFTBackend fft_backend = FFTBackend::FFTW)
+                    const std::string& platform)
 {
     int dim = nx.size();
     int M = 1;
@@ -184,14 +173,8 @@ bool run_comparison(const std::string& platform_name,
 
     // Method 1: Absorbing BC (DST-based)
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
-    ComputationContinuous<double>* solver_absorbing;
-    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
-        solver_absorbing = new ComputationContinuous<double>(
-            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
-    } else {
-        solver_absorbing = new ComputationContinuous<double>(
-            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
-    }
+    PropagatorComputation<double>* solver_absorbing = make_propagator_computation<double>(
+        platform, false, cb_absorbing, molecules, prop_opt, "rqm4");
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -199,14 +182,8 @@ bool run_comparison(const std::string& platform_name,
 
     // Method 2: Periodic BC with boundary mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
-    ComputationContinuous<double>* solver_masked;
-    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
-        solver_masked = new ComputationContinuous<double>(
-            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
-    } else {
-        solver_masked = new ComputationContinuous<double>(
-            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
-    }
+    PropagatorComputation<double>* solver_masked = make_propagator_computation<double>(
+        platform, false, cb_masked, molecules, prop_opt, "rqm4");
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
@@ -239,13 +216,13 @@ bool run_comparison(const std::string& platform_name,
  * - Have Q < 1.0 (mass is absorbed at boundaries)
  * - Absorbing BC typically has slightly higher Q (zeros at faces, not cell centers)
  */
-template<template<typename> class ComputationBox, template<typename> class ComputationContinuous>
+template<template<typename> class ComputationBox>
 bool run_physical_test(const std::string& platform_name,
                        const std::vector<int>& nx,
                        const std::vector<double>& lx,
                        Molecules* molecules,
                        PropagatorComputationOptimizer* prop_opt,
-                       FFTBackend fft_backend = FFTBackend::FFTW)
+                       const std::string& platform)
 {
     int dim = nx.size();
     int M = 1;
@@ -270,14 +247,8 @@ bool run_physical_test(const std::string& platform_name,
 
     // Reflecting BC (reference: should have Q = 1.0 for w=0)
     ComputationBox<double>* cb_ref = new ComputationBox<double>(nx, lx, bc_reflecting);
-    ComputationContinuous<double>* solver_ref;
-    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
-        solver_ref = new ComputationContinuous<double>(
-            cb_ref, molecules, prop_opt, "pseudospectral", "rqm4");
-    } else {
-        solver_ref = new ComputationContinuous<double>(
-            cb_ref, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
-    }
+    PropagatorComputation<double>* solver_ref = make_propagator_computation<double>(
+        platform, false, cb_ref, molecules, prop_opt, "rqm4");
     solver_ref->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_reflecting = solver_ref->get_total_partition(0);
     delete solver_ref;
@@ -285,14 +256,8 @@ bool run_physical_test(const std::string& platform_name,
 
     // Absorbing BC
     ComputationBox<double>* cb_absorbing = new ComputationBox<double>(nx, lx, bc_absorbing);
-    ComputationContinuous<double>* solver_absorbing;
-    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
-        solver_absorbing = new ComputationContinuous<double>(
-            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4");
-    } else {
-        solver_absorbing = new ComputationContinuous<double>(
-            cb_absorbing, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
-    }
+    PropagatorComputation<double>* solver_absorbing = make_propagator_computation<double>(
+        platform, false, cb_absorbing, molecules, prop_opt, "rqm4");
     solver_absorbing->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_absorbing = solver_absorbing->get_total_partition(0);
     delete solver_absorbing;
@@ -300,14 +265,8 @@ bool run_physical_test(const std::string& platform_name,
 
     // Periodic BC with mask
     ComputationBox<double>* cb_masked = new ComputationBox<double>(nx, lx, bc_periodic, mask.data());
-    ComputationContinuous<double>* solver_masked;
-    if constexpr (is_cuda_computation<ComputationContinuous>::value) {
-        solver_masked = new ComputationContinuous<double>(
-            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4");
-    } else {
-        solver_masked = new ComputationContinuous<double>(
-            cb_masked, molecules, prop_opt, "pseudospectral", "rqm4", fft_backend);
-    }
+    PropagatorComputation<double>* solver_masked = make_propagator_computation<double>(
+        platform, false, cb_masked, molecules, prop_opt, "rqm4");
     solver_masked->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
     double Q_masked = solver_masked->get_total_partition(0);
     delete solver_masked;
@@ -384,20 +343,20 @@ int main()
             std::vector<double> lx = {4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
                 all_passed = false;
             #endif
         }
@@ -409,20 +368,20 @@ int main()
             std::vector<double> lx = {4.0, 4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
                 all_passed = false;
             #endif
         }
@@ -434,20 +393,20 @@ int main()
             std::vector<double> lx = {4.0, 4.0, 4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, FFTBackend::MKL))
+            if (!run_physical_test<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt))
+            if (!run_physical_test<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
                 all_passed = false;
             #endif
         }
@@ -470,20 +429,20 @@ int main()
             std::vector<double> lx = {4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
                 all_passed = false;
             #endif
         }
@@ -495,20 +454,20 @@ int main()
             std::vector<double> lx = {4.0, 4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
                 all_passed = false;
             #endif
         }
@@ -520,20 +479,20 @@ int main()
             std::vector<double> lx = {4.0, 4.0, 4.0};
 
             #ifdef USE_CPU_FFTW
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance, "cpu-fftw"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CPU_MKL
-            if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, FFTBackend::MKL))
+            if (!run_comparison<CpuComputationBox>(
+                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance, "cpu-mkl"))
                 all_passed = false;
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox, CudaComputationContinuous>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance))
+            if (!run_comparison<CudaComputationBox>(
+                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
                 all_passed = false;
             #endif
         }

@@ -51,6 +51,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             this->streams[i][0] = streams[i][0];
             this->streams[i][1] = streams[i][1];
         }
+        // Null every owned resource before anything can throw (see release_base())
         for(int i=0; i<MAX_STREAMS; i++)
         {
             d_temp_storage[i] = nullptr;
@@ -64,6 +65,12 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             crysfft_[i] = nullptr;
             d_crysfft_in_[i] = nullptr;
             d_crysfft_out_[i] = nullptr;
+            fft_[i] = nullptr;
+            for (int b = 0; b < 2; b++)
+            {
+                plan_for_[i][b] = plan_bak_[i][b] = 0;
+                plan_for_created_[i][b] = plan_bak_created_[i][b] = false;
+            }
         }
         space_group_ = nullptr;
         d_reduced_basis_indices_ = nullptr;
@@ -136,12 +143,19 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             for(const auto& item: molecules->get_bond_lengths())
             {
                 const std::string& monomer_type = item.first;
-                this->d_exp_dw[ds_idx][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw[ds_idx][monomer_type], sizeof(T)*M));
+                // Insert the slot as nullptr, allocate into a local, store only on success
+                CuDeviceData<T>*& d_slot = this->d_exp_dw[ds_idx][monomer_type];
+                d_slot = nullptr;
+                CuDeviceData<T>* d_ptr = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(T)*M));
+                d_slot = d_ptr;
                 if (with_exp_dw_half)
                 {
-                    this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
-                    gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
+                    CuDeviceData<T>*& d_slot_half = this->d_exp_dw_half[ds_idx][monomer_type];
+                    d_slot_half = nullptr;
+                    CuDeviceData<T>* d_ptr_half = nullptr;
+                    gpu_error_check(cudaMalloc((void**)&d_ptr_half, sizeof(T)*M));
+                    d_slot_half = d_ptr_half;
                 }
             }
         }
@@ -169,22 +183,40 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
     }
     catch(std::exception& exc)
     {
+        release_base();
         throw_without_line_number(exc.what());
+    }
+    catch(...)
+    {
+        release_base();
+        throw;
     }
 }
 
 template <typename T>
 CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
 {
+    release_base();
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::release_base()
+{
+    // Every pointer is nullptr and every plan flag false until acquired, so a
+    // partly built object is released correctly; calling this twice is harmless.
+    // Derived solvers free their own workspaces before this runs.
     cleanup_crysfft();
     delete pseudo;
+    pseudo = nullptr;
 
-    for(int i=0; i<n_streams; i++)
+    for(int i=0; i<MAX_STREAMS; i++)
     {
         for (int b = 0; b < 2; b++)
         {
-            if (plan_for_[i][b] != 0) cufftDestroy(plan_for_[i][b]);
-            if (plan_bak_[i][b] != 0) cufftDestroy(plan_bak_[i][b]);
+            if (plan_for_created_[i][b]) cufftDestroy(plan_for_[i][b]);
+            if (plan_bak_created_[i][b]) cufftDestroy(plan_bak_[i][b]);
+            plan_for_created_[i][b] = plan_bak_created_[i][b] = false;
+            plan_for_[i][b] = plan_bak_[i][b] = 0;
         }
         delete fft_[i];
         fft_[i] = nullptr;
@@ -192,36 +224,38 @@ CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
 
     for(const auto& ds_entry: this->d_exp_dw)
         for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
+            if (item.second != nullptr) cudaFree(item.second);
     for(const auto& ds_entry: this->d_exp_dw_half)
         for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
+            if (item.second != nullptr) cudaFree(item.second);
+    this->d_exp_dw.clear();
+    this->d_exp_dw_half.clear();
 
-    for(int i=0; i<n_streams; i++)
+    auto free_device = [](auto*& d_ptr)
     {
-        cudaFree(d_stress_sum[i]);
-        cudaFree(d_stress_sum_out[i]);
-        cudaFree(d_q_multi[i]);
-        if (d_qk_conj_[i] != nullptr) cudaFree(d_qk_conj_[i]);
-        cudaFree(d_temp_storage[i]);
+        if (d_ptr != nullptr) cudaFree(d_ptr);
+        d_ptr = nullptr;
+    };
+    for(int i=0; i<MAX_STREAMS; i++)
+    {
+        free_device(d_stress_sum[i]);
+        free_device(d_stress_sum_out[i]);
+        free_device(d_q_multi[i]);
+        free_device(d_qk_conj_[i]);
+        free_device(d_temp_storage[i]);
+        temp_storage_bytes[i] = 0;
     }
-    for(int i=0; i<n_streams; i++)
+    for(int i=0; i<MAX_STREAMS; i++)
     {
-        if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
-        if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
+        free_device(d_q_full_in_[i]);
+        free_device(d_q_full_out_[i]);
     }
 }
 
 template <typename T>
 void CudaSolverPseudoBase<T>::init_fft()
 {
-    for (int i = 0; i < MAX_STREAMS; i++)
-    {
-        fft_[i] = nullptr;
-        plan_for_[i][0] = plan_for_[i][1] = 0;
-        plan_bak_[i][0] = plan_bak_[i][1] = 0;
-    }
-
+    // fft_ and the plan handles/flags were reset by the constructor
     if (is_periodic_)
     {
         // One plan per stream and batch size; cufftPlanMany reads dim_ entries of total_grid
@@ -235,7 +269,9 @@ void CudaSolverPseudoBase<T>::init_fft()
             for (int b = 0; b < max_fft_batch_; b++)
             {
                 cufft_error_check(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1));
+                plan_for_created_[i][b] = true;
                 cufft_error_check(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1));
+                plan_bak_created_[i][b] = true;
                 cufft_error_check(cufftSetStream(plan_for_[i][b], streams[i][0]));
                 cufft_error_check(cufftSetStream(plan_bak_[i][b], streams[i][0]));
             }

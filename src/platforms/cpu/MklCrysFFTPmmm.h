@@ -72,6 +72,9 @@ private:
     /// Precompute twiddle factors.
     void precomputeTwiddleFactors();
 
+    /// Free the DFTI descriptors (also after a failed construction); idempotent.
+    void release();
+
 public:
     /**
      * @brief Construct MklCrysFFTPmmm for given grid.

@@ -6,10 +6,13 @@ Stress with non-periodic (reflecting/absorbing) boundary conditions.
    of -lnQ with respect to L_d. For DISCRETE chains the stress formula is an
    exact derivative of the discretized lnQ, so agreement is limited only by
    the FD truncation (tolerance 1e-6). For CONTINUOUS chains the stress is a
-   contour-quadrature approximation: at ds = 0.01 the periodic baseline
-   mismatch is ~4e-4; reflecting converges like periodic (tolerance 1e-3),
-   absorbing degrades to O(ds) from the wall boundary layers (tolerance
-   1.5e-2). Do NOT tighten these without reducing ds accordingly.
+   contour-quadrature approximation: at ds = 0.01 the reflecting mismatch is
+   ~2e-4, like the periodic baseline (tolerance 1e-3); with absorbing walls it
+   is ~3e-7 in 1D (tolerance 1e-5) and ~1e-5 for the 3D mixed walls
+   (tolerance 1e-4). Until 2026-10 the full-storage stress dropped the
+   chain-end segments, whose q(r, 0) = 1 is not stress-free at an absorbing
+   wall; that gave absorbing walls an O(ds) error of ~5e-3, which these
+   tolerances catch. Do NOT loosen them.
 
 2. Cross-platform equivalence for per-axis MIXED reflecting/absorbing BCs:
    Q and stress must agree between CPU and CUDA to machine precision. This
@@ -116,7 +119,11 @@ def main():
         run_fd_case("1D reflect", [48], [2.3], ["reflecting"] * 2,
                     "continuous", platform, 1e-3)
         run_fd_case("1D absorb", [48], [2.3], ["absorbing"] * 2,
-                    "continuous", platform, 1.5e-2)
+                    "continuous", platform, 1e-5)
+        run_fd_case("3D mixed r/a/r", [24, 20, 16], [2.1, 1.7, 1.4],
+                    ["reflecting", "reflecting", "absorbing", "absorbing",
+                     "reflecting", "reflecting"],
+                    "continuous", platform, 1e-4)
 
     # --- Cross-platform equivalence for mixed BCs ---
     if has_cuda and cpu is not None:

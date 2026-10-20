@@ -10,7 +10,7 @@
  *
  * - CudaComputationBox: Grid with cuFFT support
  * - CudaAndersonMixing: GPU-accelerated field mixing
- * - CudaComputationContinuous/Discrete: Multi-stream propagators
+ * - Propagator computations with the CUDA backend (multi-stream)
  *
  * **Memory Modes:**
  *
@@ -38,11 +38,13 @@
 #include <vector>
 #include <string>
 
+#include <climits>
 #include "CudaComputationBox.h"
-#include "CudaComputationContinuous.h"
-#include "CudaComputationDiscrete.h"
-#include "CudaComputationReduceMemoryContinuous.h"
-#include "CudaComputationReduceMemoryDiscrete.h"
+#include "CudaComputationBackend.h"
+#include "ComputationContinuous.h"
+#include "ComputationDiscrete.h"
+#include "ComputationReduceMemoryContinuous.h"
+#include "ComputationReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
@@ -82,30 +84,29 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
 {
     try
     {
-        std::string chain_model = molecules->get_model_name();
-
-        // Discrete chain model has its own solver, numerical_method is not used
-        if (chain_model == "discrete")
-        {
-            if (!this->reduce_memory)
-                return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group);
-            else
-                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group);
-        }
-
-        // Continuous chain model: validate and use numerical_method
-        std::string solver_type;
-        if (numerical_method == "rqm4" || numerical_method == "rk2")
-            solver_type = "pseudospectral";
+        // The solver: discrete chains have their own; continuous chains take the numerical method
+        const bool discrete = (molecules->get_model_name() == "discrete");
+        std::string solver_type = "pseudospectral";
+        if (discrete)
+            numerical_method = "";
         else if (numerical_method == "cn-adi2")
             solver_type = "realspace";
-        else
+        else if (numerical_method != "rqm4" && numerical_method != "rk2")
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
+        // Reduce-memory mode computes one propagator at a time
+        const int max_n_streams = this->reduce_memory ? 1 : INT_MAX;
+        auto create_backend = [=]() {
+            return new CudaComputationBackend<T>(cb, molecules, solver_type, numerical_method, space_group, max_n_streams);
+        };
+
+        if (discrete && !this->reduce_memory)
+            return new ComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
+        if (discrete)
+            return new ComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
         if (!this->reduce_memory)
-            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, space_group);
-        else
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, space_group);
+            return new ComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
+        return new ComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
     }
     catch(std::exception& exc)
     {

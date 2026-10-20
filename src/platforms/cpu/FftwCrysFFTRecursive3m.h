@@ -23,6 +23,9 @@ private:
 
     void init_fft_plans();
 
+    /// Destroy the plans (also after a failed construction); idempotent.
+    void release();
+
 public:
     FftwCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,

@@ -20,10 +20,24 @@ FftwCrysFFTObliqueZ::FftwCrysFFTObliqueZ(
     std::array<double, 9> trans_part)
     : Base(nx_logical, cell_para, trans_part)
 {
-    initFFTPlans();
+    try
+    {
+        initFFTPlans();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 FftwCrysFFTObliqueZ::~FftwCrysFFTObliqueZ()
+{
+    release();
+}
+
+void FftwCrysFFTObliqueZ::release()
 {
     if (plan_dct_forward_z_) fftw_destroy_plan(plan_dct_forward_z_);
     if (plan_dct_backward_z_) fftw_destroy_plan(plan_dct_backward_z_);
@@ -31,12 +45,17 @@ FftwCrysFFTObliqueZ::~FftwCrysFFTObliqueZ()
     if (plan_fft_backward_xy_) fftw_destroy_plan(plan_fft_backward_xy_);
     if (plan_fft_z_forward_) fftw_destroy_plan(plan_fft_z_forward_);
     if (plan_fft_z_backward_) fftw_destroy_plan(plan_fft_z_backward_);
+    plan_dct_forward_z_ = plan_dct_backward_z_ = nullptr;
+    plan_fft_forward_xy_ = plan_fft_backward_xy_ = nullptr;
+    plan_fft_z_forward_ = plan_fft_z_backward_ = nullptr;
 
     if (io_buffer_) fftw_free(io_buffer_);
     if (temp_buffer_) fftw_free(temp_buffer_);
     if (complex_buffer_) fftw_free(complex_buffer_);
     if (fft_z_real_) fftw_free(fft_z_real_);
     if (fft_z_complex_) fftw_free(fft_z_complex_);
+    io_buffer_ = temp_buffer_ = fft_z_real_ = nullptr;
+    complex_buffer_ = fft_z_complex_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

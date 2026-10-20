@@ -61,11 +61,11 @@
  * **Created Object Types:**
  *
  * - CpuComputationBox: Grid and integration on CPU
- * - CpuComputationContinuous/Discrete: Propagator solvers
+ * - Propagator computations with the CPU backend (MKL transforms)
  * - CpuAndersonMixing: Iteration accelerator
  *
- * @note The reduce_memory flag is accepted for API compatibility
- *       but currently has no effect on CPU implementations.
+ * @note The reduce_memory flag enables checkpointing mode for memory-constrained
+ *       simulations at the cost of increased computation time.
  */
 template <typename T>
 class MklFactory : public AbstractFactory<T>
@@ -120,8 +120,9 @@ public :
     /**
      * @brief Create propagator computation solver.
      *
-     * Creates CpuComputationContinuous, CpuComputationDiscrete, or real-space solver
-     * based on chain model and numerical method.
+     * Creates ComputationContinuous, ComputationDiscrete, or their reduce-memory
+     * variants with the CPU backend, based on chain model, memory mode, and
+     * numerical method.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

@@ -247,54 +247,69 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
       cell_para_(cell_para),
       translational_part_(translational_part)
 {
-    for (int d = 0; d < 3; ++d)
+    try
     {
-        if (nx_logical_[d] <= 0 || (nx_logical_[d] % 2) != 0)
+        for (int d = 0; d < 3; ++d)
         {
-            throw_with_line_number("CudaCrysFFTRecursive3m requires even, positive grid dimensions.");
+            if (nx_logical_[d] <= 0 || (nx_logical_[d] % 2) != 0)
+            {
+                throw_with_line_number("CudaCrysFFTRecursive3m requires even, positive grid dimensions.");
+            }
         }
+        // The kernels here are size-agnostic (ker_apply_k_3m iterates the packed
+        // z range Nz2c = Nz2/2+1 with exact bounds; cuFFT D2Z/Z2D handles any
+        // length). The nz/2 >= 2 bound mirrors the guard in
+        // CrysFFTRecursive3mBase.h so CPU and CUDA stay constructible for exactly
+        // the same grids.
+        if ((nx_logical_[2] / 2) < 2)
+        {
+            throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 >= 2.");
+        }
+
+        // The fold pairs twiddle r_p with the octant-transformed Boltzmann array
+        // S_{psi(p)}, where psi depends on the parities of the m3 generator
+        // translations in grid units (see Recursive3mFoldParity.h). When psi is
+        // not a bijection the even-index physical basis does not exist on this
+        // grid and the fold cannot represent the group; CrysFFTSelector rejects
+        // such grids, but guard direct construction.
+        if (!compute_m3_fold_permutation(translational_part_, nx_logical_, fold_perm_))
+        {
+            throw_with_line_number("CudaCrysFFTRecursive3m: m3 translations are "
+                "incompatible with this grid (translation-parity permutation is "
+                "not a bijection; no even-index physical basis exists).");
+        }
+
+        nx_physical_ = { nx_logical_[0] / 2, nx_logical_[1] / 2, nx_logical_[2] / 2 };
+        M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+        M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+        M_complex_ = nx_physical_[0] * nx_physical_[1] * (nx_physical_[2] / 2 + 1);
+
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
+        gpu_error_check(cudaMalloc(&d_step1_, sizeof(cufftDoubleComplex) * M_complex_));
+        gpu_error_check(cudaMalloc(&d_step2_, sizeof(cufftDoubleComplex) * M_complex_));
+
+        init_plans();
+        generate_twiddle_factors();
     }
-    // The kernels here are size-agnostic (ker_apply_k_3m iterates the packed
-    // z range Nz2c = Nz2/2+1 with exact bounds; cuFFT D2Z/Z2D handles any
-    // length). The nz/2 >= 2 bound mirrors the guard in
-    // CrysFFTRecursive3mBase.h so CPU and CUDA stay constructible for exactly
-    // the same grids.
-    if ((nx_logical_[2] / 2) < 2)
+    catch (...)
     {
-        throw_with_line_number("CudaCrysFFTRecursive3m requires Nz/2 >= 2.");
+        release();
+        throw;
     }
-
-    // The fold pairs twiddle r_p with the octant-transformed Boltzmann array
-    // S_{psi(p)}, where psi depends on the parities of the m3 generator
-    // translations in grid units (see Recursive3mFoldParity.h). When psi is
-    // not a bijection the even-index physical basis does not exist on this
-    // grid and the fold cannot represent the group; CrysFFTSelector rejects
-    // such grids, but guard direct construction.
-    if (!compute_m3_fold_permutation(translational_part_, nx_logical_, fold_perm_))
-    {
-        throw_with_line_number("CudaCrysFFTRecursive3m: m3 translations are "
-            "incompatible with this grid (translation-parity permutation is "
-            "not a bijection; no even-index physical basis exists).");
-    }
-
-    nx_physical_ = { nx_logical_[0] / 2, nx_logical_[1] / 2, nx_logical_[2] / 2 };
-    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
-    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
-    M_complex_ = nx_physical_[0] * nx_physical_[1] * (nx_physical_[2] / 2 + 1);
-
-    gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
-    gpu_error_check(cudaMalloc(&d_step1_, sizeof(cufftDoubleComplex) * M_complex_));
-    gpu_error_check(cudaMalloc(&d_step2_, sizeof(cufftDoubleComplex) * M_complex_));
-
-    init_plans();
-    generate_twiddle_factors();
 }
 
 CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
 {
+    release();
+}
+
+// Idempotent; tolerates a partly built object (null buffers, plans not created).
+void CudaCrysFFTRecursive3m::release()
+{
     for (auto& kv : k_cache_)
         free_cache_device(kv.second);
     k_cache_.clear();
+    k_current_ = nullptr;
 
     for (auto& kv : multiplier_cache_)
         free_cache_device(kv.second);
@@ -306,6 +321,9 @@ CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
         cudaFree(d_step2_);
     if (d_work_)
         cudaFree(d_work_);
+    d_step1_ = nullptr;
+    d_step2_ = nullptr;
+    d_work_ = nullptr;
 
     free_plans();
 }
@@ -317,7 +335,11 @@ void CudaCrysFFTRecursive3m::init_plans()
     if (cufftPlan3d(&plan_r2c_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_D2Z) != CUFFT_SUCCESS)
         throw_with_line_number("Failed to create cuFFT D2Z plan for CudaCrysFFTRecursive3m.");
     if (cufftPlan3d(&plan_c2r_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_Z2D) != CUFFT_SUCCESS)
+    {
+        // plans_initialized_ covers both plans; destroy the first one here
+        cufftDestroy(plan_r2c_);
         throw_with_line_number("Failed to create cuFFT Z2D plan for CudaCrysFFTRecursive3m.");
+    }
     plans_initialized_ = true;
 }
 
@@ -524,12 +546,21 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     mul_add_sub_by_seq(k_re_ptr, k_im_ptr, r_re_ptr, r_im_ptr, k_split_perm_ptr, seq3, halfsize);
 
     KCacheDevice cache;
-    for (int i = 0; i < 8; ++i)
+    try
     {
-        gpu_error_check(cudaMalloc(&cache.re[i], sizeof(double) * M_physical_));
-        gpu_error_check(cudaMalloc(&cache.im[i], sizeof(double) * M_physical_));
-        gpu_error_check(cudaMemcpy(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        for (int i = 0; i < 8; ++i)
+        {
+            gpu_error_check(cudaMalloc(&cache.re[i], sizeof(double) * M_physical_));
+            gpu_error_check(cudaMalloc(&cache.im[i], sizeof(double) * M_physical_));
+            gpu_error_check(cudaMemcpy(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        }
+    }
+    catch (...)
+    {
+        // The cache is not stored anywhere yet; free what was allocated
+        free_cache_device(cache);
+        throw;
     }
 
     return cache;
@@ -580,8 +611,17 @@ void CudaCrysFFTRecursive3m::set_contour_step(double coeff)
     auto it = k_cache_.find(coeff);
     if (it == k_cache_.end())
     {
-        auto inserted = k_cache_.emplace(coeff, generate_k_cache(coeff));
-        it = inserted.first;
+        KCacheDevice cache = generate_k_cache(coeff);
+        try
+        {
+            auto inserted = k_cache_.emplace(coeff, cache);
+            it = inserted.first;
+        }
+        catch (...)
+        {
+            free_cache_device(cache);
+            throw;
+        }
     }
     coeff_current_ = coeff;
     k_current_ = &it->second;
@@ -641,8 +681,17 @@ void CudaCrysFFTRecursive3m::apply_multiplier(
     auto it = multiplier_cache_.find(key);
     if (it == multiplier_cache_.end())
     {
-        auto inserted = multiplier_cache_.emplace(key, generate_k_cache_from_multiplier(type, coeff));
-        it = inserted.first;
+        KCacheDevice cache = generate_k_cache_from_multiplier(type, coeff);
+        try
+        {
+            auto inserted = multiplier_cache_.emplace(key, cache);
+            it = inserted.first;
+        }
+        catch (...)
+        {
+            free_cache_device(cache);
+            throw;
+        }
     }
 
     apply_with_cache(it->second, d_q_in, d_q_out, stream);

@@ -3544,84 +3544,101 @@ static void check_transform_length(CudaTransformType type, int N, const char* ax
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
     : N_(N), type_(type), initialized_(false), d_work_(nullptr), d_x1_(nullptr)
 {
-    check_transform_length(type_, N_, "N", 1);
-    int fftSize = getFFTSize(type_, N_);
-    bool z2z = usesZ2Z(type_);
+    try
+    {
+        check_transform_length(type_, N_, "N", 1);
+        int fftSize = getFFTSize(type_, N_);
+        bool z2z = usesZ2Z(type_);
 
-    // Allocate buffers
-    if (z2z) {
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize));
-        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize));
-    } else {
-        int workSize = fftSize;
-        int complexSize = fftSize / 2 + 1;
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * workSize));
-        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize));
+        // Allocate buffers
+        if (z2z) {
+            gpu_error_check(cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize));
+            gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize));
+        } else {
+            int workSize = fftSize;
+            int complexSize = fftSize / 2 + 1;
+            gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * workSize));
+            gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize));
+        }
+
+        // Create FFT plan
+        if (z2z) {
+            if (cufftPlan1d(&plan_, fftSize, CUFFT_Z2Z, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT Z2Z plan");
+            }
+        } else if (type_ == CUDA_DCT_1) {
+            // DCT-1 uses Z2D (complex to real) FFT of size N-1 (where N_ = N+1 points)
+            if (cufftPlan1d(&plan_, N_ - 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT Z2D plan for DCT-1");
+            }
+        } else if (type_ == CUDA_DCT_2) {
+            if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT Z2D plan");
+            }
+        } else if (type_ == CUDA_DCT_3) {
+            if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT D2Z plan");
+            }
+        } else if (type_ == CUDA_DST_1) {
+            // DST-1: Z2D FFT of size N+1 (FST algorithm)
+            if (cufftPlan1d(&plan_, N_ + 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-1");
+            }
+        } else if (type_ == CUDA_DST_2) {
+            // DST-2: Z2D FFT of size N (FST algorithm)
+            if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-2");
+            }
+        } else if (type_ == CUDA_DST_3) {
+            // DST-3: D2Z FFT of size N (FST algorithm)
+            if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT D2Z plan for DST-3");
+            }
+        } else {
+            if (cufftPlan1d(&plan_, fftSize, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+                throw std::runtime_error("Failed to create cuFFT D2Z plan");
+            }
+        }
+        plan_created_ = true;  // every failed branch above has thrown
+
+        if (type_ == CUDA_DCT_2 || type_ == CUDA_DST_2 || type_ == CUDA_DST_3 ||
+            type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
+            allocate_dct2_lut(N_, &dct2_sin_, &dct2_cos_);
+        if (type_ == CUDA_DCT_3)
+            allocate_dct3_lut(N_, &dct3_sin_, &dct3_cos_);
+        if (type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
+            allocate_dct4_lut(N_, &dct4_sin_, &dct4_cos_);
+
+        initialized_ = true;
     }
-
-    // Create FFT plan
-    if (z2z) {
-        if (cufftPlan1d(&plan_, fftSize, CUFFT_Z2Z, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2Z plan");
-        }
-    } else if (type_ == CUDA_DCT_1) {
-        // DCT-1 uses Z2D (complex to real) FFT of size N-1 (where N_ = N+1 points)
-        if (cufftPlan1d(&plan_, N_ - 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for DCT-1");
-        }
-    } else if (type_ == CUDA_DCT_2) {
-        if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan");
-        }
-    } else if (type_ == CUDA_DCT_3) {
-        if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan");
-        }
-    } else if (type_ == CUDA_DST_1) {
-        // DST-1: Z2D FFT of size N+1 (FST algorithm)
-        if (cufftPlan1d(&plan_, N_ + 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-1");
-        }
-    } else if (type_ == CUDA_DST_2) {
-        // DST-2: Z2D FFT of size N (FST algorithm)
-        if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-2");
-        }
-    } else if (type_ == CUDA_DST_3) {
-        // DST-3: D2Z FFT of size N (FST algorithm)
-        if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan for DST-3");
-        }
-    } else {
-        if (cufftPlan1d(&plan_, fftSize, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
-            throw std::runtime_error("Failed to create cuFFT D2Z plan");
-        }
+    catch (...)
+    {
+        release();
+        throw;
     }
-
-    if (type_ == CUDA_DCT_2 || type_ == CUDA_DST_2 || type_ == CUDA_DST_3 ||
-        type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
-        allocate_dct2_lut(N_, &dct2_sin_, &dct2_cos_);
-    if (type_ == CUDA_DCT_3)
-        allocate_dct3_lut(N_, &dct3_sin_, &dct3_cos_);
-    if (type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
-        allocate_dct4_lut(N_, &dct4_sin_, &dct4_cos_);
-
-    initialized_ = true;
 }
 
 CudaRealTransform1D::~CudaRealTransform1D()
 {
-    if (initialized_) {
-        if (d_work_) cudaFree(d_work_);
-        if (d_x1_) cudaFree(d_x1_);
-        if (dct2_sin_) cudaFree(dct2_sin_);
-        if (dct2_cos_) cudaFree(dct2_cos_);
-        if (dct3_sin_) cudaFree(dct3_sin_);
-        if (dct3_cos_) cudaFree(dct3_cos_);
-        if (dct4_sin_) cudaFree(dct4_sin_);
-        if (dct4_cos_) cudaFree(dct4_cos_);
-        cufftDestroy(plan_);
-    }
+    release();
+}
+
+// Idempotent; tolerates a partly built object (null pointers, plan not created).
+void CudaRealTransform1D::release()
+{
+    if (d_work_) cudaFree(d_work_);
+    if (d_x1_) cudaFree(d_x1_);
+    if (dct2_sin_) cudaFree(dct2_sin_);
+    if (dct2_cos_) cudaFree(dct2_cos_);
+    if (dct3_sin_) cudaFree(dct3_sin_);
+    if (dct3_cos_) cudaFree(dct3_cos_);
+    if (dct4_sin_) cudaFree(dct4_sin_);
+    if (dct4_cos_) cudaFree(dct4_cos_);
+    if (plan_created_) cufftDestroy(plan_);
+    d_work_ = d_x1_ = nullptr;
+    dct2_sin_ = dct2_cos_ = dct3_sin_ = dct3_cos_ = dct4_sin_ = dct4_cos_ = nullptr;
+    plan_created_ = false;
+    initialized_ = false;
 }
 
 void CudaRealTransform1D::set_stream(cudaStream_t stream)
@@ -3795,15 +3812,23 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
     : Nx_(Nx), Ny_(Ny), type_x_(type_x), type_y_(type_y), initialized_(false),
       d_work_(nullptr), d_temp_(nullptr), d_x1_(nullptr)
 {
-    // Type-1 cannot be mixed with other types
-    if ((isType1(type_x_) || isType1(type_y_)) && type_x_ != type_y_) {
-        throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types");
-    }
-    check_transform_length(type_x_, Nx_, "Nx", 2);
-    check_transform_length(type_y_, Ny_, "Ny", 2);
+    try
+    {
+        // Type-1 cannot be mixed with other types
+        if ((isType1(type_x_) || isType1(type_y_)) && type_x_ != type_y_) {
+            throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types");
+        }
+        check_transform_length(type_x_, Nx_, "Nx", 2);
+        check_transform_length(type_y_, Ny_, "Ny", 2);
 
-    init();
-    set_stream(stream_);
+        init();
+        set_stream(stream_);
+    }
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -3899,12 +3924,15 @@ void CudaRealTransform2D::init()
         // DCT-1 2D
         M_padded_ = 2 * Nx_ * 2 * Ny_;
         cudaFree(d_work_);
+        d_work_ = nullptr;
         gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
         cudaFree(d_x1_);
+        d_x1_ = nullptr;
         gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * 2 * Nx_ * (Ny_ + 1)));
         if (cufftPlan2d(&plan_y_, 2 * Nx_, 2 * Ny_, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DCT-1");
         }
+        plan_y_created_ = true;
         plan_x_ = 0;
         initialized_ = true;
         return;
@@ -3915,12 +3943,15 @@ void CudaRealTransform2D::init()
         int ext_Ny = 2 * (Ny_ + 1);
         M_padded_ = ext_Nx * ext_Ny;
         cudaFree(d_work_);
+        d_work_ = nullptr;
         gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
         cudaFree(d_x1_);
+        d_x1_ = nullptr;
         gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * ext_Nx * (Ny_ + 2)));
         if (cufftPlan2d(&plan_y_, ext_Nx, ext_Ny, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DST-1");
         }
+        plan_y_created_ = true;
         plan_x_ = 0;
         initialized_ = true;
         return;
@@ -3929,7 +3960,9 @@ void CudaRealTransform2D::init()
     // Per-axis plans. The X axis DCT-3 reads the y-major layout directly,
     // hence its strided input (istride = Ny, idist = 1).
     create_axis_plan(plan_y_, type_y_, Ny_, fftSize_y, Nx_, "Y", 1, Ny_);
+    plan_y_created_ = true;
     create_axis_plan(plan_x_, type_x_, Nx_, fftSize_x, Ny_, "X", Ny_, 1);
+    plan_x_created_ = true;
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
@@ -3953,25 +3986,36 @@ void CudaRealTransform2D::init()
 
 CudaRealTransform2D::~CudaRealTransform2D()
 {
-    if (initialized_) {
-        if (d_work_) cudaFree(d_work_);
-        if (d_temp_) cudaFree(d_temp_);
-        if (d_x1_) cudaFree(d_x1_);
-        if (dct2_sin_x_) cudaFree(dct2_sin_x_);
-        if (dct2_cos_x_) cudaFree(dct2_cos_x_);
-        if (dct2_sin_y_) cudaFree(dct2_sin_y_);
-        if (dct2_cos_y_) cudaFree(dct2_cos_y_);
-        if (dct3_sin_x_) cudaFree(dct3_sin_x_);
-        if (dct3_cos_x_) cudaFree(dct3_cos_x_);
-        if (dct3_sin_y_) cudaFree(dct3_sin_y_);
-        if (dct3_cos_y_) cudaFree(dct3_cos_y_);
-        if (dct4_sin_x_) cudaFree(dct4_sin_x_);
-        if (dct4_cos_x_) cudaFree(dct4_cos_x_);
-        if (dct4_sin_y_) cudaFree(dct4_sin_y_);
-        if (dct4_cos_y_) cudaFree(dct4_cos_y_);
-        if (plan_y_) cufftDestroy(plan_y_);
-        if (plan_x_) cufftDestroy(plan_x_);
-    }
+    release();
+}
+
+// Idempotent; tolerates a partly built object (null pointers, plans not created).
+void CudaRealTransform2D::release()
+{
+    if (d_work_) cudaFree(d_work_);
+    if (d_temp_) cudaFree(d_temp_);
+    if (d_x1_) cudaFree(d_x1_);
+    if (dct2_sin_x_) cudaFree(dct2_sin_x_);
+    if (dct2_cos_x_) cudaFree(dct2_cos_x_);
+    if (dct2_sin_y_) cudaFree(dct2_sin_y_);
+    if (dct2_cos_y_) cudaFree(dct2_cos_y_);
+    if (dct3_sin_x_) cudaFree(dct3_sin_x_);
+    if (dct3_cos_x_) cudaFree(dct3_cos_x_);
+    if (dct3_sin_y_) cudaFree(dct3_sin_y_);
+    if (dct3_cos_y_) cudaFree(dct3_cos_y_);
+    if (dct4_sin_x_) cudaFree(dct4_sin_x_);
+    if (dct4_cos_x_) cudaFree(dct4_cos_x_);
+    if (dct4_sin_y_) cudaFree(dct4_sin_y_);
+    if (dct4_cos_y_) cudaFree(dct4_cos_y_);
+    if (plan_y_created_) cufftDestroy(plan_y_);
+    if (plan_x_created_) cufftDestroy(plan_x_);
+    d_work_ = d_temp_ = d_x1_ = nullptr;
+    dct2_sin_x_ = dct2_cos_x_ = dct2_sin_y_ = dct2_cos_y_ = nullptr;
+    dct3_sin_x_ = dct3_cos_x_ = dct3_sin_y_ = dct3_cos_y_ = nullptr;
+    dct4_sin_x_ = dct4_cos_x_ = dct4_sin_y_ = dct4_cos_y_ = nullptr;
+    plan_x_ = plan_y_ = 0;
+    plan_x_created_ = plan_y_created_ = false;
+    initialized_ = false;
 }
 
 void CudaRealTransform2D::set_stream(cudaStream_t stream)
@@ -4325,19 +4369,27 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
     : Nx_(Nx), Ny_(Ny), Nz_(Nz), type_x_(type_x), type_y_(type_y), type_z_(type_z),
       initialized_(false), d_work_(nullptr), d_temp_(nullptr), d_x1_(nullptr)
 {
-    // Type-1 can only be used when all dimensions have the same Type-1
-    bool hasType1 = isType1(type_x_) || isType1(type_y_) || isType1(type_z_);
-    bool allSameType1 = (type_x_ == type_y_) && (type_y_ == type_z_) && isType1(type_x_);
+    try
+    {
+        // Type-1 can only be used when all dimensions have the same Type-1
+        bool hasType1 = isType1(type_x_) || isType1(type_y_) || isType1(type_z_);
+        bool allSameType1 = (type_x_ == type_y_) && (type_y_ == type_z_) && isType1(type_x_);
 
-    if (hasType1 && !allSameType1) {
-        throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types in 3D");
+        if (hasType1 && !allSameType1) {
+            throw std::runtime_error("Type-1 transforms (DCT-1/DST-1) cannot be mixed with other types in 3D");
+        }
+        check_transform_length(type_x_, Nx_, "Nx", 3);
+        check_transform_length(type_y_, Ny_, "Ny", 3);
+        check_transform_length(type_z_, Nz_, "Nz", 3);
+
+        init();
+        set_stream(stream_);
     }
-    check_transform_length(type_x_, Nx_, "Nx", 3);
-    check_transform_length(type_y_, Ny_, "Ny", 3);
-    check_transform_length(type_z_, Nz_, "Nz", 3);
-
-    init();
-    set_stream(stream_);
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 
 void CudaRealTransform3D::init()
@@ -4355,7 +4407,10 @@ void CudaRealTransform3D::init()
 
         M_padded_ = ext_size;
 
-        cufftPlan3d(&plan_x_, 2 * Nx_, 2 * Ny_, 2 * Nz_, CUFFT_D2Z);
+        if (cufftPlan3d(&plan_x_, 2 * Nx_, 2 * Ny_, 2 * Nz_, CUFFT_D2Z) != CUFFT_SUCCESS) {
+            throw std::runtime_error("Failed to create cuFFT D2Z 3D plan for DCT-1");
+        }
+        plan_x_created_ = true;
         plan_y_ = 0;
         plan_z_ = 0;
 
@@ -4376,7 +4431,10 @@ void CudaRealTransform3D::init()
 
         M_padded_ = ext_size;
 
-        cufftPlan3d(&plan_x_, 2 * (Nx_ + 1), 2 * (Ny_ + 1), 2 * (Nz_ + 1), CUFFT_D2Z);
+        if (cufftPlan3d(&plan_x_, 2 * (Nx_ + 1), 2 * (Ny_ + 1), 2 * (Nz_ + 1), CUFFT_D2Z) != CUFFT_SUCCESS) {
+            throw std::runtime_error("Failed to create cuFFT D2Z 3D plan for DST-1");
+        }
+        plan_x_created_ = true;
         plan_y_ = 0;
         plan_z_ = 0;
 
@@ -4423,8 +4481,11 @@ void CudaRealTransform3D::init()
     // Per-axis plans. The X axis DCT-3 reads the (y,z)-major layout directly,
     // hence its strided input (istride = Ny*Nz, idist = 1).
     create_axis_plan(plan_z_, type_z_, Nz_, fftSize_z, Nx_ * Ny_, "Z", 1, Nz_);
+    plan_z_created_ = true;
     create_axis_plan(plan_y_, type_y_, Ny_, fftSize_y, Nx_ * Nz_, "Y", 1, Ny_);
+    plan_y_created_ = true;
     create_axis_plan(plan_x_, type_x_, Nx_, fftSize_x, Ny_ * Nz_, "X", Ny_ * Nz_, 1);
+    plan_x_created_ = true;
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
@@ -4453,32 +4514,43 @@ void CudaRealTransform3D::init()
 
 CudaRealTransform3D::~CudaRealTransform3D()
 {
-    if (initialized_) {
-        if (d_work_) cudaFree(d_work_);
-        if (d_temp_) cudaFree(d_temp_);
-        if (d_x1_) cudaFree(d_x1_);
-        if (dct2_sin_x_) cudaFree(dct2_sin_x_);
-        if (dct2_cos_x_) cudaFree(dct2_cos_x_);
-        if (dct2_sin_y_) cudaFree(dct2_sin_y_);
-        if (dct2_cos_y_) cudaFree(dct2_cos_y_);
-        if (dct2_sin_z_) cudaFree(dct2_sin_z_);
-        if (dct2_cos_z_) cudaFree(dct2_cos_z_);
-        if (dct3_sin_x_) cudaFree(dct3_sin_x_);
-        if (dct3_cos_x_) cudaFree(dct3_cos_x_);
-        if (dct3_sin_y_) cudaFree(dct3_sin_y_);
-        if (dct3_cos_y_) cudaFree(dct3_cos_y_);
-        if (dct3_sin_z_) cudaFree(dct3_sin_z_);
-        if (dct3_cos_z_) cudaFree(dct3_cos_z_);
-        if (dct4_sin_x_) cudaFree(dct4_sin_x_);
-        if (dct4_cos_x_) cudaFree(dct4_cos_x_);
-        if (dct4_sin_y_) cudaFree(dct4_sin_y_);
-        if (dct4_cos_y_) cudaFree(dct4_cos_y_);
-        if (dct4_sin_z_) cudaFree(dct4_sin_z_);
-        if (dct4_cos_z_) cudaFree(dct4_cos_z_);
-        if (plan_z_) cufftDestroy(plan_z_);
-        if (plan_y_) cufftDestroy(plan_y_);
-        if (plan_x_) cufftDestroy(plan_x_);
-    }
+    release();
+}
+
+// Idempotent; tolerates a partly built object (null pointers, plans not created).
+void CudaRealTransform3D::release()
+{
+    if (d_work_) cudaFree(d_work_);
+    if (d_temp_) cudaFree(d_temp_);
+    if (d_x1_) cudaFree(d_x1_);
+    if (dct2_sin_x_) cudaFree(dct2_sin_x_);
+    if (dct2_cos_x_) cudaFree(dct2_cos_x_);
+    if (dct2_sin_y_) cudaFree(dct2_sin_y_);
+    if (dct2_cos_y_) cudaFree(dct2_cos_y_);
+    if (dct2_sin_z_) cudaFree(dct2_sin_z_);
+    if (dct2_cos_z_) cudaFree(dct2_cos_z_);
+    if (dct3_sin_x_) cudaFree(dct3_sin_x_);
+    if (dct3_cos_x_) cudaFree(dct3_cos_x_);
+    if (dct3_sin_y_) cudaFree(dct3_sin_y_);
+    if (dct3_cos_y_) cudaFree(dct3_cos_y_);
+    if (dct3_sin_z_) cudaFree(dct3_sin_z_);
+    if (dct3_cos_z_) cudaFree(dct3_cos_z_);
+    if (dct4_sin_x_) cudaFree(dct4_sin_x_);
+    if (dct4_cos_x_) cudaFree(dct4_cos_x_);
+    if (dct4_sin_y_) cudaFree(dct4_sin_y_);
+    if (dct4_cos_y_) cudaFree(dct4_cos_y_);
+    if (dct4_sin_z_) cudaFree(dct4_sin_z_);
+    if (dct4_cos_z_) cudaFree(dct4_cos_z_);
+    if (plan_z_created_) cufftDestroy(plan_z_);
+    if (plan_y_created_) cufftDestroy(plan_y_);
+    if (plan_x_created_) cufftDestroy(plan_x_);
+    d_work_ = d_temp_ = d_x1_ = nullptr;
+    dct2_sin_x_ = dct2_cos_x_ = dct2_sin_y_ = dct2_cos_y_ = dct2_sin_z_ = dct2_cos_z_ = nullptr;
+    dct3_sin_x_ = dct3_cos_x_ = dct3_sin_y_ = dct3_cos_y_ = dct3_sin_z_ = dct3_cos_z_ = nullptr;
+    dct4_sin_x_ = dct4_cos_x_ = dct4_sin_y_ = dct4_cos_y_ = dct4_sin_z_ = dct4_cos_z_ = nullptr;
+    plan_x_ = plan_y_ = plan_z_ = 0;
+    plan_x_created_ = plan_y_created_ = plan_z_created_ = false;
+    initialized_ = false;
 }
 
 void CudaRealTransform3D::set_stream(cudaStream_t stream)

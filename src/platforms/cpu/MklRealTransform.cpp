@@ -64,23 +64,29 @@ public:
     MklFFTHandle(int fft_size)
         : fft_size_(fft_size)
     {
-        mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (forward)");
-        mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, forward)");
-        mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, forward)");
-        mkl_dfti_check(DftiCommitDescriptor(hand_forward_), "DftiCommitDescriptor (forward)");
+        try
+        {
+            mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (forward)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, forward)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, forward)");
+            mkl_dfti_check(DftiCommitDescriptor(hand_forward_), "DftiCommitDescriptor (forward)");
 
-        mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (backward)");
-        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, backward)");
-        mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, backward)");
-        mkl_dfti_check(DftiCommitDescriptor(hand_backward_), "DftiCommitDescriptor (backward)");
+            mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, DFTI_REAL, 1, fft_size), "DftiCreateDescriptor (backward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, backward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, backward)");
+            mkl_dfti_check(DftiCommitDescriptor(hand_backward_), "DftiCommitDescriptor (backward)");
+        }
+        catch (...)
+        {
+            // The destructor does not run for a partly constructed object
+            release();
+            throw;
+        }
     }
 
     ~MklFFTHandle()
     {
-        if (hand_forward_ != nullptr)
-            DftiFreeDescriptor(&hand_forward_);
-        if (hand_backward_ != nullptr)
-            DftiFreeDescriptor(&hand_backward_);
+        release();
     }
 
     void forward(double* in, std::complex<double>* out)
@@ -99,6 +105,17 @@ private:
     int fft_size_;
     DFTI_DESCRIPTOR_HANDLE hand_forward_{nullptr};
     DFTI_DESCRIPTOR_HANDLE hand_backward_{nullptr};
+
+    /// Free the descriptors (also after a failed construction); idempotent.
+    void release()
+    {
+        if (hand_forward_ != nullptr)
+            DftiFreeDescriptor(&hand_forward_);
+        if (hand_backward_ != nullptr)
+            DftiFreeDescriptor(&hand_backward_);
+        hand_forward_ = nullptr;
+        hand_backward_ = nullptr;
+    }
 };
 
 /**
@@ -475,19 +492,19 @@ public:
         if (stat != 0)
             throw_with_line_number("d_init_trig_transform failed, stat: " + std::to_string(stat));
 
-        // Commit the transform
+        // Commit the transform (creates handle_). The destructor does not run
+        // for a partly constructed object, so free a handle a failed commit left.
         d_commit_trig_transform(work_.data(), &handle_, ipar_, dpar_.data(), &stat);
         if (stat != 0)
+        {
+            release();
             throw_with_line_number("d_commit_trig_transform failed, stat: " + std::to_string(stat));
+        }
     }
 
     ~MklTTHandle()
     {
-        if (handle_ != nullptr)
-        {
-            MKL_INT stat = 0;
-            free_trig_transform(&handle_, ipar_, &stat);
-        }
+        release();
     }
 
     void execute(double* data)
@@ -520,6 +537,17 @@ private:
     MKL_INT ipar_[128]{};
     std::vector<double> dpar_;
     std::vector<double> work_;
+
+    /// Free the TT handle (also after a failed commit); idempotent.
+    void release()
+    {
+        if (handle_ != nullptr)
+        {
+            MKL_INT stat = 0;
+            free_trig_transform(&handle_, ipar_, &stat);
+            handle_ = nullptr;
+        }
+    }
 };
 
 //==============================================================================

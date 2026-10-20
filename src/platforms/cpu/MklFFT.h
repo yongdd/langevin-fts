@@ -116,6 +116,9 @@ private:
     /// Get stride information for dimension-by-dimension transform.
     void getStrides(int dim, int& stride, int& num_transforms) const;
 
+    /// Free the DFTI descriptors (also after a failed construction); idempotent.
+    void release();
+
 public:
     /**
      * @brief Construct MKL FFT object for given grid dimensions (periodic BC).

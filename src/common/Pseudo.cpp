@@ -73,6 +73,8 @@ Pseudo<T>::Pseudo(
     }
     catch (std::exception& exc)
     {
+        // The destructor does not run for a partly constructed object
+        release();
         throw_without_line_number(exc.what());
     }
 }
@@ -83,6 +85,12 @@ Pseudo<T>::Pseudo(
 template <typename T>
 Pseudo<T>::~Pseudo()
 {
+    release();
+}
+
+template <typename T>
+void Pseudo<T>::release()
+{
     // Delete diagonal basis arrays
     delete[] fourier_basis_x;
     delete[] fourier_basis_y;
@@ -91,12 +99,12 @@ Pseudo<T>::~Pseudo()
     delete[] fourier_basis_xy;
     delete[] fourier_basis_xz;
     delete[] fourier_basis_yz;
+    fourier_basis_x = fourier_basis_y = fourier_basis_z = nullptr;
+    fourier_basis_xy = fourier_basis_xz = fourier_basis_yz = nullptr;
 
-    if constexpr (std::is_same<T, std::complex<double>>::value)
-    {
-        if (negative_k_idx != nullptr)
-            delete[] negative_k_idx;
-    }
+    // nullptr unless complex fields with periodic BC
+    delete[] negative_k_idx;
+    negative_k_idx = nullptr;
 
     // Delete Boltzmann factors for all ds_index values
     for (const auto& ds_pair : boltz_bond)
@@ -109,6 +117,8 @@ Pseudo<T>::~Pseudo()
         for (const auto& item : ds_pair.second)
             delete[] item.second;
     }
+    boltz_bond.clear();
+    boltz_bond_half.clear();
 }
 
 //------------------------------------------------------------------------------
@@ -733,8 +743,12 @@ void Pseudo<T>::add_ds_value(int ds_index, double ds_value)
         for (const auto& item : bond_lengths)
         {
             std::string monomer_type = item.first;
-            boltz_bond[ds_index][monomer_type] = new double[M_COMPLEX];
-            boltz_bond_half[ds_index][monomer_type] = new double[M_COMPLEX];
+            // Insert null slots first, so a failed allocation leaves no
+            // unowned array behind (release() skips the null entries)
+            double*& bond = boltz_bond[ds_index][monomer_type];
+            double*& bond_half = boltz_bond_half[ds_index][monomer_type];
+            bond = new double[M_COMPLEX];
+            bond_half = new double[M_COMPLEX];
         }
     }
 }

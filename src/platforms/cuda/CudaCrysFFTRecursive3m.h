@@ -119,6 +119,8 @@ private:
     KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
     KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);
     void free_cache_device(KCacheDevice& cache);
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
     void apply_with_cache(const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream);
 };
 

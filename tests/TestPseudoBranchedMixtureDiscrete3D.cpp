@@ -22,20 +22,15 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 #include "FFT.h"
+#include "TestComputationFactory.h"
 #ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
-#include "CpuComputationDiscrete.h"
-#include "CpuComputationReduceMemoryDiscrete.h"
 #endif
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuComputationDiscrete.h"
-#include "CpuComputationReduceMemoryDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaComputationDiscrete.h"
-#include "CudaComputationReduceMemoryDiscrete.h"
 #endif
 
 int main()
@@ -354,10 +349,10 @@ int main()
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
-        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
-        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", false, cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", false, cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", true, cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", true, cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
         #endif
 
         #ifdef USE_CPU_MKL
@@ -369,10 +364,10 @@ int main()
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_computation_optimizer_1, FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_computation_optimizer_2, FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer_1, FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer_2, FFTBackend::MKL));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", false, cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", false, cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", true, cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", true, cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
         #endif
 
         #ifdef USE_CUDA
@@ -384,10 +379,10 @@ int main()
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
-        solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
         #endif
 
         std::vector<std::vector<double>> stress_list {{},{},{}};

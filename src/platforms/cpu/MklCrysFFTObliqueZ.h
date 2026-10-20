@@ -32,6 +32,9 @@ private:
 
     void initFFTPlans();
 
+    /// Free the DFTI descriptors (also after a failed construction); idempotent.
+    void release();
+
     void applyDCT2ForwardZ(const double* in, double* out) const;
     void applyDCT3BackwardZ(const double* in, double* out) const;
 

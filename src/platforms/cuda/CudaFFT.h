@@ -85,9 +85,11 @@ private:
 
     bool is_all_periodic_;                       ///< True if all dimensions are periodic
 
-    // cuFFT handles for periodic BC
+    // cuFFT handles for periodic BC (cufftHandle has no null value; the flags track creation)
     cufftHandle plan_forward_;                   ///< Forward FFT plan
     cufftHandle plan_backward_;                  ///< Backward FFT plan
+    bool plan_forward_created_ = false;          ///< plan_forward_ holds a created plan
+    bool plan_backward_created_ = false;         ///< plan_backward_ holds a created plan
 
     // Device work buffers
     double* d_work_buffer_;                      ///< Main work buffer
@@ -101,6 +103,9 @@ private:
 
     /// Initialize CudaRealTransform for non-periodic BC.
     void initNonPeriodicFFT();
+
+    /// Free everything acquired so far (idempotent; also used when a constructor throws).
+    void release();
 
 public:
     /**

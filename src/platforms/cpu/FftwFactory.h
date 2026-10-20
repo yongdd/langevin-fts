@@ -65,7 +65,7 @@
  * **Created Object Types:**
  *
  * - CpuComputationBox: Grid and integration on CPU
- * - CpuComputationContinuous/Discrete: Propagator solvers (using FFTW)
+ * - Propagator computations with the CPU backend (FFTW transforms)
  * - CpuAndersonMixing: Iteration accelerator
  *
  * @note The reduce_memory flag enables checkpointing mode for memory-constrained
@@ -124,8 +124,9 @@ public :
     /**
      * @brief Create propagator computation solver.
      *
-     * Creates CpuComputationContinuous, CpuComputationDiscrete, or real-space solver
-     * based on chain model and numerical method. Uses FFTW3 for FFT operations.
+     * Creates ComputationContinuous, ComputationDiscrete, or their reduce-memory
+     * variants with the CPU backend, based on chain model, memory mode, and
+     * numerical method. Uses FFTW3 for FFT operations.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

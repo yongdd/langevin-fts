@@ -108,6 +108,9 @@ private:
     std::map<int, std::map<std::string, double*>> zh;  ///< z-direction upper diagonal
     /// @}
 
+    /// Free the coefficient arrays (also after a failed construction); idempotent.
+    void release();
+
 
     /// Return maximum of two integers.
     int max_of_two(int x, int y);

@@ -27,7 +27,7 @@
  * - CpuSolverPseudoRQM4<std::complex<double>>: Complex fields
  *
  * @see Pseudo for Boltzmann factor computation
- * @see CpuComputationContinuous for usage context
+ * @see ComputationContinuous for usage context
  */
 
 #include <iostream>
@@ -80,6 +80,8 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
     }
     catch (std::exception& exc)
     {
+        // Nothing of this class to free: ~CpuSolverPseudoBase still runs
+        // and frees the FFT and Pseudo objects created by init_shared()
         throw_without_line_number(exc.what());
     }
 }
@@ -90,10 +92,8 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
 template <typename T>
 CpuSolverPseudoRQM4<T>::~CpuSolverPseudoRQM4()
 {
-    // exp_dw and exp_dw_half vectors are automatically cleaned up
-
-    // Clean up shared components (FFT, Pseudo)
-    this->cleanup_shared();
+    // exp_dw and exp_dw_half vectors are automatically cleaned up;
+    // the shared components (FFT, Pseudo) are freed by ~CpuSolverPseudoBase
 }
 
 //------------------------------------------------------------------------------

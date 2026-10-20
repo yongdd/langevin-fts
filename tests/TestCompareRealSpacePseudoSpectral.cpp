@@ -50,19 +50,17 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
+#include "TestComputationFactory.h"
 #ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
 #endif
 
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
 #endif
 
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaComputationContinuous.h"
 #endif
 
 /**
@@ -188,7 +186,7 @@ bool run_comparison_test(
         // Mixed BCs: only test real-space
         std::cout << "  [CPU-FFTW RS only] " << std::flush;
         CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
-        CpuComputationContinuous<T>* solver_rs = new CpuComputationContinuous<T>(cb_rs, &molecules, &prop_opt, "realspace");
+        PropagatorComputation<T>* solver_rs = make_propagator_computation<T>("cpu-fftw", false, cb_rs, &molecules, &prop_opt, "cn-adi2");
 
         // Run real-space solver
         solver_rs->compute_propagators({{"A", w.data()}}, {});
@@ -223,8 +221,8 @@ bool run_comparison_test(
         CpuComputationBox<T>* cb_ps = new CpuComputationBox<T>(nx, lx, bc);
         CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
 
-        CpuComputationContinuous<T>* solver_ps = new CpuComputationContinuous<T>(cb_ps, &molecules, &prop_opt, "pseudospectral");
-        CpuComputationContinuous<T>* solver_rs = new CpuComputationContinuous<T>(cb_rs, &molecules, &prop_opt, "realspace");
+        PropagatorComputation<T>* solver_ps = make_propagator_computation<T>("cpu-fftw", false, cb_ps, &molecules, &prop_opt, "rqm4");
+        PropagatorComputation<T>* solver_rs = make_propagator_computation<T>("cpu-fftw", false, cb_rs, &molecules, &prop_opt, "cn-adi2");
 
         // Run pseudo-spectral solver
         solver_ps->compute_propagators({{"A", w.data()}}, {});
@@ -278,7 +276,7 @@ bool run_comparison_test(
         // Mixed BCs: only test real-space
         std::cout << "  [CPU-MKL RS only] " << std::flush;
         CpuComputationBox<T>* cb_rs_mkl = new CpuComputationBox<T>(nx, lx, bc);
-        CpuComputationContinuous<T>* solver_rs_mkl = new CpuComputationContinuous<T>(cb_rs_mkl, &molecules, &prop_opt, "realspace", "", FFTBackend::MKL);
+        PropagatorComputation<T>* solver_rs_mkl = make_propagator_computation<T>("cpu-mkl", false, cb_rs_mkl, &molecules, &prop_opt, "cn-adi2");
 
         // Run real-space solver
         solver_rs_mkl->compute_propagators({{"A", w.data()}}, {});
@@ -315,8 +313,8 @@ bool run_comparison_test(
         CpuComputationBox<T>* cb_ps_mkl = new CpuComputationBox<T>(nx, lx, bc);
         CpuComputationBox<T>* cb_rs_mkl = new CpuComputationBox<T>(nx, lx, bc);
 
-        CpuComputationContinuous<T>* solver_ps_mkl = new CpuComputationContinuous<T>(cb_ps_mkl, &molecules, &prop_opt, "pseudospectral", "", FFTBackend::MKL);
-        CpuComputationContinuous<T>* solver_rs_mkl = new CpuComputationContinuous<T>(cb_rs_mkl, &molecules, &prop_opt, "realspace", "", FFTBackend::MKL);
+        PropagatorComputation<T>* solver_ps_mkl = make_propagator_computation<T>("cpu-mkl", false, cb_ps_mkl, &molecules, &prop_opt, "rqm4");
+        PropagatorComputation<T>* solver_rs_mkl = make_propagator_computation<T>("cpu-mkl", false, cb_rs_mkl, &molecules, &prop_opt, "cn-adi2");
 
         // Run pseudo-spectral solver
         solver_ps_mkl->compute_propagators({{"A", w.data()}}, {});
@@ -372,7 +370,7 @@ bool run_comparison_test(
     std::cout << "  [CUDA RS vs CPU " << (mixed_bc ? "RS" : "PS") << "] " << std::flush;
     {
         CudaComputationBox<T>* cb_cuda_rs = new CudaComputationBox<T>(nx, lx, bc);
-        CudaComputationContinuous<T>* solver_cuda_rs = new CudaComputationContinuous<T>(cb_cuda_rs, &molecules, &prop_opt, "realspace");
+        PropagatorComputation<T>* solver_cuda_rs = make_propagator_computation<T>("cuda", false, cb_cuda_rs, &molecules, &prop_opt, "cn-adi2");
 
         // Run CUDA real-space solver
         solver_cuda_rs->compute_propagators({{"A", w.data()}}, {});

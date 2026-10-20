@@ -94,6 +94,7 @@ private:
     int N_;                      ///< Transform size
     CudaTransformType type_;     ///< Transform type
     cufftHandle plan_;           ///< cuFFT plan
+    bool plan_created_ = false;  ///< plan_ holds a created plan
     double* d_work_;             ///< Work buffer
     double* d_x1_;               ///< Auxiliary buffer
     // Optional lookup tables for DCT2/DCT3/DCT4 and DST2/3/4
@@ -105,6 +106,9 @@ private:
     double* dct4_cos_{nullptr};
     cudaStream_t stream_{0};     ///< CUDA stream for execution
     bool initialized_;
+
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
 
 public:
     /**
@@ -159,8 +163,10 @@ private:
     CudaTransformType type_x_;   ///< Transform type for X dimension
     CudaTransformType type_y_;   ///< Transform type for Y dimension
 
-    cufftHandle plan_x_;         ///< cuFFT plan for X dimension
-    cufftHandle plan_y_;         ///< cuFFT plan for Y dimension
+    cufftHandle plan_x_{0};      ///< cuFFT plan for X dimension
+    cufftHandle plan_y_{0};      ///< cuFFT plan for Y dimension
+    bool plan_x_created_ = false; ///< plan_x_ holds a created plan
+    bool plan_y_created_ = false; ///< plan_y_ holds a created plan
 
     double* d_work_;             ///< Work buffer
     double* d_temp_;             ///< Temporary buffer
@@ -184,6 +190,9 @@ private:
     cudaStream_t stream_{0};     ///< CUDA stream for execution
 
     void init();
+
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
 
     // Y dimension processing
     void executeY_DCT1(double* d_data);
@@ -274,9 +283,12 @@ private:
     CudaTransformType type_y_;   ///< Transform type for Y dimension
     CudaTransformType type_z_;   ///< Transform type for Z dimension
 
-    cufftHandle plan_x_;         ///< cuFFT plan for X dimension
-    cufftHandle plan_y_;         ///< cuFFT plan for Y dimension
-    cufftHandle plan_z_;         ///< cuFFT plan for Z dimension
+    cufftHandle plan_x_{0};      ///< cuFFT plan for X dimension
+    cufftHandle plan_y_{0};      ///< cuFFT plan for Y dimension
+    cufftHandle plan_z_{0};      ///< cuFFT plan for Z dimension
+    bool plan_x_created_ = false; ///< plan_x_ holds a created plan
+    bool plan_y_created_ = false; ///< plan_y_ holds a created plan
+    bool plan_z_created_ = false; ///< plan_z_ holds a created plan
 
     double* d_work_;             ///< Work buffer
     double* d_temp_;             ///< Temporary buffer
@@ -306,6 +318,9 @@ private:
     cudaStream_t stream_{0};     ///< CUDA stream for execution
 
     void init();
+
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
 
     // Z dimension processing
     void executeZ_DCT1(double* d_data);

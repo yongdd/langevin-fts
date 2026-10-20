@@ -83,8 +83,17 @@ FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx)
     for (int d = 0; d < DIM; ++d)
         total_grid_ *= nx_[d];
 
-    computeComplexGridSize();
-    initPeriodicFFT();
+    try
+    {
+        computeComplexGridSize();
+        initPeriodicFFT();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -134,10 +143,19 @@ FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
 
     computeComplexGridSize();
 
-    if (is_all_periodic_)
-        initPeriodicFFT();
-    else
-        initNonPeriodicFFT();
+    try
+    {
+        if (is_all_periodic_)
+            initPeriodicFFT();
+        else
+            initNonPeriodicFFT();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -146,10 +164,18 @@ FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
 template <typename T, int DIM>
 FftwFFT<T, DIM>::~FftwFFT()
 {
+    release();
+}
+
+template <typename T, int DIM>
+void FftwFFT<T, DIM>::release()
+{
     if (plan_forward_ != nullptr)
         fftw_destroy_plan(plan_forward_);
     if (plan_backward_ != nullptr)
         fftw_destroy_plan(plan_backward_);
+    plan_forward_ = nullptr;
+    plan_backward_ = nullptr;
 
     for (int d = 0; d < DIM; ++d)
     {
@@ -161,12 +187,18 @@ FftwFFT<T, DIM>::~FftwFFT()
             fftw_destroy_plan(plan_dst_forward_[d]);
         if (plan_dst_backward_[d] != nullptr)
             fftw_destroy_plan(plan_dst_backward_[d]);
+        plan_dct_forward_[d] = nullptr;
+        plan_dct_backward_[d] = nullptr;
+        plan_dst_forward_[d] = nullptr;
+        plan_dst_backward_[d] = nullptr;
     }
 
     if (work_buffer_ != nullptr)
         fftw_free(work_buffer_);
     if (complex_buffer_ != nullptr)
         fftw_free(complex_buffer_);
+    work_buffer_ = nullptr;
+    complex_buffer_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

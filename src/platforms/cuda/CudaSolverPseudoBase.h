@@ -52,7 +52,7 @@ protected:
     bool is_periodic_;            ///< True if all BCs are periodic
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy] per index
 
-    // Spectral transforms (created by init_fft(), released by the destructor)
+    // Spectral transforms (created by init_fft(), released by release_base())
     int max_fft_batch_;                      ///< Largest batch a derived solver transforms at once (1 or 2)
     cufftHandle plan_for_[MAX_STREAMS][2];   ///< Periodic BC: forward plans, index = batch - 1
     cufftHandle plan_bak_[MAX_STREAMS][2];   ///< Periodic BC: backward plans, index = batch - 1
@@ -143,6 +143,11 @@ protected:
         const std::string& monomer_type, bool is_half_bond_length) const;
 
 private:
+    bool plan_for_created_[MAX_STREAMS][2];  ///< plan_for_[i][b] exists (cufftHandle has no null value)
+    bool plan_bak_created_[MAX_STREAMS][2];  ///< plan_bak_[i][b] exists
+
+    /// Free everything the base owns (idempotent; safe on a partly built object).
+    void release_base();
     /// Create the cuFFT plans (periodic BC) or the DCT/DST objects (non-periodic BC).
     void init_fft();
     /// Select and build the CrysFFT fast path for the current space group (3D periodic, real fields).

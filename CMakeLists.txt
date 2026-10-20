@@ -139,6 +139,12 @@ ADD_LIBRARY(common
     src/common/Pseudo.cpp
     src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
+    src/common/ComputationCommon.cpp
+    src/common/ComputationContinuous.cpp
+    src/common/ComputationDiscrete.cpp
+    src/common/ComputationReduceMemoryBase.cpp
+    src/common/ComputationReduceMemoryContinuous.cpp
+    src/common/ComputationReduceMemoryDiscrete.cpp
     src/common/AndersonMixing.cpp
     src/common/Scheduler.cpp
     src/common/SpaceGroup.cpp
@@ -158,13 +164,7 @@ SET(POLYMERFTS_CPU_COMMON_SOURCES
     src/platforms/cpu/CpuSolverPseudoRK2.cpp
     src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
     src/platforms/cpu/CpuSolverCNADI.cpp
-    src/platforms/cpu/CpuComputationCommon.cpp
-    src/platforms/cpu/CpuComputationBase.cpp
-    src/platforms/cpu/CpuComputationContinuous.cpp
-    src/platforms/cpu/CpuComputationDiscrete.cpp
-    src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
-    src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
-    src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
+    src/platforms/cpu/CpuComputationBackend.cpp
     src/platforms/cpu/CpuAndersonMixing.cpp
 )
 
@@ -316,13 +316,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoRK2.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
-        src/platforms/cuda/CudaComputationCommon.cu
-        src/platforms/cuda/CudaComputationBase.cu
-        src/platforms/cuda/CudaComputationContinuous.cu
-        src/platforms/cuda/CudaComputationDiscrete.cu
-        src/platforms/cuda/CudaComputationReduceMemoryBase.cu
-        src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu
-        src/platforms/cuda/CudaComputationReduceMemoryDiscrete.cu
+        src/platforms/cuda/CudaComputationBackend.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu

@@ -69,36 +69,44 @@ CudaCrysFFT::CudaCrysFFT(
       dct_backward_(nullptr),
       d_work_(nullptr)
 {
-    // Validate even grid sizes
-    for (int d = 0; d < 3; ++d)
+    try
     {
-        if (nx_logical_[d] % 2 != 0)
+        // Validate even grid sizes
+        for (int d = 0; d < 3; ++d)
         {
-            throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
+            if (nx_logical_[d] % 2 != 0)
+            {
+                throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
+            }
         }
+
+        // Physical grid: (N/2) in each dimension
+        nx_physical_ = {
+            nx_logical_[0] / 2,
+            nx_logical_[1] / 2,
+            nx_logical_[2] / 2
+        };
+
+        M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+        M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+
+        // Normalization: 1/M_logical for round-trip
+        norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+
+        // Create CudaRealTransform objects for DCT-II and DCT-III
+        dct_forward_ = new CudaRealTransform3D(
+            nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+        dct_backward_ = new CudaRealTransform3D(
+            nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+
+        // Allocate device work buffer
+        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
     }
-
-    // Physical grid: (N/2) in each dimension
-    nx_physical_ = {
-        nx_logical_[0] / 2,
-        nx_logical_[1] / 2,
-        nx_logical_[2] / 2
-    };
-
-    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
-    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
-
-    // Normalization: 1/M_logical for round-trip
-    norm_factor_ = 1.0 / static_cast<double>(M_logical_);
-
-    // Create CudaRealTransform objects for DCT-II and DCT-III
-    dct_forward_ = new CudaRealTransform3D(
-        nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
-    dct_backward_ = new CudaRealTransform3D(
-        nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
-
-    // Allocate device work buffer
-    gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -106,12 +114,23 @@ CudaCrysFFT::CudaCrysFFT(
 //------------------------------------------------------------------------------
 CudaCrysFFT::~CudaCrysFFT()
 {
+    release();
+}
+
+//------------------------------------------------------------------------------
+// Release (idempotent; tolerates a partly built object)
+//------------------------------------------------------------------------------
+void CudaCrysFFT::release()
+{
     freeBoltzmann();
     freeMultiplierCaches();
 
-    if (dct_forward_) delete dct_forward_;
-    if (dct_backward_) delete dct_backward_;
+    delete dct_forward_;
+    delete dct_backward_;
+    dct_forward_ = nullptr;
+    dct_backward_ = nullptr;
     if (d_work_) cudaFree(d_work_);
+    d_work_ = nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -188,7 +207,7 @@ void CudaCrysFFT::set_contour_step(double ds)
 void CudaCrysFFT::generateBoltzmann(double ds)
 {
     // Compute on host, then copy to device
-    double* h_boltz = new double[M_physical_];
+    std::vector<double> h_boltz(M_physical_);
 
     double Lx = cell_para_[0];
     double Ly = cell_para_[1];
@@ -221,12 +240,18 @@ void CudaCrysFFT::generateBoltzmann(double ds)
         }
     }
 
-    double* d_boltz;
+    double* d_boltz = nullptr;
     gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_physical_));
-    gpu_error_check(cudaMemcpy(d_boltz, h_boltz, sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
-
-    d_boltzmann_[ds] = d_boltz;
-    delete[] h_boltz;
+    try
+    {
+        gpu_error_check(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        d_boltzmann_[ds] = d_boltz;
+    }
+    catch (...)
+    {
+        cudaFree(d_boltz);
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -413,9 +438,17 @@ const double* CudaCrysFFT::get_axis_k2_multiplier(int axis)
     {
         if (d_axis_k2_[a] != nullptr)
             continue;
-        double* d_ptr;
+        double* d_ptr = nullptr;
         gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
-        gpu_error_check(cudaMemcpy(d_ptr, selected[a]->data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        try
+        {
+            gpu_error_check(cudaMemcpy(d_ptr, selected[a]->data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        }
+        catch (...)
+        {
+            cudaFree(d_ptr);
+            throw;
+        }
         d_axis_k2_[a] = d_ptr;
     }
 
@@ -446,10 +479,18 @@ const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axis, double coeff)
         h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
     }
 
-    double* d_ptr;
+    double* d_ptr = nullptr;
     gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
-    gpu_error_check(cudaMemcpy(d_ptr, h_mult.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
-    d_axis_boltz_k2_[key] = d_ptr;
+    try
+    {
+        gpu_error_check(cudaMemcpy(d_ptr, h_mult.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+        d_axis_boltz_k2_[key] = d_ptr;
+    }
+    catch (...)
+    {
+        cudaFree(d_ptr);
+        throw;
+    }
 
     return d_ptr;
 }

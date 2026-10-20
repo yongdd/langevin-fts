@@ -155,35 +155,60 @@ PropagatorComputation<T>                      [Abstract Base]
 ├── get_total_concentration(monomer)          [pure virtual]
 └── update_laplacian_operator()               [pure virtual]
         │
-        ├── CpuComputationCommon<T>           [CPU: solver, scheduler, φ storage, getters]
-        │   │
-        │   ├── CpuComputationBase<T>         [full propagator storage]
-        │   │   ├── CpuComputationContinuous<T>   RQM4, RK2, or CN-ADI2 (selectable)
-        │   │   └── CpuComputationDiscrete<T>     Boltzmann weight + bond convolution
-        │   │
-        │   └── CpuComputationReduceMemoryBase<T> [checkpointed storage]
-        │       ├── CpuComputationReduceMemoryContinuous<T>
-        │       └── CpuComputationReduceMemoryDiscrete<T>
-        │
-        └── CudaComputationCommon<T>          [GPU: solver, scheduler, streams, unity/mask, partition getters]
+        └── ComputationCommon<T>              [backend, scheduler, φ storage, getters, solvents]
             │
-            ├── CudaComputationBase<T>        [full storage, device-side φ]
-            │   ├── CudaComputationContinuous<T>
-            │   └── CudaComputationDiscrete<T>
+            ├── ComputationContinuous<T>      full storage; RQM4, RK2 or CN-ADI2
+            ├── ComputationDiscrete<T>        full storage; bond convolution and half bonds
             │
-            └── CudaComputationReduceMemoryBase<T> [checkpointed storage, pinned host φ]
-                ├── CudaComputationReduceMemoryContinuous<T>
-                └── CudaComputationReduceMemoryDiscrete<T>
+            └── ComputationReduceMemoryBase<T> [checkpoints and recomputation]
+                ├── ComputationReduceMemoryContinuous<T>
+                └── ComputationReduceMemoryDiscrete<T>
+
+ComputationBackend<T>                         [Abstract Base, grid operations]
+        ├── CpuComputationBackend<T>          host arrays, OpenMP threads, CpuSolver
+        └── CudaComputationBackend<T>         device arrays, CUDA streams, CudaSolver,
+                                              checkpoints in pinned host memory
 ```
 
-`CpuComputationCommon<T>` / `CudaComputationCommon<T>` hold only what is identical for
-the full-storage and the memory-saving (`reduce_memory=True`) variant: the solver and
-scheduler handles, `update_laplacian_operator()`, the partition-function getters and,
-on the CPU, the concentration getters (both CPU variants keep `phi_block` on the host
-in the same layout). The CUDA variants keep their concentration getters apart because
-the full variant stores `d_phi_block` on the device and the reduce-memory variant
-`phi_block` in pinned host memory. Propagator storage and the `compute_*` algorithms
-stay in the variant classes so that each can be changed on its own.
+All of these live in `src/common/` except the two backends. The platform
+factories (`MklFactory`, `FftwFactory`, `CudaFactory`) create the computation
+with their backend; the Python layer and the C++ tests (through
+`tests/TestComputationFactory.h`) obtain every computation from a factory.
+
+**Who does what.** The computation classes decide *what* is computed and in
+*which order*: the scheduler's groups of propagators, the initial condition of
+each propagator (free end, grafting point, junction product, aggregated sum),
+which segment pairs enter the concentration and stress integrals and with
+which weights, and the normalization. Their loops read top to bottom in the
+order the work happens. Every operation on grid data goes through
+`ComputationBackend` (`src/common/ComputationBackend.h`): advance a
+propagator, build a junction, accumulate segment products, normalize a block,
+sum the stress of a list of segment pairs, inner products, checkpoints.
+
+**Rules for the backend interface.**
+
+- One operation is one physically meaningful step on whole fields. Do not add
+  array-level helpers (scale, add, multiply): they force one kernel launch per
+  call and keep a backend from fusing the work of a step.
+- Fields are `BackendArray<T>*` (host memory on the CPU, device memory on
+  CUDA); checkpoints are `CheckpointArray<T>*` (pinned host memory on CUDA)
+  and may only be stored, loaded, or used as junction sources. Both types are
+  incomplete, so common code cannot dereference them.
+- An operation with a `stream` argument may run concurrently with the other
+  streams (an OpenMP thread on the CPU, a CUDA stream on the GPU); call
+  `synchronize()` before using results from several streams.
+- A new feature goes into the computation class once, plus the backend
+  operations it needs on both platforms. The CPU implementation is the plain
+  loop and serves as the reference; the CUDA one may fuse, batch or overlap as
+  long as `tests/` and the CPU-CUDA equivalence tests pass.
+
+**Reduce-memory mode.** The checkpointed classes store q(r, n) at the start of
+every propagator, at the segments other propagators start from, and every
+⌈2√(total segments)⌉ segments, and recompute the other segments from the last
+checkpoint before them. The solvers are deterministic and the classes use the
+same segment pairs, weights and summation order as full storage, so both
+modes give bit-for-bit identical results. Propagators are computed one at a
+time on one stream.
 
 **Chain Models:**
 
@@ -387,10 +412,10 @@ All computational classes use explicit template instantiation for:
 
 ```cpp
 // For single-parameter templates (most classes)
-INSTANTIATE_CLASS(CpuComputationContinuous);
+INSTANTIATE_CLASS(ComputationContinuous);
 // Expands to:
-//   template class CpuComputationContinuous<double>;
-//   template class CpuComputationContinuous<std::complex<double>>;
+//   template class ComputationContinuous<double>;
+//   template class ComputationContinuous<std::complex<double>>;
 
 // For FFT classes with dimension parameter
 INSTANTIATE_FFT_CLASS(FftwFFT);
@@ -432,8 +457,13 @@ See [Installation.md](../getting-started/Installation.md#testing) for test comma
 ### Platform Implementation
 
 When adding new computational features, you must implement them for both platforms unless explicitly platform-specific:
-- `src/platforms/cpu/` - CPU implementations (MKL, FFTW)
-- `src/platforms/cuda/` - CUDA GPU implementations
+- `src/common/Computation*.cpp` - the order of the computation, written once (Section 3.2)
+- `src/platforms/cpu/` - CPU implementations (MKL, FFTW): `CpuComputationBackend` and the CPU solvers
+- `src/platforms/cuda/` - CUDA GPU implementations: `CudaComputationBackend` and the CUDA solvers
+
+A change to how propagators, concentrations or stress are assembled belongs in
+the computation classes in `src/common/`; a new kind of grid operation is a new
+`ComputationBackend` operation implemented by both backends.
 
 ### Memory Management
 

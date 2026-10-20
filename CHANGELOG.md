@@ -74,6 +74,30 @@ commits are omitted.
 - `fts_consistent_energy`: the mean concentrations now include random-copolymer blocks and
   the chain length (f_p / alpha_p); before, random copolymers raised and blends of
   unequal chain lengths pinned the wrong mean (2026-10-19).
+- Continuous-chain stress with full propagator storage dropped the chain-end segments of
+  every block on the assumption that q(r, 0) = 1 carries no stress. That holds only for
+  free ends with periodic or reflecting boundaries; with absorbing walls, a mask or a
+  grafting point the stress lost an O(ds) term (absorbing walls: -2.7e-2 relative error
+  against a finite difference of ln Q at ds = 0.05, -6.7e-3 at ds = 0.0125; now 9.6e-5 and
+  6.3e-7). The reduce-memory mode always kept these terms; both modes now agree
+  (2026-10-20).
+- A failed construction freed nothing it had allocated, at any level: propagator
+  computations, solvers, `Pseudo`, the FFT, DCT/DST and CrysFFT transforms, and the CUDA
+  computation box. When a full-storage CUDA run did not fit in GPU memory, the process kept
+  every buffer allocated up to the failure (22.5 GB on an A10 for a 128^3 grid), so a retry
+  with `reduce_memory` in the same process failed as well. Every constructor now releases
+  what it holds when it throws; a sweep that runs out of GPU memory at 210 different points
+  (box, transforms, solvers, backend, propagators) leaves at most 4 MiB behind, against up
+  to 1.1 GB before. Errors thrown inside the parallel loops of the full-storage mode (out
+  of memory while building a CrysFFT cache, a grafted polymer without its `q_init`)
+  terminated the process; they now reach Python as exceptions (2026-10-20). The 3D DCT-1
+  and DST-1 transforms on CUDA did not check that their cuFFT plan was created.
+- Reduce-memory mode now gives results identical to full storage (it used separately
+  written code): the CPU continuous solvent partition function was computed from
+  exp(-w ds/2)^2 with uniform cell weights, ignoring a mask; the CUDA discrete variant
+  normalized each block with the polymer found by a key search that ignored the polymer
+  index, so two polymer types sharing a propagator pair could be normalized with the
+  wrong volume fraction (2026-10-20).
 
 ### Interface changes
 
@@ -161,6 +185,21 @@ commits are omitted.
   side); RQM4, RK2 and the discrete solver supply the bond factor and their scratch
   buffers. RK2 now transforms the propagator pair in one batched cuFFT call like the
   other two (2026-10-20).
+- The propagator computations exist once, in `src/common/`: `ComputationContinuous`,
+  `ComputationDiscrete` and their reduce-memory variants decide what is computed and in
+  which order, and every operation on grid data goes through `ComputationBackend`
+  (`CpuComputationBackend`, `CudaComputationBackend`). The eight platform classes
+  (`CpuComputationContinuous`, `CudaComputationReduceMemoryDiscrete`, ...) were removed:
+  the factories create the computations with their backend, and the C++ tests obtain
+  them from the factories (`tests/TestComputationFactory.h`). About 10,000 lines of
+  duplicated CPU/CUDA code were removed (2026-10-20).
+  CUDA stress sums the segment stresses of a block on the device and copies them once per
+  block instead of once per segment with a device-wide synchronization. CUDA reduce-memory
+  keeps the 2√N recomputation buffers on the device instead of round-tripping each
+  recomputed segment through pinned host memory; checkpoints stay in pinned host memory.
+  Results are unchanged except for the two fixes above and round-off in complex-field
+  normalizations and in discrete-chain solvent concentrations (exp(-w ds) is recomputed
+  from w with the global ds instead of taken from the solver).
 - CUDA non-periodic boundaries: the DCT/DST transforms and the kernels around them are
   issued on the propagator's stream (`CudaFFTBase::forward_stream`), like the periodic
   cuFFT path; they ran on the legacy default stream, which serialized the streams
@@ -197,6 +236,10 @@ commits are omitted.
   YAML/JSON parameter files (`load_config`, `SCFT.from_file`).
 - `scripts/install_versioned.sh`: wheel per version plus a per-version virtual environment,
   for keeping several releases side by side (documented in Installation.md).
+- `TestStressNonPeriodic` (2026-10-20): the absorbing-wall tolerance of the continuous
+  chain is 1e-5 instead of 1.5e-2 (the measured finite-difference mismatch is 3e-7 since
+  the chain-end stress fix; it was 5e-3), and the 3D mixed reflecting/absorbing case also
+  runs for continuous chains (tolerance 1e-4, measured 1.2e-5, was 4.8e-3).
 - Tests (2026-10-19): `TestStressComplexPlatforms` (complex stress on every platform, 64^3
   grid), `TestStressNonPeriodicRK2`, `TestComplexMask` (array handling and object
   lifetimes of the bindings), `TestLftsRun` (L-FTS/CL-FTS run loops and checkpoint

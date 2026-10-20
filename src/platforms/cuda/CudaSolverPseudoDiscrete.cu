@@ -34,7 +34,7 @@
  * - CudaSolverPseudoDiscrete<double>: Real field solver
  * - CudaSolverPseudoDiscrete<std::complex<double>>: Complex field solver
  *
- * @see CudaComputationDiscrete for discrete chain orchestration
+ * @see ComputationDiscrete for the order of the discrete-chain computation
  */
 
 #include <iostream>
@@ -57,13 +57,16 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
                               /*q_full_in_factor=*/2, /*with_exp_dw_half=*/false,
                               /*complex_requires_periodic=*/false)
 {
+    // Null every buffer before anything can throw (see release_workspaces())
+    for(int i=0; i<MAX_STREAMS; i++)
+    {
+        d_qk_in_1_one[i] = nullptr;
+        d_qk_in_1_two[i] = nullptr;
+        d_rk_in_1_one[i] = nullptr;
+        d_rk_in_2_one[i] = nullptr;
+    }
     try{
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        for(int i=0; i<n_streams; i++)
-        {
-            d_rk_in_1_one[i] = nullptr;
-            d_rk_in_2_one[i] = nullptr;
-        }
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
@@ -89,22 +92,39 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
     }
     catch(std::exception& exc)
     {
+        // This class's buffers only; the base destructor releases the rest
+        release_workspaces();
         throw_without_line_number(exc.what());
+    }
+    catch(...)
+    {
+        release_workspaces();
+        throw;
     }
 }
 template <typename T>
 CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
 {
+    release_workspaces();
+}
 
-    // For pseudo-spectral: advance_propagator()
-    for(int i=0; i<n_streams; i++)
+template <typename T>
+void CudaSolverPseudoDiscrete<T>::release_workspaces()
+{
+    // Only this class's buffers; CudaSolverPseudoBase frees its own
+    auto free_device = [](auto*& d_ptr)
     {
-        cudaFree(d_qk_in_1_one[i]);
-        cudaFree(d_qk_in_1_two[i]);
-        if (d_rk_in_1_one[i] != nullptr) cudaFree(d_rk_in_1_one[i]);
-        if (d_rk_in_2_one[i] != nullptr) cudaFree(d_rk_in_2_one[i]);
+        if (d_ptr != nullptr) cudaFree(d_ptr);
+        d_ptr = nullptr;
+    };
+    // For pseudo-spectral: advance_propagator()
+    for(int i=0; i<MAX_STREAMS; i++)
+    {
+        free_device(d_qk_in_1_one[i]);
+        free_device(d_qk_in_1_two[i]);
+        free_device(d_rk_in_1_one[i]);
+        free_device(d_rk_in_2_one[i]);
     }
-
 }
 
 template <typename T>

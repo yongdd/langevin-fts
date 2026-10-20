@@ -29,7 +29,7 @@
  * **Note:** Stress computation not yet supported for CN-ADI method.
  *
  * @see FiniteDifference for matrix construction
- * @see CudaComputationContinuous for integration
+ * @see ComputationContinuous for integration
  */
 
 #include <iostream>
@@ -52,11 +52,23 @@ CudaSolverCNADI::CudaSolverCNADI(
         this->d_reduced_basis_indices_ = nullptr;
         this->d_full_to_reduced_map_ = nullptr;
         this->n_basis_ = 0;
+        // Null every owned pointer before anything can throw (see release())
         for (int i = 0; i < MAX_STREAMS; i++)
         {
             this->d_q_full_in_[i] = nullptr;
             this->d_q_full_out_[i] = nullptr;
+            d_q_star[i] = nullptr;
+            d_q_dstar[i] = nullptr;
+            d_c_star[i] = nullptr;
+            d_q_sparse[i] = nullptr;
+            d_temp[i] = nullptr;
         }
+        d_offset_xy = nullptr;
+        d_offset_yz = nullptr;
+        d_offset_xz = nullptr;
+        d_offset_x = nullptr;
+        d_offset_y = nullptr;
+        d_offset = nullptr;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -90,37 +102,35 @@ CudaSolverCNADI::CudaSolverCNADI(
         const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
+        // Map slots are inserted as nullptr; cudaMalloc writes into a local that is
+        // stored only on success, so release() never sees a stale pointer
+        auto alloc_slot = [](double*& d_slot, size_t bytes)
+        {
+            d_slot = nullptr;
+            double* d_ptr = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_ptr, bytes));
+            d_slot = d_ptr;
+        };
+
         // Create exp_dw and tridiagonal coefficients for each ds_index
         for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
-                d_exp_dw     [ds_idx][monomer_type] = nullptr;
+                alloc_slot(d_exp_dw[ds_idx][monomer_type], sizeof(double)*M);
 
-                gpu_error_check(cudaMalloc((void**)&d_exp_dw     [ds_idx][monomer_type], sizeof(double)*M));
+                alloc_slot(d_xl[ds_idx][monomer_type], sizeof(double)*nx[0]);
+                alloc_slot(d_xd[ds_idx][monomer_type], sizeof(double)*nx[0]);
+                alloc_slot(d_xh[ds_idx][monomer_type], sizeof(double)*nx[0]);
 
-                d_xl[ds_idx][monomer_type] = nullptr;
-                d_xd[ds_idx][monomer_type] = nullptr;
-                d_xh[ds_idx][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_xl[ds_idx][monomer_type], sizeof(double)*nx[0]));
-                gpu_error_check(cudaMalloc((void**)&d_xd[ds_idx][monomer_type], sizeof(double)*nx[0]));
-                gpu_error_check(cudaMalloc((void**)&d_xh[ds_idx][monomer_type], sizeof(double)*nx[0]));
+                alloc_slot(d_yl[ds_idx][monomer_type], sizeof(double)*nx[1]);
+                alloc_slot(d_yd[ds_idx][monomer_type], sizeof(double)*nx[1]);
+                alloc_slot(d_yh[ds_idx][monomer_type], sizeof(double)*nx[1]);
 
-                d_yl[ds_idx][monomer_type] = nullptr;
-                d_yd[ds_idx][monomer_type] = nullptr;
-                d_yh[ds_idx][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_yl[ds_idx][monomer_type], sizeof(double)*nx[1]));
-                gpu_error_check(cudaMalloc((void**)&d_yd[ds_idx][monomer_type], sizeof(double)*nx[1]));
-                gpu_error_check(cudaMalloc((void**)&d_yh[ds_idx][monomer_type], sizeof(double)*nx[1]));
-
-                d_zl[ds_idx][monomer_type] = nullptr;
-                d_zd[ds_idx][monomer_type] = nullptr;
-                d_zh[ds_idx][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_zl[ds_idx][monomer_type], sizeof(double)*nx[2]));
-                gpu_error_check(cudaMalloc((void**)&d_zd[ds_idx][monomer_type], sizeof(double)*nx[2]));
-                gpu_error_check(cudaMalloc((void**)&d_zh[ds_idx][monomer_type], sizeof(double)*nx[2]));
-
+                alloc_slot(d_zl[ds_idx][monomer_type], sizeof(double)*nx[2]);
+                alloc_slot(d_zd[ds_idx][monomer_type], sizeof(double)*nx[2]);
+                alloc_slot(d_zh[ds_idx][monomer_type], sizeof(double)*nx[2]);
             }
         }
 
@@ -210,98 +220,57 @@ CudaSolverCNADI::CudaSolverCNADI(
     }
     catch(std::exception& exc)
     {
+        release();
         throw_without_line_number(exc.what());
+    }
+    catch(...)
+    {
+        release();
+        throw;
     }
 }
 CudaSolverCNADI::~CudaSolverCNADI()
 {
-    const int DIM = this->dim;
+    release();
+}
 
-    // Free nested maps: d_exp_dw[ds_index][monomer_type]
-    for(const auto& ds_entry: d_exp_dw)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
+void CudaSolverCNADI::release()
+{
+    // Every pointer is nullptr until allocated (buffers a dimension does not
+    // use stay nullptr), so a partly built object is released correctly.
 
-    // Free tridiagonal coefficients: d_xl[ds_index][monomer_type]
-    for(const auto& ds_entry: d_xl)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_xd)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_xh)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-
-    for(const auto& ds_entry: d_yl)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_yd)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_yh)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-
-    for(const auto& ds_entry: d_zl)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_zd)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-    for(const auto& ds_entry: d_zh)
-        for(const auto& item: ds_entry.second)
-            cudaFree(item.second);
-
-
-    if(DIM == 3)
+    // Free nested maps: d_exp_dw[ds_index][monomer_type] and the
+    // tridiagonal coefficients d_xl[ds_index][monomer_type], ...
+    for (auto* d_map : {&d_exp_dw, &d_xl, &d_xd, &d_xh, &d_yl, &d_yd, &d_yh, &d_zl, &d_zd, &d_zh})
     {
-        for(int i=0; i<n_streams; i++)
-        {
-            cudaFree(d_q_star[i]);
-            cudaFree(d_q_dstar[i]);
-            cudaFree(d_c_star[i]);
-            cudaFree(d_q_sparse[i]);
-            cudaFree(d_temp[i]);
-            if (d_q_full_in_[i] != nullptr)
-                cudaFree(d_q_full_in_[i]);
-            if (d_q_full_out_[i] != nullptr)
-                cudaFree(d_q_full_out_[i]);
-        }
-        cudaFree(d_offset_xy);
-        cudaFree(d_offset_yz);
-        cudaFree(d_offset_xz);
+        for(const auto& ds_entry: *d_map)
+            for(const auto& item: ds_entry.second)
+                if (item.second != nullptr)
+                    cudaFree(item.second);
+        d_map->clear();
     }
-    else if(DIM == 2)
+
+    auto free_device = [](auto*& d_ptr)
     {
-        for(int i=0; i<n_streams; i++)
-        {
-            cudaFree(d_q_star[i]);
-            cudaFree(d_c_star[i]);
-            cudaFree(d_q_sparse[i]);
-            cudaFree(d_temp[i]);
-            if (d_q_full_in_[i] != nullptr)
-                cudaFree(d_q_full_in_[i]);
-            if (d_q_full_out_[i] != nullptr)
-                cudaFree(d_q_full_out_[i]);
-        }
-        cudaFree(d_offset_x);
-        cudaFree(d_offset_y);
-    }
-    else if(DIM == 1)
+        if (d_ptr != nullptr) cudaFree(d_ptr);
+        d_ptr = nullptr;
+    };
+    for(int i=0; i<MAX_STREAMS; i++)
     {
-        for(int i=0; i<n_streams; i++)
-        {
-            cudaFree(d_q_star[i]);
-            cudaFree(d_c_star[i]);
-            cudaFree(d_q_sparse[i]);
-            if (d_q_full_in_[i] != nullptr)
-                cudaFree(d_q_full_in_[i]);
-            if (d_q_full_out_[i] != nullptr)
-                cudaFree(d_q_full_out_[i]);
-        }
-        cudaFree(d_offset);
+        free_device(d_q_star[i]);
+        free_device(d_q_dstar[i]);
+        free_device(d_c_star[i]);
+        free_device(d_q_sparse[i]);
+        free_device(d_temp[i]);
+        free_device(d_q_full_in_[i]);
+        free_device(d_q_full_out_[i]);
     }
+    free_device(d_offset_xy);
+    free_device(d_offset_yz);
+    free_device(d_offset_xz);
+    free_device(d_offset_x);
+    free_device(d_offset_y);
+    free_device(d_offset);
 }
 
 void CudaSolverCNADI::set_space_group(

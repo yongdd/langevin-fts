@@ -65,6 +65,9 @@ private:
     void initFFTPlans();
     void initFFTPlansZ(unsigned plan_flags);
 
+    /// Destroy the plans and free the buffers (also after a failed construction); idempotent.
+    void release();
+
     /// Thread-local work buffers, (re)allocated to the current grid size.
     ThreadBuffers& get_thread_buffers() const;
     /// DCT-II along z (native REDFT10, or the FFT-based path when

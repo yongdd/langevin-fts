@@ -32,8 +32,17 @@ FftwCrysFFTRecursive3m::FftwCrysFFTRecursive3m(
     std::array<double, 9> translational_part)
     : Base(nx_logical, cell_para, translational_part)
 {
-    init_fft_plans();
-    generate_twiddle_factors();
+    try
+    {
+        init_fft_plans();
+        generate_twiddle_factors();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -41,8 +50,15 @@ FftwCrysFFTRecursive3m::FftwCrysFFTRecursive3m(
 //------------------------------------------------------------------------------
 FftwCrysFFTRecursive3m::~FftwCrysFFTRecursive3m()
 {
+    release();
+}
+
+void FftwCrysFFTRecursive3m::release()
+{
     if (plan_forward_) fftw_destroy_plan(plan_forward_);
     if (plan_backward_) fftw_destroy_plan(plan_backward_);
+    plan_forward_ = nullptr;
+    plan_backward_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

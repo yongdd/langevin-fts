@@ -25,7 +25,7 @@
  * - CpuSolverPseudoRK2<std::complex<double>>: Complex fields
  *
  * @see Pseudo for Boltzmann factor computation
- * @see CpuComputationContinuous for usage context
+ * @see ComputationContinuous for usage context
  */
 
 #include <iostream>
@@ -78,6 +78,8 @@ CpuSolverPseudoRK2<T>::CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *mole
     }
     catch (std::exception& exc)
     {
+        // Nothing of this class to free: ~CpuSolverPseudoBase still runs
+        // and frees the FFT and Pseudo objects created by init_shared()
         throw_without_line_number(exc.what());
     }
 }
@@ -88,10 +90,8 @@ CpuSolverPseudoRK2<T>::CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *mole
 template <typename T>
 CpuSolverPseudoRK2<T>::~CpuSolverPseudoRK2()
 {
-    // exp_dw vectors are automatically cleaned up
-
-    // Clean up shared components (FFT, Pseudo)
-    this->cleanup_shared();
+    // exp_dw vectors are automatically cleaned up;
+    // the shared components (FFT, Pseudo) are freed by ~CpuSolverPseudoBase
 }
 
 //------------------------------------------------------------------------------

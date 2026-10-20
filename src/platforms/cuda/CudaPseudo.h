@@ -106,6 +106,9 @@ private:
     /// Upload Fourier basis to GPU.
     void upload_fourier_basis();
 
+    /// Free all device memory (idempotent; safe on a partly built object).
+    void release();
+
 public:
     /**
      * @brief Construct GPU pseudo-spectral utility.

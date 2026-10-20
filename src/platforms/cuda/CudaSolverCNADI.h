@@ -323,6 +323,9 @@ private:
     int* d_offset;     ///< 1D: System offsets
     /// @}
 
+    /// Free all device memory (idempotent; safe on a partly built object).
+    void release();
+
     /**
      * @brief 3D ADI propagator advancement.
      * @param ds_index Index for ds value (0-based) from ContourLengthMapping

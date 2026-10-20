@@ -25,7 +25,7 @@
  * - CpuSolverPseudoDiscrete<double>: Real fields
  * - CpuSolverPseudoDiscrete<std::complex<double>>: Complex fields
  *
- * @see CpuComputationDiscrete for usage context
+ * @see ComputationDiscrete for usage context
  */
 
 #include <iostream>
@@ -77,6 +77,8 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
     }
     catch (std::exception& exc)
     {
+        // Nothing of this class to free: ~CpuSolverPseudoBase still runs
+        // and frees the FFT and Pseudo objects created by init_shared()
         throw_without_line_number(exc.what());
     }
 }
@@ -87,10 +89,8 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
 template <typename T>
 CpuSolverPseudoDiscrete<T>::~CpuSolverPseudoDiscrete()
 {
-    // exp_dw vectors are automatically cleaned up
-
-    // Clean up shared components (FFT, Pseudo)
-    this->cleanup_shared();
+    // exp_dw vectors are automatically cleaned up;
+    // the shared components (FFT, Pseudo) are freed by ~CpuSolverPseudoBase
 }
 
 //------------------------------------------------------------------------------

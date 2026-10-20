@@ -86,19 +86,14 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
                 std::string monomer_type = item.first;
                 exp_dw     [ds_idx][monomer_type].resize(M);
 
-                // Full step coefficients
-                xl[ds_idx][monomer_type] = new double[M];
-                xd[ds_idx][monomer_type] = new double[M];
-                xh[ds_idx][monomer_type] = new double[M];
-
-                yl[ds_idx][monomer_type] = new double[M];
-                yd[ds_idx][monomer_type] = new double[M];
-                yh[ds_idx][monomer_type] = new double[M];
-
-                zl[ds_idx][monomer_type] = new double[M];
-                zd[ds_idx][monomer_type] = new double[M];
-                zh[ds_idx][monomer_type] = new double[M];
-
+                // Full step coefficients (xl, xd, xh, yl, ..., zh). The slot is
+                // inserted as nullptr first, so a failed allocation leaves no
+                // unowned array behind.
+                for(auto* coeff: {&xl, &xd, &xh, &yl, &yd, &yh, &zl, &zd, &zh})
+                {
+                    double*& slot = (*coeff)[ds_idx][monomer_type];
+                    slot = new double[M];
+                }
             }
         }
 
@@ -106,44 +101,26 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
     }
     catch(std::exception& exc)
     {
+        // The destructor does not run for a partly constructed object
+        release();
         throw_without_line_number(exc.what());
     }
 }
 CpuSolverCNADI::~CpuSolverCNADI()
 {
     // exp_dw vectors are automatically cleaned up
-
+    release();
+}
+void CpuSolverCNADI::release()
+{
     // Full step coefficients: nested map [ds_index][monomer_type]
-    for(const auto& ds_entry: xl)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: xd)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: xh)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-
-    for(const auto& ds_entry: yl)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: yd)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: yh)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-
-    for(const auto& ds_entry: zl)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: zd)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-    for(const auto& ds_entry: zh)
-        for(const auto& item: ds_entry.second)
-            delete[] item.second;
-
+    for(auto* coeff: {&xl, &xd, &xh, &yl, &yd, &yh, &zl, &zd, &zh})
+    {
+        for(const auto& ds_entry: *coeff)
+            for(const auto& item: ds_entry.second)
+                delete[] item.second;
+        coeff->clear();
+    }
 }
 int CpuSolverCNADI::max_of_two(int x, int y)
 {

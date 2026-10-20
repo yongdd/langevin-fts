@@ -182,8 +182,17 @@ MklCrysFFTPmmm::MklCrysFFTPmmm(
         dct_fft_backward_[d] = nullptr;
     }
 
-    initFFTPlans();
-    precomputeTwiddleFactors();
+    try
+    {
+        initFFTPlans();
+        precomputeTwiddleFactors();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -191,10 +200,17 @@ MklCrysFFTPmmm::MklCrysFFTPmmm(
 //------------------------------------------------------------------------------
 MklCrysFFTPmmm::~MklCrysFFTPmmm()
 {
+    release();
+}
+
+void MklCrysFFTPmmm::release()
+{
     for (int d = 0; d < 3; ++d)
     {
         if (dct_fft_forward_[d]) DftiFreeDescriptor(&dct_fft_forward_[d]);
         if (dct_fft_backward_[d]) DftiFreeDescriptor(&dct_fft_backward_[d]);
+        dct_fft_forward_[d] = nullptr;
+        dct_fft_backward_[d] = nullptr;
     }
 }
 

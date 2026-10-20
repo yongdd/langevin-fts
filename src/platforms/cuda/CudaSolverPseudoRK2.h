@@ -101,6 +101,9 @@ private:
     double *d_rk_in_2[MAX_STREAMS];                    ///< Real coefficients buffer 2
     /// @}
 
+    /// Free the workspaces above (idempotent; safe on a partly built object).
+    void release_workspaces();
+
 public:
     /**
      * @brief Construct GPU pseudo-spectral solver for continuous chains.

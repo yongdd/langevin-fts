@@ -560,7 +560,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
    cd build && make -j8 && make install
    ```
 
-2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent
+2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent. The order of a computation goes into `src/common/Computation*.cpp` once; new grid operations go into both `ComputationBackend` implementations
 
 3. Memory management: C++ uses raw pointers; ensure proper allocation/deallocation in constructors/destructors
 
@@ -576,9 +576,9 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the cuFFT plans and DCT/DST objects (`fft_forward`/`fft_backward`/`fft_`), the space-group/CrysFFT setup (index maps from the platform-independent `CrysFFTBasisMapping.h`), `update_laplacian_operator`, the shared `update_dw_impl`, and `compute_single_segment_stress` itself (the derived classes only supply `stress_scratch`, the workspaces they lend; the discrete solver also overrides `get_stress_boltz_bond`). Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
 
-**Computation Class Hierarchy**: `CpuComputationCommon<T>` / `CudaComputationCommon<T>` hold what the full-storage (`*ComputationBase`) and reduce-memory (`*ComputationReduceMemoryBase`) variants share (solver and scheduler handles, partition getters, and on the CPU the concentration getters). Propagator storage and the `compute_*` algorithms stay in the variant classes on purpose, so each variant can be changed independently.
+**Computation Class Hierarchy**: the propagator computations are platform neutral and live in `src/common/`: `ComputationCommon<T>` (backend, scheduler, block/solvent concentrations, getters, stress conversion) with `ComputationContinuous<T>`, `ComputationDiscrete<T>` (full storage) and `ComputationReduceMemoryBase<T>` -> `ComputationReduceMemoryContinuous<T>`, `ComputationReduceMemoryDiscrete<T>` (checkpoints). They decide what is computed and in which order, and their loops read top to bottom in that order. Every grid operation goes through `ComputationBackend<T>` (`src/common/ComputationBackend.h`), implemented by `CpuComputationBackend<T>` (host arrays, OpenMP threads, CPU solvers) and `CudaComputationBackend<T>` (device arrays, CUDA streams, CUDA solvers, checkpoints in pinned host memory). The factories (`MklFactory`, `FftwFactory`, `CudaFactory`) create the computations with their backend; there are no platform-specific computation classes, and the C++ tests obtain computations through `tests/TestComputationFactory.h`. Backend rules: one operation is one physically meaningful step on whole fields (no array-level scale/add helpers); `BackendArray<T>` and `CheckpointArray<T>` are incomplete types, so common code cannot dereference them; reduce-memory mode reproduces full storage bit for bit (same segment pairs, weights and summation order).
 
-Derived classes implement chain-model-specific behavior:
+Derived solver classes implement chain-model-specific behavior:
 - `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
 - `advance_propagator`: Different algorithms (RQM4 vs simple step)
 - `advance_propagator_half_bond_step`: Discrete-specific implementation

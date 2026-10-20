@@ -17,20 +17,15 @@
 #include "Exception.h"
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
+#include "TestComputationFactory.h"
 #ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
-#include "CpuComputationReduceMemoryContinuous.h"
 #endif
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuComputationContinuous.h"
-#include "CpuComputationReduceMemoryContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaComputationContinuous.h"
-#include "CudaComputationReduceMemoryContinuous.h"
 #endif
 
 int main()
@@ -127,66 +122,66 @@ int main()
         repeat += 2;
         solver_name_list.push_back("cpu-fftw, absorbing");
         solver_name_list.push_back("cpu-fftw, absorbing, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CPU_MKL
         repeat += 2;
         solver_name_list.push_back("cpu-mkl, absorbing");
         solver_name_list.push_back("cpu-mkl, absorbing, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CUDA
         repeat += 2;
         solver_name_list.push_back("cuda, absorbing");
         solver_name_list.push_back("cuda, absorbing, reduce_memory");
-        solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CPU_FFTW
         solver_name_list.push_back("cpu-fftw, reflecting");
         solver_name_list.push_back("cpu-fftw, reflecting, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl, reflecting");
         solver_name_list.push_back("cpu-mkl, reflecting, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, reflecting");
         solver_name_list.push_back("cuda, reflecting, reduce_memory");
-        solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CPU_FFTW
         solver_name_list.push_back("cpu-fftw, periodic");
         solver_name_list.push_back("cpu-fftw, periodic, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-fftw", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl, periodic");
         solver_name_list.push_back("cpu-mkl, periodic, reduce_memory");
-        solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
-        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace", "", FFTBackend::MKL));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", false, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cpu-mkl", true, new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, periodic");
         solver_name_list.push_back("cuda, periodic, reduce_memory");
-        solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
         #endif
 
         // For each platform

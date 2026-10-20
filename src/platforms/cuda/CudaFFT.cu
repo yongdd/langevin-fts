@@ -147,7 +147,13 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
     }
     catch (std::exception& exc)
     {
+        release();
         throw_without_line_number(exc.what());
+    }
+    catch (...)
+    {
+        release();
+        throw;
     }
 }
 
@@ -230,7 +236,13 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
     }
     catch (std::exception& exc)
     {
+        release();
         throw_without_line_number(exc.what());
+    }
+    catch (...)
+    {
+        release();
+        throw;
     }
 }
 
@@ -240,33 +252,44 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
 template <typename T, int DIM>
 CudaFFT<T, DIM>::~CudaFFT()
 {
+    release();
+}
+
+//------------------------------------------------------------------------------
+// Release (idempotent; tolerates a partly built object)
+//------------------------------------------------------------------------------
+template <typename T, int DIM>
+void CudaFFT<T, DIM>::release()
+{
     if (d_work_buffer_ != nullptr)
         cudaFree(d_work_buffer_);
+    d_work_buffer_ = nullptr;
 
-    if (plan_forward_ != 0)
+    if (plan_forward_created_)
         cufftDestroy(plan_forward_);
-    if (plan_backward_ != 0)
+    if (plan_backward_created_)
         cufftDestroy(plan_backward_);
+    plan_forward_created_ = false;
+    plan_backward_created_ = false;
 
-    // Delete CudaRealTransform objects
-    if (rt_forward_ != nullptr)
+    // Delete CudaRealTransform objects (either may be null if construction failed)
+    if constexpr (DIM == 1)
     {
-        if constexpr (DIM == 1)
-        {
-            delete static_cast<CudaRealTransform1D*>(rt_forward_);
-            delete static_cast<CudaRealTransform1D*>(rt_backward_);
-        }
-        else if constexpr (DIM == 2)
-        {
-            delete static_cast<CudaRealTransform2D*>(rt_forward_);
-            delete static_cast<CudaRealTransform2D*>(rt_backward_);
-        }
-        else if constexpr (DIM == 3)
-        {
-            delete static_cast<CudaRealTransform3D*>(rt_forward_);
-            delete static_cast<CudaRealTransform3D*>(rt_backward_);
-        }
+        delete static_cast<CudaRealTransform1D*>(rt_forward_);
+        delete static_cast<CudaRealTransform1D*>(rt_backward_);
     }
+    else if constexpr (DIM == 2)
+    {
+        delete static_cast<CudaRealTransform2D*>(rt_forward_);
+        delete static_cast<CudaRealTransform2D*>(rt_backward_);
+    }
+    else if constexpr (DIM == 3)
+    {
+        delete static_cast<CudaRealTransform3D*>(rt_forward_);
+        delete static_cast<CudaRealTransform3D*>(rt_backward_);
+    }
+    rt_forward_ = nullptr;
+    rt_backward_ = nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -294,7 +317,9 @@ void CudaFFT<T, DIM>::initPeriodicFFT()
     }
 
     cufft_error_check(cufftPlanMany(&plan_forward_, DIM, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1));
+    plan_forward_created_ = true;
     cufft_error_check(cufftPlanMany(&plan_backward_, DIM, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1));
+    plan_backward_created_ = true;
 }
 
 //------------------------------------------------------------------------------

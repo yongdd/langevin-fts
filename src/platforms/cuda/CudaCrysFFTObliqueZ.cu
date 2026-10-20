@@ -8,6 +8,7 @@
 #include <limits>
 #include <stdexcept>
 #include <mutex>
+#include <vector>
 
 #include "CudaCrysFFTObliqueZ.h"
 #include "CudaRealTransform.h"
@@ -96,32 +97,46 @@ CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(
       cell_para_(cell_para),
       recip_metric_(compute_recip_metric(cell_para))
 {
-    for (int d = 0; d < 3; ++d)
+    try
     {
-        if (nx_logical_[d] <= 0)
-            throw_with_line_number("CudaCrysFFTObliqueZ requires positive grid dimensions.");
+        for (int d = 0; d < 3; ++d)
+        {
+            if (nx_logical_[d] <= 0)
+                throw_with_line_number("CudaCrysFFTObliqueZ requires positive grid dimensions.");
+        }
+        if (nx_logical_[2] % 2 != 0)
+            throw_with_line_number("CudaCrysFFTObliqueZ requires even Nz.");
+
+        nx_physical_ = {nx_logical_[0], nx_logical_[1], nx_logical_[2] / 2};
+        M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+        M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+        M_complex_xy_ = nx_logical_[0] * (nx_logical_[1] / 2 + 1) * nx_physical_[2];
+        norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+
+        dct_forward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+        dct_backward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+
+        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_complex_),
+                                   sizeof(cufftDoubleComplex) * M_complex_xy_));
+        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_real_xy_),
+                                   sizeof(double) * M_physical_));
+
+        init_fft_xy();
     }
-    if (nx_logical_[2] % 2 != 0)
-        throw_with_line_number("CudaCrysFFTObliqueZ requires even Nz.");
-
-    nx_physical_ = {nx_logical_[0], nx_logical_[1], nx_logical_[2] / 2};
-    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
-    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
-    M_complex_xy_ = nx_logical_[0] * (nx_logical_[1] / 2 + 1) * nx_physical_[2];
-    norm_factor_ = 1.0 / static_cast<double>(M_logical_);
-
-    dct_forward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
-    dct_backward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
-
-    gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_complex_),
-                               sizeof(cufftDoubleComplex) * M_complex_xy_));
-    gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_real_xy_),
-                               sizeof(double) * M_physical_));
-
-    init_fft_xy();
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 
 CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
+{
+    release();
+}
+
+// Idempotent; tolerates a partly built object (null pointers, plans not created).
+void CudaCrysFFTObliqueZ::release()
 {
     freeBoltzmann();
     free_fft_xy();
@@ -214,7 +229,7 @@ void CudaCrysFFTObliqueZ::freeBoltzmann()
 
 void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
 {
-    double* h_boltz = new double[M_complex_xy_];
+    std::vector<double> h_boltz(M_complex_xy_);
 
     const double G11 = recip_metric_[0];
     const double G12 = recip_metric_[1];
@@ -284,9 +299,16 @@ void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
 
     double* d_boltz = nullptr;
     gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_complex_xy_));
-    gpu_error_check(cudaMemcpy(d_boltz, h_boltz, sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice));
-    d_boltzmann_[ds] = d_boltz;
-    delete[] h_boltz;
+    try
+    {
+        gpu_error_check(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice));
+        d_boltzmann_[ds] = d_boltz;
+    }
+    catch (...)
+    {
+        cudaFree(d_boltz);
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------

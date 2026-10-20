@@ -26,7 +26,7 @@
  * ```
  *
  * @see PropagatorComputationOptimizer for propagator dependency analysis
- * @see CudaComputationContinuous for multi-stream execution
+ * @see ComputationContinuous for the concurrent execution of a group
  */
 
 #ifndef SCHEDULER_H_

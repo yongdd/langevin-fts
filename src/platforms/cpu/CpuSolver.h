@@ -131,18 +131,6 @@ public:
     virtual void set_space_group(SpaceGroup* /*sg*/) {}
 
     /**
-     * @brief Reset internal solver state for a new propagator.
-     *
-     * Called when starting a new propagator computation to reset any
-     * internal state (e.g., for Global Richardson method which maintains
-     * independent full-step and half-step evolutions).
-     *
-     * Default implementation does nothing. Override in derived classes
-     * that maintain internal state between advance_propagator() calls.
-     */
-    virtual void reset_internal_state() {}
-
-    /**
      * @brief Update Laplacian operator for changed box dimensions.
      *
      * Called when box size changes (e.g., during stress relaxation).

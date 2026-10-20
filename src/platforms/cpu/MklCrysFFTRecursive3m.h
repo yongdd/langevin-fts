@@ -24,6 +24,9 @@ private:
 
     void init_fft_plans();
 
+    /// Free the DFTI descriptors (also after a failed construction); idempotent.
+    void release();
+
 public:
     MklCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,

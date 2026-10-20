@@ -32,7 +32,7 @@
  * - CudaSolverPseudoRQM4<std::complex<double>>: Complex field solver
  *
  * @see CudaPseudo for Boltzmann factors
- * @see CudaComputationContinuous for propagator orchestration
+ * @see ComputationContinuous for the order of the propagator computation
  */
 
 #include <iostream>
@@ -55,14 +55,20 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
                               /*q_full_in_factor=*/1, /*with_exp_dw_half=*/true,
                               /*complex_requires_periodic=*/true)
 {
+    // Null every workspace before anything can throw (see release_workspaces())
+    for(int i=0; i<MAX_STREAMS; i++)
+    {
+        d_q_step_1_one[i] = nullptr;
+        d_q_step_2_one[i] = nullptr;
+        d_q_step_1_two[i] = nullptr;
+        d_qk_in_2_one[i] = nullptr;
+        d_qk_in_1_two[i] = nullptr;
+        d_rk_in_1_one[i] = nullptr;
+        d_rk_in_2_one[i] = nullptr;
+    }
     try{
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        for(int i=0; i<n_streams; i++)
-        {
-            d_rk_in_1_one[i] = nullptr;
-            d_rk_in_2_one[i] = nullptr;
-        }
         if (!is_periodic_)
         {
             // Real coefficient buffers for the DCT/DST path
@@ -87,33 +93,44 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
     }
     catch(std::exception& exc)
     {
+        // This class's buffers only; the base destructor releases the rest
+        release_workspaces();
         throw_without_line_number(exc.what());
+    }
+    catch(...)
+    {
+        release_workspaces();
+        throw;
     }
 }
 template <typename T>
 CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
 {
+    release_workspaces();
+}
 
-    if (!is_periodic_)
+template <typename T>
+void CudaSolverPseudoRQM4<T>::release_workspaces()
+{
+    // Only this class's buffers; CudaSolverPseudoBase frees its own
+    auto free_device = [](auto*& d_ptr)
     {
-        // Free real coefficient buffers
-        for(int i=0; i<n_streams; i++)
-        {
-            if (d_rk_in_1_one[i] != nullptr) cudaFree(d_rk_in_1_one[i]);
-            if (d_rk_in_2_one[i] != nullptr) cudaFree(d_rk_in_2_one[i]);
-        }
-    }
-
-    // For pseudo-spectral: advance_propagator()
-    for(int i=0; i<n_streams; i++)
+        if (d_ptr != nullptr) cudaFree(d_ptr);
+        d_ptr = nullptr;
+    };
+    for(int i=0; i<MAX_STREAMS; i++)
     {
-        cudaFree(d_q_step_1_one[i]);
-        cudaFree(d_q_step_2_one[i]);
-        cudaFree(d_q_step_1_two[i]);
-        cudaFree(d_qk_in_2_one[i]);
-        cudaFree(d_qk_in_1_two[i]);
-    }
+        // Real coefficient buffers (non-periodic BC)
+        free_device(d_rk_in_1_one[i]);
+        free_device(d_rk_in_2_one[i]);
 
+        // For pseudo-spectral: advance_propagator()
+        free_device(d_q_step_1_one[i]);
+        free_device(d_q_step_2_one[i]);
+        free_device(d_q_step_1_two[i]);
+        free_device(d_qk_in_2_one[i]);
+        free_device(d_qk_in_1_two[i]);
+    }
 }
 
 template <typename T>

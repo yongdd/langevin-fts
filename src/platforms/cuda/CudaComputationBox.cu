@@ -54,7 +54,15 @@ CudaComputationBox<T>::CudaComputationBox(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
     : ComputationBox<T>(nx, lx, bc, mask)
 {
-    initialize();
+    try
+    {
+        initialize();
+    }
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 template <typename T>
 CudaComputationBox<T>::CudaComputationBox(
@@ -62,7 +70,15 @@ CudaComputationBox<T>::CudaComputationBox(
     std::vector<double> angles, const double* mask)
     : ComputationBox<T>(nx, lx, bc, angles, mask)
 {
-    initialize();
+    try
+    {
+        initialize();
+    }
+    catch (...)
+    {
+        release();
+        throw;
+    }
 }
 template <typename T>
 void CudaComputationBox<T>::initialize()
@@ -88,6 +104,12 @@ void CudaComputationBox<T>::initialize()
 template <typename T>
 CudaComputationBox<T>::~CudaComputationBox()
 {
+    release();
+}
+// Idempotent; cudaFree(nullptr) is a no-op, so a partly built box is fine.
+template <typename T>
+void CudaComputationBox<T>::release()
+{
     cudaFree(d_dv);
     cudaFree(d_multiple);
     cudaFree(d_sum);
@@ -95,6 +117,12 @@ CudaComputationBox<T>::~CudaComputationBox()
     cudaFree(d_temp_storage);
     if (d_orbit_counts_ != nullptr)
         cudaFree(d_orbit_counts_);
+    d_dv = nullptr;
+    d_multiple = nullptr;
+    d_sum = nullptr;
+    d_sum_out = nullptr;
+    d_temp_storage = nullptr;
+    d_orbit_counts_ = nullptr;
 }
 //-----------------------------------------------------------
 template <typename T>

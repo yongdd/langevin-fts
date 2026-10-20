@@ -49,6 +49,8 @@ private:
     void free_fft_xy();
     void generateBoltzmann(double ds);
     void freeBoltzmann();
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
 
 public:
     CudaCrysFFTObliqueZ(

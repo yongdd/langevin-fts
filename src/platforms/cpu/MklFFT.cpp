@@ -68,7 +68,16 @@ MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx)
         total_complex_grid_ = total_grid_;
     }
 
-    initPeriodicFFT();
+    try
+    {
+        initPeriodicFFT();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -136,6 +145,8 @@ MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DI
     }
     catch (std::exception& exc)
     {
+        // The destructor does not run for a partly constructed object
+        release();
         throw_without_line_number(exc.what());
     }
 }
@@ -146,10 +157,18 @@ MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DI
 template <typename T, int DIM>
 MklFFT<T, DIM>::~MklFFT()
 {
+    release();
+}
+
+template <typename T, int DIM>
+void MklFFT<T, DIM>::release()
+{
     if (hand_forward_ != nullptr)
         DftiFreeDescriptor(&hand_forward_);
     if (hand_backward_ != nullptr)
         DftiFreeDescriptor(&hand_backward_);
+    hand_forward_ = nullptr;
+    hand_backward_ = nullptr;
 
     // Free 1D FFT plans for DCT/DST
     for (auto& handle : dct_fft_forward_)
@@ -158,6 +177,8 @@ MklFFT<T, DIM>::~MklFFT()
     for (auto& handle : dct_fft_backward_)
         if (handle != nullptr)
             DftiFreeDescriptor(&handle);
+    dct_fft_forward_.clear();
+    dct_fft_backward_.clear();
 }
 
 //------------------------------------------------------------------------------

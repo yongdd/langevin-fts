@@ -65,13 +65,14 @@
  * **Created Object Types:**
  *
  * - CudaComputationBox: Grid and integration on GPU
- * - CudaComputationContinuous/Discrete: GPU propagator solvers
+ * - Propagator computations (ComputationContinuous, ComputationDiscrete and
+ *   their reduce-memory variants) with the CUDA backend
  * - CudaAndersonMixing: GPU iteration accelerator
  *
  * **Memory Management:**
  *
  * When reduce_memory=true:
- * - Uses CudaComputationReduceMemoryContinuous/Discrete
+ * - Uses the reduce-memory propagator computations
  * - Uses CudaAndersonMixingReduceMemory
  * - Stores propagator history in pinned host memory
  * - Overlaps kernel execution with async memory transfers
@@ -137,8 +138,9 @@ public :
     /**
      * @brief Create CUDA propagator computation solver.
      *
-     * Creates CudaComputationContinuous, CudaComputationDiscrete, or their
-     * reduce-memory variants based on chain model, memory mode, and numerical method.
+     * Creates ComputationContinuous, ComputationDiscrete, or their reduce-memory
+     * variants with the CUDA backend, based on chain model, memory mode, and
+     * numerical method.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

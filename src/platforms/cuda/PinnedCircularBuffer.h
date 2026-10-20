@@ -14,9 +14,8 @@
  *
  * **Memory-Saving Mode:**
  *
- * Used by CudaAndersonMixingReduceMemory and
- * CudaComputationReduceMemoryContinuous/Discrete to store propagator
- * history in host memory when GPU memory is limited.
+ * Used by CudaAndersonMixingReduceMemory to store the field history in host
+ * memory when GPU memory is limited.
  *
  * **Usage Pattern:**
  *

@@ -32,15 +32,31 @@ MklCrysFFTObliqueZ::MklCrysFFTObliqueZ(
     std::array<double, 9> trans_part)
     : Base(nx_logical, cell_para, trans_part)
 {
-    initFFTPlans();
+    try
+    {
+        initFFTPlans();
+    }
+    catch (...)
+    {
+        // The destructor does not run for a partly constructed object
+        release();
+        throw;
+    }
 }
 
 MklCrysFFTObliqueZ::~MklCrysFFTObliqueZ()
+{
+    release();
+}
+
+void MklCrysFFTObliqueZ::release()
 {
     if (plan_dct_forward_z_) DftiFreeDescriptor(&plan_dct_forward_z_);
     if (plan_dct_backward_z_) DftiFreeDescriptor(&plan_dct_backward_z_);
     if (plan_fft_forward_xy_) DftiFreeDescriptor(&plan_fft_forward_xy_);
     if (plan_fft_backward_xy_) DftiFreeDescriptor(&plan_fft_backward_xy_);
+    plan_dct_forward_z_ = plan_dct_backward_z_ = nullptr;
+    plan_fft_forward_xy_ = plan_fft_backward_xy_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

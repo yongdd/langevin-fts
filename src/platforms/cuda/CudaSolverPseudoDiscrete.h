@@ -90,6 +90,9 @@ private:
     double *d_rk_in_2_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST); nullptr when periodic
     /// @}
 
+    /// Free the buffers above (idempotent; safe on a partly built object).
+    void release_workspaces();
+
 public:
     /**
      * @brief Construct GPU pseudo-spectral solver for discrete chains.

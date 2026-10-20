@@ -98,6 +98,9 @@ private:
     /// Free cached stress multiplier arrays.
     void freeMultiplierCaches();
 
+    /// Free everything acquired so far (idempotent; also used when the constructor throws).
+    void release();
+
     /// Compute per-axis k² arrays on the physical grid (host).
     void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
 
