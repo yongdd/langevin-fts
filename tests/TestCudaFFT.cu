@@ -40,9 +40,9 @@ int main()
         cufftPlanMany(&plan_for, 1, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, 1);
 
         d_data_init = new double*[2];
-        gpu_error_check(cudaMalloc((void**)&d_data_init[0], sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_data_init[1], sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_data_k, sizeof(cufftDoubleComplex)*M_COMPLEX));
+        CUDA_CHECK(cudaMalloc((void**)&d_data_init[0], sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_data_init[1], sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_data_k, sizeof(cufftDoubleComplex)*M_COMPLEX));
 
         //---------------- Forward --------------------
         std::cout<< "Running FFT 1D" << std::endl;

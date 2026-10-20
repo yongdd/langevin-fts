@@ -19,22 +19,22 @@ int main()
         double array_sum;
 
         array_sum = 0.0;
-        gpu_error_check(cudaMalloc((void**)&d_array, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
-        gpu_error_check(cudaMemcpy(d_array, array, sizeof(double)*M, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMalloc((void**)&d_array, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
+        CUDA_CHECK(cudaMemcpy(d_array, array, sizeof(double)*M, cudaMemcpyHostToDevice));
 
         // It seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu],
         // If d_temp_storage[gpu]=nullptr and temp_storage_bytes[gpu]=0.
         d_temp_storage = nullptr;
         temp_storage_bytes = 0;
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
-        gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
+        CUDA_CHECK(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
-        gpu_error_check(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
         std::cout << "gpu, array_sum 0: " << 0 << ", " << array_sum << std::endl;
 
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
-        gpu_error_check(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
         std::cout << "gpu, array_sum 1: " << 0 << ", " << array_sum << std::endl;
 
         cudaFree(d_array);

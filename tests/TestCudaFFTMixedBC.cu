@@ -42,8 +42,8 @@ int main()
         // GPU buffers
         double* d_data_r;
         double* d_data_k;
-        gpu_error_check(cudaMalloc((void**)&d_data_r, sizeof(double) * N));
-        gpu_error_check(cudaMalloc((void**)&d_data_k, sizeof(double) * N));
+        CUDA_CHECK(cudaMalloc((void**)&d_data_r, sizeof(double) * N));
+        CUDA_CHECK(cudaMalloc((void**)&d_data_k, sizeof(double) * N));
 
         //=======================================================================
         // Test 0: 1D Odd N DCT Round-trip
@@ -67,7 +67,7 @@ int main()
         CudaFFT<double, 1> fft_dct(nx_1d, bc_reflect);
 
         // Copy input to device
-        gpu_error_check(cudaMemcpy(d_data_r, data_init.data(),
+        CUDA_CHECK(cudaMemcpy(d_data_r, data_init.data(),
                                    sizeof(double) * N, cudaMemcpyHostToDevice));
 
         // Forward DCT-II
@@ -77,7 +77,7 @@ int main()
         fft_dct.backward(d_data_k, d_data_r);
 
         // Copy result back to host
-        gpu_error_check(cudaMemcpy(data_r.data(), d_data_r,
+        CUDA_CHECK(cudaMemcpy(data_r.data(), d_data_r,
                                    sizeof(double) * N, cudaMemcpyDeviceToHost));
 
         for (int i = 0; i < N; ++i)
@@ -103,7 +103,7 @@ int main()
         CudaFFT<double, 1> fft_dst(nx_1d, bc_absorb);
 
         // Copy input to device
-        gpu_error_check(cudaMemcpy(d_data_r, data_init.data(),
+        CUDA_CHECK(cudaMemcpy(d_data_r, data_init.data(),
                                    sizeof(double) * N, cudaMemcpyHostToDevice));
 
         // Forward DST-II
@@ -113,7 +113,7 @@ int main()
         fft_dst.backward(d_data_k, d_data_r);
 
         // Copy result back to host
-        gpu_error_check(cudaMemcpy(data_r.data(), d_data_r,
+        CUDA_CHECK(cudaMemcpy(data_r.data(), d_data_r,
                                    sizeof(double) * N, cudaMemcpyDeviceToHost));
 
         for (int i = 0; i < N; ++i)
@@ -143,13 +143,13 @@ int main()
             random_data[i] = dist(gen);
 
         // DCT round-trip
-        gpu_error_check(cudaMemcpy(d_data_r, random_data.data(),
+        CUDA_CHECK(cudaMemcpy(d_data_r, random_data.data(),
                                    sizeof(double) * N, cudaMemcpyHostToDevice));
 
         fft_dct.forward(d_data_r, d_data_k);
         fft_dct.backward(d_data_k, d_data_r);
 
-        gpu_error_check(cudaMemcpy(data_r.data(), d_data_r,
+        CUDA_CHECK(cudaMemcpy(data_r.data(), d_data_r,
                                    sizeof(double) * N, cudaMemcpyDeviceToHost));
 
         for (int i = 0; i < N; ++i)
@@ -166,13 +166,13 @@ int main()
         }
 
         // DST round-trip
-        gpu_error_check(cudaMemcpy(d_data_r, random_data.data(),
+        CUDA_CHECK(cudaMemcpy(d_data_r, random_data.data(),
                                    sizeof(double) * N, cudaMemcpyHostToDevice));
 
         fft_dst.forward(d_data_r, d_data_k);
         fft_dst.backward(d_data_k, d_data_r);
 
-        gpu_error_check(cudaMemcpy(data_r.data(), d_data_r,
+        CUDA_CHECK(cudaMemcpy(data_r.data(), d_data_r,
                                    sizeof(double) * N, cudaMemcpyDeviceToHost));
 
         for (int i = 0; i < N; ++i)
@@ -207,20 +207,20 @@ int main()
 
         double* d_data2d_r;
         double* d_data2d_k;
-        gpu_error_check(cudaMalloc((void**)&d_data2d_r, sizeof(double) * M));
-        gpu_error_check(cudaMalloc((void**)&d_data2d_k, sizeof(double) * M));
+        CUDA_CHECK(cudaMalloc((void**)&d_data2d_r, sizeof(double) * M));
+        CUDA_CHECK(cudaMalloc((void**)&d_data2d_k, sizeof(double) * M));
 
         std::array<int, 2> nx_2d = {NX, NY};
         std::array<BoundaryCondition, 2> bc_2d = {BoundaryCondition::REFLECTING, BoundaryCondition::ABSORBING};
         CudaFFT<double, 2> fft_2d(nx_2d, bc_2d);
 
-        gpu_error_check(cudaMemcpy(d_data2d_r, data2d_init.data(),
+        CUDA_CHECK(cudaMemcpy(d_data2d_r, data2d_init.data(),
                                    sizeof(double) * M, cudaMemcpyHostToDevice));
 
         fft_2d.forward(d_data2d_r, d_data2d_k);
         fft_2d.backward(d_data2d_k, d_data2d_r);
 
-        gpu_error_check(cudaMemcpy(data2d_r.data(), d_data2d_r,
+        CUDA_CHECK(cudaMemcpy(data2d_r.data(), d_data2d_r,
                                    sizeof(double) * M, cudaMemcpyDeviceToHost));
 
         std::vector<double> diff_sq_2d(M);
@@ -258,8 +258,8 @@ int main()
 
         double* d_data3d_r;
         double* d_data3d_k;
-        gpu_error_check(cudaMalloc((void**)&d_data3d_r, sizeof(double) * M3));
-        gpu_error_check(cudaMalloc((void**)&d_data3d_k, sizeof(double) * M3));
+        CUDA_CHECK(cudaMalloc((void**)&d_data3d_r, sizeof(double) * M3));
+        CUDA_CHECK(cudaMalloc((void**)&d_data3d_k, sizeof(double) * M3));
 
         std::array<int, 3> nx_3d = {NX3, NY3, NZ3};
         std::array<BoundaryCondition, 3> bc_3d = {
@@ -269,13 +269,13 @@ int main()
         };
         CudaFFT<double, 3> fft_3d(nx_3d, bc_3d);
 
-        gpu_error_check(cudaMemcpy(d_data3d_r, data3d_init.data(),
+        CUDA_CHECK(cudaMemcpy(d_data3d_r, data3d_init.data(),
                                    sizeof(double) * M3, cudaMemcpyHostToDevice));
 
         fft_3d.forward(d_data3d_r, d_data3d_k);
         fft_3d.backward(d_data3d_k, d_data3d_r);
 
-        gpu_error_check(cudaMemcpy(data3d_r.data(), d_data3d_r,
+        CUDA_CHECK(cudaMemcpy(data3d_r.data(), d_data3d_r,
                                    sizeof(double) * M3, cudaMemcpyDeviceToHost));
 
         std::vector<double> diff_sq_3d(M3);

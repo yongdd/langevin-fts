@@ -297,16 +297,16 @@ int main(int argc, char** argv)
     crys_pmmm.set_contour_step(coeff);
 
     double *d_pmmm_in{}, *d_pmmm_out{};
-    gpu_error_check(cudaMalloc(&d_pmmm_in, sizeof(double) * M_phys));
-    gpu_error_check(cudaMalloc(&d_pmmm_out, sizeof(double) * M_phys));
-    gpu_error_check(cudaMemcpy(d_pmmm_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_pmmm_in, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMalloc(&d_pmmm_out, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMemcpy(d_pmmm_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
 
     for (int i = 0; i < warmup; ++i)
     {
         crys_pmmm.diffusion(d_pmmm_in, d_pmmm_out);
         std::swap(d_pmmm_in, d_pmmm_out);
     }
-    gpu_error_check(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     float ms_pmmm = time_cuda_events([&](){
         crys_pmmm.diffusion(d_pmmm_in, d_pmmm_out);
@@ -326,16 +326,16 @@ int main(int argc, char** argv)
     crys_3m.set_contour_step(coeff);
 
     double *d_3m_in{}, *d_3m_out{};
-    gpu_error_check(cudaMalloc(&d_3m_in, sizeof(double) * M_phys));
-    gpu_error_check(cudaMalloc(&d_3m_out, sizeof(double) * M_phys));
-    gpu_error_check(cudaMemcpy(d_3m_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_3m_in, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMalloc(&d_3m_out, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMemcpy(d_3m_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
 
     for (int i = 0; i < warmup; ++i)
     {
         crys_3m.diffusion(d_3m_in, d_3m_out);
         std::swap(d_3m_in, d_3m_out);
     }
-    gpu_error_check(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     float ms_3m = time_cuda_events([&](){
         crys_3m.diffusion(d_3m_in, d_3m_out);
@@ -345,9 +345,9 @@ int main(int argc, char** argv)
     // === Full FFT (cuFFT D2Z/Z2D) ===
     double* d_full{};
     cufftDoubleComplex* d_freq{};
-    gpu_error_check(cudaMalloc(&d_full, sizeof(double) * M_full));
-    gpu_error_check(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex) * M_complex));
-    gpu_error_check(cudaMemcpy(d_full, h_full.data(), sizeof(double) * M_full, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_full, sizeof(double) * M_full));
+    CUDA_CHECK(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex) * M_complex));
+    CUDA_CHECK(cudaMemcpy(d_full, h_full.data(), sizeof(double) * M_full, cudaMemcpyHostToDevice));
 
     cufftHandle plan_fwd{}, plan_bwd{};
     int n[3] = {Nx, Ny, Nz};
@@ -363,7 +363,7 @@ int main(int argc, char** argv)
         ker_apply_boltzmann<<<blocks, 256>>>(d_freq, Lx, Ly, Lz, Nx, Ny, Nz/2+1, coeff, norm);
         cufftExecZ2D(plan_bwd, d_freq, d_full);
     }
-    gpu_error_check(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     float ms_off = time_cuda_events([&](){
         cufftExecD2Z(plan_fwd, d_full, d_freq);
@@ -513,16 +513,16 @@ int main(int argc, char** argv)
         crys_hex.set_contour_step(coeff);
 
         double *d_hex_in{}, *d_hex_out{};
-        gpu_error_check(cudaMalloc(&d_hex_in, sizeof(double) * M_hex_phys));
-        gpu_error_check(cudaMalloc(&d_hex_out, sizeof(double) * M_hex_phys));
-        gpu_error_check(cudaMemcpy(d_hex_in, h_hex_phys.data(), sizeof(double) * M_hex_phys, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMalloc(&d_hex_in, sizeof(double) * M_hex_phys));
+        CUDA_CHECK(cudaMalloc(&d_hex_out, sizeof(double) * M_hex_phys));
+        CUDA_CHECK(cudaMemcpy(d_hex_in, h_hex_phys.data(), sizeof(double) * M_hex_phys, cudaMemcpyHostToDevice));
 
         for (int i = 0; i < warmup; ++i)
         {
             crys_hex.diffusion(d_hex_in, d_hex_out);
             std::swap(d_hex_in, d_hex_out);
         }
-        gpu_error_check(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         float ms_hex = time_cuda_events([&](){
             crys_hex.diffusion(d_hex_in, d_hex_out);
@@ -537,11 +537,11 @@ int main(int argc, char** argv)
         double* d_hex_full{};
         cufftDoubleComplex* d_hex_freq{};
         double* d_boltz{};
-        gpu_error_check(cudaMalloc(&d_hex_full, sizeof(double) * M_full));
-        gpu_error_check(cudaMalloc(&d_hex_freq, sizeof(cufftDoubleComplex) * M_complex));
-        gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_complex));
-        gpu_error_check(cudaMemcpy(d_hex_full, h_full.data(), sizeof(double) * M_full, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_boltz, boltz_hex.data(), sizeof(double) * M_complex, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMalloc(&d_hex_full, sizeof(double) * M_full));
+        CUDA_CHECK(cudaMalloc(&d_hex_freq, sizeof(cufftDoubleComplex) * M_complex));
+        CUDA_CHECK(cudaMalloc(&d_boltz, sizeof(double) * M_complex));
+        CUDA_CHECK(cudaMemcpy(d_hex_full, h_full.data(), sizeof(double) * M_full, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_boltz, boltz_hex.data(), sizeof(double) * M_complex, cudaMemcpyHostToDevice));
 
         cufftHandle plan_hex_fwd{}, plan_hex_bwd{};
         int n_hex[3] = {Nx, Ny, Nz};
@@ -555,7 +555,7 @@ int main(int argc, char** argv)
             ker_apply_boltzmann_lut<<<blocks_hex, 256>>>(d_hex_freq, d_boltz, M_complex);
             cufftExecZ2D(plan_hex_bwd, d_hex_freq, d_hex_full);
         }
-        gpu_error_check(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         float ms_hex_off = time_cuda_events([&](){
             cufftExecD2Z(plan_hex_fwd, d_hex_full, d_hex_freq);

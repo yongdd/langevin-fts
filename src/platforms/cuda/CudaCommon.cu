@@ -103,8 +103,8 @@ void CudaCommon::set(int n_blocks, int n_threads, int process_idx)
     this->n_threads = n_threads;
 
     // Change GPU setting
-    gpu_error_check(cudaGetDeviceCount(&devices_count));
-    gpu_error_check(cudaSetDevice(process_idx%devices_count));
+    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
+    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
 }
 int CudaCommon::get_n_blocks()
 {
@@ -143,8 +143,8 @@ void CudaCommon::set_idx(int process_idx)
     int devices_count;
 
     // Change GPU setting
-    gpu_error_check(cudaGetDeviceCount(&devices_count));
-    gpu_error_check(cudaSetDevice(process_idx%devices_count));
+    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
+    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
 }
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M)

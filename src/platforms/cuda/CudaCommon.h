@@ -209,13 +209,13 @@ public:
 };
 
 /**
- * @def gpu_error_check
+ * @def CUDA_CHECK
  * @brief Macro for CUDA error checking with source location.
  *
  * Wraps CUDA API calls and throws an exception on error. Every call that
  * returns an error code is checked, and every kernel launch is followed by
- * gpu_error_check(cudaGetLastError()), as the CUDA C++ Best Practices Guide
- * (2.3) recommends: the check is a host-side read that does not synchronize,
+ * CUDA_CHECK_LAUNCH(), as the CUDA C++ Best Practices Guide (2.3)
+ * recommends: the check is a host-side read that does not synchronize,
  * and cudaGetLastError() clears the slot, so an error is reported at the
  * launch that caused it and not again by a later, unrelated check. Errors of
  * a running kernel (e.g. an illegal address) surface at the next synchronizing
@@ -225,13 +225,22 @@ public:
  *
  * @example
  * @code
- * gpu_error_check(cudaMalloc(&ptr, size));
- * gpu_error_check(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
+ * CUDA_CHECK(cudaMalloc(&ptr, size));
+ * CUDA_CHECK(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
  * ker_scale<<<blocks, threads, 0, stream>>>(d_x, 2.0, n);
- * gpu_error_check(cudaGetLastError());
+ * CUDA_CHECK_LAUNCH();
  * @endcode
  */
-#define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__)
+#define CUDA_CHECK(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__)
+
+/**
+ * @def CUDA_CHECK_LAUNCH
+ * @brief Check the kernel launch just issued: CUDA_CHECK(cudaGetLastError()).
+ *
+ * Kernel launches return void; a bad launch (configuration, shared memory)
+ * is only recorded in the error slot. Put this right after every launch.
+ */
+#define CUDA_CHECK_LAUNCH() CUDA_CHECK(cudaGetLastError())
 
 /// Throw the exception for a failed CUDA call (out of line: only the error path pays).
 [[noreturn]] void report_cuda_error(cudaError_t code, const char *file, int line, const char *func);
@@ -251,7 +260,7 @@ inline void throw_on_cuda_error(cudaError_t code, const char *file, int line, co
 }
 
 /**
- * @def cufft_error_check
+ * @def CUFFT_CHECK
  * @brief Macro for cuFFT error checking with source location.
  *
  * Wraps cuFFT API calls (plan creation, cufftSetStream, cufftExec*) and
@@ -259,11 +268,11 @@ inline void throw_on_cuda_error(cudaError_t code, const char *file, int line, co
  *
  * @example
  * @code
- * cufft_error_check(cufftPlanMany(&plan, ...));
- * cufft_error_check(cufftExecD2Z(plan, in, out));
+ * CUFFT_CHECK(cufftPlanMany(&plan, ...));
+ * CUFFT_CHECK(cufftExecD2Z(plan, in, out));
  * @endcode
  */
-#define cufft_error_check(code) throw_on_cufft_error((code), __FILE__, __LINE__, __func__)
+#define CUFFT_CHECK(code) throw_on_cufft_error((code), __FILE__, __LINE__, __func__)
 
 /// Blocks for a grid-stride kernel over n elements: enough to cover n, capped at
 /// MAX_GRID_THREADS threads in total (the kernels loop over the rest), so that
@@ -568,7 +577,7 @@ public:
         if (countdown.load(std::memory_order_relaxed) >= 0 && countdown.fetch_sub(1) == 0)
             throw_with_line_number("CudaBuffer: injected allocation failure (test hook)");
         void* p = nullptr;
-        gpu_error_check(Memory::allocate(&p, sizeof(T) * count));
+        CUDA_CHECK(Memory::allocate(&p, sizeof(T) * count));
         ptr_ = static_cast<T*>(p);
         count_ = count;
         Memory::counters().live_count.fetch_add(1, std::memory_order_relaxed);

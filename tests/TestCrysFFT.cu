@@ -270,22 +270,22 @@ bool test_cuda(int Nx, int Ny, int Nz, double ds)
     crys.set_contour_step(ds);
 
     double *d_in, *d_out;
-    gpu_error_check(cudaMalloc(&d_in, sizeof(double)*M_physical));
-    gpu_error_check(cudaMalloc(&d_out, sizeof(double)*M_physical));
-    gpu_error_check(cudaMemcpy(d_in, h_phys.data(), sizeof(double)*M_physical, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_in, sizeof(double)*M_physical));
+    CUDA_CHECK(cudaMalloc(&d_out, sizeof(double)*M_physical));
+    CUDA_CHECK(cudaMemcpy(d_in, h_phys.data(), sizeof(double)*M_physical, cudaMemcpyHostToDevice));
 
     crys.diffusion(d_in, d_out);
     cudaDeviceSynchronize();
 
     std::vector<double> h_crys_out(M_physical);
-    gpu_error_check(cudaMemcpy(h_crys_out.data(), d_out, sizeof(double)*M_physical, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_crys_out.data(), d_out, sizeof(double)*M_physical, cudaMemcpyDeviceToHost));
     cudaFree(d_in); cudaFree(d_out);
 
     // Standard cuFFT
     double *d_full; cufftDoubleComplex *d_freq;
-    gpu_error_check(cudaMalloc(&d_full, sizeof(double)*M_logical));
-    gpu_error_check(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex)*M_complex));
-    gpu_error_check(cudaMemcpy(d_full, h_logical.data(), sizeof(double)*M_logical, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_full, sizeof(double)*M_logical));
+    CUDA_CHECK(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex)*M_complex));
+    CUDA_CHECK(cudaMemcpy(d_full, h_logical.data(), sizeof(double)*M_logical, cudaMemcpyHostToDevice));
 
     cufftHandle fwd, bwd;
     int n[3] = {Nx, Ny, Nz};
@@ -298,7 +298,7 @@ bool test_cuda(int Nx, int Ny, int Nz, double ds)
     cudaDeviceSynchronize();
 
     std::vector<double> h_std_out(M_logical);
-    gpu_error_check(cudaMemcpy(h_std_out.data(), d_full, sizeof(double)*M_logical, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_std_out.data(), d_full, sizeof(double)*M_logical, cudaMemcpyDeviceToHost));
     cufftDestroy(fwd); cufftDestroy(bwd);
     cudaFree(d_full); cudaFree(d_freq);
 
@@ -424,12 +424,12 @@ bool test_recursive3m(const char* symbol, int hall, int Nx, int Ny, int Nz,
         CudaCrysFFTRecursive3m crys({Nx, Ny, Nz}, cell, trans);
         crys.set_contour_step(ds);
         double *d_in, *d_out;
-        gpu_error_check(cudaMalloc(&d_in, sizeof(double) * M_physical));
-        gpu_error_check(cudaMalloc(&d_out, sizeof(double) * M_physical));
-        gpu_error_check(cudaMemcpy(d_in, q_phys.data(), sizeof(double) * M_physical, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMalloc(&d_in, sizeof(double) * M_physical));
+        CUDA_CHECK(cudaMalloc(&d_out, sizeof(double) * M_physical));
+        CUDA_CHECK(cudaMemcpy(d_in, q_phys.data(), sizeof(double) * M_physical, cudaMemcpyHostToDevice));
         crys.diffusion(d_in, d_out);
         cudaDeviceSynchronize();
-        gpu_error_check(cudaMemcpy(got.data(), d_out, sizeof(double) * M_physical, cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(got.data(), d_out, sizeof(double) * M_physical, cudaMemcpyDeviceToHost));
         cudaFree(d_in);
         cudaFree(d_out);
         double rel = max_rel(got);
@@ -484,13 +484,13 @@ bool test_recursive3m(const char* symbol, int hall, int Nx, int Ny, int Nz,
         {
             CudaCrysFFTRecursive3m crys({Nx, Ny, Nz}, cell, trans);
             double *d_in, *d_out;
-            gpu_error_check(cudaMalloc(&d_in, sizeof(double) * M_physical));
-            gpu_error_check(cudaMalloc(&d_out, sizeof(double) * M_physical));
-            gpu_error_check(cudaMemcpy(d_in, q_phys.data(), sizeof(double) * M_physical, cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMalloc(&d_in, sizeof(double) * M_physical));
+            CUDA_CHECK(cudaMalloc(&d_out, sizeof(double) * M_physical));
+            CUDA_CHECK(cudaMemcpy(d_in, q_phys.data(), sizeof(double) * M_physical, cudaMemcpyHostToDevice));
             crys.apply_multiplier(d_in, d_out,
                                   CudaCrysFFTRecursive3m::MultiplierType::ExpKx2, ds, 0);
             cudaDeviceSynchronize();
-            gpu_error_check(cudaMemcpy(got.data(), d_out, sizeof(double) * M_physical, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(got.data(), d_out, sizeof(double) * M_physical, cudaMemcpyDeviceToHost));
             cudaFree(d_in);
             cudaFree(d_out);
             double rel = max_rel_m(got);

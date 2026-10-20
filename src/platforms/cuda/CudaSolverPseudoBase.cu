@@ -134,9 +134,9 @@ void launch_stress_dyads(TD* out, TD* partial, const TD* integrand, const Stress
     // About two elements per thread, at most STRESS_MAX_BLOCKS blocks
     const int n_partial = std::max(1, std::min(STRESS_MAX_BLOCKS, (M + 2 * STRESS_THREADS - 1) / (2 * STRESS_THREADS)));
     ker_stress_dyad_partials<TD, NC><<<n_partial, STRESS_THREADS, 0, stream>>>(partial, integrand, bases, factor, M);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
     ker_stress_dyad_finalize<TD, NC><<<1, STRESS_THREADS, 0, stream>>>(out, partial, n_partial);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }
 
 template <typename TD>
@@ -284,7 +284,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         {
             // the first call only queries the size of the CUB scratch
             temp_storage_bytes[i] = 0;
-            gpu_error_check(cuda_reduce_sum(nullptr, temp_storage_bytes[i], d_stress_sum[i].get(), d_stress_sum_out[i].get(), M_COMPLEX, streams[i][0]));
+            CUDA_CHECK(cuda_reduce_sum(nullptr, temp_storage_bytes[i], d_stress_sum[i].get(), d_stress_sum_out[i].get(), M_COMPLEX, streams[i][0]));
             d_temp_storage[i].allocate(temp_storage_bytes[i]);
         }
 
@@ -363,12 +363,12 @@ void CudaSolverPseudoBase<T>::init_fft()
         {
             for (int b = 0; b < max_fft_batch_; b++)
             {
-                cufft_error_check(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1));
+                CUFFT_CHECK(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1));
                 plan_for_created_[i][b] = true;
-                cufft_error_check(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1));
+                CUFFT_CHECK(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1));
                 plan_bak_created_[i][b] = true;
-                cufft_error_check(cufftSetStream(plan_for_[i][b], streams[i][0]));
-                cufft_error_check(cufftSetStream(plan_bak_[i][b], streams[i][0]));
+                CUFFT_CHECK(cufftSetStream(plan_for_[i][b], streams[i][0]));
+                CUFFT_CHECK(cufftSetStream(plan_bak_[i][b], streams[i][0]));
             }
         }
     }
@@ -404,13 +404,13 @@ void CudaSolverPseudoBase<T>::init_fft()
 template <typename T>
 void CudaSolverPseudoBase<T>::fft_forward(int stream, CuDeviceData<T>* d_in, cuDoubleComplex* d_out, int batch)
 {
-    cufft_error_check(cufft_exec_forward(plan_for_[stream][batch - 1], d_in, d_out));
+    CUFFT_CHECK(cufft_exec_forward(plan_for_[stream][batch - 1], d_in, d_out));
 }
 
 template <typename T>
 void CudaSolverPseudoBase<T>::fft_backward(int stream, cuDoubleComplex* d_in, CuDeviceData<T>* d_out, int batch)
 {
-    cufft_error_check(cufft_exec_backward(plan_bak_[stream][batch - 1], d_in, d_out));
+    CUFFT_CHECK(cufft_exec_backward(plan_bak_[stream][batch - 1], d_in, d_out));
 }
 
 template <typename T>
@@ -547,16 +547,16 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
     {
         d_crysfft_phys_to_reduced_.allocate(map.M_phys);
         d_crysfft_reduced_to_phys_.allocate(map.M_reduced);
-        gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, map.phys_to_reduced.data(),
+        CUDA_CHECK(cudaMemcpy(d_crysfft_phys_to_reduced_, map.phys_to_reduced.data(),
                                    sizeof(int) * map.M_phys, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, map.reduced_to_phys.data(),
+        CUDA_CHECK(cudaMemcpy(d_crysfft_reduced_to_phys_, map.reduced_to_phys.data(),
                                    sizeof(int) * map.M_reduced, cudaMemcpyHostToDevice));
     }
 
     // Orbit counts for the CrysFFT stress fast path
     const auto& orbit_counts = space_group_->get_orbit_counts();
     d_crysfft_orbit_counts_.allocate(map.M_reduced);
-    gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
+    CUDA_CHECK(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
                                sizeof(int) * map.M_reduced, cudaMemcpyHostToDevice));
 
     const auto nx = cb->get_nx();
@@ -666,10 +666,10 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
                     {
                         // Expand reduced basis -> full grid on device
                         ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_full, w, d_full_to_reduced_map_, M);
-                        gpu_error_check(cudaGetLastError());
+                        CUDA_CHECK_LAUNCH();
                         if (with_half)
                             ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_half, w, d_full_to_reduced_map_, M);
-                        gpu_error_check(cudaGetLastError());
+                        CUDA_CHECK_LAUNCH();
                     }
                     else
                     {
@@ -694,20 +694,20 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
                         }
                     }
                     // Copy field configurations to the device
-                    gpu_error_check(cudaMemcpyAsync(d_full, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
+                    CUDA_CHECK(cudaMemcpyAsync(d_full, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
                     if (with_half)
-                        gpu_error_check(cudaMemcpyAsync(d_half, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
+                        CUDA_CHECK(cudaMemcpyAsync(d_half, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
                 }
 
                 // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>(d_full, d_full, 1.0, -factor*local_ds, M_use);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 if (with_half)
                     ker_exp<<<N_BLOCKS, N_THREADS>>>(d_half, d_half, 1.0, -factor_half*local_ds, M_use);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
             }
         }
-        gpu_error_check(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
     {
@@ -833,10 +833,10 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
             {
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     scratch.pair_full, d_q_pair, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     &scratch.pair_full[M], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 d_q_pair_full = scratch.pair_full;
             }
             else
@@ -849,7 +849,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         {
             // Periodic BC: batched forward FFT of both propagators
             fft_forward(STREAM, d_q_pair_full, scratch.qk_pair, 2);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
 
             // [type-specific algorithm] Real fields store the Hermitian half-spectrum, so the
             // conjugate product is formed directly; complex fields need the -k index map.
@@ -861,11 +861,11 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
                 // Gather q2(-k) into a separate buffer: an in-place gather through the
                 // k -> -k map (an involution) would race.
                 ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj_[STREAM], &scratch.qk_pair[M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &scratch.qk_pair[0], d_qk_conj_[STREAM], 1.0, M_COMPLEX);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
             }
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
         else
         {
@@ -893,7 +893,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
                 // (All dimensions are r2r here: mixed periodic/non-periodic is rejected.)
                 const double dct_scale = std::pow(0.25, DIM);
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], scratch.rk_1, scratch.rk_2, dct_scale, M_COMPLEX);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
             }
         }
 
@@ -902,7 +902,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         if (_d_boltz_bond != nullptr)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
 
         // fourier_basis arrays contain v⊗v dyad components of the deformation
@@ -972,7 +972,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         // One pass over k for all components, then the block partials in block order
         launch_stress_dyads(d_segment_stress, d_stress_partial_[STREAM].get(), d_q_multi[STREAM].get(), bases, n_comp,
                             basis_factor, M_COMPLEX, streams[STREAM][0]);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
     }
     catch(std::exception& exc)
     {

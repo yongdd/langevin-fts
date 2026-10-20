@@ -76,9 +76,9 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
         // Allocate memory for cub reduction sum (the first call only queries the size)
         d_sum_out.allocate(1);
         if constexpr (std::is_same<T, double>::value)
-            gpu_error_check(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
+            CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
         else
-            gpu_error_check(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+            CUDA_CHECK(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
         d_temp_storage.allocate(temp_storage_bytes);
 
         // Reset_count
@@ -124,7 +124,7 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
         const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         
-        gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv, sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_w_deriv, w_deriv, sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
         //printf("this->mix: %f\n", this->mix);
         // Condition to start anderson mixing
         if(error_level < this->start_error || this->n_anderson >= 0)
@@ -141,14 +141,14 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
             for(int i=0; i<= this->n_anderson; i++)
             {
-                gpu_error_check(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
                 ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, this->n_var);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 if constexpr (std::is_same<T, double>::value)
-                    gpu_error_check(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
+                    CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
                 else
-                    gpu_error_check(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-                gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+                CUDA_CHECK(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
             //print_array(this->max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots.data());
@@ -189,32 +189,32 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             this->find_an(u_nm.data(), v_n.data(), a_n.data(), this->n_anderson);
 
             // Calculate the new field
-            gpu_error_check(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
 
-            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(T)*this->n_var, cudaMemcpyDeviceToDevice));
+            CUDA_CHECK(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(T)*this->n_var, cudaMemcpyDeviceToDevice));
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
             for(int i=0; i<this->n_anderson; i++)
             {
-                gpu_error_check(cudaMemcpy(d_w_hist2,       pinned_cb_w_hist->get_array(i+1),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_w_deriv_hist2, pinned_cb_w_deriv_hist->get_array(i+1), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_w_hist2,       pinned_cb_w_hist->get_array(i+1),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_w_deriv_hist2, pinned_cb_w_deriv_hist->get_array(i+1), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
                 if constexpr (std::is_same<T, double>::value)
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                 }
                 else
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_hist2,       stdToCuDoubleComplex(-a_n[i]), d_w_hist1,       this->n_var);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv_hist1, this->n_var);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                 }
             }
-            gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(T)*this->n_var,cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(w_new, d_w_new, sizeof(T)*this->n_var,cudaMemcpyDeviceToHost));
         }
     }
     catch(std::exception& exc)

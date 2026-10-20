@@ -112,6 +112,9 @@ commits are omitted.
   place and, since the peek does not clear it, again by the next call after the exception
   (for example on a retry from Python). No synchronization was added. The CN-ADI solver
   requests at most the device's opt-in shared-memory limit instead of an unchecked 96000 bytes.
+  The check macros are named as is conventional for macros (C++ Core Guidelines ES.32):
+  `CUDA_CHECK(...)`, `CUFFT_CHECK(...)` and `CUDA_CHECK_LAUNCH()` after a kernel launch
+  (formerly `gpu_error_check`, `cufft_error_check`).
 - C++ ownership (2026-10-21): device memory is held in `CudaDeviceBuffer<T>` /
   `CudaPinnedBuffer<T>` (`CudaCommon.h`), host arrays in `std::vector` and owned objects in
   `std::unique_ptr`, replacing hand-written allocation and cleanup code (the FFTW/MKL plans

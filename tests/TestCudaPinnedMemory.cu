@@ -12,9 +12,9 @@ int main()
         int max_n_segment = 10;
 
         // Allocate gpu memory
-        gpu_error_check(cudaMalloc((void**)&d_progpa_temp, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_progpa_temp, sizeof(double)*M));
         // Allocate pinned host memory
-        gpu_error_check(cudaMallocHost((void**)&propagator, sizeof(double)*(max_n_segment+1)*M));
+        CUDA_CHECK(cudaMallocHost((void**)&propagator, sizeof(double)*(max_n_segment+1)*M));
 
         for(int n=0; n<=max_n_segment; n++)
         {
@@ -23,7 +23,7 @@ int main()
                 std::cout << n << ", " << max_n_segment << std::endl;
             }
 
-            gpu_error_check(cudaMemcpy(&propagator[n*M], d_progpa_temp, sizeof(double)*M,
+            CUDA_CHECK(cudaMemcpy(&propagator[n*M], d_progpa_temp, sizeof(double)*M,
                 cudaMemcpyDeviceToHost));
         }
 

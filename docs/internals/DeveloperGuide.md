@@ -527,8 +527,8 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 - Follow existing naming conventions
 - Document public APIs
 - CUDA error checks follow the CUDA C++ Best Practices Guide (2.3): wrap every call that returns
-  an error code (`gpu_error_check(...)` for runtime and CUB calls, `cufft_error_check(...)` for
-  cuFFT) and follow every kernel launch with `gpu_error_check(cudaGetLastError());`. The check
+  an error code (`CUDA_CHECK(...)` for runtime and CUB calls, `CUFFT_CHECK(...)` for
+  cuFFT) and follow every kernel launch with `CUDA_CHECK_LAUNCH();`. The check
   reads a host-side value and does not synchronize; `cudaGetLastError()` clears the slot, so an
   error is reported at the launch that caused it. Release calls in destructors stay unchecked.
 

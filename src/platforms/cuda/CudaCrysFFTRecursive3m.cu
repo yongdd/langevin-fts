@@ -550,13 +550,13 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
             cache.re[i].allocate(M_physical_);
         if (cache.im[i].empty())
             cache.im[i].allocate(M_physical_);
-        gpu_error_check(cudaMemcpyAsync(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_,
+        CUDA_CHECK(cudaMemcpyAsync(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_,
                                         cudaMemcpyHostToDevice, stream_));
-        gpu_error_check(cudaMemcpyAsync(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_,
+        CUDA_CHECK(cudaMemcpyAsync(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_,
                                         cudaMemcpyHostToDevice, stream_));
     }
     // Complete before the host tables go away and before any stream uses the cache
-    gpu_error_check(cudaStreamSynchronize(stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
 
     return cache;
 }
@@ -621,7 +621,7 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
     if (d_q_in != d_q_out)
     {
-        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice, stream_));
+        CUDA_CHECK(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice, stream_));
     }
 
     if (cufftExecD2Z(plan_r2c_, d_work, d_step1_) != CUFFT_SUCCESS)
@@ -637,7 +637,7 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
         cache.im[0], cache.im[1], cache.im[2], cache.im[3],
         cache.im[4], cache.im[5], cache.im[6], cache.im[7],
         nx_physical_[0], nx_physical_[1], nx_physical_[2], nx_physical_[2] / 2 + 1);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 
     if (cufftExecZ2D(plan_c2r_, d_step2_, d_work) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTRecursive3m cufftExecZ2D failed.");
@@ -663,6 +663,6 @@ void CudaCrysFFTRecursive3m::set_stream(cudaStream_t stream)
     if (stream_ == stream)
         return;
     stream_ = stream;
-    cufft_error_check(cufftSetStream(plan_r2c_, stream_));
-    cufft_error_check(cufftSetStream(plan_c2r_, stream_));
+    CUFFT_CHECK(cufftSetStream(plan_r2c_, stream_));
+    CUFFT_CHECK(cufftSetStream(plan_c2r_, stream_));
 }

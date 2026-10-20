@@ -44,19 +44,19 @@ int main()
         double error;
 
         double *d_a, *d_b, *d_c, *d_y, *d_x; 
-        gpu_error_check(cudaMalloc((void**)&d_a, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_b, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_c, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_y, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_x, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_a, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_b, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_c, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_y, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_x, sizeof(double)*M));
 
         int *d_offset, offset[1] = {0};
         double *d_temp, *d_q_sparse, *d_x_answer, *d_x_periodic_answer;
-        gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(double)*1));
-        gpu_error_check(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_temp, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_x_answer, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_x_periodic_answer, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_offset, sizeof(double)*1));
+        CUDA_CHECK(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_temp, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_x_answer, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_x_periodic_answer, sizeof(double)*M));
 
         cudaMemcpy(d_a, a, sizeof(double)*M, cudaMemcpyHostToDevice);
         cudaMemcpy(d_b, b, sizeof(double)*M, cudaMemcpyHostToDevice);

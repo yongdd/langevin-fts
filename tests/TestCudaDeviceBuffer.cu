@@ -44,8 +44,8 @@ static long long live_pinned() { return CudaPinnedMemory::counters().live_count.
 static size_t free_bytes()
 {
     size_t f = 0, t = 0;
-    gpu_error_check(cudaDeviceSynchronize());
-    gpu_error_check(cudaMemGetInfo(&f, &t));
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaMemGetInfo(&f, &t));
     return f;
 }
 
@@ -200,7 +200,7 @@ int main()
         CudaDeviceBuffer<double> a(n);
         ok &= check(a.get() != nullptr && a.size() == n && a.bytes() == n * sizeof(double) && !a.empty(), "allocation and sizes");
         ok &= check(live_device() == d_start + 1, "the counter sees the allocation");
-        gpu_error_check(cudaMemset(a, 0, a.bytes()));   // lent to the runtime
+        CUDA_CHECK(cudaMemset(a, 0, a.bytes()));   // lent to the runtime
         double* raw = a;                                 // lent, not transferred
         ok &= check(raw == a.get(), "implicit conversion lends the same pointer");
 
@@ -244,9 +244,9 @@ int main()
         ok &= check(p.get() != nullptr && p.size() == 1000 && live_pinned() == p_start + 1, "pinned allocation");
         p.get()[999] = std::complex<double>(1.0, 2.0);
         CudaDeviceBuffer<cuDoubleComplex> dev(1000);
-        gpu_error_check(cudaMemcpy(dev, p, p.bytes(), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dev, p, p.bytes(), cudaMemcpyHostToDevice));
         std::vector<std::complex<double>> h(1000);
-        gpu_error_check(cudaMemcpy(h.data(), dev, dev.bytes(), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(h.data(), dev, dev.bytes(), cudaMemcpyDeviceToHost));
         ok &= check(h[999] == std::complex<double>(1.0, 2.0), "pinned -> device -> host round trip");
     }
     ok &= check(live_pinned() == p_start && live_device() == d_start, "pinned and device buffers released");

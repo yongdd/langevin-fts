@@ -107,20 +107,20 @@ CudaComputationBackend<T>::CudaComputationBackend(
         {
             const int n_reduced = space_group->get_n_reduced_basis();
             d_reduced_basis_indices.allocate(n_reduced);
-            gpu_error_check(cudaMemcpy(d_reduced_basis_indices, space_group->get_reduced_basis_indices().data(),
+            CUDA_CHECK(cudaMemcpy(d_reduced_basis_indices, space_group->get_reduced_basis_indices().data(),
                                        sizeof(int)*n_reduced, cudaMemcpyHostToDevice));
             d_full_to_reduced_map.allocate(M);
-            gpu_error_check(cudaMemcpy(d_full_to_reduced_map, space_group->get_full_to_reduced_map().data(),
+            CUDA_CHECK(cudaMemcpy(d_full_to_reduced_map, space_group->get_full_to_reduced_map().data(),
                                        sizeof(int)*M, cudaMemcpyHostToDevice));
         }
 
         n_streams = std::min({this->n_streams_from_env(/*default_n_streams=*/MAX_STREAMS), MAX_STREAMS, max_n_streams});
         for (int i = 0; i < n_streams; i++)
         {
-            gpu_error_check(cudaStreamCreate(&streams[i][0]));  // kernels
-            gpu_error_check(cudaStreamCreate(&streams[i][1]));  // copies
-            gpu_error_check(cudaEventCreateWithFlags(&kernel_done[i], cudaEventDisableTiming));
-            gpu_error_check(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming));
+            CUDA_CHECK(cudaStreamCreate(&streams[i][0]));  // kernels
+            CUDA_CHECK(cudaStreamCreate(&streams[i][1]));  // copies
+            CUDA_CHECK(cudaEventCreateWithFlags(&kernel_done[i], cudaEventDisableTiming));
+            CUDA_CHECK(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming));
         }
 
         if (chain_model == "discrete")
@@ -155,13 +155,13 @@ CudaComputationBackend<T>::CudaComputationBackend(
         // Ones for free chain ends
         std::vector<T> unity(M, T(1.0));
         d_q_unity.allocate(M);
-        gpu_error_check(cudaMemcpy(d_q_unity, unity.data(), sizeof(T)*M, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_q_unity, unity.data(), sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Mask (the box stores it in the reduced basis when a space group is set)
         if (cb->get_mask() != nullptr)
         {
             d_q_mask.allocate(n_basis);
-            gpu_error_check(cudaMemcpy(d_q_mask, cb->get_mask(), sizeof(double)*n_basis, cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_q_mask, cb->get_mask(), sizeof(double)*n_basis, cudaMemcpyHostToDevice));
         }
 
         d_sum.allocate(M);
@@ -238,7 +238,7 @@ void CudaComputationBackend<T>::release()
 template <typename T>
 void CudaComputationBackend<T>::synchronize()
 {
-    gpu_error_check(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 // ==================== Memory ====================
@@ -247,12 +247,12 @@ template <typename T>
 BackendArray<T>* CudaComputationBackend<T>::allocate()
 {
     CuDeviceData<T>* d_a = nullptr;
-    gpu_error_check(cudaMalloc((void**)&d_a, sizeof(T)*n_basis));
+    CUDA_CHECK(cudaMalloc((void**)&d_a, sizeof(T)*n_basis));
     const cudaError_t err = cudaMemset(d_a, 0, sizeof(T)*n_basis);
     if (err != cudaSuccess)
     {
         cudaFree(d_a);
-        gpu_error_check(err);
+        CUDA_CHECK(err);
     }
     return wrap(d_a);
 }
@@ -266,20 +266,20 @@ void CudaComputationBackend<T>::deallocate(BackendArray<T>* a)
 template <typename T>
 void CudaComputationBackend<T>::copy_from_host(int stream, BackendArray<T>* dst, const T* src)
 {
-    gpu_error_check(cudaMemcpyAsync(raw(dst), src, sizeof(T)*n_basis, cudaMemcpyHostToDevice, streams[stream][0]));
+    CUDA_CHECK(cudaMemcpyAsync(raw(dst), src, sizeof(T)*n_basis, cudaMemcpyHostToDevice, streams[stream][0]));
 }
 
 template <typename T>
 void CudaComputationBackend<T>::copy_to_host(T* dst, BackendArray<T>* src)
 {
-    gpu_error_check(cudaMemcpy(dst, raw(src), sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(dst, raw(src), sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
 }
 
 template <typename T>
 CheckpointArray<T>* CudaComputationBackend<T>::allocate_checkpoint()
 {
     CuDeviceData<T>* h_a = nullptr;
-    gpu_error_check(cudaMallocHost((void**)&h_a, sizeof(T)*n_basis));
+    CUDA_CHECK(cudaMallocHost((void**)&h_a, sizeof(T)*n_basis));
     return reinterpret_cast<CheckpointArray<T>*>(h_a);
 }
 
@@ -292,13 +292,13 @@ void CudaComputationBackend<T>::deallocate_checkpoint(CheckpointArray<T>* a)
 template <typename T>
 void CudaComputationBackend<T>::store_checkpoint(int stream, CheckpointArray<T>* dst, BackendArray<T>* src)
 {
-    gpu_error_check(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis, cudaMemcpyDeviceToHost, streams[stream][0]));
+    CUDA_CHECK(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis, cudaMemcpyDeviceToHost, streams[stream][0]));
 }
 
 template <typename T>
 void CudaComputationBackend<T>::load_checkpoint(int stream, BackendArray<T>* dst, CheckpointArray<T>* src)
 {
-    gpu_error_check(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis, cudaMemcpyHostToDevice, streams[stream][0]));
+    CUDA_CHECK(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis, cudaMemcpyHostToDevice, streams[stream][0]));
 }
 
 // ==================== Solver ====================
@@ -333,17 +333,17 @@ void CudaComputationBackend<T>::update_dw(std::map<std::string, const T*> w_inpu
             CuDeviceData<T>* d_exp_dw_solver = solver->d_exp_dw.at(0).at(monomer_type);
             if (solver_discrete->exp_dw_stored_reduced())
             {
-                gpu_error_check(cudaMemcpy(d_exp_dw_basis, d_exp_dw_solver,
+                CUDA_CHECK(cudaMemcpy(d_exp_dw_basis, d_exp_dw_solver,
                                            sizeof(T)*n_basis, cudaMemcpyDeviceToDevice));
             }
             else
             {
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(
                     d_exp_dw_basis, d_exp_dw_solver, d_reduced_basis_indices, n_basis);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
             }
         }
-        gpu_error_check(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 }
 
@@ -381,20 +381,20 @@ BackendArray<T>* CudaComputationBackend<T>::boltzmann_factor(const std::string& 
 template <typename T>
 void CudaComputationBackend<T>::set_unity(int stream, BackendArray<T>* q)
 {
-    gpu_error_check(cudaMemcpyAsync(raw(q), d_q_unity, sizeof(T)*n_basis,
+    CUDA_CHECK(cudaMemcpyAsync(raw(q), d_q_unity, sizeof(T)*n_basis,
                                     cudaMemcpyDeviceToDevice, streams[stream][0]));
 }
 
 template <typename T>
 void CudaComputationBackend<T>::set_zero(int stream, BackendArray<T>* a)
 {
-    gpu_error_check(cudaMemsetAsync(raw(a), 0, sizeof(T)*n_basis, streams[stream][0]));
+    CUDA_CHECK(cudaMemsetAsync(raw(a), 0, sizeof(T)*n_basis, streams[stream][0]));
 }
 
 template <typename T>
 void CudaComputationBackend<T>::copy(int stream, BackendArray<T>* dst, BackendArray<T>* src)
 {
-    gpu_error_check(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis,
+    CUDA_CHECK(cudaMemcpyAsync(raw(dst), raw(src), sizeof(T)*n_basis,
                                     cudaMemcpyDeviceToDevice, streams[stream][0]));
 }
 
@@ -406,12 +406,12 @@ void CudaComputationBackend<T>::junction_sum(
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     CuDeviceData<T>* d_q = raw(q);
 
-    gpu_error_check(cudaMemsetAsync(d_q, 0, sizeof(T)*n_basis, streams[stream][0]));
+    CUDA_CHECK(cudaMemsetAsync(d_q, 0, sizeof(T)*n_basis, streams[stream][0]));
     for (const auto& [src, n_repeated] : sources)
     {
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
             d_q, 1.0, d_q, n_repeated, raw(src), n_basis);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
     }
 }
 
@@ -423,7 +423,7 @@ void CudaComputationBackend<T>::junction_product(
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     CuDeviceData<T>* d_q = raw(q);
 
-    gpu_error_check(cudaMemcpyAsync(d_q, d_q_unity, sizeof(T)*n_basis,
+    CUDA_CHECK(cudaMemcpyAsync(d_q, d_q_unity, sizeof(T)*n_basis,
                                     cudaMemcpyDeviceToDevice, streams[stream][0]));
     for (const auto& [src, n_repeated] : sources)
     {
@@ -431,7 +431,7 @@ void CudaComputationBackend<T>::junction_product(
         for (int r = 0; r < n_repeated; r++)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(d_q, d_q, raw(src), 1.0, n_basis);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
     }
 }
@@ -446,14 +446,14 @@ void CudaComputationBackend<T>::junction_sum(
     // The stress pair buffer is free while propagators are computed; stage each checkpoint in it
     CuDeviceData<T>* d_stage = d_q_pair[stream][0];
 
-    gpu_error_check(cudaMemsetAsync(d_q, 0, sizeof(T)*n_basis, streams[stream][0]));
+    CUDA_CHECK(cudaMemsetAsync(d_q, 0, sizeof(T)*n_basis, streams[stream][0]));
     for (const auto& [src, n_repeated] : sources)
     {
-        gpu_error_check(cudaMemcpyAsync(d_stage, raw(src), sizeof(T)*n_basis,
+        CUDA_CHECK(cudaMemcpyAsync(d_stage, raw(src), sizeof(T)*n_basis,
                                         cudaMemcpyHostToDevice, streams[stream][0]));
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
             d_q, 1.0, d_q, n_repeated, d_stage, n_basis);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
     }
 }
 
@@ -467,16 +467,16 @@ void CudaComputationBackend<T>::junction_product(
     // The stress pair buffer is free while propagators are computed; stage each checkpoint in it
     CuDeviceData<T>* d_stage = d_q_pair[stream][0];
 
-    gpu_error_check(cudaMemcpyAsync(d_q, d_q_unity, sizeof(T)*n_basis,
+    CUDA_CHECK(cudaMemcpyAsync(d_q, d_q_unity, sizeof(T)*n_basis,
                                     cudaMemcpyDeviceToDevice, streams[stream][0]));
     for (const auto& [src, n_repeated] : sources)
     {
-        gpu_error_check(cudaMemcpyAsync(d_stage, raw(src), sizeof(T)*n_basis,
+        CUDA_CHECK(cudaMemcpyAsync(d_stage, raw(src), sizeof(T)*n_basis,
                                         cudaMemcpyHostToDevice, streams[stream][0]));
         for (int r = 0; r < n_repeated; r++)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(d_q, d_q, d_stage, 1.0, n_basis);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
     }
 }
@@ -489,7 +489,7 @@ void CudaComputationBackend<T>::apply_mask(int stream, BackendArray<T>* q)
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(raw(q), raw(q), d_q_mask, 1.0, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }
 
 template <typename T>
@@ -499,7 +499,7 @@ void CudaComputationBackend<T>::multiply_boltzmann_factor(int stream, BackendArr
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
         raw(q), raw(q), raw(boltzmann_factor(monomer_type)), 1.0, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }
 
 // ==================== Statistics ====================
@@ -534,9 +534,9 @@ void CudaComputationBackend<T>::add_segment_products(
             chunk.weight[k] = pairs[first + k].weight;
         }
         ker_add_segment_products<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(raw(phi), chunk, n_basis);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
     }
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }
 
 template <typename T>
@@ -548,9 +548,9 @@ void CudaComputationBackend<T>::normalize_concentration(int stream, BackendArray
     cudaStream_t s = streams[stream][0];
     if (divisor != nullptr)
         ker_divide<<<N_BLOCKS, N_THREADS, 0, s>>>(d_phi, d_phi, raw(divisor), 1.0, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
     ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, s>>>(d_phi, to_device_scalar(norm), d_phi, 0.0, d_phi, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }
 
 template <typename T>
@@ -571,31 +571,31 @@ std::array<T, 6> CudaComputationBackend<T>::block_stress(
     cudaStream_t s_copy   = streams[stream][1];
     CuDeviceData<T>* d_segment = d_segment_stress[stream];
     CuDeviceData<T>* d_block   = d_block_stress[stream];
-    gpu_error_check(cudaMemsetAsync(d_segment, 0, sizeof(T)*6, s_kernel));
-    gpu_error_check(cudaMemsetAsync(d_block,   0, sizeof(T)*6, s_kernel));
+    CUDA_CHECK(cudaMemsetAsync(d_segment, 0, sizeof(T)*6, s_kernel));
+    CUDA_CHECK(cudaMemsetAsync(d_block,   0, sizeof(T)*6, s_kernel));
 
     cudaEvent_t kernel_done_s = kernel_done[stream];
     cudaEvent_t copy_done_s   = copy_done[stream];
 
     // The pairs may still be computed on the kernel stream (reduce-memory
     // recomputation): the copies wait for it
-    gpu_error_check(cudaEventRecord(kernel_done_s, s_kernel));
-    gpu_error_check(cudaStreamWaitEvent(s_copy, kernel_done_s, 0));
+    CUDA_CHECK(cudaEventRecord(kernel_done_s, s_kernel));
+    CUDA_CHECK(cudaStreamWaitEvent(s_copy, kernel_done_s, 0));
 
     // The solver reads the pair as one contiguous [q_1 | q_2] buffer; copy the
     // next pair on the copy stream while the current one is computed.
     auto copy_pair = [&](size_t i, CuDeviceData<T>* d_pair)
     {
-        gpu_error_check(cudaMemcpyAsync(&d_pair[0], raw(pairs[i].q_1), sizeof(T)*n_basis,
+        CUDA_CHECK(cudaMemcpyAsync(&d_pair[0], raw(pairs[i].q_1), sizeof(T)*n_basis,
                                         cudaMemcpyDeviceToDevice, s_copy));
-        gpu_error_check(cudaMemcpyAsync(&d_pair[n_basis], raw(pairs[i].q_2), sizeof(T)*n_basis,
+        CUDA_CHECK(cudaMemcpyAsync(&d_pair[n_basis], raw(pairs[i].q_2), sizeof(T)*n_basis,
                                         cudaMemcpyDeviceToDevice, s_copy));
-        gpu_error_check(cudaEventRecord(copy_done_s, s_copy));
+        CUDA_CHECK(cudaEventRecord(copy_done_s, s_copy));
     };
 
     int prev = 0, next = 1;
     copy_pair(0, d_q_pair[stream][prev]);
-    gpu_error_check(cudaStreamWaitEvent(s_kernel, copy_done_s, 0));
+    CUDA_CHECK(cudaStreamWaitEvent(s_kernel, copy_done_s, 0));
 
     for (size_t i = 0; i < pairs.size(); i++)
     {
@@ -606,19 +606,19 @@ std::array<T, 6> CudaComputationBackend<T>::block_stress(
         solver->compute_single_segment_stress(stream, d_q_pair[stream][prev], d_segment,
                                               monomer_type, pairs[i].is_half_bond_length);
         ker_lin_comb<<<1, 32, 0, s_kernel>>>(d_block, 1.0, d_block, pairs[i].weight, d_segment, N_STRESS_DIM);
-        gpu_error_check(cudaGetLastError());
-        gpu_error_check(cudaEventRecord(kernel_done_s, s_kernel));
+        CUDA_CHECK_LAUNCH();
+        CUDA_CHECK(cudaEventRecord(kernel_done_s, s_kernel));
 
-        gpu_error_check(cudaStreamWaitEvent(s_copy, kernel_done_s, 0));
-        gpu_error_check(cudaStreamWaitEvent(s_kernel, copy_done_s, 0));
+        CUDA_CHECK(cudaStreamWaitEvent(s_copy, kernel_done_s, 0));
+        CUDA_CHECK(cudaStreamWaitEvent(s_kernel, copy_done_s, 0));
         std::swap(prev, next);
     }
 
     // One copy per block; waiting on this stream only lets the other streams run on
-    gpu_error_check(cudaMemcpyAsync(h_block_stress[stream], d_block, sizeof(T)*N_STRESS_DIM,
+    CUDA_CHECK(cudaMemcpyAsync(h_block_stress[stream], d_block, sizeof(T)*N_STRESS_DIM,
                                     cudaMemcpyDeviceToHost, s_kernel));
-    gpu_error_check(cudaStreamSynchronize(s_kernel));
-    gpu_error_check(cudaStreamSynchronize(s_copy));
+    CUDA_CHECK(cudaStreamSynchronize(s_kernel));
+    CUDA_CHECK(cudaStreamSynchronize(s_copy));
 
     for (int d = 0; d < N_STRESS_DIM; d++)
         stress[d] = h_block_stress[stream][d];
@@ -634,7 +634,7 @@ T CudaComputationBackend<T>::solvent_concentration(
     CuDeviceData<T>* d_phi = raw(phi);
 
     ker_exp<<<N_BLOCKS, N_THREADS>>>(d_phi, raw(w), 1.0, -ds, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 
     const T partition = cb->mean_device(d_phi);
 
@@ -644,7 +644,7 @@ T CudaComputationBackend<T>::solvent_concentration(
     else
         norm = cuCdiv(make_cuDoubleComplex(volume_fraction, 0.0), stdToCuDoubleComplex(partition));
     ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_phi, 0.0, d_phi, n_basis);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
     return partition;
 }
 
@@ -655,11 +655,11 @@ void CudaComputationBackend<T>::sum_to_host(
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    gpu_error_check(cudaMemset(d_sum, 0, sizeof(T)*n_basis));
+    CUDA_CHECK(cudaMemset(d_sum, 0, sizeof(T)*n_basis));
     for (size_t a = 0; a < arrays.size(); a++)
         ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_sum, to_device_scalar(weights[a]), raw(arrays[a]), 1.0, d_sum, n_basis);
-    gpu_error_check(cudaGetLastError());
-    gpu_error_check(cudaMemcpy(out, d_sum, sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
+    CUDA_CHECK_LAUNCH();
+    CUDA_CHECK(cudaMemcpy(out, d_sum, sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
 }
 
 // Explicit template instantiation

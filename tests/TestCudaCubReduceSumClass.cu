@@ -16,8 +16,8 @@ public:
 
     TestCudaCub()
     {
-        gpu_error_check(cudaMalloc((void**)&d_array, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
+        CUDA_CHECK(cudaMalloc((void**)&d_array, sizeof(double)*M));
+        CUDA_CHECK(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
 
         temp_storage_bytes = 0;
         d_temp_storage = nullptr;

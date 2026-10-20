@@ -89,7 +89,7 @@ void cuda_crysfft_compute_single_segment_stress(
     {
         ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
             args.d_phys_work, d_q2_reduced, args.d_phys_to_reduced, args.M_phys);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
         d_q2_phys = args.d_phys_work;
     }
 
@@ -136,22 +136,22 @@ void cuda_crysfft_compute_single_segment_stress(
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
                 args.d_reduce_buf, args.d_phys_out, args.d_reduced_to_phys, args.n_basis);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
             d_tmp_reduced = args.d_reduce_buf;
         }
 
         // ===== Step 4: Orbit-weighted dot product with q1 =====
         ker_multi<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
             args.d_reduce_buf, d_tmp_reduced, d_q1_reduced, 1.0, args.n_basis);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
         ker_multi_weight<<<N_BLOCKS, N_THREADS, 0, args.stream>>>(
             args.d_reduce_buf, args.d_reduce_buf, args.d_orbit_counts, args.n_basis);
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
 
         size_t temp_bytes = args.cub_temp_bytes;
-        gpu_error_check(cub::DeviceReduce::Sum(args.d_cub_temp, temp_bytes,
+        CUDA_CHECK(cub::DeviceReduce::Sum(args.d_cub_temp, temp_bytes,
                                args.d_reduce_buf, &d_segment_stress[g], args.n_basis, args.stream));
-        gpu_error_check(cudaGetLastError());
+        CUDA_CHECK_LAUNCH();
     }
 
     // ===== Step 5: Spread the group sums over their axes and scale =====
@@ -169,5 +169,5 @@ void cuda_crysfft_compute_single_segment_stress(
 
     ker_crysfft_stress_finalize<<<1, 1, 0, args.stream>>>(
         d_segment_stress, static_cast<int>(groups.size()), masks[0], masks[1], masks[2], s0, s1, s2);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 }

@@ -134,7 +134,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 const int M_phys = crysfft_physical_size_;
                 if (crysfft_identity_map_)
                 {
-                    gpu_error_check(cudaMemcpyAsync(
+                    CUDA_CHECK(cudaMemcpyAsync(
                         d_crysfft_in_[STREAM], d_q_in,
                         sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
@@ -143,36 +143,36 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out, d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
 
                     if (d_q_mask != nullptr)
                     {
                         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                             d_q_out, d_q_out, d_q_mask, 1.0, M_phys);
-                        gpu_error_check(cudaGetLastError());
+                        CUDA_CHECK_LAUNCH();
                     }
                     return;
                 }
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
 
                 crysfft_[STREAM]->set_contour_step(coeff_full);
                 crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                 ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
 
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
 
                 if (d_q_mask != nullptr)
                 {
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                 }
                 return;
             }
@@ -190,7 +190,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 // Expand reduced basis → full grid
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 fft_in = d_q_full_in_[STREAM];
                 fft_out = d_q_full_out_[STREAM];
             }
@@ -207,14 +207,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
             // Multiply exp(-k^2 ds/6) in fourier space
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
 
             // Execute a backward FFT
             fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
 
             // Evaluate exp(-w*ds) in real space (1/M normalization from unnormalized cuFFT)
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
         else
         {
@@ -230,13 +230,13 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
             else
                 ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM].get()), _d_boltz_bond, 1.0, M_COMPLEX);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
 
             fft_[STREAM]->backward_stream(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out), streams[STREAM][0]);
 
             // Evaluate exp(-w*ds); DCT/DST backward is already normalized (no 1/M).
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0, M);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
 
         // Multiply mask (on full grid)
@@ -250,7 +250,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 {
                     ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                    gpu_error_check(cudaGetLastError());
+                    CUDA_CHECK_LAUNCH();
                     d_q_mask_full = d_q_full_in_[STREAM];
                 }
                 else
@@ -259,7 +259,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 }
             }
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
 
         // Reduce full grid → reduced basis
@@ -267,7 +267,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
     }
     catch(std::exception& exc)
@@ -309,28 +309,28 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 const int M_phys = crysfft_physical_size_;
                 if (crysfft_identity_map_)
                 {
-                    gpu_error_check(cudaMemcpyAsync(
+                    CUDA_CHECK(cudaMemcpyAsync(
                         d_crysfft_in_[STREAM], d_q_in,
                         sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
                     crysfft_[STREAM]->set_contour_step(coeff_half);
                     crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
-                    gpu_error_check(cudaMemcpyAsync(
+                    CUDA_CHECK(cudaMemcpyAsync(
                         d_q_out, d_crysfft_out_[STREAM],
                         sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
                     return;
                 }
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
 
                 crysfft_[STREAM]->set_contour_step(coeff_half);
                 crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 return;
             }
         }
@@ -347,7 +347,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 // Expand reduced basis → full grid
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaGetLastError());
+                CUDA_CHECK_LAUNCH();
                 fft_in = d_q_full_in_[STREAM];
                 fft_out = d_q_full_out_[STREAM];
             }
@@ -361,15 +361,15 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         {
             // 3D fourier discrete transform, forward
             fft_forward(STREAM, fft_in, d_qk_in_1_one[STREAM], 1);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
 
             // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
 
             // 3D fourier discrete transform, backward
             fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
         else
         {
@@ -382,7 +382,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
             else
                 ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM].get()), _d_boltz_bond_half, 1.0, M_COMPLEX);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
             fft_[STREAM]->backward_stream(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out), streams[STREAM][0]);
         }
 
@@ -391,7 +391,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            gpu_error_check(cudaGetLastError());
+            CUDA_CHECK_LAUNCH();
         }
     }
     catch(std::exception& exc)

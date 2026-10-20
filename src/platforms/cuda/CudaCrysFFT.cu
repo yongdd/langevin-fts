@@ -168,8 +168,8 @@ CudaDeviceBuffer<double> CudaCrysFFT::uploadTable(const std::vector<double>& h)
         d_table.allocate(M_physical_);
     }
     // on failure the local releases the table
-    gpu_error_check(cudaMemcpyAsync(d_table, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
-    gpu_error_check(cudaStreamSynchronize(stream_));
+    CUDA_CHECK(cudaMemcpyAsync(d_table, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
     return d_table;
 }
 
@@ -254,12 +254,12 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{}, ev4{};
     if (profile_this)
     {
-        gpu_error_check(cudaEventCreate(&ev0));
-        gpu_error_check(cudaEventCreate(&ev1));
-        gpu_error_check(cudaEventCreate(&ev2));
-        gpu_error_check(cudaEventCreate(&ev3));
-        gpu_error_check(cudaEventCreate(&ev4));
-        gpu_error_check(cudaEventRecord(ev0, stream_));
+        CUDA_CHECK(cudaEventCreate(&ev0));
+        CUDA_CHECK(cudaEventCreate(&ev1));
+        CUDA_CHECK(cudaEventCreate(&ev2));
+        CUDA_CHECK(cudaEventCreate(&ev3));
+        CUDA_CHECK(cudaEventCreate(&ev4));
+        CUDA_CHECK(cudaEventRecord(ev0, stream_));
     }
 
     // Determine working buffer to minimize memory copies
@@ -270,25 +270,25 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     if (d_q_in != d_q_out)
     {
         // Single copy at start (instead of two copies before/after)
-        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
+        CUDA_CHECK(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
                                         cudaMemcpyDeviceToDevice, stream_));
     }
 
     if (profile_this)
-        gpu_error_check(cudaEventRecord(ev1, stream_));
+        CUDA_CHECK(cudaEventRecord(ev1, stream_));
 
     // Step 1: Forward DCT-II (in-place)
     dct_forward_->execute(d_work);
 
     if (profile_this)
-        gpu_error_check(cudaEventRecord(ev2, stream_));
+        CUDA_CHECK(cudaEventRecord(ev2, stream_));
 
     // Step 2: Apply Boltzmann factor (in-place)
     kernel_apply_boltzmann_crys<<<blocks, threads, 0, stream_>>>(d_work, d_boltz_current_, M_physical_);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 
     if (profile_this)
-        gpu_error_check(cudaEventRecord(ev3, stream_));
+        CUDA_CHECK(cudaEventRecord(ev3, stream_));
 
     // Step 3: Backward DCT-III (in-place)
     // Normalization is already included in Boltzmann factor (pre-multiplied in generateBoltzmann)
@@ -296,14 +296,14 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
 
     if (profile_this)
     {
-        gpu_error_check(cudaEventRecord(ev4, stream_));
-        gpu_error_check(cudaEventSynchronize(ev4));
+        CUDA_CHECK(cudaEventRecord(ev4, stream_));
+        CUDA_CHECK(cudaEventSynchronize(ev4));
         float t_copy = 0.0f, t_fwd = 0.0f, t_boltz = 0.0f, t_bwd = 0.0f, t_total = 0.0f;
-        gpu_error_check(cudaEventElapsedTime(&t_copy, ev0, ev1));
-        gpu_error_check(cudaEventElapsedTime(&t_fwd, ev1, ev2));
-        gpu_error_check(cudaEventElapsedTime(&t_boltz, ev2, ev3));
-        gpu_error_check(cudaEventElapsedTime(&t_bwd, ev3, ev4));
-        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev4));
+        CUDA_CHECK(cudaEventElapsedTime(&t_copy, ev0, ev1));
+        CUDA_CHECK(cudaEventElapsedTime(&t_fwd, ev1, ev2));
+        CUDA_CHECK(cudaEventElapsedTime(&t_boltz, ev2, ev3));
+        CUDA_CHECK(cudaEventElapsedTime(&t_bwd, ev3, ev4));
+        CUDA_CHECK(cudaEventElapsedTime(&t_total, ev0, ev4));
 
         std::cout << "[CrysFFT-Pmmm profile] M_phys=" << M_physical_
                   << " copy(ms)=" << t_copy
@@ -344,7 +344,7 @@ void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
     if (d_q_in != d_q_out)
     {
-        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
+        CUDA_CHECK(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
                                         cudaMemcpyDeviceToDevice, stream_));
     }
 
@@ -353,7 +353,7 @@ void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double
 
     // Apply raw multiplier with round-trip normalization
     kernel_apply_multiplier_crys<<<blocks, threads, 0, stream_>>>(d_work, d_multiplier, norm_factor_, M_physical_);
-    gpu_error_check(cudaGetLastError());
+    CUDA_CHECK_LAUNCH();
 
     // Backward DCT-III (in-place)
     dct_backward_->execute(d_work);

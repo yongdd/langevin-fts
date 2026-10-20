@@ -327,24 +327,24 @@ static bool test_cuda_oblique_glide(int Nx, int Ny, int Nz, double ds)
     crys.set_contour_step(ds);
 
     double *d_in{}, *d_out{};
-    gpu_error_check(cudaMalloc(&d_in, sizeof(double) * M_phys));
-    gpu_error_check(cudaMalloc(&d_out, sizeof(double) * M_phys));
-    gpu_error_check(cudaMemcpy(d_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_in, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMalloc(&d_out, sizeof(double) * M_phys));
+    CUDA_CHECK(cudaMemcpy(d_in, h_phys.data(), sizeof(double) * M_phys, cudaMemcpyHostToDevice));
 
     crys.diffusion(d_in, d_out);
     cudaDeviceSynchronize();
 
     std::vector<double> h_crys_out(M_phys);
-    gpu_error_check(cudaMemcpy(h_crys_out.data(), d_out, sizeof(double) * M_phys, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_crys_out.data(), d_out, sizeof(double) * M_phys, cudaMemcpyDeviceToHost));
     cudaFree(d_in);
     cudaFree(d_out);
 
     // Full FFT (cuFFT) reference
     double* d_full{};
     cufftDoubleComplex* d_freq{};
-    gpu_error_check(cudaMalloc(&d_full, sizeof(double) * M_logical));
-    gpu_error_check(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex) * M_complex));
-    gpu_error_check(cudaMemcpy(d_full, h_logical.data(), sizeof(double) * M_logical, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_full, sizeof(double) * M_logical));
+    CUDA_CHECK(cudaMalloc(&d_freq, sizeof(cufftDoubleComplex) * M_complex));
+    CUDA_CHECK(cudaMemcpy(d_full, h_logical.data(), sizeof(double) * M_logical, cudaMemcpyHostToDevice));
 
     cufftHandle fwd, bwd;
     int n[3] = {Nx, Ny, Nz};
@@ -370,7 +370,7 @@ static bool test_cuda_oblique_glide(int Nx, int Ny, int Nz, double ds)
     cudaDeviceSynchronize();
 
     std::vector<double> h_std_out(M_logical);
-    gpu_error_check(cudaMemcpy(h_std_out.data(), d_full, sizeof(double) * M_logical, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_std_out.data(), d_full, sizeof(double) * M_logical, cudaMemcpyDeviceToHost));
     cufftDestroy(fwd);
     cufftDestroy(bwd);
     cudaFree(d_full);
