@@ -84,14 +84,12 @@ private:
 
     /// @name Fourier Space Buffers
     /// @{
-    cuDoubleComplex *d_qk_in_1_one[MAX_STREAMS];
-    cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
-    double *d_rk_in_1_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST); nullptr when periodic
-    double *d_rk_in_2_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST); nullptr when periodic
+    CudaDeviceBuffer<cuDoubleComplex> d_qk_in_1_one[MAX_STREAMS];
+    CudaDeviceBuffer<cuDoubleComplex> d_qk_in_1_two[MAX_STREAMS];
+    CudaDeviceBuffer<double> d_rk_in_1_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST); nullptr when periodic
+    CudaDeviceBuffer<double> d_rk_in_2_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST); nullptr when periodic
     /// @}
 
-    /// Free the buffers above (idempotent; safe on a partly built object).
-    void release_workspaces();
 
 public:
     /**

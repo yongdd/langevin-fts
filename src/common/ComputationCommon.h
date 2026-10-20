@@ -15,6 +15,7 @@
 #define COMPUTATION_COMMON_H_
 
 #include <array>
+#include <memory>
 #include <exception>
 #include <functional>
 #include <map>
@@ -71,8 +72,8 @@ template <typename T>
 class ComputationCommon : public PropagatorComputation<T>
 {
 protected:
-    ComputationBackend<T>* backend;  ///< Platform operations (owned)
-    Scheduler* sc;                   ///< Order in which the propagators are computed
+    std::unique_ptr<ComputationBackend<T>> backend;  ///< Platform operations
+    std::unique_ptr<Scheduler> sc;                   ///< Order in which the propagators are computed
     int n_streams;                   ///< Number of propagators computed concurrently
 
     /// Concentration of each block, key (polymer, key_left, key_right)
@@ -87,7 +88,7 @@ protected:
     ComputationCommon(ComputationBox<T>* cb, Molecules* molecules,
                       PropagatorComputationOptimizer* propagator_computation_optimizer,
                       SpaceGroup* space_group,
-                      const std::function<ComputationBackend<T>*()>& create_backend);
+                      const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
 
     /**
      * @brief Check the inputs of compute_propagators(), keep a copy of the

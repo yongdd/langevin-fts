@@ -9,8 +9,8 @@
  * **Usage:**
  *
  * @code
- * FFT<double>* fft = createFFT<double, 3>(nx, bc, FFTBackend::FFTW);
- * FFT<double>* fft_mkl = createFFT<double, 3>(nx, bc, FFTBackend::MKL);
+ * std::unique_ptr<FFT<double>> fft = createFFT<double, 3>(nx, bc, FFTBackend::FFTW);
+ * auto fft_mkl = createFFT<double, 3>(nx, bc, FFTBackend::MKL);
  * @endcode
  *
  * @see FFT for the abstract interface
@@ -22,6 +22,7 @@
 #define FFT_FACTORY_H_
 
 #include <array>
+#include <memory>
 #include "FFT.h"
 #include "ComputationBox.h"
 
@@ -48,21 +49,21 @@
  * @param bc      Boundary conditions per dimension
  * @param backend FFT backend to use (FFTW or MKL)
  *
- * @return Pointer to newly created FFT object (caller owns memory)
+ * @return Owning pointer to the new FFT object
  *
  * @throws Exception if the requested backend is not available
  */
 template <typename T, int DIM>
-FFT<T>* createFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc, FFTBackend backend)
+std::unique_ptr<FFT<T>> createFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc, FFTBackend backend)
 {
 #ifdef USE_CPU_MKL
     if (backend == FFTBackend::MKL)
-        return new MklFFT<T, DIM>(nx, bc);
+        return std::make_unique<MklFFT<T, DIM>>(nx, bc);
 #endif
 
 #ifdef USE_CPU_FFTW
     if (backend == FFTBackend::FFTW)
-        return new FftwFFT<T, DIM>(nx, bc);
+        return std::make_unique<FftwFFT<T, DIM>>(nx, bc);
 #endif
 
     (void)nx;
@@ -83,10 +84,10 @@ FFT<T>* createFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc
  * @param nx      Grid dimensions
  * @param backend FFT backend to use (only FFTW is supported)
  *
- * @return Pointer to newly created FFT object (caller owns memory)
+ * @return Owning pointer to the new FFT object
  */
 template <typename T, int DIM>
-FFT<T>* createFFT(std::array<int, DIM> nx, FFTBackend backend)
+std::unique_ptr<FFT<T>> createFFT(std::array<int, DIM> nx, FFTBackend backend)
 {
     std::array<BoundaryCondition, DIM> bc;
     bc.fill(BoundaryCondition::PERIODIC);

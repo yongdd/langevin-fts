@@ -28,6 +28,7 @@
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
+#include <atomic>
 #include <complex>
 #include <map>
 #include <string>
@@ -211,15 +212,29 @@ public:
  * @def gpu_error_check
  * @brief Macro for CUDA error checking with source location.
  *
- * Wraps CUDA API calls and throws an exception on error.
+ * Wraps CUDA API calls and throws an exception on error. Every call that
+ * returns an error code is checked, and every kernel launch is followed by
+ * gpu_error_check(cudaGetLastError()), as the CUDA C++ Best Practices Guide
+ * (2.3) recommends: the check is a host-side read that does not synchronize,
+ * and cudaGetLastError() clears the slot, so an error is reported at the
+ * launch that caused it and not again by a later, unrelated check. Errors of
+ * a running kernel (e.g. an illegal address) surface at the next synchronizing
+ * call; run with CUDA_LAUNCH_BLOCKING=1 (or compute-sanitizer) to see them at
+ * their launch. Release calls (cudaFree, *Destroy) are not checked: they run
+ * in destructors, which must not throw.
  *
  * @example
  * @code
  * gpu_error_check(cudaMalloc(&ptr, size));
  * gpu_error_check(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
+ * ker_scale<<<blocks, threads, 0, stream>>>(d_x, 2.0, n);
+ * gpu_error_check(cudaGetLastError());
  * @endcode
  */
-#define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
+#define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__)
+
+/// Throw the exception for a failed CUDA call (out of line: only the error path pays).
+[[noreturn]] void report_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
 /**
  * @brief Throw exception on CUDA error.
@@ -229,7 +244,11 @@ public:
  * @param func Function name
  * @throws Exception if code != cudaSuccess
  */
-void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
+inline void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func)
+{
+    if (code != cudaSuccess)
+        report_cuda_error(code, file, line, func);
+}
 
 /**
  * @def cufft_error_check
@@ -244,16 +263,8 @@ void throw_on_cuda_error(cudaError_t code, const char *file, int line, const cha
  * cufft_error_check(cufftExecD2Z(plan, in, out));
  * @endcode
  */
-#define cufft_error_check(code) throw_on_cufft_error((code), __FILE__, __LINE__, __func__);
+#define cufft_error_check(code) throw_on_cufft_error((code), __FILE__, __LINE__, __func__)
 
-/**
- * @brief Throw exception on cuFFT error.
- * @param code cuFFT result code
- * @param file Source file name
- * @param line Line number
- * @param func Function name
- * @throws Exception if code != CUFFT_SUCCESS
- */
 /// Blocks for a grid-stride kernel over n elements: enough to cover n, capped at
 /// MAX_GRID_THREADS threads in total (the kernels loop over the rest), so that
 /// `i += blockDim.x * gridDim.x` stays within int (see GridLimits.h).
@@ -264,6 +275,14 @@ inline int grid_blocks(long long n, int block_size)
     return static_cast<int>(blocks < 1 ? 1 : (blocks > max_blocks ? max_blocks : blocks));
 }
 
+/**
+ * @brief Throw exception on cuFFT error.
+ * @param code cuFFT result code
+ * @param file Source file name
+ * @param line Line number
+ * @param func Function name
+ * @throws Exception if code != CUFFT_SUCCESS
+ */
 inline void throw_on_cufft_error(cufftResult code, const char *file, int line, const char *func)
 {
     if (code != CUFFT_SUCCESS)
@@ -452,5 +471,139 @@ __global__ void ker_multi_weight(
 
 __global__ void ker_multi_weight(
     cuDoubleComplex* dst, const cuDoubleComplex* src, const int* weights, const int n);
+
+//==============================================================================
+// Owning CUDA allocations
+//==============================================================================
+
+/// Live CudaBuffer allocations of one memory kind. Exact (unlike device-wide
+/// free memory, which other processes and cuFFT's own plan memory change), so
+/// the tests can check that destroyed objects released everything.
+struct CudaBufferCounters
+{
+    std::atomic<long long> live_count{0};
+    std::atomic<long long> live_bytes{0};
+};
+
+/// Test hook: when set to N >= 0, the N-th following CudaBuffer allocation
+/// (0-based) throws instead of allocating, once; -1 (the default) disables it.
+/// tests/TestCudaDeviceBuffer.cu sweeps N to fail every allocation of a
+/// construction in turn and checks that the counters return to their start.
+inline std::atomic<long long>& cuda_buffer_fail_countdown()
+{
+    static std::atomic<long long> countdown{-1};
+    return countdown;
+}
+
+/// cudaMalloc / cudaFree policy of CudaBuffer
+struct CudaDeviceMemory
+{
+    static cudaError_t allocate(void** p, size_t bytes) { return cudaMalloc(p, bytes); }
+    static void release(void* p) { cudaFree(p); }
+    static CudaBufferCounters& counters() { static CudaBufferCounters c; return c; }
+};
+
+/// cudaMallocHost / cudaFreeHost (pinned host memory) policy of CudaBuffer
+struct CudaPinnedMemory
+{
+    static cudaError_t allocate(void** p, size_t bytes) { return cudaMallocHost(p, bytes); }
+    static void release(void* p) { cudaFreeHost(p); }
+    static CudaBufferCounters& counters() { static CudaBufferCounters c; return c; }
+};
+
+/**
+ * @brief Owning device (or pinned host) allocation of `count` elements of T.
+ *
+ * Move-only: the allocation is released by the destructor, so a class that
+ * keeps its device arrays in CudaBuffer members needs no cleanup code and
+ * leaks nothing when its constructor throws. The raw pointer is lent through
+ * get() or the implicit conversion, so kernel launches, cudaMemcpy and cuFFT
+ * calls read as before; template functions that deduce the pointer type
+ * (CUB, thrust) take get(). Errors of the release call are ignored on
+ * purpose: a destructor must not throw, and at process exit the runtime may
+ * already be gone.
+ *
+ * @code
+ * CudaDeviceBuffer<double> d_q(M);            // allocated
+ * ker_scale<<<B, T>>>(d_q, 2.0, M);           // lent as double*
+ * cub::DeviceReduce::Sum(d_tmp.get(), bytes, d_q.get(), d_out.get(), M);
+ * CudaPinnedBuffer<double> h_q(M);            // page-locked host memory
+ * @endcode
+ */
+template <typename T, typename Memory = CudaDeviceMemory>
+class CudaBuffer
+{
+public:
+    CudaBuffer() = default;
+    explicit CudaBuffer(size_t count) { allocate(count); }
+    ~CudaBuffer() { release(); }
+
+    CudaBuffer(CudaBuffer&& other) noexcept : ptr_(other.ptr_), count_(other.count_)
+    {
+        other.ptr_ = nullptr;
+        other.count_ = 0;
+    }
+    CudaBuffer& operator=(CudaBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+            ptr_ = other.ptr_;
+            count_ = other.count_;
+            other.ptr_ = nullptr;
+            other.count_ = 0;
+        }
+        return *this;
+    }
+    CudaBuffer(const CudaBuffer&) = delete;
+    CudaBuffer& operator=(const CudaBuffer&) = delete;
+
+    /// Allocate `count` elements, releasing a previous allocation first (count 0 only releases).
+    void allocate(size_t count)
+    {
+        release();
+        if (count == 0)
+            return;
+        std::atomic<long long>& countdown = cuda_buffer_fail_countdown();
+        if (countdown.load(std::memory_order_relaxed) >= 0 && countdown.fetch_sub(1) == 0)
+            throw_with_line_number("CudaBuffer: injected allocation failure (test hook)");
+        void* p = nullptr;
+        gpu_error_check(Memory::allocate(&p, sizeof(T) * count));
+        ptr_ = static_cast<T*>(p);
+        count_ = count;
+        Memory::counters().live_count.fetch_add(1, std::memory_order_relaxed);
+        Memory::counters().live_bytes.fetch_add(static_cast<long long>(bytes()), std::memory_order_relaxed);
+    }
+    /// Free the allocation (no-op when empty).
+    void release() noexcept
+    {
+        if (ptr_ != nullptr)
+        {
+            Memory::release(ptr_);
+            Memory::counters().live_count.fetch_sub(1, std::memory_order_relaxed);
+            Memory::counters().live_bytes.fetch_sub(static_cast<long long>(bytes()), std::memory_order_relaxed);
+        }
+        ptr_ = nullptr;
+        count_ = 0;
+    }
+
+    T* get() const noexcept { return ptr_; }
+    operator T*() const noexcept { return ptr_; }   ///< lends the pointer (no ownership transfer)
+    size_t size() const noexcept { return count_; }   ///< number of elements
+    size_t bytes() const noexcept { return sizeof(T) * count_; }
+    bool empty() const noexcept { return ptr_ == nullptr; }
+
+private:
+    T* ptr_ = nullptr;
+    size_t count_ = 0;
+};
+
+template <typename T> using CudaDeviceBuffer = CudaBuffer<T, CudaDeviceMemory>;
+template <typename T> using CudaPinnedBuffer = CudaBuffer<T, CudaPinnedMemory>;
+
+// The implicit pointer conversion would let a buffer be freed by hand, which
+// the buffer then frees again; these overloads make that a compile error.
+template <typename T, typename M> cudaError_t cudaFree(const CudaBuffer<T, M>&) = delete;
+template <typename T, typename M> cudaError_t cudaFreeHost(const CudaBuffer<T, M>&) = delete;
 
 #endif

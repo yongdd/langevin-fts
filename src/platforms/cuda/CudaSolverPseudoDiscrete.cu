@@ -57,22 +57,14 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
                               /*q_full_in_factor=*/2, /*with_exp_dw_half=*/false,
                               /*complex_requires_periodic=*/false)
 {
-    // Null every buffer before anything can throw (see release_workspaces())
-    for(int i=0; i<MAX_STREAMS; i++)
-    {
-        d_qk_in_1_one[i] = nullptr;
-        d_qk_in_1_two[i] = nullptr;
-        d_rk_in_1_one[i] = nullptr;
-        d_rk_in_2_one[i] = nullptr;
-    }
     try{
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
+            d_qk_in_1_one[i].allocate(M_COMPLEX);
+            d_qk_in_1_two[i].allocate(2*M_COMPLEX);
         }
         if (!is_periodic_)
         {
@@ -83,8 +75,8 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
                                 ? 2 * M_COMPLEX : M_COMPLEX;
             for(int i=0; i<n_streams; i++)
             {
-                gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*rk_size));
-                gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*rk_size));
+                d_rk_in_1_one[i].allocate(rk_size);
+                d_rk_in_2_one[i].allocate(rk_size);
             }
         }
 
@@ -92,40 +84,11 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
     }
     catch(std::exception& exc)
     {
-        // This class's buffers only; the base destructor releases the rest
-        release_workspaces();
-        throw_without_line_number(exc.what());
-    }
-    catch(...)
-    {
-        release_workspaces();
-        throw;
+        throw_without_line_number(exc.what());   // the owning members release what was acquired
     }
 }
 template <typename T>
-CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
-{
-    release_workspaces();
-}
-
-template <typename T>
-void CudaSolverPseudoDiscrete<T>::release_workspaces()
-{
-    // Only this class's buffers; CudaSolverPseudoBase frees its own
-    auto free_device = [](auto*& d_ptr)
-    {
-        if (d_ptr != nullptr) cudaFree(d_ptr);
-        d_ptr = nullptr;
-    };
-    // For pseudo-spectral: advance_propagator()
-    for(int i=0; i<MAX_STREAMS; i++)
-    {
-        free_device(d_qk_in_1_one[i]);
-        free_device(d_qk_in_1_two[i]);
-        free_device(d_rk_in_1_one[i]);
-        free_device(d_rk_in_2_one[i]);
-    }
-}
+CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete() = default;
 
 template <typename T>
 void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::string, const T*> w_input)
@@ -180,36 +143,36 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out, d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
-                    gpu_error_check(cudaPeekAtLastError());
+                    gpu_error_check(cudaGetLastError());
 
                     if (d_q_mask != nullptr)
                     {
                         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                             d_q_out, d_q_out, d_q_mask, 1.0, M_phys);
-                        gpu_error_check(cudaPeekAtLastError());
+                        gpu_error_check(cudaGetLastError());
                     }
                     return;
                 }
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 crysfft_[STREAM]->set_contour_step(coeff_full);
                 crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                 ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 if (d_q_mask != nullptr)
                 {
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
-                    gpu_error_check(cudaPeekAtLastError());
+                    gpu_error_check(cudaGetLastError());
                 }
                 return;
             }
@@ -227,7 +190,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 // Expand reduced basis → full grid
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 fft_in = d_q_full_in_[STREAM];
                 fft_out = d_q_full_out_[STREAM];
             }
@@ -244,14 +207,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
 
             // Multiply exp(-k^2 ds/6) in fourier space
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             // Execute a backward FFT
             fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
 
             // Evaluate exp(-w*ds) in real space (1/M normalization from unnormalized cuFFT)
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -266,14 +229,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
             if constexpr (std::is_same<T, double>::value)
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
             else
-                ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM]), _d_boltz_bond, 1.0, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
+                ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM].get()), _d_boltz_bond, 1.0, M_COMPLEX);
+            gpu_error_check(cudaGetLastError());
 
             fft_[STREAM]->backward_stream(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out), streams[STREAM][0]);
 
             // Evaluate exp(-w*ds); DCT/DST backward is already normalized (no 1/M).
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0, M);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
 
         // Multiply mask (on full grid)
@@ -287,7 +250,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 {
                     ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                    gpu_error_check(cudaPeekAtLastError());
+                    gpu_error_check(cudaGetLastError());
                     d_q_mask_full = d_q_full_in_[STREAM];
                 }
                 else
@@ -296,7 +259,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
                 }
             }
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
 
         // Reduce full grid → reduced basis
@@ -304,7 +267,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
     }
     catch(std::exception& exc)
@@ -360,14 +323,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 }
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 crysfft_[STREAM]->set_contour_step(coeff_half);
                 crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
 
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 return;
             }
         }
@@ -384,7 +347,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
                 // Expand reduced basis → full grid
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 fft_in = d_q_full_in_[STREAM];
                 fft_out = d_q_full_out_[STREAM];
             }
@@ -398,15 +361,15 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         {
             // 3D fourier discrete transform, forward
             fft_forward(STREAM, fft_in, d_qk_in_1_one[STREAM], 1);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
             ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             // 3D fourier discrete transform, backward
             fft_backward(STREAM, d_qk_in_1_one[STREAM], fft_out, 1);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -418,8 +381,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             if constexpr (std::is_same<T, double>::value)
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
             else
-                ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM]), _d_boltz_bond_half, 1.0, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
+                ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(reinterpret_cast<cuDoubleComplex*>(d_rk_in_1_one[STREAM].get()), _d_boltz_bond_half, 1.0, M_COMPLEX);
+            gpu_error_check(cudaGetLastError());
             fft_[STREAM]->backward_stream(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out), streams[STREAM][0]);
         }
 
@@ -428,7 +391,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
     }
     catch(std::exception& exc)

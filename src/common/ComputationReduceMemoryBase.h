@@ -27,6 +27,7 @@
 #define COMPUTATION_REDUCE_MEMORY_BASE_H_
 
 #include <functional>
+#include <memory>
 #include <map>
 #include <string>
 #include <tuple>
@@ -59,7 +60,7 @@ protected:
     ComputationReduceMemoryBase(ComputationBox<T>* cb, Molecules* molecules,
                                 PropagatorComputationOptimizer* propagator_computation_optimizer,
                                 SpaceGroup* space_group, int first_segment,
-                                const std::function<ComputationBackend<T>*()>& create_backend);
+                                const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
 
     /// Contour step index used to advance propagator key (discrete chains: 0).
     virtual int propagator_ds_index(const std::string& key) const = 0;

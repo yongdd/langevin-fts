@@ -37,12 +37,14 @@
 
 #include "CudaCommon.h"
 
-void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func)
+void report_cuda_error(cudaError_t code, const char *file, int line, const char *func)
 {
-    if (code != cudaSuccess){
-        std::string file_and_line("File: \"" + std::string(file) + "\", line: " + std::to_string(line) + ", function <" + std::string(func) + ">");
-        throw thrust::system_error(code, thrust::cuda_category(), file_and_line);
-    }
+    // A failed API call (e.g. cudaMalloc) also leaves its error in the per-thread
+    // slot; clear it so the next launch check does not report it again. Sticky
+    // errors of a broken context stay, as they must.
+    (void)cudaGetLastError();
+    std::string file_and_line("File: \"" + std::string(file) + "\", line: " + std::to_string(line) + ", function <" + std::string(func) + ">");
+    throw thrust::system_error(code, thrust::cuda_category(), file_and_line);
 }
 
 std::complex<double> cuDoubleToStdComplex(cuDoubleComplex z) {

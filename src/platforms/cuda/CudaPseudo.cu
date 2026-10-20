@@ -48,96 +48,39 @@ CudaPseudo<T>::CudaPseudo(
     std::array<double, 9> recip_vec)
         : Pseudo<T>(bond_lengths, bc, nx, dx, recip_metric, recip_vec)
 {
-    // Null every device pointer before anything can throw (see release())
-    d_fourier_basis_x = nullptr;
-    d_fourier_basis_y = nullptr;
-    d_fourier_basis_z = nullptr;
-    d_fourier_basis_xy = nullptr;
-    d_fourier_basis_xz = nullptr;
-    d_fourier_basis_yz = nullptr;
-    d_negative_k_idx = nullptr;
-    try
+    // The device arrays are owning buffers: a failed allocation below releases
+    // the ones made so far, and the Pseudo<T> base frees the host arrays.
+    const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
+
+    // Boltzmann factors are allocated in finalize_ds_values()
+    // after add_ds_value() is called for each unique ds value
+
+    // Stress calculation: compute_stress(). Diagonal terms, then the
+    // cross-terms for non-orthogonal systems
+    d_fourier_basis_x.allocate(M_COMPLEX);
+    d_fourier_basis_y.allocate(M_COMPLEX);
+    d_fourier_basis_z.allocate(M_COMPLEX);
+    d_fourier_basis_xy.allocate(M_COMPLEX);
+    d_fourier_basis_xz.allocate(M_COMPLEX);
+    d_fourier_basis_yz.allocate(M_COMPLEX);
+
+    if constexpr (std::is_same<T, std::complex<double>>::value)
     {
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
-
-        // Boltzmann factors are allocated in finalize_ds_values()
-        // after add_ds_value() is called for each unique ds value
-
-        // Allocate memory for stress calculation: compute_stress()
-        // Diagonal terms
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));
-        // Cross-terms for non-orthogonal systems
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_xy, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_xz, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_yz, sizeof(double)*M_COMPLEX));
-
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-        {
-            // Mirror the host convention: the mapping exists only for
-            // periodic BCs; leave the device pointer nullptr otherwise so
-            // get_negative_frequency_mapping() returns nullptr on both
-            // sides for non-periodic boxes.
-            if (Pseudo<T>::get_negative_frequency_mapping() != nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
-        }
-
-        // Upload Fourier basis to GPU
-        upload_fourier_basis();
+        // Mirror the host convention: the mapping exists only for
+        // periodic BCs; leave the device pointer nullptr otherwise so
+        // get_negative_frequency_mapping() returns nullptr on both
+        // sides for non-periodic boxes.
+        if (Pseudo<T>::get_negative_frequency_mapping() != nullptr)
+            d_negative_k_idx.allocate(M_COMPLEX);
     }
-    catch(std::exception& exc)
-    {
-        // The Pseudo<T> base destructor still frees the host arrays
-        release();
-        throw_without_line_number(exc.what());
-    }
-    catch(...)
-    {
-        release();
-        throw;
-    }
+
+    // Upload Fourier basis to GPU
+    upload_fourier_basis();
 }
 //----------------- Destructor -----------------------------
 template <typename T>
-CudaPseudo<T>::~CudaPseudo()
-{
-    release();
-}
+CudaPseudo<T>::~CudaPseudo() = default;
 
-//----------------- Release (pointers are nullptr until allocated) -----------------------------
-template <typename T>
-void CudaPseudo<T>::release()
-{
-    // Free GPU memory for nested maps: d_boltz_bond[ds_index][monomer_type]
-    for (const auto& ds_entry : d_boltz_bond)
-        for (const auto& item : ds_entry.second)
-            if (item.second != nullptr)
-                cudaFree(item.second);
-    for (const auto& ds_entry : d_boltz_bond_half)
-        for (const auto& item : ds_entry.second)
-            if (item.second != nullptr)
-                cudaFree(item.second);
-    d_boltz_bond.clear();
-    d_boltz_bond_half.clear();
-
-    // For stress calculation: compute_stress()
-    // Diagonal terms, then cross-terms
-    for (double** d_ptr : {&d_fourier_basis_x, &d_fourier_basis_y, &d_fourier_basis_z,
-                           &d_fourier_basis_xy, &d_fourier_basis_xz, &d_fourier_basis_yz})
-    {
-        if (*d_ptr != nullptr)
-            cudaFree(*d_ptr);
-        *d_ptr = nullptr;
-    }
-
-    // Allocated for complex fields with periodic BC only
-    if (d_negative_k_idx != nullptr)
-        cudaFree(d_negative_k_idx);
-    d_negative_k_idx = nullptr;
-}
-
-//----------------- Upload Boltzmann factors to GPU -----------------------------
 template <typename T>
 void CudaPseudo<T>::upload_boltz_bond()
 {
@@ -150,7 +93,7 @@ void CudaPseudo<T>::upload_boltz_bond()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            gpu_error_check(cudaMemcpy(d_boltz_bond[ds_index][monomer_type], item.second,
+            gpu_error_check(cudaMemcpy(d_boltz_bond[ds_index][monomer_type], item.second.data(),
                                        sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
@@ -161,7 +104,7 @@ void CudaPseudo<T>::upload_boltz_bond()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            gpu_error_check(cudaMemcpy(d_boltz_bond_half[ds_index][monomer_type], item.second,
+            gpu_error_check(cudaMemcpy(d_boltz_bond_half[ds_index][monomer_type], item.second.data(),
                                        sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
@@ -174,18 +117,18 @@ void CudaPseudo<T>::upload_fourier_basis()
     const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
 
     // Diagonal terms
-    gpu_error_check(cudaMemcpy(d_fourier_basis_x, this->fourier_basis_x,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_x, this->fourier_basis_x.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_y, this->fourier_basis_y,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_y, this->fourier_basis_y.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_z, this->fourier_basis_z,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_z, this->fourier_basis_z.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
     // Cross-terms for non-orthogonal systems
-    gpu_error_check(cudaMemcpy(d_fourier_basis_xy, this->fourier_basis_xy,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xy, this->fourier_basis_xy.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_xz, this->fourier_basis_xz,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xz, this->fourier_basis_xz.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_yz, this->fourier_basis_yz,
+    gpu_error_check(cudaMemcpy(d_fourier_basis_yz, this->fourier_basis_yz.data(),
                                sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
 
     // negative_k_idx for complex fields with periodic BC
@@ -233,15 +176,10 @@ void CudaPseudo<T>::finalize_ds_values()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            // Allocate only if no GPU memory exists for this ds_index/monomer_type.
-            // The slot is inserted as nullptr and set only after cudaMalloc succeeds.
-            double*& d_slot = d_boltz_bond[ds_index][monomer_type];
-            if (d_slot == nullptr)
-            {
-                double* d_ptr = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(double)*M_COMPLEX));
-                d_slot = d_ptr;
-            }
+            // Allocate only if no GPU memory exists for this ds_index/monomer_type
+            CudaDeviceBuffer<double>& slot = d_boltz_bond[ds_index][monomer_type];
+            if (slot.empty())
+                slot.allocate(M_COMPLEX);
         }
     }
     for (const auto& ds_entry : this->boltz_bond_half)
@@ -251,13 +189,9 @@ void CudaPseudo<T>::finalize_ds_values()
         {
             std::string monomer_type = item.first;
             // Allocate only if no GPU memory exists for this ds_index/monomer_type
-            double*& d_slot = d_boltz_bond_half[ds_index][monomer_type];
-            if (d_slot == nullptr)
-            {
-                double* d_ptr = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(double)*M_COMPLEX));
-                d_slot = d_ptr;
-            }
+            CudaDeviceBuffer<double>& slot = d_boltz_bond_half[ds_index][monomer_type];
+            if (slot.empty())
+                slot.allocate(M_COMPLEX);
         }
     }
 

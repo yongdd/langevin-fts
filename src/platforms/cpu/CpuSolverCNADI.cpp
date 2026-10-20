@@ -86,14 +86,9 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
                 std::string monomer_type = item.first;
                 exp_dw     [ds_idx][monomer_type].resize(M);
 
-                // Full step coefficients (xl, xd, xh, yl, ..., zh). The slot is
-                // inserted as nullptr first, so a failed allocation leaves no
-                // unowned array behind.
+                // Full step coefficients (xl, xd, xh, yl, ..., zh)
                 for(auto* coeff: {&xl, &xd, &xh, &yl, &yd, &yh, &zl, &zd, &zh})
-                {
-                    double*& slot = (*coeff)[ds_idx][monomer_type];
-                    slot = new double[M];
-                }
+                    (*coeff)[ds_idx][monomer_type].resize(M);
             }
         }
 
@@ -101,27 +96,10 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
     }
     catch(std::exception& exc)
     {
-        // The destructor does not run for a partly constructed object
-        release();
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverCNADI::~CpuSolverCNADI()
-{
-    // exp_dw vectors are automatically cleaned up
-    release();
-}
-void CpuSolverCNADI::release()
-{
-    // Full step coefficients: nested map [ds_index][monomer_type]
-    for(auto* coeff: {&xl, &xd, &xh, &yl, &yd, &yh, &zl, &zd, &zh})
-    {
-        for(const auto& ds_entry: *coeff)
-            for(const auto& item: ds_entry.second)
-                delete[] item.second;
-        coeff->clear();
-    }
-}
+CpuSolverCNADI::~CpuSolverCNADI() = default;   // the coefficient tables are std::vector members
 int CpuSolverCNADI::max_of_two(int x, int y)
 {
    return (x > y) ? x : y;
@@ -152,9 +130,9 @@ void CpuSolverCNADI::update_laplacian_operator()
                 FiniteDifference::get_laplacian_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
-                    xl[ds_idx][monomer_type], xd[ds_idx][monomer_type], xh[ds_idx][monomer_type],
-                    yl[ds_idx][monomer_type], yd[ds_idx][monomer_type], yh[ds_idx][monomer_type],
-                    zl[ds_idx][monomer_type], zd[ds_idx][monomer_type], zh[ds_idx][monomer_type],
+                    xl[ds_idx][monomer_type].data(), xd[ds_idx][monomer_type].data(), xh[ds_idx][monomer_type].data(),
+                    yl[ds_idx][monomer_type].data(), yd[ds_idx][monomer_type].data(), yh[ds_idx][monomer_type].data(),
+                    zl[ds_idx][monomer_type].data(), zd[ds_idx][monomer_type].data(), zh[ds_idx][monomer_type].data(),
                     bond_length_sq, local_ds);
 
             }
@@ -245,9 +223,9 @@ void CpuSolverCNADI::advance_propagator(
         advance_propagator_step(
             q_in_full, q_out_full,
             _exp_dw,
-            xl[ds_index][monomer_type], xd[ds_index][monomer_type], xh[ds_index][monomer_type],
-            yl[ds_index][monomer_type], yd[ds_index][monomer_type], yh[ds_index][monomer_type],
-            zl[ds_index][monomer_type], zd[ds_index][monomer_type], zh[ds_index][monomer_type],
+            xl[ds_index][monomer_type].data(), xd[ds_index][monomer_type].data(), xh[ds_index][monomer_type].data(),
+            yl[ds_index][monomer_type].data(), yd[ds_index][monomer_type].data(), yh[ds_index][monomer_type].data(),
+            zl[ds_index][monomer_type].data(), zd[ds_index][monomer_type].data(), zh[ds_index][monomer_type].data(),
             nullptr);
 
         // Multiply mask
@@ -318,17 +296,17 @@ void CpuSolverCNADI::advance_propagator_3d(
         double temp2[nx[1]];
         double temp3[nx[2]];
 
-        double *_xl = xl[ds_index][monomer_type];
-        double *_xd = xd[ds_index][monomer_type];
-        double *_xh = xh[ds_index][monomer_type];
+        double *_xl = xl[ds_index][monomer_type].data();
+        double *_xd = xd[ds_index][monomer_type].data();
+        double *_xh = xh[ds_index][monomer_type].data();
 
-        double *_yl = yl[ds_index][monomer_type];
-        double *_yd = yd[ds_index][monomer_type];
-        double *_yh = yh[ds_index][monomer_type];
+        double *_yl = yl[ds_index][monomer_type].data();
+        double *_yd = yd[ds_index][monomer_type].data();
+        double *_yh = yh[ds_index][monomer_type].data();
 
-        double *_zl = zl[ds_index][monomer_type];
-        double *_zd = zd[ds_index][monomer_type];
-        double *_zh = zh[ds_index][monomer_type];
+        double *_zl = zl[ds_index][monomer_type].data();
+        double *_zd = zd[ds_index][monomer_type].data();
+        double *_zh = zh[ds_index][monomer_type].data();
 
         int im, ip, jm, jp, km, kp;
 
@@ -466,13 +444,13 @@ void CpuSolverCNADI::advance_propagator_2d(
         double temp1[nx[0]];
         double temp2[nx[1]];
 
-        double *_xl = xl[ds_index][monomer_type];
-        double *_xd = xd[ds_index][monomer_type];
-        double *_xh = xh[ds_index][monomer_type];
+        double *_xl = xl[ds_index][monomer_type].data();
+        double *_xd = xd[ds_index][monomer_type].data();
+        double *_xh = xh[ds_index][monomer_type].data();
 
-        double *_yl = yl[ds_index][monomer_type];
-        double *_yd = yd[ds_index][monomer_type];
-        double *_yh = yh[ds_index][monomer_type];
+        double *_yl = yl[ds_index][monomer_type].data();
+        double *_yd = yd[ds_index][monomer_type].data();
+        double *_yh = yh[ds_index][monomer_type].data();
 
         int im, ip, jm, jp;
 
@@ -560,9 +538,9 @@ void CpuSolverCNADI::advance_propagator_1d(
         const std::vector<int> nx = this->cb->get_nx();
         double q_star[nx[0]];
 
-        double *_xl = xl[ds_index][monomer_type];
-        double *_xd = xd[ds_index][monomer_type];
-        double *_xh = xh[ds_index][monomer_type];
+        double *_xl = xl[ds_index][monomer_type].data();
+        double *_xd = xd[ds_index][monomer_type].data();
+        double *_xh = xh[ds_index][monomer_type].data();
 
         int im, ip;
 

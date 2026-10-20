@@ -97,7 +97,7 @@ PropagatorComputation<T>* FftwFactory<T>::create_propagator_computation(Computat
         // Reduce-memory mode computes one propagator at a time
         const int max_n_streams = this->reduce_memory ? 1 : INT_MAX;
         auto create_backend = [=]() {
-            return new CpuComputationBackend<T>(cb, molecules, solver_type, numerical_method, FFTBackend::FFTW, space_group, max_n_streams);
+            return std::make_unique<CpuComputationBackend<T>>(cb, molecules, solver_type, numerical_method, FFTBackend::FFTW, space_group, max_n_streams);
         };
 
         if (discrete && !this->reduce_memory)

@@ -20,8 +20,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 11. Check whether two GPUs can be used for `CudaAndersonMixing`, and why two-GPU performance fluctuates on A100.
 12. Check whether a cuFFT callback function is applicable.
 13. Reduce the number of splits in the scheduler.
-14. Replace raw `new` with safe memory allocation.
-15. Throw exceptions properly from inside OpenMP blocks.
 
 ## Tests
 
@@ -127,5 +125,12 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 
 ## Done (removed from the list above)
 
+- Replace raw `new` and `cudaMalloc`/`cudaFree` with owning buffers (2026-10-21):
+  `CudaDeviceBuffer`/`CudaPinnedBuffer`, `std::vector` and `std::unique_ptr` (the FFTW/MKL
+  plans and `fftw_malloc` buffers stay in the CPU FFT classes' `release()`); see
+  docs/internals/DeveloperGuide.md (Memory Management).
+- Throw exceptions properly from inside OpenMP blocks: `ParallelErrors` in
+  `src/common/ComputationCommon.h` carries the first exception out of every parallel
+  region of `ComputationContinuous.cpp` / `ComputationDiscrete.cpp` (2026-10-20, 3007130a).
 - Packaging with conda, pip and Docker (conda-recipe/, pyproject.toml, docker/).
 - Stress computation tests with complex type (`TestStress1DComplex`, `TestStressLinear2DComplex`).

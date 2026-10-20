@@ -28,6 +28,8 @@
 #include <array>
 #include <vector>
 #include <complex>
+#include <memory>
+#include <type_traits>
 #include <cufft.h>
 
 #include "ComputationBox.h"
@@ -91,12 +93,15 @@ private:
     bool plan_forward_created_ = false;          ///< plan_forward_ holds a created plan
     bool plan_backward_created_ = false;         ///< plan_backward_ holds a created plan
 
-    // Device work buffers
-    double* d_work_buffer_;                      ///< Main work buffer
+    // Device work buffer: 2*total_complex_grid_ doubles (complex layout) for
+    // periodic BC, total_grid_ doubles otherwise
+    CudaDeviceBuffer<double> d_work_buffer_;
 
-    // CudaRealTransform objects for non-periodic BC (forward: DCT-2/DST-2, backward: DCT-3/DST-3)
-    void* rt_forward_;                           ///< Forward transform (DCT-2/DST-2)
-    void* rt_backward_;                          ///< Backward transform (DCT-3/DST-3)
+    // Real transforms for non-periodic BC (forward: DCT-2/DST-2, backward: DCT-3/DST-3)
+    using RealTransform = std::conditional_t<DIM == 1, CudaRealTransform1D,
+                          std::conditional_t<DIM == 2, CudaRealTransform2D, CudaRealTransform3D>>;
+    std::unique_ptr<RealTransform> rt_forward_;
+    std::unique_ptr<RealTransform> rt_backward_;
 
     /// Initialize cuFFT plans for periodic BC.
     void initPeriodicFFT();

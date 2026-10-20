@@ -237,7 +237,7 @@ CpuSolver<T>                                  [Abstract Base]
 └── compute_single_segment_stress() [pure virtual]
         │
         ├── CpuSolverPseudoBase<T>            [Pseudo-spectral Common]
-        │   ├── fft_               - FFT<T>* for transforms
+        │   ├── fft_               - std::unique_ptr<FFT<T>> for transforms
         │   ├── transform_forward()
         │   ├── transform_backward()
         │   ├── update_laplacian_operator()
@@ -474,7 +474,33 @@ the computation classes in `src/common/`; a new kind of grid operation is a new
 
 ### Memory Management
 
-C++ code uses raw pointers. Ensure proper allocation/deallocation in constructors/destructors.
+Allocations are owned by objects that release them, so destructors and constructors
+that throw need no cleanup code:
+
+- device memory: `CudaDeviceBuffer<T>`; page-locked host memory: `CudaPinnedBuffer<T>`
+  (both in `src/platforms/cuda/CudaCommon.h`; move-only, `allocate(n)`, `release()`,
+  `get()`, and an implicit conversion that lends the raw pointer to kernels, `cudaMemcpy`
+  and cuFFT; template calls such as CUB take `get()`);
+- host arrays: `std::vector`; owned objects (solvers, transforms, CrysFFT engines,
+  `Pseudo`, the scheduler, the backend): `std::unique_ptr`.
+
+Raw pointers are lent, never owned. Two places hand out ownership on purpose: the
+factory functions (`create_computation_box`, `create_propagator_computation`, ...),
+whose results the caller (the Python bindings or a C++ test) deletes, and the backends'
+`allocate()`/`deallocate()` pair, the allocator of the propagator handles that the
+computation classes free in one place. cuFFT plans, CUDA streams and events are not
+memory and are destroyed explicitly where their order matters (the solver before the
+streams it runs on). The CPU FFT classes keep their FFTW/MKL plans and descriptors and
+the `fftw_malloc`-aligned buffers of `FftwFFT`/`FftwCrysFFT*` in hand-written
+`release()` functions, which their destructors call. `CudaBuffer` keeps exact counts of its live device and pinned allocations
+(`CudaDeviceMemory::counters()`, `CudaPinnedMemory::counters()`), and
+`cuda_buffer_fail_countdown()` is a test hook that makes the N-th following allocation
+throw. `tests/TestCudaDeviceBuffer.cu` uses both: every kind of CUDA object (all
+solvers, the CrysFFT engines, non-periodic transforms, complex fields, the Anderson
+mixers) must return the counters to their start when destroyed, and a sweep fails each
+allocation of each construction in turn and requires the same after every failure. The
+test also lets one construction run out of device memory for real, so it runs serially.
+Freeing a buffer by hand (`cudaFree(buffer)`) does not compile.
 
 ### Propagator Computation Optimizer
 
@@ -500,6 +526,11 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 - Use C++20 features where appropriate
 - Follow existing naming conventions
 - Document public APIs
+- CUDA error checks follow the CUDA C++ Best Practices Guide (2.3): wrap every call that returns
+  an error code (`gpu_error_check(...)` for runtime and CUB calls, `cufft_error_check(...)` for
+  cuFFT) and follow every kernel launch with `gpu_error_check(cudaGetLastError());`. The check
+  reads a host-side value and does not synchronize; `cudaGetLastError()` clears the slot, so an
+  error is reported at the launch that caused it. Release calls in destructors stay unchecked.
 
 ### Python
 
@@ -517,9 +548,14 @@ See [Installation.md](../getting-started/Installation.md#segmentation-fault) for
 
 ### CUDA Debugging
 
-- Use `cuda-memcheck` for memory errors
-- Check return values of CUDA API calls
-- Use `nvprof` or Nsight for profiling
+- A launch error (bad configuration, too much shared memory) is reported by the check right
+  after its launch.
+- An error inside a running kernel (e.g. an illegal address) is reported by the next call that
+  waits for the GPU, not at its launch. Run with `CUDA_LAUNCH_BLOCKING=1` to make every launch
+  synchronous, so the error appears at its own launch check (slower; for debugging only).
+- `compute-sanitizer --tool memcheck` finds out-of-bounds accesses and, with
+  `--report-api-errors all`, every CUDA call that returns an error.
+- Use Nsight Systems / Nsight Compute for profiling.
 
 ### Platform Consistency Issues
 

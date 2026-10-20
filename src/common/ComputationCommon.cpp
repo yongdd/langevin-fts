@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <memory>
 #include <complex>
 
 #include "ComputationCommon.h"
@@ -15,9 +16,9 @@ ComputationCommon<T>::ComputationCommon(
     Molecules* molecules,
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     SpaceGroup* space_group,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer),
-      backend(nullptr), sc(nullptr), n_streams(0)
+      n_streams(0)
 {
     try
     {
@@ -38,7 +39,7 @@ ComputationCommon<T>::ComputationCommon(
         for (int s = 0; s < molecules->get_n_solvent_types(); s++)
             phi_solvent.push_back(backend->allocate());
 
-        sc = new Scheduler(propagator_computation_optimizer->get_computation_propagators(), n_streams);
+        sc = std::make_unique<Scheduler>(propagator_computation_optimizer->get_computation_propagators(), n_streams);
     }
     catch (std::exception& exc)
     {
@@ -57,8 +58,7 @@ ComputationCommon<T>::~ComputationCommon()
 template <typename T>
 void ComputationCommon<T>::release()
 {
-    delete sc;
-    sc = nullptr;
+    sc.reset();
     if (backend != nullptr)
     {
         for (const auto& item : phi_block)
@@ -67,8 +67,7 @@ void ComputationCommon<T>::release()
             backend->deallocate(item);
         for (const auto& item : w)
             backend->deallocate(item.second);
-        delete backend;
-        backend = nullptr;
+        backend.reset();
     }
     phi_block.clear();
     phi_solvent.clear();

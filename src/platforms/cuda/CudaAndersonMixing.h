@@ -26,6 +26,8 @@
 
 #include "CircularBuffer.h"
 #include "AndersonMixing.h"
+#include <memory>
+#include <vector>
 #include "CudaCommon.h"
 #include "CudaCircularBuffer.h"
 
@@ -56,35 +58,35 @@ template <typename T>
 class CudaAndersonMixing : public AndersonMixing<T>
 {
 private:
-    CudaCircularBuffer<T> *d_cb_w_hist = nullptr;        ///< Field history on GPU
-    CudaCircularBuffer<T> *d_cb_w_deriv_hist = nullptr;  ///< Residual history on GPU
-    CircularBuffer<T> *cb_w_deriv_dots = nullptr;        ///< Cached dot products (CPU)
-    T *w_deriv_dots = nullptr;                            ///< Current residual dots
+    std::unique_ptr<CudaCircularBuffer<T>> d_cb_w_hist;        ///< Field history on GPU
+    std::unique_ptr<CudaCircularBuffer<T>> d_cb_w_deriv_hist;  ///< Residual history on GPU
+    std::unique_ptr<CircularBuffer<T>> cb_w_deriv_dots;        ///< Cached dot products (CPU)
+    std::vector<T> w_deriv_dots;                            ///< Current residual dots
 
     /// @name Least-squares solve arrays (on CPU)
     /// @{
-    T **u_nm = nullptr;   ///< Matrix for normal equations
-    T *v_n = nullptr;     ///< RHS vector
-    T *a_n = nullptr;     ///< Solution coefficients
+    std::vector<T> u_nm_storage;   ///< max_hist x max_hist, row-major
+    std::vector<T*> u_nm;          ///< Row pointers into u_nm_storage (find_an takes T**)
+    std::vector<T> v_n;     ///< RHS vector
+    std::vector<T> a_n;     ///< Solution coefficients
     /// @}
 
     /// @name Temporary GPU arrays
     /// @{
-    CuDeviceData<T> *d_w_current = nullptr;  ///< Current field on GPU
-    CuDeviceData<T> *d_w_new = nullptr;      ///< New field on GPU
-    CuDeviceData<T> *d_w_deriv = nullptr;    ///< Residual on GPU
-    CuDeviceData<T> *d_sum = nullptr;        ///< Reduction temp
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_current;  ///< Current field on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_new;      ///< New field on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv;    ///< Residual on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum;        ///< Reduction temp
     /// @}
 
     /// @name CUB reduction storage
     /// @{
     size_t temp_storage_bytes = 0;
-    CuDeviceData<T> *d_temp_storage = nullptr;
-    CuDeviceData<T> *d_sum_out = nullptr;
+    CudaDeviceBuffer<unsigned char> d_temp_storage;
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;
     /// @}
 
     void print_array(int n, T *a);  ///< Debug helper
-    void release();  ///< Free all buffers; shared by the destructor and a failed constructor
 
 public:
     /**

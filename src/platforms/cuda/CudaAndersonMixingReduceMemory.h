@@ -29,6 +29,8 @@
 #include "CircularBuffer.h"
 #include "ComputationBox.h"
 #include "AndersonMixing.h"
+#include <memory>
+#include <vector>
 #include "CudaCommon.h"
 #include "PinnedCircularBuffer.h"
 
@@ -62,44 +64,44 @@ class CudaAndersonMixingReduceMemory : public AndersonMixing<T>
 private:
     /// @name Pinned Memory History
     /// @{
-    PinnedCircularBuffer<T> *pinned_cb_w_hist = nullptr;        ///< Field history (pinned)
-    PinnedCircularBuffer<T> *pinned_cb_w_deriv_hist = nullptr;  ///< Residual history (pinned)
+    std::unique_ptr<PinnedCircularBuffer<T>> pinned_cb_w_hist;        ///< Field history (pinned)
+    std::unique_ptr<PinnedCircularBuffer<T>> pinned_cb_w_deriv_hist;  ///< Residual history (pinned)
     /// @}
 
-    CircularBuffer<T> *cb_w_deriv_dots = nullptr;  ///< Cached dot products
-    T *w_deriv_dots = nullptr;
+    std::unique_ptr<CircularBuffer<T>> cb_w_deriv_dots;  ///< Cached dot products
+    std::vector<T> w_deriv_dots;
 
     /// @name Least-squares arrays
     /// @{
-    T **u_nm = nullptr;
-    T *v_n = nullptr;
-    T *a_n = nullptr;
+    std::vector<T> u_nm_storage;   ///< max_hist x max_hist, row-major
+    std::vector<T*> u_nm;          ///< Row pointers into u_nm_storage (find_an takes T**)
+    std::vector<T> v_n;
+    std::vector<T> a_n;
     /// @}
 
     /// @name Temporary GPU arrays
     /// @{
-    CuDeviceData<T> *d_w_new = nullptr;
-    CuDeviceData<T> *d_w_deriv = nullptr;
-    CuDeviceData<T> *d_sum = nullptr;
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_new;
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv;
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum;
     /// @}
 
     /// @name GPU buffers for history access (2 pairs)
     /// @{
-    CuDeviceData<T> *d_w_hist1 = nullptr;        ///< First history entry on GPU
-    CuDeviceData<T> *d_w_hist2 = nullptr;        ///< Second history entry on GPU
-    CuDeviceData<T> *d_w_deriv_hist1 = nullptr;  ///< First residual history on GPU
-    CuDeviceData<T> *d_w_deriv_hist2 = nullptr;  ///< Second residual history on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist1;        ///< First history entry on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist2;        ///< Second history entry on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv_hist1;  ///< First residual history on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv_hist2;  ///< Second residual history on GPU
     /// @}
 
     /// @name CUB reduction storage
     /// @{
     size_t temp_storage_bytes = 0;
-    CuDeviceData<T> *d_temp_storage = nullptr;
-    CuDeviceData<T> *d_sum_out = nullptr;
+    CudaDeviceBuffer<unsigned char> d_temp_storage;
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;
     /// @}
 
     void print_array(int n, T *a);
-    void release();  ///< Free all buffers; shared by the destructor and a failed constructor
 
 public:
     /**

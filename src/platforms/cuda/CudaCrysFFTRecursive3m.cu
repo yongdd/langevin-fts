@@ -284,9 +284,9 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
         M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
         M_complex_ = nx_physical_[0] * nx_physical_[1] * (nx_physical_[2] / 2 + 1);
 
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
-        gpu_error_check(cudaMalloc(&d_step1_, sizeof(cufftDoubleComplex) * M_complex_));
-        gpu_error_check(cudaMalloc(&d_step2_, sizeof(cufftDoubleComplex) * M_complex_));
+        d_work_.allocate(M_physical_);
+        d_step1_.allocate(M_complex_);
+        d_step2_.allocate(M_complex_);
 
         init_plans();
         generate_twiddle_factors();
@@ -306,28 +306,14 @@ CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
 // Idempotent; tolerates a partly built object (null buffers, plans not created).
 void CudaCrysFFTRecursive3m::release()
 {
-    for (auto& kv : k_cache_)
-        free_cache_device(kv.second);
+    // The caches and buffers are owning; the cuFFT plans need the explicit free
     k_cache_.clear();
     k_current_ = nullptr;
-
-    for (auto& kv : multiplier_cache_)
-        free_cache_device(kv.second);
     multiplier_cache_.clear();
-
-    for (KCacheDevice& cache : spare_caches_)
-        free_cache_device(cache);
     spare_caches_.clear();
-
-    if (d_step1_)
-        cudaFree(d_step1_);
-    if (d_step2_)
-        cudaFree(d_step2_);
-    if (d_work_)
-        cudaFree(d_work_);
-    d_step1_ = nullptr;
-    d_step2_ = nullptr;
-    d_work_ = nullptr;
+    d_step1_.release();
+    d_step2_.release();
+    d_work_.release();
 
     free_plans();
 }
@@ -554,31 +540,23 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     KCacheDevice cache;
     if (!spare_caches_.empty())
     {
-        cache = spare_caches_.back();
+        cache = std::move(spare_caches_.back());
         spare_caches_.pop_back();
     }
-    try
+    // on failure the local cache releases its tables
+    for (int i = 0; i < 8; ++i)
     {
-        for (int i = 0; i < 8; ++i)
-        {
-            if (cache.re[i] == nullptr)
-                gpu_error_check(cudaMalloc(&cache.re[i], sizeof(double) * M_physical_));
-            if (cache.im[i] == nullptr)
-                gpu_error_check(cudaMalloc(&cache.im[i], sizeof(double) * M_physical_));
-            gpu_error_check(cudaMemcpyAsync(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_,
-                                            cudaMemcpyHostToDevice, stream_));
-            gpu_error_check(cudaMemcpyAsync(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_,
-                                            cudaMemcpyHostToDevice, stream_));
-        }
-        // Complete before the host tables go away and before any stream uses the cache
-        gpu_error_check(cudaStreamSynchronize(stream_));
+        if (cache.re[i].empty())
+            cache.re[i].allocate(M_physical_);
+        if (cache.im[i].empty())
+            cache.im[i].allocate(M_physical_);
+        gpu_error_check(cudaMemcpyAsync(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_,
+                                        cudaMemcpyHostToDevice, stream_));
+        gpu_error_check(cudaMemcpyAsync(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_,
+                                        cudaMemcpyHostToDevice, stream_));
     }
-    catch (...)
-    {
-        // The cache is not stored anywhere yet; free what was allocated
-        free_cache_device(cache);
-        throw;
-    }
+    // Complete before the host tables go away and before any stream uses the cache
+    gpu_error_check(cudaStreamSynchronize(stream_));
 
     return cache;
 }
@@ -598,31 +576,15 @@ void CudaCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_par
     // before update_laplacian_operator() can change the cell; set_cell_para() must
     // not run while a kernel may still read the old tables.
     for (auto& kv : k_cache_)
-        spare_caches_.push_back(kv.second);
+        spare_caches_.push_back(std::move(kv.second));
     k_cache_.clear();
     k_current_ = nullptr;
 
     for (auto& kv : multiplier_cache_)
-        spare_caches_.push_back(kv.second);
+        spare_caches_.push_back(std::move(kv.second));
     multiplier_cache_.clear();
 }
 
-void CudaCrysFFTRecursive3m::free_cache_device(KCacheDevice& cache)
-{
-    for (int i = 0; i < 8; ++i)
-    {
-        if (cache.re[i])
-        {
-            cudaFree(cache.re[i]);
-            cache.re[i] = nullptr;
-        }
-        if (cache.im[i])
-        {
-            cudaFree(cache.im[i]);
-            cache.im[i] = nullptr;
-        }
-    }
-}
 
 void CudaCrysFFTRecursive3m::set_contour_step(double coeff)
 {
@@ -632,17 +594,7 @@ void CudaCrysFFTRecursive3m::set_contour_step(double coeff)
     auto it = k_cache_.find(coeff);
     if (it == k_cache_.end())
     {
-        KCacheDevice cache = generate_k_cache(coeff);
-        try
-        {
-            auto inserted = k_cache_.emplace(coeff, cache);
-            it = inserted.first;
-        }
-        catch (...)
-        {
-            free_cache_device(cache);
-            throw;
-        }
+        it = k_cache_.emplace(coeff, generate_k_cache(coeff)).first;
     }
     coeff_current_ = coeff;
     k_current_ = &it->second;
@@ -685,7 +637,7 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
         cache.im[0], cache.im[1], cache.im[2], cache.im[3],
         cache.im[4], cache.im[5], cache.im[6], cache.im[7],
         nx_physical_[0], nx_physical_[1], nx_physical_[2], nx_physical_[2] / 2 + 1);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 
     if (cufftExecZ2D(plan_c2r_, d_step2_, d_work) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTRecursive3m cufftExecZ2D failed.");
@@ -700,17 +652,7 @@ void CudaCrysFFTRecursive3m::apply_multiplier(
     auto it = multiplier_cache_.find(key);
     if (it == multiplier_cache_.end())
     {
-        KCacheDevice cache = generate_k_cache_from_multiplier(type, coeff);
-        try
-        {
-            auto inserted = multiplier_cache_.emplace(key, cache);
-            it = inserted.first;
-        }
-        catch (...)
-        {
-            free_cache_device(cache);
-            throw;
-        }
+        it = multiplier_cache_.emplace(key, generate_k_cache_from_multiplier(type, coeff)).first;
     }
 
     apply_with_cache(it->second, d_q_in, d_q_out, stream);
@@ -721,6 +663,6 @@ void CudaCrysFFTRecursive3m::set_stream(cudaStream_t stream)
     if (stream_ == stream)
         return;
     stream_ = stream;
-    cufftSetStream(plan_r2c_, stream_);
-    cufftSetStream(plan_c2r_, stream_);
+    cufft_error_check(cufftSetStream(plan_r2c_, stream_));
+    cufft_error_check(cufftSetStream(plan_c2r_, stream_));
 }

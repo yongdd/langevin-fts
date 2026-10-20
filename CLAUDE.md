@@ -154,7 +154,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 93 | ~7 min | Development validation |
+| **Full** | `ctest` | 94 | ~7 min | Development validation |
 
 ### Running Tests
 
@@ -312,6 +312,7 @@ CUDA code uses:
 - **Kernels loop over their index range**: every element-wise kernel uses a grid-stride loop (`while (i < M) { ...; i += blockDim.x * gridDim.x; }`), so it is correct for any launch configuration; kernels that give one block a row or a whole 1D transform loop over rows with `gridDim.x` and over the row with `blockDim.x`. Write new kernels the same way. The default launch is 1024 blocks of 256 threads (`LFTS_GPU_NUM_BLOCKS`, `LFTS_GPU_NUM_THREADS` override it); line solvers (CN-ADI) size their launch to the number of grid lines
 - **No new OpenMP regions in per-iteration host code of the CUDA path**: a `#pragma omp parallel for` in the box-change table update made the Gyroid example 3x slower (its threads competed with spinning threads elsewhere in the process; `OMP_WAIT_POLICY=PASSIVE` hid it) and was removed. Host work there stays serial or moves to the GPU
 - **Launch shape**: element kernels launched to cover an array use `grid_blocks(n, block_size)` (`CudaCommon.h`), which caps the grid at `MAX_GRID_THREADS` = 2^20 threads so the stride loop cannot overflow `int`
+- **Error checks (CUDA C++ Best Practices Guide 2.3)**: every call that returns an error code is wrapped (`gpu_error_check(...)` for runtime and CUB calls, `cufft_error_check(...)` for cuFFT), and every kernel launch is followed by `gpu_error_check(cudaGetLastError());` (one check after an unbraced `if/else` launch pair). The check is a host-side read that does not synchronize, and `cudaGetLastError()` clears the slot, so a launch error is reported at its own launch and never again by a later, unrelated check. Errors of a running kernel surface at the next synchronizing call; run with `CUDA_LAUNCH_BLOCKING=1` or under `compute-sanitizer` to locate them. Release calls (`cudaFree`, `*Destroy`) are not checked because they run in destructors
 - **No allocation or default-stream copies inside the propagator loop**: `cudaMalloc`/`cudaFree` and synchronous `cudaMemcpy` serialize all streams. Tables rebuilt after a box change reuse their device buffers and are uploaded with `cudaMemcpyAsync` on the object's own stream
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
@@ -568,14 +569,14 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent. The order of a computation goes into `src/common/Computation*.cpp` once; new grid operations go into both `ComputationBackend` implementations
 
-3. Memory management: C++ uses raw pointers; ensure proper allocation/deallocation in constructors/destructors
+3. Memory management: allocations are owned by objects that release them. Device memory lives in `CudaDeviceBuffer<T>` and page-locked host memory in `CudaPinnedBuffer<T>` (`src/platforms/cuda/CudaCommon.h`), host arrays in `std::vector`, owned objects in `std::unique_ptr`, so destructors and constructors that throw need no cleanup code. Raw pointers are only lent (`.get()`, kernel and cuFFT arguments); the exceptions are the factory functions, which hand ownership to the caller, and the backends' `allocate()`/`deallocate()` pair, which is the allocator of the propagator handles; FFTW/MKL plans and descriptors and the `fftw_malloc` buffers of `FftwFFT`/`FftwCrysFFT*` are freed by those classes' `release()`
 
 4. The propagator computation optimizer (`PropagatorComputationOptimizer`) automatically detects redundant calculations using hash tables of `PropagatorCode` objects - avoid manual optimization
 
 ### Design Decisions
 
 **CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4`, `CpuSolverPseudoRK2`, and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
-- FFT object management (`init_shared`/`cleanup_shared`)
+- FFT object management (`init_shared`; the FFT and `Pseudo` objects are owning members)
 - Transform dispatch (`transform_forward`/`transform_backward`)
 - Laplacian operator updates (`update_laplacian_operator`)
 - Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
@@ -632,7 +633,7 @@ Violating these rules causes tests to fail with garbage values (e.g., partition 
 - `forward_stream(T*, double*, cudaStream_t)` / `backward_stream(double*, T*, cudaStream_t)`
 - `forward_stream(T*, complex<double>*, cudaStream_t)` / `backward_stream(complex<double>*, T*, cudaStream_t)`
 
-CPU solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimension-specific casting; the CUDA solvers hold their DCT/DST objects as `CudaFFTBase<T>*` and call `forward_stream()`/`backward_stream()` with the propagator's stream.
+CPU solvers hold `std::unique_ptr<FFT<T>> fft_` and call `fft_->forward()` directly without dimension-specific casting; the CUDA solvers hold their DCT/DST objects as `std::unique_ptr<CudaFFTBase<T>>` and call `forward_stream()`/`backward_stream()` with the propagator's stream.
 
 ### When Modifying Python Code
 

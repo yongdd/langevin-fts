@@ -98,26 +98,12 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
     for (int d = 0; d < dim_; ++d)
         bc_per_dim.push_back(bc_vec[2 * d]);
 
-    pseudo = new Pseudo<T>(
+    pseudo = std::make_unique<Pseudo<T>>(
         molecules->get_bond_lengths(),
         bc_per_dim,
         cb->get_nx(), cb->get_dx(),
         cb->get_recip_metric(),
         cb->get_recip_vec());
-}
-
-//------------------------------------------------------------------------------
-// Clean up shared components
-//------------------------------------------------------------------------------
-template <typename T>
-void CpuSolverPseudoBase<T>::cleanup_shared()
-{
-    // FFT<T> has a virtual destructor, so delete works polymorphically
-    delete fft_;
-    fft_ = nullptr;
-
-    delete pseudo;
-    pseudo = nullptr;
 }
 
 //------------------------------------------------------------------------------

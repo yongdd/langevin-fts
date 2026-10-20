@@ -76,10 +76,11 @@ public:
     void apply_multiplier(double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream);
 
 private:
+    /// Device tables of one k-space multiplier (owning; the struct is move-only)
     struct KCacheDevice
     {
-        std::array<double*, 8> re{};
-        std::array<double*, 8> im{};
+        std::array<CudaDeviceBuffer<double>, 8> re;
+        std::array<CudaDeviceBuffer<double>, 8> im;
     };
 
     std::array<int, 3> nx_logical_;
@@ -115,9 +116,9 @@ private:
     cufftHandle plan_c2r_{};
     bool plans_initialized_{false};
 
-    cufftDoubleComplex* d_step1_{nullptr};
-    cufftDoubleComplex* d_step2_{nullptr};
-    double* d_work_{nullptr};
+    CudaDeviceBuffer<cufftDoubleComplex> d_step1_;
+    CudaDeviceBuffer<cufftDoubleComplex> d_step2_;
+    CudaDeviceBuffer<double> d_work_;
 
     cudaStream_t stream_{0};
 
@@ -127,7 +128,6 @@ private:
     KCacheDevice generate_k_cache(double coeff);
     KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
     KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);
-    void free_cache_device(KCacheDevice& cache);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
     void apply_with_cache(const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream);

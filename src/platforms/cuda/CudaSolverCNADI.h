@@ -280,51 +280,49 @@ private:
     /// @name Space group support (reduced basis)
     /// @{
     SpaceGroup* space_group_;           ///< Space group pointer (nullptr if not used)
-    int* d_reduced_basis_indices_;      ///< Device array: reduced → full index mapping
-    int* d_full_to_reduced_map_;        ///< Device array: full → reduced index mapping
+    int* d_reduced_basis_indices_;      ///< Device array: reduced → full index mapping (lent by the backend)
+    int* d_full_to_reduced_map_;        ///< Device array: full → reduced index mapping (lent by the backend)
     int n_basis_;                       ///< Number of reduced basis points
-    double *d_q_full_in_[MAX_STREAMS];  ///< Work buffer: full grid input (per stream)
-    double *d_q_full_out_[MAX_STREAMS]; ///< Work buffer: full grid output (per stream)
+    CudaDeviceBuffer<double> d_q_full_in_[MAX_STREAMS];  ///< Work buffer: full grid input (per stream)
+    CudaDeviceBuffer<double> d_q_full_out_[MAX_STREAMS]; ///< Work buffer: full grid output (per stream)
     /// @}
 
     /// @name Tridiagonal Coefficients per ds_index per monomer_type
     /// Nested map structure: [ds_index][monomer_type] -> coefficient array (device)
     /// @{
-    std::map<int, std::map<std::string, double*>> d_xl;  ///< X-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> d_xd;  ///< X-direction main diagonal
-    std::map<int, std::map<std::string, double*>> d_xh;  ///< X-direction upper diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_xl;  ///< X-direction lower diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_xd;  ///< X-direction main diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_xh;  ///< X-direction upper diagonal
 
-    std::map<int, std::map<std::string, double*>> d_yl;  ///< Y-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> d_yd;  ///< Y-direction main diagonal
-    std::map<int, std::map<std::string, double*>> d_yh;  ///< Y-direction upper diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_yl;  ///< Y-direction lower diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_yd;  ///< Y-direction main diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_yh;  ///< Y-direction upper diagonal
 
-    std::map<int, std::map<std::string, double*>> d_zl;  ///< Z-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> d_zd;  ///< Z-direction main diagonal
-    std::map<int, std::map<std::string, double*>> d_zh;  ///< Z-direction upper diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_zl;  ///< Z-direction lower diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_zd;  ///< Z-direction main diagonal
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_zh;  ///< Z-direction upper diagonal
     /// @}
 
 
     /// @name Tridiagonal Solver Workspace (per stream)
     /// @{
-    double *d_q_star  [MAX_STREAMS];  ///< First intermediate solution
-    double *d_q_dstar [MAX_STREAMS];  ///< Second intermediate (3D)
-    double *d_c_star  [MAX_STREAMS];  ///< Modified upper diagonal
-    double *d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
-    double *d_temp    [MAX_STREAMS];  ///< General temporary
+    CudaDeviceBuffer<double> d_q_star[MAX_STREAMS];  ///< First intermediate solution
+    CudaDeviceBuffer<double> d_q_dstar[MAX_STREAMS];  ///< Second intermediate (3D)
+    CudaDeviceBuffer<double> d_c_star[MAX_STREAMS];  ///< Modified upper diagonal
+    CudaDeviceBuffer<double> d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
+    CudaDeviceBuffer<double> d_temp[MAX_STREAMS];  ///< General temporary
     /// @}
 
     /// @name Index Offset Arrays
     /// @{
-    int* d_offset_xy;  ///< 3D: XY-plane offsets
-    int* d_offset_yz;  ///< 3D: YZ-plane offsets
-    int* d_offset_xz;  ///< 3D: XZ-plane offsets
-    int* d_offset_x;   ///< 2D: X-direction offsets
-    int* d_offset_y;   ///< 2D: Y-direction offsets
-    int* d_offset;     ///< 1D: System offsets
+    CudaDeviceBuffer<int> d_offset_xy;  ///< 3D: XY-plane offsets
+    CudaDeviceBuffer<int> d_offset_yz;  ///< 3D: YZ-plane offsets
+    CudaDeviceBuffer<int> d_offset_xz;  ///< 3D: XZ-plane offsets
+    CudaDeviceBuffer<int> d_offset_x;   ///< 2D: X-direction offsets
+    CudaDeviceBuffer<int> d_offset_y;   ///< 2D: Y-direction offsets
+    CudaDeviceBuffer<int> d_offset;     ///< 1D: System offsets
     /// @}
 
-    /// Free all device memory (idempotent; safe on a partly built object).
-    void release();
 
     /**
      * @brief 3D ADI propagator advancement.

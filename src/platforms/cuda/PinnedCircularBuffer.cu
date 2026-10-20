@@ -39,37 +39,15 @@ PinnedCircularBuffer<T>::PinnedCircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    elems = new T*[length]();
-    try
-    {
-        for(int i=0; i<length; i++)
-        {
-            gpu_error_check(cudaMallocHost((void**)&elems[i], sizeof(T)*width));
-            for(int j=0; j<width; j++)
-                elems[i][j] = 0.0;
-        }
-    }
-    catch (...)
-    {
-        release();
-        throw;
-    }
-}
-template <typename T>
-PinnedCircularBuffer<T>::~PinnedCircularBuffer()
-{
-    release();
-}
-template <typename T>
-void PinnedCircularBuffer<T>::release()
-{
-    if (elems == nullptr)
-        return;
+    elems.resize(length);
     for(int i=0; i<length; i++)
-        cudaFreeHost(elems[i]);
-    delete[] elems;
-    elems = nullptr;
+    {
+        elems[i].allocate(width);
+        std::fill_n(elems[i].get(), width, T());
+    }
 }
+template <typename T>
+PinnedCircularBuffer<T>::~PinnedCircularBuffer() = default;
 template <typename T>
 void PinnedCircularBuffer<T>::reset()
 {
@@ -81,7 +59,7 @@ void PinnedCircularBuffer<T>::insert(T* new_arr)
 {
     int i = (start+n_items)%length;
     for(int m=0; m<width; m++){
-        elems[i][m] = new_arr[m];
+        elems[i].get()[m] = new_arr[m];
     }
     if (n_items == length)
         start = (start+1)%length;
@@ -91,7 +69,7 @@ template <typename T>
 T* PinnedCircularBuffer<T>::get_array(int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return elems[i];
+    return elems[i].get();
 }
 
 

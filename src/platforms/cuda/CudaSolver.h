@@ -62,7 +62,7 @@ public:
      * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
-    std::map<int, std::map<std::string, CuDeviceData<T>*>> d_exp_dw;
+    std::map<int, std::map<std::string, CudaDeviceBuffer<CuDeviceData<T>>>> d_exp_dw;
 
     /**
      * @brief Half segment Boltzmann factor: exp(-w·ds/2) on GPU.
@@ -71,7 +71,7 @@ public:
      * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
-    std::map<int, std::map<std::string, CuDeviceData<T>*>> d_exp_dw_half;
+    std::map<int, std::map<std::string, CudaDeviceBuffer<CuDeviceData<T>>>> d_exp_dw_half;
 
     /**
      * @brief Force off-diagonal (cross-term) stress accumulation for orthogonal boxes.

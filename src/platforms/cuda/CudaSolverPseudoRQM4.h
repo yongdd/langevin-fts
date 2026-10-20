@@ -96,25 +96,23 @@ private:
 
     /// @name Workspace Arrays (per stream)
     /// @{
-    CuDeviceData<T> *d_q_step_1_one[MAX_STREAMS];      ///< Full step workspace 1
-    CuDeviceData<T> *d_q_step_2_one[MAX_STREAMS];      ///< Full step workspace 2
-    CuDeviceData<T> *d_q_step_1_two[MAX_STREAMS];      ///< Half step workspace 1
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_step_1_one[MAX_STREAMS];      ///< Full step workspace 1
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_step_2_one[MAX_STREAMS];      ///< Full step workspace 2
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_step_1_two[MAX_STREAMS];      ///< Half step workspace 1
     /// @}
 
     /// @name Fourier Space Buffers (periodic BC - complex coefficients)
     /// @{
-    cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
-    cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
+    CudaDeviceBuffer<cuDoubleComplex> d_qk_in_2_one[MAX_STREAMS];
+    CudaDeviceBuffer<cuDoubleComplex> d_qk_in_1_two[MAX_STREAMS];
     /// @}
 
     /// @name Spectral Space Buffers (non-periodic BC - real coefficients)
     /// @{
-    double *d_rk_in_1_one[MAX_STREAMS];    ///< Real coefficients buffer 1
-    double *d_rk_in_2_one[MAX_STREAMS];    ///< Real coefficients buffer 2
+    CudaDeviceBuffer<double> d_rk_in_1_one[MAX_STREAMS];    ///< Real coefficients buffer 1
+    CudaDeviceBuffer<double> d_rk_in_2_one[MAX_STREAMS];    ///< Real coefficients buffer 2
     /// @}
 
-    /// Free the workspaces above (idempotent; safe on a partly built object).
-    void release_workspaces();
 
 public:
     /**

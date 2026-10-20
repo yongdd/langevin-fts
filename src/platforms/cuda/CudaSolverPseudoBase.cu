@@ -134,7 +134,9 @@ void launch_stress_dyads(TD* out, TD* partial, const TD* integrand, const Stress
     // About two elements per thread, at most STRESS_MAX_BLOCKS blocks
     const int n_partial = std::max(1, std::min(STRESS_MAX_BLOCKS, (M + 2 * STRESS_THREADS - 1) / (2 * STRESS_THREADS)));
     ker_stress_dyad_partials<TD, NC><<<n_partial, STRESS_THREADS, 0, stream>>>(partial, integrand, bases, factor, M);
+    gpu_error_check(cudaGetLastError());
     ker_stress_dyad_finalize<TD, NC><<<1, STRESS_THREADS, 0, stream>>>(out, partial, n_partial);
+    gpu_error_check(cudaGetLastError());
 }
 
 template <typename TD>
@@ -171,7 +173,6 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
     try{
         this->cb = cb;
         this->molecules = molecules;
-        this->pseudo = nullptr;
         this->n_streams = n_streams;
         this->dim_ = cb->get_dim();
         this->q_full_in_factor_ = q_full_in_factor;
@@ -182,22 +183,12 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             this->streams[i][0] = streams[i][0];
             this->streams[i][1] = streams[i][1];
         }
-        // Null every owned resource before anything can throw (see release_base())
+        // The device buffers and transform objects are owning members, released
+        // automatically (also when this constructor throws); the cuFFT plans are
+        // tracked by their created flags for release_base()
         for(int i=0; i<MAX_STREAMS; i++)
         {
-            d_temp_storage[i] = nullptr;
             temp_storage_bytes[i] = 0;
-            d_stress_sum[i] = nullptr;
-            d_stress_sum_out[i] = nullptr;
-            d_q_multi[i] = nullptr;
-            d_qk_conj_[i] = nullptr;
-            d_stress_partial_[i] = nullptr;
-            d_q_full_in_[i] = nullptr;
-            d_q_full_out_[i] = nullptr;
-            crysfft_[i] = nullptr;
-            d_crysfft_in_[i] = nullptr;
-            d_crysfft_out_[i] = nullptr;
-            fft_[i] = nullptr;
             for (int b = 0; b < 2; b++)
             {
                 plan_for_[i][b] = plan_bak_[i][b] = 0;
@@ -212,9 +203,6 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         crysfft_mode_ = CudaCrysFFTMode::None;
         crysfft_identity_map_ = false;
         crysfft_physical_size_ = 0;
-        d_crysfft_phys_to_reduced_ = nullptr;
-        d_crysfft_reduced_to_phys_ = nullptr;
-        d_crysfft_orbit_counts_ = nullptr;
 
         // Boundary conditions: the pseudo-spectral method needs the same BC on
         // both faces of each direction.
@@ -253,7 +241,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             std::vector<BoundaryCondition> bc_dim_ctor;
             for (int d = 0; d < dim_; ++d)
                 bc_dim_ctor.push_back(bc_vec[2 * d]);
-            pseudo = new CudaPseudo<T>(
+            pseudo = std::make_unique<CudaPseudo<T>>(
                 molecules->get_bond_lengths(),
                 bc_dim_ctor,
                 cb->get_nx(), cb->get_dx(),
@@ -275,20 +263,9 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             for(const auto& item: molecules->get_bond_lengths())
             {
                 const std::string& monomer_type = item.first;
-                // Insert the slot as nullptr, allocate into a local, store only on success
-                CuDeviceData<T>*& d_slot = this->d_exp_dw[ds_idx][monomer_type];
-                d_slot = nullptr;
-                CuDeviceData<T>* d_ptr = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_ptr, sizeof(T)*M));
-                d_slot = d_ptr;
+                this->d_exp_dw[ds_idx][monomer_type].allocate(M);
                 if (with_exp_dw_half)
-                {
-                    CuDeviceData<T>*& d_slot_half = this->d_exp_dw_half[ds_idx][monomer_type];
-                    d_slot_half = nullptr;
-                    CuDeviceData<T>* d_ptr_half = nullptr;
-                    gpu_error_check(cudaMalloc((void**)&d_ptr_half, sizeof(T)*M));
-                    d_slot_half = d_ptr_half;
-                }
+                    this->d_exp_dw_half[ds_idx][monomer_type].allocate(M);
             }
         }
         pseudo->finalize_ds_values();
@@ -296,19 +273,19 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
         // Stress reduction workspace
         for(int i=0; i<n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(T)*1));
-            gpu_error_check(cudaMalloc((void**)&d_q_multi[i],         sizeof(T)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_stress_partial_[i], sizeof(T)*6*STRESS_MAX_BLOCKS));
+            d_stress_sum[i].allocate(M_COMPLEX);
+            d_stress_sum_out[i].allocate(1);
+            d_q_multi[i].allocate(M_COMPLEX);
+            d_stress_partial_[i].allocate(6*STRESS_MAX_BLOCKS);
             if constexpr (std::is_same<T, std::complex<double>>::value)
-                gpu_error_check(cudaMalloc((void**)&d_qk_conj_[i],    sizeof(cuDoubleComplex)*M_COMPLEX));
+                d_qk_conj_[i].allocate(M_COMPLEX);
         }
         for(int i=0; i<n_streams; i++)
         {
-            d_temp_storage[i] = nullptr;
+            // the first call only queries the size of the CUB scratch
             temp_storage_bytes[i] = 0;
-            cuda_reduce_sum(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, streams[i][0]);
-            gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
+            gpu_error_check(cuda_reduce_sum(nullptr, temp_storage_bytes[i], d_stress_sum[i].get(), d_stress_sum_out[i].get(), M_COMPLEX, streams[i][0]));
+            d_temp_storage[i].allocate(temp_storage_bytes[i]);
         }
 
         // Spectral transforms: cuFFT plans (periodic) or DCT/DST objects (non-periodic)
@@ -335,12 +312,12 @@ CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
 template <typename T>
 void CudaSolverPseudoBase<T>::release_base()
 {
-    // Every pointer is nullptr and every plan flag false until acquired, so a
-    // partly built object is released correctly; calling this twice is harmless.
-    // Derived solvers free their own workspaces before this runs.
+    // The cuFFT plans are tracked by their created flags; the transforms,
+    // the pseudo object and the device buffers are owning members and are
+    // released here explicitly as well, so a derived constructor that throws
+    // leaves nothing behind. Calling this twice is harmless.
     cleanup_crysfft();
-    delete pseudo;
-    pseudo = nullptr;
+    pseudo.reset();
 
     for(int i=0; i<MAX_STREAMS; i++)
     {
@@ -351,38 +328,22 @@ void CudaSolverPseudoBase<T>::release_base()
             plan_for_created_[i][b] = plan_bak_created_[i][b] = false;
             plan_for_[i][b] = plan_bak_[i][b] = 0;
         }
-        delete fft_[i];
-        fft_[i] = nullptr;
+        fft_[i].reset();
     }
 
-    for(const auto& ds_entry: this->d_exp_dw)
-        for(const auto& item: ds_entry.second)
-            if (item.second != nullptr) cudaFree(item.second);
-    for(const auto& ds_entry: this->d_exp_dw_half)
-        for(const auto& item: ds_entry.second)
-            if (item.second != nullptr) cudaFree(item.second);
     this->d_exp_dw.clear();
     this->d_exp_dw_half.clear();
-
-    auto free_device = [](auto*& d_ptr)
-    {
-        if (d_ptr != nullptr) cudaFree(d_ptr);
-        d_ptr = nullptr;
-    };
     for(int i=0; i<MAX_STREAMS; i++)
     {
-        free_device(d_stress_sum[i]);
-        free_device(d_stress_sum_out[i]);
-        free_device(d_q_multi[i]);
-        free_device(d_qk_conj_[i]);
-        free_device(d_stress_partial_[i]);
-        free_device(d_temp_storage[i]);
+        d_stress_sum[i].release();
+        d_stress_sum_out[i].release();
+        d_q_multi[i].release();
+        d_qk_conj_[i].release();
+        d_stress_partial_[i].release();
+        d_temp_storage[i].release();
         temp_storage_bytes[i] = 0;
-    }
-    for(int i=0; i<MAX_STREAMS; i++)
-    {
-        free_device(d_q_full_in_[i]);
-        free_device(d_q_full_out_[i]);
+        d_q_full_in_[i].release();
+        d_q_full_out_[i].release();
     }
 }
 
@@ -422,19 +383,19 @@ void CudaSolverPseudoBase<T>::init_fft()
             {
                 std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
                 std::array<BoundaryCondition, 3> bc_arr = {bc_vec[0], bc_vec[2], bc_vec[4]};
-                fft_[i] = new CudaFFT<T, 3>(nx_arr, bc_arr);
+                fft_[i] = std::make_unique<CudaFFT<T, 3>>(nx_arr, bc_arr);
             }
             else if (dim_ == 2)
             {
                 std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
                 std::array<BoundaryCondition, 2> bc_arr = {bc_vec[0], bc_vec[2]};
-                fft_[i] = new CudaFFT<T, 2>(nx_arr, bc_arr);
+                fft_[i] = std::make_unique<CudaFFT<T, 2>>(nx_arr, bc_arr);
             }
             else
             {
                 std::array<int, 1> nx_arr = {cb->get_nx(0)};
                 std::array<BoundaryCondition, 1> bc_arr = {bc_vec[0]};
-                fft_[i] = new CudaFFT<T, 1>(nx_arr, bc_arr);
+                fft_[i] = std::make_unique<CudaFFT<T, 1>>(nx_arr, bc_arr);
             }
         }
     }
@@ -460,39 +421,14 @@ void CudaSolverPseudoBase<T>::cleanup_crysfft()
     crysfft_identity_map_ = false;
     crysfft_physical_size_ = 0;
 
-    if (d_crysfft_phys_to_reduced_ != nullptr)
-    {
-        cudaFree(d_crysfft_phys_to_reduced_);
-        d_crysfft_phys_to_reduced_ = nullptr;
-    }
-    if (d_crysfft_reduced_to_phys_ != nullptr)
-    {
-        cudaFree(d_crysfft_reduced_to_phys_);
-        d_crysfft_reduced_to_phys_ = nullptr;
-    }
-    if (d_crysfft_orbit_counts_ != nullptr)
-    {
-        cudaFree(d_crysfft_orbit_counts_);
-        d_crysfft_orbit_counts_ = nullptr;
-    }
-
+    d_crysfft_phys_to_reduced_.release();
+    d_crysfft_reduced_to_phys_.release();
+    d_crysfft_orbit_counts_.release();
     for (int i = 0; i < MAX_STREAMS; i++)
     {
-        if (crysfft_[i] != nullptr)
-        {
-            delete crysfft_[i];
-            crysfft_[i] = nullptr;
-        }
-        if (d_crysfft_in_[i] != nullptr)
-        {
-            cudaFree(d_crysfft_in_[i]);
-            d_crysfft_in_[i] = nullptr;
-        }
-        if (d_crysfft_out_[i] != nullptr)
-        {
-            cudaFree(d_crysfft_out_[i]);
-            d_crysfft_out_[i] = nullptr;
-        }
+        crysfft_[i].reset();
+        d_crysfft_in_[i].release();
+        d_crysfft_out_[i].release();
     }
 }
 
@@ -516,23 +452,15 @@ void CudaSolverPseudoBase<T>::set_space_group(
     {
         if (sg != nullptr)
         {
-            if (d_q_full_in_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M*q_full_in_factor_));
-            if (d_q_full_out_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
+            if (d_q_full_in_[i].empty())
+                d_q_full_in_[i].allocate(static_cast<size_t>(M) * q_full_in_factor_);
+            if (d_q_full_out_[i].empty())
+                d_q_full_out_[i].allocate(M);
         }
         else
         {
-            if (d_q_full_in_[i] != nullptr)
-            {
-                cudaFree(d_q_full_in_[i]);
-                d_q_full_in_[i] = nullptr;
-            }
-            if (d_q_full_out_[i] != nullptr)
-            {
-                cudaFree(d_q_full_out_[i]);
-                d_q_full_out_[i] = nullptr;
-            }
+            d_q_full_in_[i].release();
+            d_q_full_out_[i].release();
         }
     }
 
@@ -617,8 +545,8 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
     // Index maps are needed only when the physical grid is not the reduced basis itself
     if (!crysfft_identity_map_)
     {
-        gpu_error_check(cudaMalloc((void**)&d_crysfft_phys_to_reduced_, sizeof(int) * map.M_phys));
-        gpu_error_check(cudaMalloc((void**)&d_crysfft_reduced_to_phys_, sizeof(int) * map.M_reduced));
+        d_crysfft_phys_to_reduced_.allocate(map.M_phys);
+        d_crysfft_reduced_to_phys_.allocate(map.M_reduced);
         gpu_error_check(cudaMemcpy(d_crysfft_phys_to_reduced_, map.phys_to_reduced.data(),
                                    sizeof(int) * map.M_phys, cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_crysfft_reduced_to_phys_, map.reduced_to_phys.data(),
@@ -627,7 +555,7 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
 
     // Orbit counts for the CrysFFT stress fast path
     const auto& orbit_counts = space_group_->get_orbit_counts();
-    gpu_error_check(cudaMalloc((void**)&d_crysfft_orbit_counts_, sizeof(int) * map.M_reduced));
+    d_crysfft_orbit_counts_.allocate(map.M_reduced);
     gpu_error_check(cudaMemcpy(d_crysfft_orbit_counts_, orbit_counts.data(),
                                sizeof(int) * map.M_reduced, cudaMemcpyHostToDevice));
 
@@ -640,14 +568,14 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
     for (int i = 0; i < n_streams; i++)
     {
         if (mode == CudaCrysFFTMode::Recursive3m)
-            crysfft_[i] = new CudaCrysFFTRecursive3m(nx_logical, cell_para, m3_translations);
+            crysfft_[i] = std::make_unique<CudaCrysFFTRecursive3m>(nx_logical, cell_para, m3_translations);
         else if (mode == CudaCrysFFTMode::ObliqueZ)
-            crysfft_[i] = new CudaCrysFFTObliqueZ(nx_logical, cell_para);
+            crysfft_[i] = std::make_unique<CudaCrysFFTObliqueZ>(nx_logical, cell_para);
         else
-            crysfft_[i] = new CudaCrysFFT(nx_logical, cell_para);
+            crysfft_[i] = std::make_unique<CudaCrysFFT>(nx_logical, cell_para);
 
-        gpu_error_check(cudaMalloc((void**)&d_crysfft_in_[i], sizeof(double) * map.M_phys));
-        gpu_error_check(cudaMalloc((void**)&d_crysfft_out_[i], sizeof(double) * map.M_phys));
+        d_crysfft_in_[i].allocate(map.M_phys);
+        d_crysfft_out_[i].allocate(map.M_phys);
     }
     crysfft_mode_ = mode;
     use_crysfft_ = true;
@@ -729,8 +657,8 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
 
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-                CuDeviceData<T>* d_full = this->d_exp_dw[ds_idx][monomer_type];
-                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half[ds_idx][monomer_type] : nullptr;
+                CuDeviceData<T>* d_full = this->d_exp_dw[ds_idx][monomer_type].get();
+                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half[ds_idx][monomer_type].get() : nullptr;
 
                 if (use_reduced_basis && device == "gpu" && !use_crysfft)
                 {
@@ -738,8 +666,10 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
                     {
                         // Expand reduced basis -> full grid on device
                         ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_full, w, d_full_to_reduced_map_, M);
+                        gpu_error_check(cudaGetLastError());
                         if (with_half)
                             ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_half, w, d_full_to_reduced_map_, M);
+                        gpu_error_check(cudaGetLastError());
                     }
                     else
                     {
@@ -771,11 +701,12 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
 
                 // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>(d_full, d_full, 1.0, -factor*local_ds, M_use);
+                gpu_error_check(cudaGetLastError());
                 if (with_half)
                     ker_exp<<<N_BLOCKS, N_THREADS>>>(d_half, d_half, 1.0, -factor_half*local_ds, M_use);
+                gpu_error_check(cudaGetLastError());
             }
         }
-        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
@@ -860,7 +791,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
                 const std::vector<double> lx_vec = this->cb->get_lx();
 
                 CudaCrysFFTStressArgs args{};
-                args.crysfft = crysfft_[STREAM];
+                args.crysfft = crysfft_[STREAM].get();
                 args.mode = crysfft_mode_;
                 args.identity_map = crysfft_identity_map_;
                 args.M_phys = crysfft_physical_size_;
@@ -902,9 +833,10 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
             {
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     scratch.pair_full, d_q_pair, d_full_to_reduced_map_, M);
+                gpu_error_check(cudaGetLastError());
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     &scratch.pair_full[M], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 d_q_pair_full = scratch.pair_full;
             }
             else
@@ -917,7 +849,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         {
             // Periodic BC: batched forward FFT of both propagators
             fft_forward(STREAM, d_q_pair_full, scratch.qk_pair, 2);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             // [type-specific algorithm] Real fields store the Hermitian half-spectrum, so the
             // conjugate product is formed directly; complex fields need the -k index map.
@@ -929,9 +861,11 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
                 // Gather q2(-k) into a separate buffer: an in-place gather through the
                 // k -> -k map (an involution) would race.
                 ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj_[STREAM], &scratch.qk_pair[M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
+                gpu_error_check(cudaGetLastError());
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &scratch.qk_pair[0], d_qk_conj_[STREAM], 1.0, M_COMPLEX);
+                gpu_error_check(cudaGetLastError());
             }
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -959,7 +893,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
                 // (All dimensions are r2r here: mixed periodic/non-periodic is rejected.)
                 const double dct_scale = std::pow(0.25, DIM);
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], scratch.rk_1, scratch.rk_2, dct_scale, M_COMPLEX);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
             }
         }
 
@@ -968,7 +902,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         if (_d_boltz_bond != nullptr)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
 
         // fourier_basis arrays contain v⊗v dyad components of the deformation
@@ -1036,9 +970,9 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         }
 
         // One pass over k for all components, then the block partials in block order
-        launch_stress_dyads(d_segment_stress, d_stress_partial_[STREAM], d_q_multi[STREAM], bases, n_comp,
+        launch_stress_dyads(d_segment_stress, d_stress_partial_[STREAM].get(), d_q_multi[STREAM].get(), bases, n_comp,
                             basis_factor, M_COMPLEX, streams[STREAM][0]);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {

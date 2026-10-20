@@ -155,14 +155,18 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
     {
         std::unique_ptr<double[]> z_extended;
         std::unique_ptr<std::complex<double>[]> z_freq;
-        int size = 0;
+        int size = 0;        ///< elements of z_extended
+        int size_freq = 0;   ///< elements of z_freq
     };
+    // Shared by every instance on this thread: two grids with the same
+    // Nx*Ny*Nz but a different Nz need different z_freq sizes
     thread_local ThreadBuffers buffers;
-    if (buffers.size != howmany * Nz)
+    if (buffers.size != howmany * Nz || buffers.size_freq != howmany * freq_stride)
     {
-        buffers.z_extended.reset(new double[howmany * Nz]);
-        buffers.z_freq.reset(new std::complex<double>[howmany * freq_stride]);
+        buffers.z_extended = std::make_unique<double[]>(howmany * Nz);
+        buffers.z_freq = std::make_unique<std::complex<double>[]>(howmany * freq_stride);
         buffers.size = howmany * Nz;
+        buffers.size_freq = howmany * freq_stride;
     }
 
     // Create mirrored sequences for all (x, y) columns
@@ -216,14 +220,18 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
     {
         std::unique_ptr<std::complex<double>[]> z_freq;
         std::unique_ptr<double[]> z_extended;
-        int size = 0;
+        int size = 0;        ///< elements of z_extended
+        int size_freq = 0;   ///< elements of z_freq
     };
+    // Shared by every instance on this thread: two grids with the same
+    // Nx*Ny*Nz but a different Nz need different z_freq sizes
     thread_local ThreadBuffers buffers;
-    if (buffers.size != howmany * Nz)
+    if (buffers.size != howmany * Nz || buffers.size_freq != howmany * freq_stride)
     {
-        buffers.z_freq.reset(new std::complex<double>[howmany * freq_stride]);
-        buffers.z_extended.reset(new double[howmany * Nz]);
+        buffers.z_freq = std::make_unique<std::complex<double>[]>(howmany * freq_stride);
+        buffers.z_extended = std::make_unique<double[]>(howmany * Nz);
         buffers.size = howmany * Nz;
+        buffers.size_freq = howmany * freq_stride;
     }
 
     // Apply twiddle factors to create symmetric spectrum
@@ -281,9 +289,9 @@ void MklCrysFFTObliqueZ::apply_spectral_multiplier(const double* q_in, double* q
     thread_local ThreadBuffers buffers;
     if (buffers.size_real != M_physical_ || buffers.size_complex != M_complex_)
     {
-        buffers.real_in.reset(new double[M_physical_]);
-        buffers.real_tmp.reset(new double[M_physical_]);
-        buffers.complex.reset(new std::complex<double>[M_complex_]);
+        buffers.real_in = std::make_unique<double[]>(M_physical_);
+        buffers.real_tmp = std::make_unique<double[]>(M_physical_);
+        buffers.complex = std::make_unique<std::complex<double>[]>(M_complex_);
         buffers.size_real = M_physical_;
         buffers.size_complex = M_complex_;
     }

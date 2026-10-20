@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <memory>
 #include <cmath>
 
 #include "ComputationReduceMemoryContinuous.h"
@@ -17,7 +18,7 @@ ComputationReduceMemoryContinuous<T>::ComputationReduceMemoryContinuous(
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     std::string method,
     SpaceGroup* space_group,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : ComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, space_group,
                                      /*first_segment=*/0, create_backend),
       method(method)

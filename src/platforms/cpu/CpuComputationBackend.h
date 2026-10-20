@@ -14,6 +14,7 @@
 #define CPU_COMPUTATION_BACKEND_H_
 
 #include <climits>
+#include <memory>
 #include <map>
 #include <string>
 #include <vector>
@@ -32,7 +33,7 @@ private:
     ComputationBox<T>* cb;
     SpaceGroup* space_group;
     std::string chain_model;
-    CpuSolver<T>* solver;
+    std::unique_ptr<CpuSolver<T>> solver;
     int n_streams;
     int n_basis;
 

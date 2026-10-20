@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <memory>
 #include <omp.h>
 
 #include "ComputationDiscrete.h"
@@ -15,7 +16,7 @@ ComputationDiscrete<T>::ComputationDiscrete(
     Molecules* molecules,
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     SpaceGroup* space_group,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : ComputationCommon<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend)
 {
     try
@@ -26,16 +27,15 @@ ComputationDiscrete<T>::ComputationDiscrete(
             //   O--O--O--O--O
             //   1  2  3  4  5
             const int size = edge.max_n_segment + 1;
-            propagator_size[key] = size;
 
-            propagator[key] = new BackendArray<T>*[size]();
+            propagator[key].assign(size, nullptr);
             propagator[key][0] = nullptr;
             for (int n = 1; n < size; n++)
                 propagator[key][n] = this->backend->allocate();
 
             // Half-bond states: the junction value it starts from (n = 0) and
             // the states half a bond past the segments where junctions attach
-            propagator_half_steps[key] = new BackendArray<T>*[size]();
+            propagator_half_steps[key].assign(size, nullptr);
             propagator_half_steps[key][0] = (edge.deps.size() > 0) ? this->backend->allocate() : nullptr;
             for (int n = 1; n < size; n++)
                 propagator_half_steps[key][n] = edge.junction_ends.contains(n) ? this->backend->allocate() : nullptr;
@@ -80,13 +80,11 @@ void ComputationDiscrete<T>::free_propagators()
 {
     for (auto* storage : {&propagator, &propagator_half_steps})
     {
+        // Iterate the vectors themselves: an entry left by a failed assign() is empty
         for (const auto& [key, q] : *storage)
-        {
-            for (int n = 0; n < propagator_size[key]; n++)
-                if (q[n] != nullptr)
-                    this->backend->deallocate(q[n]);
-            delete[] q;
-        }
+            for (BackendArray<T>* a : q)
+                if (a != nullptr)
+                    this->backend->deallocate(a);
         storage->clear();
     }
 }
@@ -114,8 +112,8 @@ void ComputationDiscrete<T>::compute_propagators(
                     const auto& [key, n_segment_from, n_segment_to] = parallel_job[job];
                     const auto& edge = this->propagator_computation_optimizer->get_computation_propagator(key);
                     const std::string& monomer_type = edge.monomer_type;
-                    BackendArray<T>** q      = propagator.at(key);
-                    BackendArray<T>** q_half = propagator_half_steps.at(key);
+                    BackendArray<T>** q      = propagator.at(key).data();
+                    BackendArray<T>** q_half = propagator_half_steps.at(key).data();
 
                     // First segment q(r, 1)
                     if (n_segment_from == 0)

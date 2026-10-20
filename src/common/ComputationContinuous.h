@@ -27,6 +27,7 @@
 #define COMPUTATION_CONTINUOUS_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -39,8 +40,7 @@ class ComputationContinuous : public ComputationCommon<T>
 private:
     std::string method;  ///< "pseudospectral" or "realspace"
 
-    std::map<std::string, BackendArray<T>**> propagator;  ///< propagator[key][n], n = 0..max_n_segment
-    std::map<std::string, int> propagator_size;            ///< max_n_segment + 1 per key
+    std::map<std::string, std::vector<BackendArray<T>*>> propagator;  ///< propagator[key][n], n = 0..max_n_segment
 
     /// One segment per polymer for its partition function: (polymer, q, q†, n_aggregated)
     std::vector<std::tuple<int, BackendArray<T>*, BackendArray<T>*, int>> single_partition_segment;
@@ -60,7 +60,7 @@ public:
     ComputationContinuous(ComputationBox<T>* cb, Molecules* molecules,
                           PropagatorComputationOptimizer* propagator_computation_optimizer,
                           std::string method, SpaceGroup* space_group,
-                          const std::function<ComputationBackend<T>*()>& create_backend);
+                          const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
     ~ComputationContinuous();
 
     void compute_propagators(std::map<std::string, const T*> w_input,

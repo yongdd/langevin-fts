@@ -32,6 +32,7 @@
 #ifndef CUDA_CIRCULAR_BUFFER_H_
 #define CUDA_CIRCULAR_BUFFER_H_
 
+#include <vector>
 #include "CudaCommon.h"
 
 /**
@@ -63,9 +64,7 @@ private:
     int width;     ///< Size of each array (n_grid)
     int start;     ///< Index of oldest element
     int n_items;   ///< Current number of items stored
-    CuDeviceData<T>** d_elems = nullptr;  ///< Array of device pointers
-
-    void release();  ///< Free the arrays; shared by the destructor and a failed constructor
+    std::vector<CudaDeviceBuffer<CuDeviceData<T>>> d_elems;  ///< One owning device array per slot
 
 public:
     /**

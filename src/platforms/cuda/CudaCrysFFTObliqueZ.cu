@@ -113,13 +113,11 @@ CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(
         M_complex_xy_ = nx_logical_[0] * (nx_logical_[1] / 2 + 1) * nx_physical_[2];
         norm_factor_ = 1.0 / static_cast<double>(M_logical_);
 
-        dct_forward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
-        dct_backward_z_ = new CudaRealTransform3D(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+        dct_forward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+        dct_backward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
 
-        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_complex_),
-                                   sizeof(cufftDoubleComplex) * M_complex_xy_));
-        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(&d_real_xy_),
-                                   sizeof(double) * M_physical_));
+        d_complex_.allocate(M_complex_xy_);
+        d_real_xy_.allocate(M_physical_);
 
         init_fft_xy();
     }
@@ -135,23 +133,16 @@ CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
     release();
 }
 
-// Idempotent; tolerates a partly built object (null pointers, plans not created).
+// Idempotent; tolerates a partly built object. The cuFFT plans need the
+// explicit free; the tables, transforms and buffers are owning members.
 void CudaCrysFFTObliqueZ::release()
 {
     freeBoltzmann();
     free_fft_xy();
-
-    if (dct_forward_z_) delete dct_forward_z_;
-    if (dct_backward_z_) delete dct_backward_z_;
-    dct_forward_z_ = nullptr;
-    dct_backward_z_ = nullptr;
-
-    if (d_complex_)
-        cudaFree(d_complex_);
-    d_complex_ = nullptr;
-    if (d_real_xy_)
-        cudaFree(d_real_xy_);
-    d_real_xy_ = nullptr;
+    dct_forward_z_.reset();
+    dct_backward_z_.reset();
+    d_complex_.release();
+    d_real_xy_.release();
 }
 
 //------------------------------------------------------------------------------
@@ -200,8 +191,8 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
     }
 
     plan_xy_initialized_ = true;
-    cufftSetStream(plan_xy_fwd_, stream_);
-    cufftSetStream(plan_xy_bwd_, stream_);
+    cufft_error_check(cufftSetStream(plan_xy_fwd_, stream_));
+    cufft_error_check(cufftSetStream(plan_xy_bwd_, stream_));
 
 }
 
@@ -220,8 +211,6 @@ void CudaCrysFFTObliqueZ::free_fft_xy()
 //------------------------------------------------------------------------------
 void CudaCrysFFTObliqueZ::freeBoltzmann()
 {
-    for (auto& kv : d_boltzmann_)
-        cudaFree(kv.second);
     d_boltzmann_.clear();
     d_boltz_current_ = nullptr;
     ds_current_ = 0.0;
@@ -297,18 +286,9 @@ void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
         }
     }
 
-    double* d_boltz = nullptr;
-    gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_complex_xy_));
-    try
-    {
-        gpu_error_check(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice));
-        d_boltzmann_[ds] = d_boltz;
-    }
-    catch (...)
-    {
-        cudaFree(d_boltz);
-        throw;
-    }
+    CudaDeviceBuffer<double> d_boltz(M_complex_xy_);
+    gpu_error_check(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice));
+    d_boltzmann_[ds] = std::move(d_boltz);
 }
 
 //------------------------------------------------------------------------------
@@ -327,14 +307,14 @@ void CudaCrysFFTObliqueZ::set_contour_step(double ds)
 {
     if (ds == ds_current_ && d_boltzmann_.count(ds) > 0)
     {
-        d_boltz_current_ = d_boltzmann_[ds];
+        d_boltz_current_ = d_boltzmann_[ds].get();
         return;
     }
 
     if (d_boltzmann_.count(ds) == 0)
         generateBoltzmann(ds);
 
-    d_boltz_current_ = d_boltzmann_[ds];
+    d_boltz_current_ = d_boltzmann_[ds].get();
     ds_current_ = ds;
 }
 
@@ -345,8 +325,8 @@ void CudaCrysFFTObliqueZ::set_stream(cudaStream_t stream)
     if (dct_backward_z_) dct_backward_z_->set_stream(stream_);
     if (plan_xy_initialized_)
     {
-        cufftSetStream(plan_xy_fwd_, stream_);
-        cufftSetStream(plan_xy_bwd_, stream_);
+        cufft_error_check(cufftSetStream(plan_xy_fwd_, stream_));
+        cufft_error_check(cufftSetStream(plan_xy_bwd_, stream_));
     }
 }
 
@@ -372,53 +352,54 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
     if (profile_this)
     {
         cudaEvent_t e0{}, e1{}, e2{}, e3{}, e4{}, e5{}, e6{};
-        cudaEventCreate(&e0);
-        cudaEventCreate(&e1);
-        cudaEventCreate(&e2);
-        cudaEventCreate(&e3);
-        cudaEventCreate(&e4);
-        cudaEventCreate(&e5);
-        cudaEventCreate(&e6);
+        gpu_error_check(cudaEventCreate(&e0));
+        gpu_error_check(cudaEventCreate(&e1));
+        gpu_error_check(cudaEventCreate(&e2));
+        gpu_error_check(cudaEventCreate(&e3));
+        gpu_error_check(cudaEventCreate(&e4));
+        gpu_error_check(cudaEventCreate(&e5));
+        gpu_error_check(cudaEventCreate(&e6));
 
-        cudaEventRecord(e0, stream_);
+        gpu_error_check(cudaEventRecord(e0, stream_));
         if (d_q_in != d_q_out)
         {
             gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
                                             cudaMemcpyDeviceToDevice, stream_));
         }
-        cudaEventRecord(e1, stream_);
+        gpu_error_check(cudaEventRecord(e1, stream_));
 
         // DCT-II along z -> z-major layout (contiguous XY per z)
         dct_forward_z_->execute_z_dct2_to_zmajor(d_work, d_real_xy_, stream_);
-        cudaEventRecord(e2, stream_);
+        gpu_error_check(cudaEventRecord(e2, stream_));
 
         // FFT along x,y (batched over z)
         if (cufftExecD2Z(plan_xy_fwd_, d_real_xy_, d_complex_) != CUFFT_SUCCESS)
             throw_with_line_number("CudaCrysFFTObliqueZ cufftExecD2Z forward failed.");
-        cudaEventRecord(e3, stream_);
+        gpu_error_check(cudaEventRecord(e3, stream_));
 
         // Apply Boltzmann in spectral space (includes normalization)
         ker_multi_complex_real<<<blocks, threads, 0, stream_>>>(d_complex_, d_boltz_current_, 1.0, M_complex_xy_);
-        cudaEventRecord(e4, stream_);
+        gpu_error_check(cudaGetLastError());
+        gpu_error_check(cudaEventRecord(e4, stream_));
 
         if (cufftExecZ2D(plan_xy_bwd_, d_complex_, d_real_xy_) != CUFFT_SUCCESS)
             throw_with_line_number("CudaCrysFFTObliqueZ cufftExecZ2D inverse failed.");
-        cudaEventRecord(e5, stream_);
+        gpu_error_check(cudaEventRecord(e5, stream_));
 
         // DCT-III along z from z-major (normalization already applied in boltzmann)
         dct_backward_z_->execute_z_dct3_from_zmajor(d_real_xy_, d_work, stream_);
-        cudaEventRecord(e6, stream_);
+        gpu_error_check(cudaEventRecord(e6, stream_));
 
-        cudaEventSynchronize(e6);
+        gpu_error_check(cudaEventSynchronize(e6));
 
         float ms_copy = 0.0f, ms_dct2 = 0.0f, ms_fft = 0.0f, ms_boltz = 0.0f, ms_ifft = 0.0f, ms_dct3 = 0.0f, ms_total = 0.0f;
-        cudaEventElapsedTime(&ms_copy, e0, e1);
-        cudaEventElapsedTime(&ms_dct2, e1, e2);
-        cudaEventElapsedTime(&ms_fft, e2, e3);
-        cudaEventElapsedTime(&ms_boltz, e3, e4);
-        cudaEventElapsedTime(&ms_ifft, e4, e5);
-        cudaEventElapsedTime(&ms_dct3, e5, e6);
-        cudaEventElapsedTime(&ms_total, e0, e6);
+        gpu_error_check(cudaEventElapsedTime(&ms_copy, e0, e1));
+        gpu_error_check(cudaEventElapsedTime(&ms_dct2, e1, e2));
+        gpu_error_check(cudaEventElapsedTime(&ms_fft, e2, e3));
+        gpu_error_check(cudaEventElapsedTime(&ms_boltz, e3, e4));
+        gpu_error_check(cudaEventElapsedTime(&ms_ifft, e4, e5));
+        gpu_error_check(cudaEventElapsedTime(&ms_dct3, e5, e6));
+        gpu_error_check(cudaEventElapsedTime(&ms_total, e0, e6));
 
         std::printf("[CrysFFT-ObliqueZ] copy(ms)=%.4f dct2(ms)=%.4f fft(ms)=%.4f boltz(ms)=%.4f ifft(ms)=%.4f dct3(ms)=%.4f total(ms)=%.4f\n",
                     ms_copy, ms_dct2, ms_fft, ms_boltz, ms_ifft, ms_dct3, ms_total);
@@ -448,6 +429,7 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
 
     // Apply Boltzmann in spectral space (includes normalization)
     ker_multi_complex_real<<<blocks, threads, 0, stream_>>>(d_complex_, d_boltz_current_, 1.0, M_complex_xy_);
+    gpu_error_check(cudaGetLastError());
 
     if (cufftExecZ2D(plan_xy_bwd_, d_complex_, d_real_xy_) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTObliqueZ cufftExecZ2D inverse failed.");

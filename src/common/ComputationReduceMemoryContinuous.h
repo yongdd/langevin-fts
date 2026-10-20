@@ -21,6 +21,7 @@
 #define COMPUTATION_REDUCE_MEMORY_CONTINUOUS_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -43,7 +44,7 @@ public:
     ComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules* molecules,
                                       PropagatorComputationOptimizer* propagator_computation_optimizer,
                                       std::string method, SpaceGroup* space_group,
-                                      const std::function<ComputationBackend<T>*()>& create_backend);
+                                      const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
 
     void compute_propagators(std::map<std::string, const T*> w_input,
                              std::map<std::string, const T*> q_init = {}) override;

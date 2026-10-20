@@ -105,6 +105,22 @@ commits are omitted.
 
 ### Interface changes
 
+- CUDA error checks follow the CUDA C++ Best Practices Guide (2026-10-21): every kernel launch
+  is followed by a `cudaGetLastError()` check, and the cuFFT, CUB and runtime calls whose
+  return codes were ignored (about 210) are checked. Before, about half the launches were
+  checked only by a later `cudaPeekAtLastError()`, so an error was reported at an unrelated
+  place and, since the peek does not clear it, again by the next call after the exception
+  (for example on a retry from Python). No synchronization was added. The CN-ADI solver
+  requests at most the device's opt-in shared-memory limit instead of an unchecked 96000 bytes.
+- C++ ownership (2026-10-21): device memory is held in `CudaDeviceBuffer<T>` /
+  `CudaPinnedBuffer<T>` (`CudaCommon.h`), host arrays in `std::vector` and owned objects in
+  `std::unique_ptr`, replacing hand-written allocation and cleanup code (the FFTW/MKL plans
+  and the `fftw_malloc` buffers of the CPU FFT classes keep their `release()` functions).
+  `createFFT()` returns a `std::unique_ptr<FFT<T>>`, and the computation classes take a
+  backend factory returning `std::unique_ptr<ComputationBackend<T>>`. The factory functions
+  still return raw pointers that the caller owns. Results are unchanged. The MKL ObliqueZ
+  CrysFFT reallocates its per-thread z buffers also when only Nz changes (two grids with the
+  same Nx*Ny*Nz but a different Nz overflowed the spectrum buffer on one thread).
 - The Python layer is organised for researchers: each simulation class reads its options
   straight from the `params` dictionary, and the package has fewer files (`compressor.py`
   merged into `lfts.py`; `config.py` and `io.py` into `utils.py`; `result.py` into

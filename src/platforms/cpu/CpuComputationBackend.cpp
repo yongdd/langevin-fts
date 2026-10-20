@@ -18,19 +18,19 @@ CpuComputationBackend<T>::CpuComputationBackend(
     ComputationBox<T>* cb, Molecules* molecules,
     std::string method, std::string numerical_method,
     FFTBackend fft_backend, SpaceGroup* space_group, int max_n_streams)
-    : cb(cb), space_group(space_group), chain_model(molecules->get_model_name()), solver(nullptr)
+    : cb(cb), space_group(space_group), chain_model(molecules->get_model_name())
 {
     n_basis = cb->get_n_basis();
     n_streams = std::min(this->n_streams_from_env(/*default_n_streams=*/4), max_n_streams);
 
     if (chain_model == "discrete")
-        solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, fft_backend);
+        solver = std::make_unique<CpuSolverPseudoDiscrete<T>>(cb, molecules, fft_backend);
     else if (method == "pseudospectral")
     {
         if (numerical_method == "" || numerical_method == "rqm4")
-            solver = new CpuSolverPseudoRQM4<T>(cb, molecules, fft_backend);
+            solver = std::make_unique<CpuSolverPseudoRQM4<T>>(cb, molecules, fft_backend);
         else if (numerical_method == "rk2")
-            solver = new CpuSolverPseudoRK2<T>(cb, molecules, fft_backend);
+            solver = std::make_unique<CpuSolverPseudoRK2<T>>(cb, molecules, fft_backend);
         else
             throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
     }
@@ -40,7 +40,7 @@ CpuComputationBackend<T>::CpuComputationBackend(
         {
             if (numerical_method != "" && numerical_method != "cn-adi2")
                 throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
-            solver = new CpuSolverCNADI(cb, molecules);
+            solver = std::make_unique<CpuSolverCNADI>(cb, molecules);
         }
         else
             throw_with_line_number("Currently, the realspace method is only available for double precision.");
@@ -48,25 +48,15 @@ CpuComputationBackend<T>::CpuComputationBackend(
     else
         throw_with_line_number("Unknown method: '" + method + "'. Use 'pseudospectral' or 'realspace'.");
 
-    try
-    {
-        // The solver expands/reduces around its FFTs when a space group is set
-        if (space_group != nullptr)
-            solver->set_space_group(space_group);
-        solver->update_laplacian_operator();
-    }
-    catch (...)
-    {
-        delete solver;
-        throw;
-    }
+    // The solver expands/reduces around its FFTs when a space group is set
+    // (the owning member releases the solver if this throws)
+    if (space_group != nullptr)
+        solver->set_space_group(space_group);
+    solver->update_laplacian_operator();
 }
 
 template <typename T>
-CpuComputationBackend<T>::~CpuComputationBackend()
-{
-    delete solver;
-}
+CpuComputationBackend<T>::~CpuComputationBackend() = default;
 
 // ==================== Memory ====================
 

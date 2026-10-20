@@ -7,6 +7,7 @@
 #define CUDA_CRYS_FFT_OBLIQUEZ_H_
 
 #include <array>
+#include <memory>
 #include <map>
 #include <cuda_runtime.h>
 #include <cufft.h>
@@ -27,19 +28,19 @@ private:
     std::array<double, 6> cell_para_;
     std::array<double, 6> recip_metric_;
 
-    std::map<double, double*> d_boltzmann_;
-    double* d_boltz_current_{nullptr};
+    std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
+    double* d_boltz_current_{nullptr};   ///< Table of ds_current_ in d_boltzmann_ (not owning)
     double ds_current_{0.0};
 
-    CudaRealTransform3D* dct_forward_z_{nullptr};
-    CudaRealTransform3D* dct_backward_z_{nullptr};
+    std::unique_ptr<CudaRealTransform3D> dct_forward_z_;
+    std::unique_ptr<CudaRealTransform3D> dct_backward_z_;
 
     cufftHandle plan_xy_fwd_{};
     cufftHandle plan_xy_bwd_{};
     bool plan_xy_initialized_{false};
 
-    cufftDoubleComplex* d_complex_{nullptr};
-    double* d_real_xy_{nullptr};
+    CudaDeviceBuffer<cufftDoubleComplex> d_complex_;
+    CudaDeviceBuffer<double> d_real_xy_;
 
     double norm_factor_{1.0};
     cudaStream_t stream_{0};

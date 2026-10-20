@@ -73,13 +73,10 @@ protected:
     //--------------------------------------------------------------------------
     // Per-thread Boltzmann factor caching (owned by the object)
     //--------------------------------------------------------------------------
-    struct BoltzDeleter {
-        void operator()(double* ptr) const { delete[] ptr; }
-    };
 
     struct ThreadState
     {
-        std::map<double, std::unique_ptr<double, BoltzDeleter>> boltzmann;
+        std::map<double, std::unique_ptr<double[]>> boltzmann;
         const double* boltz_current = nullptr;
         double ds_current = std::numeric_limits<double>::quiet_NaN();
         uint64_t epoch = 0;
@@ -124,9 +121,9 @@ protected:
     }
 
     /// Generate Boltzmann factors for given ds.
-    double* generateBoltzmann(double ds) const
+    std::unique_ptr<double[]> generateBoltzmann(double ds) const
     {
-        double* boltz = new double[M_physical_];
+        auto boltz = std::make_unique<double[]>(M_physical_);
 
         double Lx = cell_para_[0];
         double Ly = cell_para_[1];
@@ -242,7 +239,7 @@ public:
         auto it = state.boltzmann.find(ds);
         if (it == state.boltzmann.end())
         {
-            std::unique_ptr<double, BoltzDeleter> boltz(generateBoltzmann(ds));
+            std::unique_ptr<double[]> boltz = generateBoltzmann(ds);
             it = state.boltzmann.emplace(ds, std::move(boltz)).first;
         }
 

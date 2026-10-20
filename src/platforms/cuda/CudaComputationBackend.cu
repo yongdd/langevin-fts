@@ -82,19 +82,12 @@ CudaComputationBackend<T>::CudaComputationBackend(
     std::string method, std::string numerical_method,
     SpaceGroup* space_group, int max_n_streams)
     : cb(nullptr), space_group(space_group), chain_model(molecules->get_model_name()),
-      solver(nullptr), solver_discrete(nullptr), n_streams(0), n_basis(0), force_off_diagonal_stress(false),
-      d_q_unity(nullptr), d_q_mask(nullptr),
-      d_reduced_basis_indices(nullptr), d_full_to_reduced_map(nullptr), d_sum(nullptr)
+      solver_discrete(nullptr), n_streams(0), n_basis(0), force_off_diagonal_stress(false)
 {
     for (int i = 0; i < MAX_STREAMS; i++)
     {
         streams[i][0] = nullptr;
         streams[i][1] = nullptr;
-        d_q_pair[i][0] = nullptr;
-        d_q_pair[i][1] = nullptr;
-        d_segment_stress[i] = nullptr;
-        d_block_stress[i] = nullptr;
-        h_block_stress[i] = nullptr;
         kernel_done[i] = nullptr;
         copy_done[i] = nullptr;
     }
@@ -113,10 +106,10 @@ CudaComputationBackend<T>::CudaComputationBackend(
         if (space_group != nullptr)
         {
             const int n_reduced = space_group->get_n_reduced_basis();
-            gpu_error_check(cudaMalloc((void**)&d_reduced_basis_indices, sizeof(int)*n_reduced));
+            d_reduced_basis_indices.allocate(n_reduced);
             gpu_error_check(cudaMemcpy(d_reduced_basis_indices, space_group->get_reduced_basis_indices().data(),
                                        sizeof(int)*n_reduced, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMalloc((void**)&d_full_to_reduced_map, sizeof(int)*M));
+            d_full_to_reduced_map.allocate(M);
             gpu_error_check(cudaMemcpy(d_full_to_reduced_map, space_group->get_full_to_reduced_map().data(),
                                        sizeof(int)*M, cudaMemcpyHostToDevice));
         }
@@ -132,15 +125,16 @@ CudaComputationBackend<T>::CudaComputationBackend(
 
         if (chain_model == "discrete")
         {
-            solver_discrete = new CudaSolverPseudoDiscrete<T>(cb, molecules, n_streams, streams, false);
-            solver = solver_discrete;
+            auto discrete = std::make_unique<CudaSolverPseudoDiscrete<T>>(cb, molecules, n_streams, streams, false);
+            solver_discrete = discrete.get();
+            solver = std::move(discrete);
         }
         else if (method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                solver = new CudaSolverPseudoRQM4<T>(cb, molecules, n_streams, streams, false);
+                solver = std::make_unique<CudaSolverPseudoRQM4<T>>(cb, molecules, n_streams, streams, false);
             else if (numerical_method == "rk2")
-                solver = new CudaSolverPseudoRK2<T>(cb, molecules, n_streams, streams, false);
+                solver = std::make_unique<CudaSolverPseudoRK2<T>>(cb, molecules, n_streams, streams, false);
             else
                 throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
         }
@@ -150,7 +144,7 @@ CudaComputationBackend<T>::CudaComputationBackend(
             {
                 if (numerical_method != "" && numerical_method != "cn-adi2")
                     throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
-                solver = new CudaSolverCNADI(cb, molecules, n_streams, streams, false);
+                solver = std::make_unique<CudaSolverCNADI>(cb, molecules, n_streams, streams, false);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
@@ -160,27 +154,27 @@ CudaComputationBackend<T>::CudaComputationBackend(
 
         // Ones for free chain ends
         std::vector<T> unity(M, T(1.0));
-        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(T)*M));
+        d_q_unity.allocate(M);
         gpu_error_check(cudaMemcpy(d_q_unity, unity.data(), sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Mask (the box stores it in the reduced basis when a space group is set)
         if (cb->get_mask() != nullptr)
         {
-            gpu_error_check(cudaMalloc((void**)&d_q_mask, sizeof(double)*n_basis));
+            d_q_mask.allocate(n_basis);
             gpu_error_check(cudaMemcpy(d_q_mask, cb->get_mask(), sizeof(double)*n_basis, cudaMemcpyHostToDevice));
         }
 
-        gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(T)*M));
+        d_sum.allocate(M);
         for (int i = 0; i < n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0], sizeof(T)*2*M));
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1], sizeof(T)*2*M));
+            d_q_pair[i][0].allocate(2*M);
+            d_q_pair[i][1].allocate(2*M);
         }
         for (int i = 0; i < MAX_STREAMS; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress[i], sizeof(T)*6));
-            gpu_error_check(cudaMalloc((void**)&d_block_stress[i], sizeof(T)*6));
-            gpu_error_check(cudaMallocHost((void**)&h_block_stress[i], sizeof(T)*6));
+            d_segment_stress[i].allocate(6);
+            d_block_stress[i].allocate(6);
+            h_block_stress[i].allocate(6);
         }
 
         solver->update_laplacian_operator();
@@ -207,33 +201,25 @@ template <typename T>
 void CudaComputationBackend<T>::release()
 {
     // The solver first: its cuFFT plans run on the streams destroyed below.
-    // cudaFree(nullptr) does nothing, so partly built objects are fine.
-    delete solver;
-    solver = nullptr;
+    // The device buffers are owning members (released by the destructor, or
+    // here for a partly built object).
+    solver.reset();
     solver_discrete = nullptr;
 
-    cudaFree(d_q_unity);
-    cudaFree(d_q_mask);
-    cudaFree(d_reduced_basis_indices);
-    cudaFree(d_full_to_reduced_map);
-    cudaFree(d_sum);
-    d_q_unity = nullptr;
-    d_q_mask = nullptr;
-    d_reduced_basis_indices = nullptr;
-    d_full_to_reduced_map = nullptr;
-    d_sum = nullptr;
-    for (const auto& item : d_exp_dw_reduced)
-        cudaFree(item.second);
+    d_q_unity.release();
+    d_q_mask.release();
+    d_reduced_basis_indices.release();
+    d_full_to_reduced_map.release();
+    d_sum.release();
     d_exp_dw_reduced.clear();
 
     for (int i = 0; i < MAX_STREAMS; i++)
     {
-        cudaFree(d_q_pair[i][0]);
-        cudaFree(d_q_pair[i][1]);
-        cudaFree(d_segment_stress[i]);
-        cudaFree(d_block_stress[i]);
-        if (h_block_stress[i] != nullptr)
-            cudaFreeHost(h_block_stress[i]);
+        d_q_pair[i][0].release();
+        d_q_pair[i][1].release();
+        d_segment_stress[i].release();
+        d_block_stress[i].release();
+        h_block_stress[i].release();
         if (kernel_done[i] != nullptr)
             cudaEventDestroy(kernel_done[i]);
         if (copy_done[i] != nullptr)
@@ -242,11 +228,6 @@ void CudaComputationBackend<T>::release()
             cudaStreamDestroy(streams[i][0]);
         if (streams[i][1] != nullptr)
             cudaStreamDestroy(streams[i][1]);
-        d_q_pair[i][0] = nullptr;
-        d_q_pair[i][1] = nullptr;
-        d_segment_stress[i] = nullptr;
-        d_block_stress[i] = nullptr;
-        h_block_stress[i] = nullptr;
         kernel_done[i] = nullptr;
         copy_done[i] = nullptr;
         streams[i][0] = nullptr;
@@ -346,19 +327,9 @@ void CudaComputationBackend<T>::update_dw(std::map<std::string, const T*> w_inpu
             if (found == d_exp_dw_reduced.end())
             {
                 // Enter the buffer only once it exists, so a failed allocation can be retried
-                CuDeviceData<T>* d_new = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_new, sizeof(T)*n_basis));
-                try
-                {
-                    found = d_exp_dw_reduced.emplace(monomer_type, d_new).first;
-                }
-                catch (...)
-                {
-                    cudaFree(d_new);
-                    throw;
-                }
+                found = d_exp_dw_reduced.emplace(monomer_type, CudaDeviceBuffer<CuDeviceData<T>>(n_basis)).first;
             }
-            CuDeviceData<T>* d_exp_dw_basis  = found->second;
+            CuDeviceData<T>* d_exp_dw_basis  = found->second.get();
             CuDeviceData<T>* d_exp_dw_solver = solver->d_exp_dw.at(0).at(monomer_type);
             if (solver_discrete->exp_dw_stored_reduced())
             {
@@ -369,7 +340,7 @@ void CudaComputationBackend<T>::update_dw(std::map<std::string, const T*> w_inpu
             {
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(
                     d_exp_dw_basis, d_exp_dw_solver, d_reduced_basis_indices, n_basis);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
             }
         }
         gpu_error_check(cudaDeviceSynchronize());
@@ -440,7 +411,7 @@ void CudaComputationBackend<T>::junction_sum(
     {
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
             d_q, 1.0, d_q, n_repeated, raw(src), n_basis);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
 }
 
@@ -460,7 +431,7 @@ void CudaComputationBackend<T>::junction_product(
         for (int r = 0; r < n_repeated; r++)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(d_q, d_q, raw(src), 1.0, n_basis);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
     }
 }
@@ -482,7 +453,7 @@ void CudaComputationBackend<T>::junction_sum(
                                         cudaMemcpyHostToDevice, streams[stream][0]));
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
             d_q, 1.0, d_q, n_repeated, d_stage, n_basis);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
 }
 
@@ -505,7 +476,7 @@ void CudaComputationBackend<T>::junction_product(
         for (int r = 0; r < n_repeated; r++)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(d_q, d_q, d_stage, 1.0, n_basis);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
     }
 }
@@ -513,12 +484,12 @@ void CudaComputationBackend<T>::junction_product(
 template <typename T>
 void CudaComputationBackend<T>::apply_mask(int stream, BackendArray<T>* q)
 {
-    if (d_q_mask == nullptr)
+    if (d_q_mask.empty())
         return;
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(raw(q), raw(q), d_q_mask, 1.0, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 }
 
 template <typename T>
@@ -528,7 +499,7 @@ void CudaComputationBackend<T>::multiply_boltzmann_factor(int stream, BackendArr
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
         raw(q), raw(q), raw(boltzmann_factor(monomer_type)), 1.0, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 }
 
 // ==================== Statistics ====================
@@ -563,8 +534,9 @@ void CudaComputationBackend<T>::add_segment_products(
             chunk.weight[k] = pairs[first + k].weight;
         }
         ker_add_segment_products<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(raw(phi), chunk, n_basis);
+        gpu_error_check(cudaGetLastError());
     }
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 }
 
 template <typename T>
@@ -576,8 +548,9 @@ void CudaComputationBackend<T>::normalize_concentration(int stream, BackendArray
     cudaStream_t s = streams[stream][0];
     if (divisor != nullptr)
         ker_divide<<<N_BLOCKS, N_THREADS, 0, s>>>(d_phi, d_phi, raw(divisor), 1.0, n_basis);
+    gpu_error_check(cudaGetLastError());
     ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, s>>>(d_phi, to_device_scalar(norm), d_phi, 0.0, d_phi, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 }
 
 template <typename T>
@@ -633,7 +606,7 @@ std::array<T, 6> CudaComputationBackend<T>::block_stress(
         solver->compute_single_segment_stress(stream, d_q_pair[stream][prev], d_segment,
                                               monomer_type, pairs[i].is_half_bond_length);
         ker_lin_comb<<<1, 32, 0, s_kernel>>>(d_block, 1.0, d_block, pairs[i].weight, d_segment, N_STRESS_DIM);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
         gpu_error_check(cudaEventRecord(kernel_done_s, s_kernel));
 
         gpu_error_check(cudaStreamWaitEvent(s_copy, kernel_done_s, 0));
@@ -661,7 +634,7 @@ T CudaComputationBackend<T>::solvent_concentration(
     CuDeviceData<T>* d_phi = raw(phi);
 
     ker_exp<<<N_BLOCKS, N_THREADS>>>(d_phi, raw(w), 1.0, -ds, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 
     const T partition = cb->mean_device(d_phi);
 
@@ -671,7 +644,7 @@ T CudaComputationBackend<T>::solvent_concentration(
     else
         norm = cuCdiv(make_cuDoubleComplex(volume_fraction, 0.0), stdToCuDoubleComplex(partition));
     ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_phi, 0.0, d_phi, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
     return partition;
 }
 
@@ -685,7 +658,7 @@ void CudaComputationBackend<T>::sum_to_host(
     gpu_error_check(cudaMemset(d_sum, 0, sizeof(T)*n_basis));
     for (size_t a = 0; a < arrays.size(); a++)
         ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_sum, to_device_scalar(weights[a]), raw(arrays[a]), 1.0, d_sum, n_basis);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
     gpu_error_check(cudaMemcpy(out, d_sum, sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
 }
 

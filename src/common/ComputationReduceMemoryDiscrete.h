@@ -18,6 +18,7 @@
 #define COMPUTATION_REDUCE_MEMORY_DISCRETE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -45,7 +46,7 @@ public:
     ComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules* molecules,
                                     PropagatorComputationOptimizer* propagator_computation_optimizer,
                                     SpaceGroup* space_group,
-                                    const std::function<ComputationBackend<T>*()>& create_backend);
+                                    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
     ~ComputationReduceMemoryDiscrete();
 
     void compute_propagators(std::map<std::string, const T*> w_input,

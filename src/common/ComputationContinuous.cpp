@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <memory>
 #include <omp.h>
 
 #include "ComputationContinuous.h"
@@ -17,7 +18,7 @@ ComputationContinuous<T>::ComputationContinuous(
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     std::string method,
     SpaceGroup* space_group,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : ComputationCommon<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend),
       method(method)
 {
@@ -27,8 +28,7 @@ ComputationContinuous<T>::ComputationContinuous(
         for (const auto& [key, edge] : this->propagator_computation_optimizer->get_computation_propagators())
         {
             const int size = edge.max_n_segment + 1;
-            propagator_size[key] = size;
-            propagator[key] = new BackendArray<T>*[size]();
+            propagator[key].assign(size, nullptr);
             for (int n = 0; n < size; n++)
                 propagator[key][n] = this->backend->allocate();
         }
@@ -67,13 +67,11 @@ ComputationContinuous<T>::~ComputationContinuous()
 template <typename T>
 void ComputationContinuous<T>::free_propagators()
 {
+    // Iterate the vectors themselves: an entry left by a failed assign() is empty
     for (const auto& [key, q] : propagator)
-    {
-        for (int n = 0; n < propagator_size[key]; n++)
-            if (q[n] != nullptr)
-                this->backend->deallocate(q[n]);
-        delete[] q;
-    }
+        for (BackendArray<T>* a : q)
+            if (a != nullptr)
+                this->backend->deallocate(a);
     propagator.clear();
 }
 
@@ -109,7 +107,7 @@ void ComputationContinuous<T>::compute_propagators(
                     const int STREAM = omp_get_thread_num();
                     const auto& [key, n_segment_from, n_segment_to] = parallel_job[job];
                     const auto& edge = this->propagator_computation_optimizer->get_computation_propagator(key);
-                    BackendArray<T>** q = propagator.at(key);
+                    BackendArray<T>** q = propagator.at(key).data();
 
                     // Initial condition q(r, 0)
                     if (n_segment_from == 0)

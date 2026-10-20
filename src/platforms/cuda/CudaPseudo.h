@@ -41,6 +41,7 @@
 #include <map>
 
 #include "Pseudo.h"
+#include "CudaCommon.h"
 #include "Exception.h"
 #include "ComputationBox.h"
 #include "Molecules.h"
@@ -79,25 +80,25 @@ private:
     /// @name Stress Calculation Arrays (k⊗k Diagonal)
     /// Stores Cartesian k⊗k dyad diagonal components in device memory.
     /// @{
-    double *d_fourier_basis_x;  ///< k_x² in device memory
-    double *d_fourier_basis_y;  ///< k_y² in device memory
-    double *d_fourier_basis_z;  ///< k_z² in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_x;  ///< k_x² in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_y;  ///< k_y² in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_z;  ///< k_z² in device memory
     /// @}
 
     /// @name Stress Calculation Arrays (k⊗k Off-diagonal)
     /// Stores Cartesian k⊗k dyad off-diagonal components in device memory.
     /// @{
-    double *d_fourier_basis_xy;  ///< k_x × k_y in device memory
-    double *d_fourier_basis_xz;  ///< k_x × k_z in device memory
-    double *d_fourier_basis_yz;  ///< k_y × k_z in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_xy;  ///< k_x × k_y in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_xz;  ///< k_x × k_z in device memory
+    CudaDeviceBuffer<double> d_fourier_basis_yz;  ///< k_y × k_z in device memory
     /// @}
 
-    int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
+    CudaDeviceBuffer<int> d_negative_k_idx;  ///< Index map for negative frequencies (device)
 
     /// @name Pseudo-Spectral Operators (per ds_index)
     /// @{
-    std::map<int, std::map<std::string, double*>> d_boltz_bond;       ///< Full bond diffusion (device) [ds_index][monomer_type]
-    std::map<int, std::map<std::string, double*>> d_boltz_bond_half;  ///< Half bond diffusion (device) [ds_index][monomer_type]
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_boltz_bond;       ///< Full bond diffusion (device) [ds_index][monomer_type]
+    std::map<int, std::map<std::string, CudaDeviceBuffer<double>>> d_boltz_bond_half;  ///< Half bond diffusion (device) [ds_index][monomer_type]
     /// @}
 
     /// Upload Boltzmann factors to GPU.
@@ -105,9 +106,6 @@ private:
 
     /// Upload Fourier basis to GPU.
     void upload_fourier_basis();
-
-    /// Free all device memory (idempotent; safe on a partly built object).
-    void release();
 
 public:
     /**
@@ -143,7 +141,7 @@ public:
      * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/6)
      */
-    double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond[ds_index][monomer_type]; };
+    double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond[ds_index][monomer_type].get(); };
 
     /**
      * @brief Get half bond factor (device pointer).
@@ -151,7 +149,7 @@ public:
      * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/12)
      */
-    double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type];};
+    double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type].get();};
 
     /// Get x-direction Fourier basis (device pointer).
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};

@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <memory>
 
 #include "ComputationReduceMemoryDiscrete.h"
 #include "PropagatorCode.h"
@@ -14,7 +15,7 @@ ComputationReduceMemoryDiscrete<T>::ComputationReduceMemoryDiscrete(
     Molecules* molecules,
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     SpaceGroup* space_group,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : ComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, space_group,
                                      /*first_segment=*/1, create_backend)
 {

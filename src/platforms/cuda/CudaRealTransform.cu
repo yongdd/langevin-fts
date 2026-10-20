@@ -24,9 +24,9 @@
 // DCT lookup table helpers (optional sin/cos precompute)
 //==============================================================================
 
-static void allocate_dct2_lut(int N, double** d_sin, double** d_cos)
+static void allocate_dct2_lut(int N, CudaDeviceBuffer<double>& d_sin, CudaDeviceBuffer<double>& d_cos)
 {
-    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+    if (N <= 0)
         return;
 
     std::vector<double> h_sin(N, 0.0);
@@ -38,15 +38,15 @@ static void allocate_dct2_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * N));
-    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * N));
-    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    d_sin.allocate(N);
+    d_cos.allocate(N);
+    gpu_error_check(cudaMemcpy(d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
 }
 
-static void allocate_dct3_lut(int N, double** d_sin, double** d_cos)
+static void allocate_dct3_lut(int N, CudaDeviceBuffer<double>& d_sin, CudaDeviceBuffer<double>& d_cos)
 {
-    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+    if (N <= 0)
         return;
 
     int half = N / 2;
@@ -59,15 +59,15 @@ static void allocate_dct3_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * (half + 1)));
-    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * (half + 1)));
-    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
+    d_sin.allocate(half + 1);
+    d_cos.allocate(half + 1);
+    gpu_error_check(cudaMemcpy(d_sin, h_sin.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_cos, h_cos.data(), sizeof(double) * (half + 1), cudaMemcpyHostToDevice));
 }
 
-static void allocate_dct4_lut(int N, double** d_sin, double** d_cos)
+static void allocate_dct4_lut(int N, CudaDeviceBuffer<double>& d_sin, CudaDeviceBuffer<double>& d_cos)
 {
-    if (N <= 0 || d_sin == nullptr || d_cos == nullptr)
+    if (N <= 0)
         return;
 
     std::vector<double> h_sin(N, 0.0);
@@ -79,15 +79,21 @@ static void allocate_dct4_lut(int N, double** d_sin, double** d_cos)
         h_cos[i] = std::cos(angle);
     }
 
-    gpu_error_check(cudaMalloc(d_sin, sizeof(double) * N));
-    gpu_error_check(cudaMalloc(d_cos, sizeof(double) * N));
-    gpu_error_check(cudaMemcpy(*d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(*d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    d_sin.allocate(N);
+    d_cos.allocate(N);
+    gpu_error_check(cudaMemcpy(d_sin, h_sin.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_cos, h_cos.data(), sizeof(double) * N, cudaMemcpyHostToDevice));
 }
 
 //==============================================================================
 // Helper functions
 //==============================================================================
+
+/// Number of doubles that hold `bytes` bytes (work buffers sized in bytes)
+static size_t doubles_for_bytes(size_t bytes)
+{
+    return (bytes + sizeof(double) - 1) / sizeof(double);
+}
 
 static int pow2roundup(int x)
 {
@@ -3750,7 +3756,7 @@ static size_t shared_bytes_1d(CudaTransformType type, int N)
 }
 
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
-    : N_(N), type_(type), initialized_(false), d_work_(nullptr), d_x1_(nullptr)
+    : N_(N), type_(type), initialized_(false)
 {
     try
     {
@@ -3772,14 +3778,14 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
 
         // Allocate buffers
         if (z2z) {
-            gpu_error_check(cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize));
-            gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize));
+            d_work_.allocate(2 * static_cast<size_t>(fftSize));   // complex values
+            d_x1_.allocate(2 * static_cast<size_t>(fftSize));   // complex values
         } else {
             int complexSize = fftSize / 2 + 1;
             // DCT-3 runs its D2Z into d_work_ (complexSize complex values)
             int workSize = std::max(fftSize, 2 * complexSize);
-            gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * workSize));
-            gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize));
+            d_work_.allocate(workSize);
+            d_x1_.allocate(2 * static_cast<size_t>(complexSize));   // complex values
         }
 
         // Create FFT plan
@@ -3824,11 +3830,11 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
 
         if (type_ == CUDA_DCT_2 || type_ == CUDA_DST_2 || type_ == CUDA_DST_3 ||
             type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
-            allocate_dct2_lut(N_, &dct2_sin_, &dct2_cos_);
+            allocate_dct2_lut(N_, dct2_sin_, dct2_cos_);
         if (type_ == CUDA_DCT_3)
-            allocate_dct3_lut(N_, &dct3_sin_, &dct3_cos_);
+            allocate_dct3_lut(N_, dct3_sin_, dct3_cos_);
         if (type_ == CUDA_DCT_4 || type_ == CUDA_DST_4)
-            allocate_dct4_lut(N_, &dct4_sin_, &dct4_cos_);
+            allocate_dct4_lut(N_, dct4_sin_, dct4_cos_);
 
         initialized_ = true;
     }
@@ -3847,17 +3853,15 @@ CudaRealTransform1D::~CudaRealTransform1D()
 // Idempotent; tolerates a partly built object (null pointers, plan not created).
 void CudaRealTransform1D::release()
 {
-    if (d_work_) cudaFree(d_work_);
-    if (d_x1_) cudaFree(d_x1_);
-    if (dct2_sin_) cudaFree(dct2_sin_);
-    if (dct2_cos_) cudaFree(dct2_cos_);
-    if (dct3_sin_) cudaFree(dct3_sin_);
-    if (dct3_cos_) cudaFree(dct3_cos_);
-    if (dct4_sin_) cudaFree(dct4_sin_);
-    if (dct4_cos_) cudaFree(dct4_cos_);
+    d_work_.release();
+    d_x1_.release();
+    dct2_sin_.release();
+    dct2_cos_.release();
+    dct3_sin_.release();
+    dct3_cos_.release();
+    dct4_sin_.release();
+    dct4_cos_.release();
     if (plan_created_) cufftDestroy(plan_);
-    d_work_ = d_x1_ = nullptr;
-    dct2_sin_ = dct2_cos_ = dct3_sin_ = dct3_cos_ = dct4_sin_ = dct4_cos_ = nullptr;
     plan_created_ = false;
     initialized_ = false;
 }
@@ -3902,12 +3906,14 @@ void CudaRealTransform1D::execute(double* d_data)
 
             // PreOp modifies work buffer in place
             kernel_dct1_preOp<<<1, std::min(nT, 256), nT * sizeof(double), stream_>>>(d_work_, d_x1_, N, nT);
+            gpu_error_check(cudaGetLastError());
 
             // Z2D FFT (in-place: treat d_work_ as complex, output real)
-            cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
+            cufft_error_check(cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get()), d_work_));
 
             // PostOp
             kernel_dct1_postOp<<<1, std::min(N / 2 + 1, 256), 0, stream_>>>(d_work_, d_x1_, N);
+            gpu_error_check(cudaGetLastError());
 
             // Copy result back
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_));
@@ -3916,16 +3922,20 @@ void CudaRealTransform1D::execute(double* d_data)
         case CUDA_DCT_2: {
             // packed spectrum (N/2+1 complex) into d_x1_, which has room for it
             kernel_dct2_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, d_x1_, N_);
-            cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_x1_), d_work_);
+            gpu_error_check(cudaGetLastError());
+            cufft_error_check(cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_x1_.get()), d_work_));
             kernel_dct2_postOp<<<1, std::min(nThread, 256), sizeof(double) * nThread, stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
+            gpu_error_check(cudaGetLastError());
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DCT_3: {
             kernel_dct3_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
-            cufftExecD2Z(plan_, d_data, (cufftDoubleComplex*)d_work_);
+            gpu_error_check(cudaGetLastError());
+            cufft_error_check(cufftExecD2Z(plan_, d_data, reinterpret_cast<cufftDoubleComplex*>(d_work_.get())));
             kernel_dct3_postOp<<<1, std::min(nThread, 256), sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
+            gpu_error_check(cudaGetLastError());
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
@@ -3933,13 +3943,15 @@ void CudaRealTransform1D::execute(double* d_data)
             int N2 = 2 * N_;
             int blockSize = 256;
             int numBlocks = grid_blocks(N2, blockSize);
-            cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-            cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+            cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+            cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
             kernel_dct4_preOp<<<numBlocks, blockSize, 0, stream_>>>(
                 d_data, d_z_in, N_, dct4_sin_, dct4_cos_);
-            cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
+            gpu_error_check(cudaGetLastError());
+            cufft_error_check(cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD));
             kernel_dct4_postOp<<<grid_blocks(N_, blockSize), blockSize, 0, stream_>>>(
                 d_z_out, d_data, N_, dct2_sin_, dct2_cos_);
+            gpu_error_check(cudaGetLastError());
             break;
         }
         case CUDA_DST_1: {
@@ -3953,10 +3965,12 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp
             kernel_dst1_preOp<<<1, std::min(nT, 256), M * sizeof(double), stream_>>>(d_work_, M);
+            gpu_error_check(cudaGetLastError());
             // Z2D FFT of size M
-            cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
+            cufft_error_check(cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get()), d_work_));
             // PostOp
             kernel_dst1_postOp<<<1, std::min(M / 2 + 1, 256), 0, stream_>>>(d_work_, M);
+            gpu_error_check(cudaGetLastError());
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
@@ -3968,11 +3982,13 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads from buffer[1..N]) - needs N/2+1 threads
             kernel_dst2_preOp<<<1, std::min(N_ / 2 + 1, 256), N_ * sizeof(double), stream_>>>(d_work_, N_);
+            gpu_error_check(cudaGetLastError());
             // Z2D FFT of size N
-            cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
+            cufft_error_check(cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get()), d_work_));
             // PostOp
             kernel_dst2_postOp<<<1, std::min(N_ / 2 + 1, 256), N_ * sizeof(double), stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
+            gpu_error_check(cudaGetLastError());
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
@@ -3984,10 +4000,12 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads buffer[0..N])
             kernel_dst3_preOp<<<1, std::min(N_ / 2 + 1, 256), 0, stream_>>>(d_work_, N_, dct2_sin_, dct2_cos_);
+            gpu_error_check(cudaGetLastError());
             // D2Z FFT of size N
-            cufftExecD2Z(plan_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_));
+            cufft_error_check(cufftExecD2Z(plan_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get())));
             // PostOp
             kernel_dst3_postOp<<<1, std::min(N_ / 2 + 1, 256), (N_ + 2) * sizeof(double), stream_>>>(d_work_, N_);
+            gpu_error_check(cudaGetLastError());
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
@@ -3996,13 +4014,15 @@ void CudaRealTransform1D::execute(double* d_data)
             int N2 = 2 * N_;
             int blockSize = 256;
             int numBlocks = grid_blocks(N2, blockSize);
-            cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-            cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+            cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+            cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
             kernel_dst4_preOp<<<numBlocks, blockSize, 0, stream_>>>(
                 d_data, d_z_in, N_, dct4_sin_, dct4_cos_);
-            cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD);
+            gpu_error_check(cudaGetLastError());
+            cufft_error_check(cufftExecZ2Z(plan_, d_z_in, d_z_out, CUFFT_FORWARD));
             kernel_dst4_postOp<<<grid_blocks(N_, blockSize), blockSize, 0, stream_>>>(
                 d_z_out, d_data, N_, dct2_sin_, dct2_cos_);
+            gpu_error_check(cudaGetLastError());
             break;
         }
         default:
@@ -4030,8 +4050,7 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type)
 }
 
 CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_x, CudaTransformType type_y)
-    : Nx_(Nx), Ny_(Ny), type_x_(type_x), type_y_(type_y), initialized_(false),
-      d_work_(nullptr), d_temp_(nullptr), d_x1_(nullptr)
+    : Nx_(Nx), Ny_(Ny), type_x_(type_x), type_y_(type_y), initialized_(false)
 {
     try
     {
@@ -4137,20 +4156,16 @@ void CudaRealTransform2D::init()
                                   : sizeof(cufftDoubleComplex) * Ny_ * (fftSize_x / 2 + 1);
 
     // Allocate buffers
-    gpu_error_check(cudaMalloc(&d_work_, std::max(work_size_y, work_size_x)));
-    gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
-    gpu_error_check(cudaMalloc(&d_x1_, std::max(complex_size_y, complex_size_x)));
+    d_work_.allocate(doubles_for_bytes(std::max(work_size_y, work_size_x)));
+    d_temp_.allocate(M_);
+    d_x1_.allocate(doubles_for_bytes(std::max(complex_size_y, complex_size_x)));
 
     // Whole-plane DCT-1 / DST-1 use a single 2D FFT with mirror/odd extension
     if (type_y_ == CUDA_DCT_1) {
         // DCT-1 2D
         M_padded_ = 2 * Nx_ * 2 * Ny_;
-        cudaFree(d_work_);
-        d_work_ = nullptr;
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
-        cudaFree(d_x1_);
-        d_x1_ = nullptr;
-        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * 2 * Nx_ * (Ny_ + 1)));
+        d_work_.allocate(M_padded_);
+        d_x1_.allocate(4 * static_cast<size_t>(Nx_) * (Ny_ + 1));   // complex values
         if (cufftPlan2d(&plan_y_, 2 * Nx_, 2 * Ny_, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DCT-1");
         }
@@ -4164,12 +4179,8 @@ void CudaRealTransform2D::init()
         int ext_Nx = 2 * (Nx_ + 1);
         int ext_Ny = 2 * (Ny_ + 1);
         M_padded_ = ext_Nx * ext_Ny;
-        cudaFree(d_work_);
-        d_work_ = nullptr;
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_padded_));
-        cudaFree(d_x1_);
-        d_x1_ = nullptr;
-        gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * ext_Nx * (Ny_ + 2)));
+        d_work_.allocate(M_padded_);
+        d_x1_.allocate(2 * static_cast<size_t>(ext_Nx) * (Ny_ + 2));   // complex values
         if (cufftPlan2d(&plan_y_, ext_Nx, ext_Ny, CUFFT_D2Z) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DST-1");
         }
@@ -4188,19 +4199,19 @@ void CudaRealTransform2D::init()
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
-        allocate_dct2_lut(Nx_, &dct2_sin_x_, &dct2_cos_x_);
+        allocate_dct2_lut(Nx_, dct2_sin_x_, dct2_cos_x_);
     if (type_x_ == CUDA_DCT_3)
-        allocate_dct3_lut(Nx_, &dct3_sin_x_, &dct3_cos_x_);
+        allocate_dct3_lut(Nx_, dct3_sin_x_, dct3_cos_x_);
     if (type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
-        allocate_dct4_lut(Nx_, &dct4_sin_x_, &dct4_cos_x_);
+        allocate_dct4_lut(Nx_, dct4_sin_x_, dct4_cos_x_);
 
     if (type_y_ == CUDA_DCT_2 || type_y_ == CUDA_DST_2 || type_y_ == CUDA_DST_3 ||
         type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
-        allocate_dct2_lut(Ny_, &dct2_sin_y_, &dct2_cos_y_);
+        allocate_dct2_lut(Ny_, dct2_sin_y_, dct2_cos_y_);
     if (type_y_ == CUDA_DCT_3)
-        allocate_dct3_lut(Ny_, &dct3_sin_y_, &dct3_cos_y_);
+        allocate_dct3_lut(Ny_, dct3_sin_y_, dct3_cos_y_);
     if (type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
-        allocate_dct4_lut(Ny_, &dct4_sin_y_, &dct4_cos_y_);
+        allocate_dct4_lut(Ny_, dct4_sin_y_, dct4_cos_y_);
 
     initialized_ = true;
     set_stream(stream_);
@@ -4214,27 +4225,23 @@ CudaRealTransform2D::~CudaRealTransform2D()
 // Idempotent; tolerates a partly built object (null pointers, plans not created).
 void CudaRealTransform2D::release()
 {
-    if (d_work_) cudaFree(d_work_);
-    if (d_temp_) cudaFree(d_temp_);
-    if (d_x1_) cudaFree(d_x1_);
-    if (dct2_sin_x_) cudaFree(dct2_sin_x_);
-    if (dct2_cos_x_) cudaFree(dct2_cos_x_);
-    if (dct2_sin_y_) cudaFree(dct2_sin_y_);
-    if (dct2_cos_y_) cudaFree(dct2_cos_y_);
-    if (dct3_sin_x_) cudaFree(dct3_sin_x_);
-    if (dct3_cos_x_) cudaFree(dct3_cos_x_);
-    if (dct3_sin_y_) cudaFree(dct3_sin_y_);
-    if (dct3_cos_y_) cudaFree(dct3_cos_y_);
-    if (dct4_sin_x_) cudaFree(dct4_sin_x_);
-    if (dct4_cos_x_) cudaFree(dct4_cos_x_);
-    if (dct4_sin_y_) cudaFree(dct4_sin_y_);
-    if (dct4_cos_y_) cudaFree(dct4_cos_y_);
+    d_work_.release();
+    d_temp_.release();
+    d_x1_.release();
+    dct2_sin_x_.release();
+    dct2_cos_x_.release();
+    dct2_sin_y_.release();
+    dct2_cos_y_.release();
+    dct3_sin_x_.release();
+    dct3_cos_x_.release();
+    dct3_sin_y_.release();
+    dct3_cos_y_.release();
+    dct4_sin_x_.release();
+    dct4_cos_x_.release();
+    dct4_sin_y_.release();
+    dct4_cos_y_.release();
     if (plan_y_created_) cufftDestroy(plan_y_);
     if (plan_x_created_) cufftDestroy(plan_x_);
-    d_work_ = d_temp_ = d_x1_ = nullptr;
-    dct2_sin_x_ = dct2_cos_x_ = dct2_sin_y_ = dct2_cos_y_ = nullptr;
-    dct3_sin_x_ = dct3_cos_x_ = dct3_sin_y_ = dct3_cos_y_ = nullptr;
-    dct4_sin_x_ = dct4_cos_x_ = dct4_sin_y_ = dct4_cos_y_ = nullptr;
     plan_x_ = plan_y_ = 0;
     plan_x_created_ = plan_y_created_ = false;
     initialized_ = false;
@@ -4272,12 +4279,14 @@ void CudaRealTransform2D::executeY_DCT2(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = grid_blocks(total_postOp, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
-    cufftExecZ2D(plan_y_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_y_, d_complex, d_work_));
     kernel_dct2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeY_DCT3(double* d_data)
@@ -4292,24 +4301,28 @@ void CudaRealTransform2D::executeY_DCT3(double* d_data)
 
     kernel_dct3_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, Nx_, Ny_, dct3_sin_y_, dct3_cos_y_);
+    gpu_error_check(cudaGetLastError());
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_y_, d_temp_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_y_, d_temp_, d_complex));
 
     kernel_dct3_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeY_DCT4(double* d_data)
 {
     int N2 = 2 * Ny_;
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct4_2d_preOp_y<<<grid_blocks(static_cast<long long>(Nx_) * N2, 256), 256, 0, stream_>>>(
         d_data, d_z_in, Nx_, Ny_, dct4_sin_y_, dct4_cos_y_);
-    cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dct4_2d_postOp_y<<<grid_blocks(static_cast<long long>(Nx_) * Ny_, 256), 256, 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeY_DST1(double* d_data) {
@@ -4325,12 +4338,14 @@ void CudaRealTransform2D::executeY_DST2(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = grid_blocks(total_postOp, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst2_2d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_);
-    cufftExecZ2D(plan_y_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_y_, d_complex, d_work_));
     kernel_dst2_2d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeY_DST3(double* d_data)
@@ -4349,35 +4364,41 @@ void CudaRealTransform2D::executeY_DST3(double* d_data)
     int total_setup = Nx_ * stride;
     int numBlocks_setup = grid_blocks(total_setup, blockSize);
     kernel_dst3_2d_setup_padded_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 2: PreOp on padded buffer (each block handles one row)
     kernel_dst3_2d_preOp_y<<<Nx_, std::min(Ny_ / 2 + 1, 256), 0, stream_>>>(
         d_work_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 3: D2Z FFT in-place on padded buffer
-    cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_work_);
+    cufft_error_check(cufftExecD2Z(plan_y_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get())));
 
     // Step 4: PostOp in-place (each block handles one row, needs shared memory)
     size_t sharedSize = sizeof(double) * (Ny_ + 2);
     kernel_dst3_2d_postOp_y<<<Nx_, std::min(Ny_ / 2 + 1, 256), sharedSize, stream_>>>(d_work_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 5: Copy results back to d_temp_
     int total_copy = Nx_ * Ny_;
     int numBlocks_copy = grid_blocks(total_copy, blockSize);
     kernel_dst3_2d_copy_back_y<<<numBlocks_copy, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeY_DST4(double* d_data)
 {
     int N2 = 2 * Ny_;
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst4_2d_preOp_y<<<Nx_, std::min(N2, 256), 0, stream_>>>(
         d_data, d_z_in, Nx_, Ny_, dct4_sin_y_, dct4_cos_y_);
-    cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dst4_2d_postOp_y<<<Nx_, std::min(Ny_, 256), 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DCT1(double* d_data) {
@@ -4392,12 +4413,14 @@ void CudaRealTransform2D::executeX_DCT2(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = grid_blocks(total_postOp, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
-    cufftExecZ2D(plan_x_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_x_, d_complex, d_work_));
     kernel_dct2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DCT3(double* d_data)
@@ -4410,24 +4433,28 @@ void CudaRealTransform2D::executeX_DCT3(double* d_data)
 
     kernel_dct3_2d_preOp_x_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, Nx_, Ny_, dct3_sin_x_, dct3_cos_x_);
+    gpu_error_check(cudaGetLastError());
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_x_, d_temp_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_x_, d_temp_, d_complex));
 
     kernel_dct3_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DCT4(double* d_data)
 {
     int N2 = 2 * Nx_;
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct4_2d_preOp_x<<<grid_blocks(static_cast<long long>(Ny_) * N2, 256), 256, 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, dct4_sin_x_, dct4_cos_x_);
-    cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dct4_2d_postOp_x<<<grid_blocks(static_cast<long long>(Ny_) * Nx_, 256), 256, 0, stream_>>>(
         d_z_out, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DST1(double* d_data) {
@@ -4443,12 +4470,14 @@ void CudaRealTransform2D::executeX_DST2(double* d_data)
     int total_postOp = Nx_ * Ny_;
     int numBlocks_postOp = grid_blocks(total_postOp, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst2_2d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_);
-    cufftExecZ2D(plan_x_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_x_, d_complex, d_work_));
     kernel_dst2_2d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DST3(double* d_data)
@@ -4467,35 +4496,41 @@ void CudaRealTransform2D::executeX_DST3(double* d_data)
     int total_setup = Ny_ * stride;
     int numBlocks_setup = grid_blocks(total_setup, blockSize);
     kernel_dst3_2d_setup_padded_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 2: PreOp on padded buffer (each block handles one row)
     kernel_dst3_2d_preOp_x<<<Ny_, std::min(Nx_ / 2 + 1, 256), 0, stream_>>>(
         d_work_, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 3: D2Z FFT in-place on padded buffer
-    cufftExecD2Z(plan_x_, d_work_, (cufftDoubleComplex*)d_work_);
+    cufft_error_check(cufftExecD2Z(plan_x_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_.get())));
 
     // Step 4: PostOp in-place (each block handles one row, needs shared memory)
     size_t sharedSize = sizeof(double) * (Nx_ + 2);
     kernel_dst3_2d_postOp_x<<<Ny_, std::min(Nx_ / 2 + 1, 256), sharedSize, stream_>>>(d_work_, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 
     // Step 5: Copy results back to d_data with transpose
     int total_copy = Nx_ * Ny_;
     int numBlocks_copy = grid_blocks(total_copy, blockSize);
     kernel_dst3_2d_copy_back_x<<<numBlocks_copy, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::executeX_DST4(double* d_data)
 {
     int N2 = 2 * Nx_;
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst4_2d_preOp_x<<<Ny_, std::min(N2, 256), 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, dct4_sin_x_, dct4_cos_x_);
-    cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dst4_2d_postOp_x<<<Ny_, std::min(Nx_, 256), 0, stream_>>>(
         d_z_out, d_data, Nx_, Ny_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform2D::execute(double* d_data)
@@ -4512,9 +4547,11 @@ void CudaRealTransform2D::execute(double* d_data)
 
         kernel_dct1_2d_mirror_extend<<<grid_blocks(ext_total, blockSize), blockSize, 0, stream_>>>(
             d_data, d_work_, Nx_, Ny_);
-        cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_x1_);
+        gpu_error_check(cudaGetLastError());
+        cufft_error_check(cufftExecD2Z(plan_y_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_x1_.get())));
         kernel_dct1_2d_extract<<<grid_blocks(out_total, blockSize), blockSize, 0, stream_>>>(
-            (cufftDoubleComplex*)d_x1_, d_data, Nx_, Ny_);
+            reinterpret_cast<cufftDoubleComplex*>(d_x1_.get()), d_data, Nx_, Ny_);
+        gpu_error_check(cudaGetLastError());
         return;
     }
 
@@ -4527,9 +4564,11 @@ void CudaRealTransform2D::execute(double* d_data)
 
         kernel_dst1_2d_mirror_extend<<<grid_blocks(ext_total, blockSize), blockSize, 0, stream_>>>(
             d_data, d_work_, Nx_, Ny_);
-        cufftExecD2Z(plan_y_, d_work_, (cufftDoubleComplex*)d_x1_);
+        gpu_error_check(cudaGetLastError());
+        cufft_error_check(cufftExecD2Z(plan_y_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_x1_.get())));
         kernel_dst1_2d_extract<<<grid_blocks(out_total, blockSize), blockSize, 0, stream_>>>(
-            (cufftDoubleComplex*)d_x1_, d_data, Nx_, Ny_);
+            reinterpret_cast<cufftDoubleComplex*>(d_x1_.get()), d_data, Nx_, Ny_);
+        gpu_error_check(cudaGetLastError());
         return;
     }
 
@@ -4589,7 +4628,7 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
                                          CudaTransformType type_y,
                                          CudaTransformType type_z)
     : Nx_(Nx), Ny_(Ny), Nz_(Nz), type_x_(type_x), type_y_(type_y), type_z_(type_z),
-      initialized_(false), d_work_(nullptr), d_temp_(nullptr), d_x1_(nullptr)
+      initialized_(false)
 {
     try
     {
@@ -4624,9 +4663,9 @@ void CudaRealTransform3D::init()
         int ext_size = 8 * Nx_ * Ny_ * Nz_;
         int freq_size = 2 * Nx_ * 2 * Ny_ * (Nz_ + 1);
 
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * ext_size));
-        gpu_error_check(cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size));
-        d_x1_ = nullptr;
+        d_work_.allocate(ext_size);
+        d_temp_.allocate(2 * static_cast<size_t>(freq_size));   // complex values
+        d_x1_.release();   // not used by the type-1 path
 
         M_padded_ = ext_size;
 
@@ -4648,9 +4687,9 @@ void CudaRealTransform3D::init()
         int ext_size = 8 * (Nx_ + 1) * (Ny_ + 1) * (Nz_ + 1);
         int freq_size = 2 * (Nx_ + 1) * 2 * (Ny_ + 1) * (Nz_ + 2);
 
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * ext_size));
-        gpu_error_check(cudaMalloc(&d_temp_, sizeof(cufftDoubleComplex) * freq_size));
-        d_x1_ = nullptr;
+        d_work_.allocate(ext_size);
+        d_temp_.allocate(2 * static_cast<size_t>(freq_size));   // complex values
+        d_x1_.release();   // not used by the type-1 path
 
         M_padded_ = ext_size;
 
@@ -4697,9 +4736,9 @@ void CudaRealTransform3D::init()
     size_t max_complex = std::max({complex_size_z, complex_size_y, complex_size_x});
 
     // Allocate buffers
-    gpu_error_check(cudaMalloc(&d_work_, max_work));
-    gpu_error_check(cudaMalloc(&d_temp_, sizeof(double) * M_));
-    gpu_error_check(cudaMalloc(&d_x1_, max_complex));
+    d_work_.allocate(doubles_for_bytes(max_work));
+    d_temp_.allocate(M_);
+    d_x1_.allocate(doubles_for_bytes(max_complex));
 
     // Per-axis plans. The X axis DCT-3 reads the (y,z)-major layout directly,
     // hence its strided input (istride = Ny*Nz, idist = 1).
@@ -4712,25 +4751,25 @@ void CudaRealTransform3D::init()
 
     if (type_x_ == CUDA_DCT_2 || type_x_ == CUDA_DST_2 || type_x_ == CUDA_DST_3 ||
         type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
-        allocate_dct2_lut(Nx_, &dct2_sin_x_, &dct2_cos_x_);
+        allocate_dct2_lut(Nx_, dct2_sin_x_, dct2_cos_x_);
     if (type_x_ == CUDA_DCT_3)
-        allocate_dct3_lut(Nx_, &dct3_sin_x_, &dct3_cos_x_);
+        allocate_dct3_lut(Nx_, dct3_sin_x_, dct3_cos_x_);
     if (type_x_ == CUDA_DCT_4 || type_x_ == CUDA_DST_4)
-        allocate_dct4_lut(Nx_, &dct4_sin_x_, &dct4_cos_x_);
+        allocate_dct4_lut(Nx_, dct4_sin_x_, dct4_cos_x_);
     if (type_y_ == CUDA_DCT_2 || type_y_ == CUDA_DST_2 || type_y_ == CUDA_DST_3 ||
         type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
-        allocate_dct2_lut(Ny_, &dct2_sin_y_, &dct2_cos_y_);
+        allocate_dct2_lut(Ny_, dct2_sin_y_, dct2_cos_y_);
     if (type_y_ == CUDA_DCT_3)
-        allocate_dct3_lut(Ny_, &dct3_sin_y_, &dct3_cos_y_);
+        allocate_dct3_lut(Ny_, dct3_sin_y_, dct3_cos_y_);
     if (type_y_ == CUDA_DCT_4 || type_y_ == CUDA_DST_4)
-        allocate_dct4_lut(Ny_, &dct4_sin_y_, &dct4_cos_y_);
+        allocate_dct4_lut(Ny_, dct4_sin_y_, dct4_cos_y_);
     if (type_z_ == CUDA_DCT_2 || type_z_ == CUDA_DST_2 || type_z_ == CUDA_DST_3 ||
         type_z_ == CUDA_DCT_4 || type_z_ == CUDA_DST_4)
-        allocate_dct2_lut(Nz_, &dct2_sin_z_, &dct2_cos_z_);
+        allocate_dct2_lut(Nz_, dct2_sin_z_, dct2_cos_z_);
     if (type_z_ == CUDA_DCT_3)
-        allocate_dct3_lut(Nz_, &dct3_sin_z_, &dct3_cos_z_);
+        allocate_dct3_lut(Nz_, dct3_sin_z_, dct3_cos_z_);
     if (type_z_ == CUDA_DCT_4 || type_z_ == CUDA_DST_4)
-        allocate_dct4_lut(Nz_, &dct4_sin_z_, &dct4_cos_z_);
+        allocate_dct4_lut(Nz_, dct4_sin_z_, dct4_cos_z_);
 
     initialized_ = true;
 }
@@ -4743,34 +4782,30 @@ CudaRealTransform3D::~CudaRealTransform3D()
 // Idempotent; tolerates a partly built object (null pointers, plans not created).
 void CudaRealTransform3D::release()
 {
-    if (d_work_) cudaFree(d_work_);
-    if (d_temp_) cudaFree(d_temp_);
-    if (d_x1_) cudaFree(d_x1_);
-    if (dct2_sin_x_) cudaFree(dct2_sin_x_);
-    if (dct2_cos_x_) cudaFree(dct2_cos_x_);
-    if (dct2_sin_y_) cudaFree(dct2_sin_y_);
-    if (dct2_cos_y_) cudaFree(dct2_cos_y_);
-    if (dct2_sin_z_) cudaFree(dct2_sin_z_);
-    if (dct2_cos_z_) cudaFree(dct2_cos_z_);
-    if (dct3_sin_x_) cudaFree(dct3_sin_x_);
-    if (dct3_cos_x_) cudaFree(dct3_cos_x_);
-    if (dct3_sin_y_) cudaFree(dct3_sin_y_);
-    if (dct3_cos_y_) cudaFree(dct3_cos_y_);
-    if (dct3_sin_z_) cudaFree(dct3_sin_z_);
-    if (dct3_cos_z_) cudaFree(dct3_cos_z_);
-    if (dct4_sin_x_) cudaFree(dct4_sin_x_);
-    if (dct4_cos_x_) cudaFree(dct4_cos_x_);
-    if (dct4_sin_y_) cudaFree(dct4_sin_y_);
-    if (dct4_cos_y_) cudaFree(dct4_cos_y_);
-    if (dct4_sin_z_) cudaFree(dct4_sin_z_);
-    if (dct4_cos_z_) cudaFree(dct4_cos_z_);
+    d_work_.release();
+    d_temp_.release();
+    d_x1_.release();
+    dct2_sin_x_.release();
+    dct2_cos_x_.release();
+    dct2_sin_y_.release();
+    dct2_cos_y_.release();
+    dct2_sin_z_.release();
+    dct2_cos_z_.release();
+    dct3_sin_x_.release();
+    dct3_cos_x_.release();
+    dct3_sin_y_.release();
+    dct3_cos_y_.release();
+    dct3_sin_z_.release();
+    dct3_cos_z_.release();
+    dct4_sin_x_.release();
+    dct4_cos_x_.release();
+    dct4_sin_y_.release();
+    dct4_cos_y_.release();
+    dct4_sin_z_.release();
+    dct4_cos_z_.release();
     if (plan_z_created_) cufftDestroy(plan_z_);
     if (plan_y_created_) cufftDestroy(plan_y_);
     if (plan_x_created_) cufftDestroy(plan_x_);
-    d_work_ = d_temp_ = d_x1_ = nullptr;
-    dct2_sin_x_ = dct2_cos_x_ = dct2_sin_y_ = dct2_cos_y_ = dct2_sin_z_ = dct2_cos_z_ = nullptr;
-    dct3_sin_x_ = dct3_cos_x_ = dct3_sin_y_ = dct3_cos_y_ = dct3_sin_z_ = dct3_cos_z_ = nullptr;
-    dct4_sin_x_ = dct4_cos_x_ = dct4_sin_y_ = dct4_cos_y_ = dct4_sin_z_ = dct4_cos_z_ = nullptr;
     plan_x_ = plan_y_ = plan_z_ = 0;
     plan_x_created_ = plan_y_created_ = plan_z_created_ = false;
     initialized_ = false;
@@ -4827,17 +4862,19 @@ void CudaRealTransform3D::execute_z_dct2_to_zmajor(double* d_data, double* d_out
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_data, d_complex, Nx_, Ny_, Nz_);
-    cufftExecZ2D(plan_z_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_z_, d_complex, d_work_));
     if (dct2_sin_z_ && dct2_cos_z_)
         kernel_dct2_3d_postOp_z_lut_zmajor<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_out_zmajor, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
     else
         kernel_dct2_3d_postOp_z_zmajor<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_out_zmajor, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::execute_z_dct2_to_zmajor(double* d_data, double* d_out_zmajor, cudaStream_t stream)
@@ -4880,11 +4917,13 @@ void CudaRealTransform3D::execute_z_dct3_from_zmajor(double* d_in_zmajor, double
     else
         kernel_dct3_3d_preOp_z_from_zmajor<<<numBlocks_preOp, blockSize, 0, stream_>>>(
             d_in_zmajor, d_out_xyz, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_z_, d_out_xyz, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_z_, d_out_xyz, d_complex));
     kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_complex, d_out_xyz, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz, cudaStream_t stream)
@@ -4909,40 +4948,42 @@ void CudaRealTransform3D::executeZ_DCT2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     static std::atomic<bool> prof_once{false};
     const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
-    cufftExecZ2D(plan_z_, d_complex, d_work_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
+    cufft_error_check(cufftExecZ2D(plan_z_, d_complex, d_work_));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
     if (dct2_sin_z_ && dct2_cos_z_)
         kernel_dct2_3d_postOp_z_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
     else
         kernel_dct2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT2 Z] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -4964,11 +5005,11 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     gpu_error_check(cudaMemcpyAsync(d_temp_, d_data, sizeof(double) * M_, cudaMemcpyDeviceToDevice, stream_));
@@ -4978,24 +5019,26 @@ void CudaRealTransform3D::executeZ_DCT3(double* d_data)
             d_temp_, Nx_, Ny_, Nz_, dct3_sin_z_, dct3_cos_z_);
     else
         kernel_dct3_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_z_, d_temp_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_z_, d_temp_, d_complex));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
 
     kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT3 Z] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -5013,14 +5056,16 @@ void CudaRealTransform3D::executeZ_DCT4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_data, d_z_in, Nx_, Ny_, Nz_, dct4_sin_z_, dct4_cos_z_);
-    cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dct4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeZ_DST1(double* d_data) {
@@ -5035,12 +5080,14 @@ void CudaRealTransform3D::executeZ_DST2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_data, d_complex, Nx_, Ny_, Nz_);
-    cufftExecZ2D(plan_z_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_z_, d_complex, d_work_));
     kernel_dst2_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeZ_DST3(double* d_data)
@@ -5055,21 +5102,25 @@ void CudaRealTransform3D::executeZ_DST3(double* d_data)
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Nz-1}, 0] for each XY point
     kernel_dst3_3d_setup_z<<<numBlocks_setup, blockSize, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // PreOp twiddle factors - 1 block per XY point, Nz/2+1 threads per block
     kernel_dst3_3d_preOp_z<<<batch, std::min(Nz_ / 2 + 1, 256), 0, stream_>>>(
         d_work_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
+    gpu_error_check(cudaGetLastError());
 
     // D2Z FFT
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_z_, d_work_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_z_, d_work_, d_complex));
 
     // PostOp - 1 block per XY point, with shared memory
     kernel_dst3_3d_postOp_z<<<batch, std::min(Nz_ / 2 + 1, 256), sizeof(double) * (Nz_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // Copy result back from padded buffer
     kernel_dst3_3d_copy_z<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeZ_DST4(double* d_data)
@@ -5080,14 +5131,16 @@ void CudaRealTransform3D::executeZ_DST4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst4_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_data, d_z_in, Nx_, Ny_, Nz_, dct4_sin_z_, dct4_cos_z_);
-    cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_z_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dst4_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
+    gpu_error_check(cudaGetLastError());
 }
 
 //------------------------------------------------------------------------------
@@ -5106,40 +5159,42 @@ void CudaRealTransform3D::executeY_DCT2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     static std::atomic<bool> prof_once{false};
     const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     kernel_dct2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
-    cufftExecZ2D(plan_y_, d_complex, d_work_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
+    cufft_error_check(cufftExecZ2D(plan_y_, d_complex, d_work_));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
     if (dct2_sin_y_ && dct2_cos_y_)
         kernel_dct2_3d_postOp_y_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
     else
         kernel_dct2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT2 Y] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -5162,39 +5217,42 @@ void CudaRealTransform3D::executeY_DCT3(double* d_data)
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     // Transpose (x,y,z) -> (x,z,y) into d_work_ for contiguous Y FFT
     kernel_dct3_3d_preOp_y_transpose<<<numBlocks_transpose, blockSize, 0, stream_>>>(
         d_temp_, d_work_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (dct3_sin_y_ && dct3_cos_y_)
         kernel_dct3_3d_preOp_y_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
             d_work_, Nx_, Ny_, Nz_, dct3_sin_y_, dct3_cos_y_);
     else
         kernel_dct3_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_work_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_y_, d_work_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_y_, d_work_, d_complex));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
 
     kernel_dct3_3d_postOp_y<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT3 Y] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -5212,14 +5270,16 @@ void CudaRealTransform3D::executeY_DCT4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_y_, dct4_cos_y_);
-    cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dct4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeY_DST1(double* d_data) {
@@ -5234,12 +5294,14 @@ void CudaRealTransform3D::executeY_DST2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst2_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
-    cufftExecZ2D(plan_y_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_y_, d_complex, d_work_));
     kernel_dst2_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeY_DST3(double* d_data)
@@ -5254,21 +5316,25 @@ void CudaRealTransform3D::executeY_DST3(double* d_data)
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Ny-1}, 0] for each XZ point
     kernel_dst3_3d_setup_y<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // PreOp twiddle factors - 1 block per XZ point, Ny/2+1 threads per block
     kernel_dst3_3d_preOp_y<<<batch, std::min(Ny_ / 2 + 1, 256), 0, stream_>>>(
         d_work_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 
     // D2Z FFT
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_y_, d_work_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_y_, d_work_, d_complex));
 
     // PostOp - 1 block per XZ point, with shared memory
     kernel_dst3_3d_postOp_y<<<batch, std::min(Ny_ / 2 + 1, 256), sizeof(double) * (Ny_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // Copy result back from padded buffer
     kernel_dst3_3d_copy_y<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeY_DST4(double* d_data)
@@ -5279,14 +5345,16 @@ void CudaRealTransform3D::executeY_DST4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst4_3d_preOp_y<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_y_, dct4_cos_y_);
-    cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_y_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dst4_3d_postOp_y<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_temp_, Nx_, Ny_, Nz_, dct2_sin_y_, dct2_cos_y_);
+    gpu_error_check(cudaGetLastError());
 }
 
 //------------------------------------------------------------------------------
@@ -5305,40 +5373,42 @@ void CudaRealTransform3D::executeX_DCT2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     static std::atomic<bool> prof_once{false};
     const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM_DETAIL") != nullptr);
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     kernel_dct2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
-    cufftExecZ2D(plan_x_, d_complex, d_work_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
+    cufft_error_check(cufftExecZ2D(plan_x_, d_complex, d_work_));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
     if (dct2_sin_x_ && dct2_cos_x_)
         kernel_dct2_3d_postOp_x_lut<<<numBlocks_postOp, blockSize, 0, stream_>>>(
             d_work_, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
     else
         kernel_dct2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(d_work_, d_data, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT2 X] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -5360,11 +5430,11 @@ void CudaRealTransform3D::executeX_DCT3(double* d_data)
     const bool profile_this = do_profile && !prof_once.exchange(true);
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{};
     if (profile_this) {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     if (dct3_sin_x_ && dct3_cos_x_)
@@ -5372,24 +5442,26 @@ void CudaRealTransform3D::executeX_DCT3(double* d_data)
             d_temp_, Nx_, Ny_, Nz_, dct3_sin_x_, dct3_cos_x_);
     else
         kernel_dct3_3d_preOp_x_strided<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_x_, d_temp_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_x_, d_temp_, d_complex));
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
 
     kernel_dct3_3d_postOp_x<<<numBlocks_M, blockSize, 0, stream_>>>(d_complex, d_data, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this) {
-        cudaEventRecord(ev3, stream_);
-        cudaEventSynchronize(ev3);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
+        gpu_error_check(cudaEventSynchronize(ev3));
         float t_pre = 0.0f, t_fft = 0.0f, t_post = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_pre, ev0, ev1);
-        cudaEventElapsedTime(&t_fft, ev1, ev2);
-        cudaEventElapsedTime(&t_post, ev2, ev3);
-        cudaEventElapsedTime(&t_total, ev0, ev3);
+        gpu_error_check(cudaEventElapsedTime(&t_pre, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fft, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_post, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev3));
         std::printf("[CrysFFT-DCT3D DCT3 X] pre(ms)=%.4f fft(ms)=%.4f post(ms)=%.4f total(ms)=%.4f\n",
                     t_pre, t_fft, t_post, t_total);
         cudaEventDestroy(ev0);
@@ -5407,14 +5479,16 @@ void CudaRealTransform3D::executeX_DCT4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dct4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_x_, dct4_cos_x_);
-    cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dct4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeX_DST1(double* d_data) {
@@ -5429,12 +5503,14 @@ void CudaRealTransform3D::executeX_DST2(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst2_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(d_temp_, d_complex, Nx_, Ny_, Nz_);
-    cufftExecZ2D(plan_x_, d_complex, d_work_);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2D(plan_x_, d_complex, d_work_));
     kernel_dst2_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_work_, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeX_DST3(double* d_data)
@@ -5449,21 +5525,25 @@ void CudaRealTransform3D::executeX_DST3(double* d_data)
 
     // Setup padded buffer: [0, x0, x1, ..., x_{Nx-1}, 0] for each YZ point
     kernel_dst3_3d_setup_x<<<numBlocks_setup, blockSize, 0, stream_>>>(d_temp_, d_work_, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // PreOp twiddle factors - 1 block per YZ point, Nx/2+1 threads per block
     kernel_dst3_3d_preOp_x<<<batch, std::min(Nx_ / 2 + 1, 256), 0, stream_>>>(
         d_work_, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 
     // D2Z FFT
-    cufftDoubleComplex* d_complex = (cufftDoubleComplex*)d_x1_;
-    cufftExecD2Z(plan_x_, d_work_, d_complex);
+    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
+    cufft_error_check(cufftExecD2Z(plan_x_, d_work_, d_complex));
 
     // PostOp - 1 block per YZ point, with shared memory
     kernel_dst3_3d_postOp_x<<<batch, std::min(Nx_ / 2 + 1, 256), sizeof(double) * (Nx_ + 2), stream_>>>(
         (double*)d_complex, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 
     // Copy result back from padded buffer
     kernel_dst3_3d_copy_x<<<numBlocks_copy, blockSize, 0, stream_>>>((double*)d_complex, d_data, Nx_, Ny_, Nz_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::executeX_DST4(double* d_data)
@@ -5474,14 +5554,16 @@ void CudaRealTransform3D::executeX_DST4(double* d_data)
     int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
     int numBlocks_postOp = grid_blocks(M_, blockSize);
 
-    cufftDoubleComplex* d_z_in = (cufftDoubleComplex*)d_work_;
-    cufftDoubleComplex* d_z_out = (cufftDoubleComplex*)d_x1_;
+    cufftDoubleComplex* d_z_in = reinterpret_cast<cufftDoubleComplex*>(d_work_.get());
+    cufftDoubleComplex* d_z_out = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
 
     kernel_dst4_3d_preOp_x<<<numBlocks_preOp, blockSize, 0, stream_>>>(
         d_temp_, d_z_in, Nx_, Ny_, Nz_, dct4_sin_x_, dct4_cos_x_);
-    cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD);
+    gpu_error_check(cudaGetLastError());
+    cufft_error_check(cufftExecZ2Z(plan_x_, d_z_in, d_z_out, CUFFT_FORWARD));
     kernel_dst4_3d_postOp_x<<<numBlocks_postOp, blockSize, 0, stream_>>>(
         d_z_out, d_data, Nx_, Ny_, Nz_, dct2_sin_x_, dct2_cos_x_);
+    gpu_error_check(cudaGetLastError());
 }
 
 void CudaRealTransform3D::execute(double* d_data)
@@ -5498,11 +5580,13 @@ void CudaRealTransform3D::execute(double* d_data)
         int blocks_ext = grid_blocks(ext_size, threads);
         int blocks_out = grid_blocks(M_, threads);
 
-        cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_);
+        cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_.get());
 
         kernel_dct1_3d_mirror_extend<<<blocks_ext, threads, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
-        cufftExecD2Z(plan_x_, d_work_, d_freq);
+        gpu_error_check(cudaGetLastError());
+        cufft_error_check(cufftExecD2Z(plan_x_, d_work_, d_freq));
         kernel_dct1_3d_extract<<<blocks_out, threads, 0, stream_>>>(d_freq, d_data, Nx_, Ny_, Nz_);
+        gpu_error_check(cudaGetLastError());
         return;
     }
 
@@ -5512,11 +5596,13 @@ void CudaRealTransform3D::execute(double* d_data)
         int blocks_ext = grid_blocks(ext_size, threads);
         int blocks_out = grid_blocks(M_, threads);
 
-        cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_);
+        cufftDoubleComplex* d_freq = reinterpret_cast<cufftDoubleComplex*>(d_temp_.get());
 
         kernel_dst1_3d_odd_extend<<<blocks_ext, threads, 0, stream_>>>(d_data, d_work_, Nx_, Ny_, Nz_);
-        cufftExecD2Z(plan_x_, d_work_, d_freq);
+        gpu_error_check(cudaGetLastError());
+        cufft_error_check(cufftExecD2Z(plan_x_, d_work_, d_freq));
         kernel_dst1_3d_extract<<<blocks_out, threads, 0, stream_>>>(d_freq, d_data, Nx_, Ny_, Nz_);
+        gpu_error_check(cudaGetLastError());
         return;
     }
 

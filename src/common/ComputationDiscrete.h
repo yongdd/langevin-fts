@@ -37,6 +37,7 @@
 #define COMPUTATION_DISCRETE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -47,9 +48,8 @@ template <typename T>
 class ComputationDiscrete : public ComputationCommon<T>
 {
 private:
-    std::map<std::string, BackendArray<T>**> propagator;             ///< q(r, n), n = 1..max_n_segment
-    std::map<std::string, BackendArray<T>**> propagator_half_steps;  ///< q(r, n+1/2) where needed, else nullptr
-    std::map<std::string, int> propagator_size;                      ///< max_n_segment + 1 per key
+    std::map<std::string, std::vector<BackendArray<T>*>> propagator;             ///< q(r, n), n = 1..max_n_segment
+    std::map<std::string, std::vector<BackendArray<T>*>> propagator_half_steps;  ///< q(r, n+1/2) where needed, else nullptr
 
     /// One segment per polymer for its partition function: (polymer, q, q†, monomer type, n_aggregated)
     std::vector<std::tuple<int, BackendArray<T>*, BackendArray<T>*, std::string, int>> single_partition_segment;
@@ -61,7 +61,7 @@ public:
     ComputationDiscrete(ComputationBox<T>* cb, Molecules* molecules,
                         PropagatorComputationOptimizer* propagator_computation_optimizer,
                         SpaceGroup* space_group,
-                        const std::function<ComputationBackend<T>*()>& create_backend);
+                        const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend);
     ~ComputationDiscrete();
 
     void compute_propagators(std::map<std::string, const T*> w_input,

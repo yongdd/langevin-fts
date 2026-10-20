@@ -58,12 +58,9 @@ protected:
 
     double norm_factor_{1.0};
 
-    struct BoltzDeleter {
-        void operator()(double* ptr) const { delete[] ptr; }
-    };
     struct ThreadState
     {
-        std::map<double, std::unique_ptr<double, BoltzDeleter>> boltzmann;
+        std::map<double, std::unique_ptr<double[]>> boltzmann;
         const double* boltz_current = nullptr;
         double ds_current = std::numeric_limits<double>::quiet_NaN();
         uint64_t epoch = 0;
@@ -165,9 +162,9 @@ protected:
         return *state;
     }
 
-    double* generateBoltzmann(double ds) const
+    std::unique_ptr<double[]> generateBoltzmann(double ds) const
     {
-        double* boltz = new double[M_complex_];
+        auto boltz = std::make_unique<double[]>(M_complex_);
 
         const double G11 = recip_metric_[0];
         const double G12 = recip_metric_[1];
@@ -291,7 +288,7 @@ public:
         auto it = state.boltzmann.find(ds);
         if (it == state.boltzmann.end())
         {
-            std::unique_ptr<double, BoltzDeleter> boltz(generateBoltzmann(ds));
+            std::unique_ptr<double[]> boltz = generateBoltzmann(ds);
             it = state.boltzmann.emplace(ds, std::move(boltz)).first;
         }
 

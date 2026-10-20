@@ -19,11 +19,14 @@
 #define CUDA_CRYS_FFT_H_
 
 #include <array>
+#include <memory>
 #include <map>
 #include <utility>
 #include <vector>
 #include <cuda_runtime.h>
 #include <cufft.h>
+
+#include "CudaCommon.h"
 
 // Forward declaration
 class CudaRealTransform3D;
@@ -70,24 +73,24 @@ private:
     std::array<double, 6> cell_para_;
 
     // Boltzmann factors - per ds value (device memory)
-    std::map<double, double*> d_boltzmann_;
-    double* d_boltz_current_;
+    std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
+    double* d_boltz_current_;     ///< Table of ds_current_ in d_boltzmann_ (not owning)
     double ds_current_;
 
     // CudaRealTransform objects for DCT-II (forward) and DCT-III (backward)
-    CudaRealTransform3D* dct_forward_;
-    CudaRealTransform3D* dct_backward_;
+    std::unique_ptr<CudaRealTransform3D> dct_forward_;
+    std::unique_ptr<CudaRealTransform3D> dct_backward_;
 
     // Device buffers
-    double* d_work_;              ///< Work buffer (physical grid)
+    CudaDeviceBuffer<double> d_work_;    ///< Work buffer (physical grid)
 
     // Normalization factor
     double norm_factor_;
     cudaStream_t stream_{0};      ///< CUDA stream for execution
 
     // Cached stress multipliers (device memory)
-    double* d_axis_k2_[8] = {};                                   ///< Σ k_d² per axis mask
-    std::map<std::pair<int, double>, double*> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
+    std::array<CudaDeviceBuffer<double>, 8> d_axis_k2_;                        ///< Σ k_d² per axis mask
+    std::map<std::pair<int, double>, CudaDeviceBuffer<double>> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
 
     /// Generate Boltzmann factors for given ds.
     void generateBoltzmann(double ds);
@@ -96,14 +99,11 @@ private:
     void freeBoltzmann();
     /// Device table of M_physical_ values from h (a spare buffer when one is left),
     /// copied on stream_ and complete on return
-    double* uploadTable(const std::vector<double>& h);
-    std::vector<double*> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
+    CudaDeviceBuffer<double> uploadTable(const std::vector<double>& h);
+    std::vector<CudaDeviceBuffer<double>> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
 
     /// Free cached stress multiplier arrays.
     void freeMultiplierCaches();
-
-    /// Free everything acquired so far (idempotent; also used when the constructor throws).
-    void release();
 
     /// Compute per-axis k² arrays on the physical grid (host).
     void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;

@@ -80,8 +80,8 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
     }
     catch (std::exception& exc)
     {
-        // Nothing of this class to free: ~CpuSolverPseudoBase still runs
-        // and frees the FFT and Pseudo objects created by init_shared()
+        // Nothing to free here: the FFT and Pseudo objects created by
+        // init_shared() are owning members of CpuSolverPseudoBase
         throw_without_line_number(exc.what());
     }
 }
@@ -93,7 +93,7 @@ template <typename T>
 CpuSolverPseudoRQM4<T>::~CpuSolverPseudoRQM4()
 {
     // exp_dw and exp_dw_half vectors are automatically cleaned up;
-    // the shared components (FFT, Pseudo) are freed by ~CpuSolverPseudoBase
+    // the shared components (FFT, Pseudo) are owning members of the base
 }
 
 //------------------------------------------------------------------------------

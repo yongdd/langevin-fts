@@ -95,21 +95,19 @@ private:
     /// @name Tridiagonal coefficients per ds_index per monomer_type
     /// Nested map structure: [ds_index][monomer_type] -> coefficient array
     /// @{
-    std::map<int, std::map<std::string, double*>> xl;  ///< x-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> xd;  ///< x-direction main diagonal
-    std::map<int, std::map<std::string, double*>> xh;  ///< x-direction upper diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> xl;  ///< x-direction lower diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> xd;  ///< x-direction main diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> xh;  ///< x-direction upper diagonal
 
-    std::map<int, std::map<std::string, double*>> yl;  ///< y-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> yd;  ///< y-direction main diagonal
-    std::map<int, std::map<std::string, double*>> yh;  ///< y-direction upper diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> yl;  ///< y-direction lower diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> yd;  ///< y-direction main diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> yh;  ///< y-direction upper diagonal
 
-    std::map<int, std::map<std::string, double*>> zl;  ///< z-direction lower diagonal
-    std::map<int, std::map<std::string, double*>> zd;  ///< z-direction main diagonal
-    std::map<int, std::map<std::string, double*>> zh;  ///< z-direction upper diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> zl;  ///< z-direction lower diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> zd;  ///< z-direction main diagonal
+    std::map<int, std::map<std::string, std::vector<double>>> zh;  ///< z-direction upper diagonal
     /// @}
 
-    /// Free the coefficient arrays (also after a failed construction); idempotent.
-    void release();
 
 
     /// Return maximum of two integers.

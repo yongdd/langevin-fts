@@ -32,6 +32,7 @@
  * @see ComputationContinuous for integration
  */
 
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -58,23 +59,6 @@ CudaSolverCNADI::CudaSolverCNADI(
         this->d_reduced_basis_indices_ = nullptr;
         this->d_full_to_reduced_map_ = nullptr;
         this->n_basis_ = 0;
-        // Null every owned pointer before anything can throw (see release())
-        for (int i = 0; i < MAX_STREAMS; i++)
-        {
-            this->d_q_full_in_[i] = nullptr;
-            this->d_q_full_out_[i] = nullptr;
-            d_q_star[i] = nullptr;
-            d_q_dstar[i] = nullptr;
-            d_c_star[i] = nullptr;
-            d_q_sparse[i] = nullptr;
-            d_temp[i] = nullptr;
-        }
-        d_offset_xy = nullptr;
-        d_offset_yz = nullptr;
-        d_offset_xz = nullptr;
-        d_offset_x = nullptr;
-        d_offset_y = nullptr;
-        d_offset = nullptr;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -108,14 +92,10 @@ CudaSolverCNADI::CudaSolverCNADI(
         const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
-        // Map slots are inserted as nullptr; cudaMalloc writes into a local that is
-        // stored only on success, so release() never sees a stale pointer
-        auto alloc_slot = [](double*& d_slot, size_t bytes)
+        // Map slots are owning buffers: a failed allocation leaves the slot empty
+        auto alloc_slot = [](CudaDeviceBuffer<double>& slot, size_t count)
         {
-            d_slot = nullptr;
-            double* d_ptr = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_ptr, bytes));
-            d_slot = d_ptr;
+            slot.allocate(count);
         };
 
         // Create exp_dw and tridiagonal coefficients for each ds_index
@@ -124,19 +104,19 @@ CudaSolverCNADI::CudaSolverCNADI(
             for(const auto& item: molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
-                alloc_slot(d_exp_dw[ds_idx][monomer_type], sizeof(double)*M);
+                alloc_slot(d_exp_dw[ds_idx][monomer_type], M);
 
-                alloc_slot(d_xl[ds_idx][monomer_type], sizeof(double)*nx[0]);
-                alloc_slot(d_xd[ds_idx][monomer_type], sizeof(double)*nx[0]);
-                alloc_slot(d_xh[ds_idx][monomer_type], sizeof(double)*nx[0]);
+                alloc_slot(d_xl[ds_idx][monomer_type], nx[0]);
+                alloc_slot(d_xd[ds_idx][monomer_type], nx[0]);
+                alloc_slot(d_xh[ds_idx][monomer_type], nx[0]);
 
-                alloc_slot(d_yl[ds_idx][monomer_type], sizeof(double)*nx[1]);
-                alloc_slot(d_yd[ds_idx][monomer_type], sizeof(double)*nx[1]);
-                alloc_slot(d_yh[ds_idx][monomer_type], sizeof(double)*nx[1]);
+                alloc_slot(d_yl[ds_idx][monomer_type], nx[1]);
+                alloc_slot(d_yd[ds_idx][monomer_type], nx[1]);
+                alloc_slot(d_yh[ds_idx][monomer_type], nx[1]);
 
-                alloc_slot(d_zl[ds_idx][monomer_type], sizeof(double)*nx[2]);
-                alloc_slot(d_zd[ds_idx][monomer_type], sizeof(double)*nx[2]);
-                alloc_slot(d_zh[ds_idx][monomer_type], sizeof(double)*nx[2]);
+                alloc_slot(d_zl[ds_idx][monomer_type], nx[2]);
+                alloc_slot(d_zd[ds_idx][monomer_type], nx[2]);
+                alloc_slot(d_zh[ds_idx][monomer_type], nx[2]);
             }
         }
 
@@ -144,11 +124,11 @@ CudaSolverCNADI::CudaSolverCNADI(
         {
             for(int i=0; i<n_streams; i++)
             {
-                gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_q_dstar[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_temp[i], sizeof(double)*M));
+                d_q_star[i].allocate(M);
+                d_q_dstar[i].allocate(M);
+                d_c_star[i].allocate(M);
+                d_q_sparse[i].allocate(M);
+                d_temp[i].allocate(M);
             }
 
             int offset_xy[nx[0]*nx[1]];
@@ -171,9 +151,9 @@ CudaSolverCNADI::CudaSolverCNADI(
                 for(int k=0;k<nx[2];k++)
                     offset_xz[count++] = i*nx[1]*nx[2] + k;
 
-            gpu_error_check(cudaMalloc((void**)&d_offset_xy, sizeof(int)*nx[0]*nx[1]));
-            gpu_error_check(cudaMalloc((void**)&d_offset_yz, sizeof(int)*nx[1]*nx[2]));
-            gpu_error_check(cudaMalloc((void**)&d_offset_xz, sizeof(int)*nx[0]*nx[2]));
+            d_offset_xy.allocate(nx[0]*nx[1]);
+            d_offset_yz.allocate(nx[1]*nx[2]);
+            d_offset_xz.allocate(nx[0]*nx[2]);
 
             gpu_error_check(cudaMemcpy(d_offset_xy, offset_xy, sizeof(int)*nx[0]*nx[1], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_offset_yz, offset_yz, sizeof(int)*nx[1]*nx[2], cudaMemcpyHostToDevice));
@@ -183,10 +163,10 @@ CudaSolverCNADI::CudaSolverCNADI(
         {
             for(int i=0; i<n_streams; i++)
             {
-                gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_temp[i], sizeof(double)*M));
+                d_q_star[i].allocate(M);
+                d_c_star[i].allocate(M);
+                d_q_sparse[i].allocate(M);
+                d_temp[i].allocate(M);
             }
 
             int offset_x[nx[0]];
@@ -198,8 +178,8 @@ CudaSolverCNADI::CudaSolverCNADI(
             for(int j=0;j<nx[1];j++)
                 offset_y[j] = j;
 
-            gpu_error_check(cudaMalloc((void**)&d_offset_x, sizeof(int)*nx[0]));
-            gpu_error_check(cudaMalloc((void**)&d_offset_y, sizeof(int)*nx[1]));
+            d_offset_x.allocate(nx[0]);
+            d_offset_y.allocate(nx[1]);
 
             gpu_error_check(cudaMemcpy(d_offset_x, offset_x, sizeof(int)*nx[0], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_offset_y, offset_y, sizeof(int)*nx[1], cudaMemcpyHostToDevice));
@@ -208,76 +188,34 @@ CudaSolverCNADI::CudaSolverCNADI(
         {
             for(int i=0; i<n_streams; i++)
             {
-                gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
-                gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
+                d_q_star[i].allocate(M);
+                d_c_star[i].allocate(M);
+                d_q_sparse[i].allocate(M);
             }
 
-            gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(int)));
+            d_offset.allocate(1);
             gpu_error_check(cudaMemset(d_offset, 0, sizeof(int)));
         }
 
-        // Set max dynamic shared memory size for tridiagonal solver kernels
-        int max_shmem = 96000;
-        cudaFuncSetAttribute(tridiagonal, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem);
-        cudaFuncSetAttribute(tridiagonal_periodic, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem);
+        // Allow the tridiagonal solver kernels up to 96000 bytes of dynamic shared
+        // memory, or the device's opt-in limit when that is smaller (a launch that
+        // needs more then fails with a reported launch error)
+        int device = 0, optin_shmem = 0;
+        gpu_error_check(cudaGetDevice(&device));
+        gpu_error_check(cudaDeviceGetAttribute(&optin_shmem, cudaDevAttrMaxSharedMemoryPerBlockOptin, device));
+        const int max_shmem = std::min(96000, optin_shmem);
+        gpu_error_check(cudaFuncSetAttribute(tridiagonal, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem));
+        gpu_error_check(cudaFuncSetAttribute(tridiagonal_periodic, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem));
 
         update_laplacian_operator();
     }
     catch(std::exception& exc)
     {
-        release();
-        throw_without_line_number(exc.what());
-    }
-    catch(...)
-    {
-        release();
-        throw;
+        throw_without_line_number(exc.what());   // the owning members release what was acquired
     }
 }
-CudaSolverCNADI::~CudaSolverCNADI()
-{
-    release();
-}
+CudaSolverCNADI::~CudaSolverCNADI() = default;
 
-void CudaSolverCNADI::release()
-{
-    // Every pointer is nullptr until allocated (buffers a dimension does not
-    // use stay nullptr), so a partly built object is released correctly.
-
-    // Free nested maps: d_exp_dw[ds_index][monomer_type] and the
-    // tridiagonal coefficients d_xl[ds_index][monomer_type], ...
-    for (auto* d_map : {&d_exp_dw, &d_xl, &d_xd, &d_xh, &d_yl, &d_yd, &d_yh, &d_zl, &d_zd, &d_zh})
-    {
-        for(const auto& ds_entry: *d_map)
-            for(const auto& item: ds_entry.second)
-                if (item.second != nullptr)
-                    cudaFree(item.second);
-        d_map->clear();
-    }
-
-    auto free_device = [](auto*& d_ptr)
-    {
-        if (d_ptr != nullptr) cudaFree(d_ptr);
-        d_ptr = nullptr;
-    };
-    for(int i=0; i<MAX_STREAMS; i++)
-    {
-        free_device(d_q_star[i]);
-        free_device(d_q_dstar[i]);
-        free_device(d_c_star[i]);
-        free_device(d_q_sparse[i]);
-        free_device(d_temp[i]);
-        free_device(d_q_full_in_[i]);
-        free_device(d_q_full_out_[i]);
-    }
-    free_device(d_offset_xy);
-    free_device(d_offset_yz);
-    free_device(d_offset_xz);
-    free_device(d_offset_x);
-    free_device(d_offset_y);
-    free_device(d_offset);
-}
 
 void CudaSolverCNADI::set_space_group(
     SpaceGroup* sg,
@@ -295,10 +233,10 @@ void CudaSolverCNADI::set_space_group(
     {
         for (int i = 0; i < n_streams; i++)
         {
-            if (d_q_full_in_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(double)*M));
-            if (d_q_full_out_[i] == nullptr)
-                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(double)*M));
+            if (d_q_full_in_[i].empty())
+                d_q_full_in_[i].allocate(M);
+            if (d_q_full_out_[i].empty())
+                d_q_full_out_[i].allocate(M);
         }
     }
 }
@@ -403,6 +341,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
                 {
                     ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
                         d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                    gpu_error_check(cudaGetLastError());
                 }
                 else
                 {
@@ -425,6 +364,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
                     ((double*) d_exp_dw[ds_idx][monomer_type],
                      (double*) d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                gpu_error_check(cudaGetLastError());
             }
         }
         gpu_error_check(cudaDeviceSynchronize());
@@ -455,7 +395,7 @@ void CudaSolverCNADI::advance_propagator(
         {
             ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
             d_q_in_full = d_q_full_in_[STREAM];
             d_q_out_full = d_q_full_out_[STREAM];
         }
@@ -465,7 +405,7 @@ void CudaSolverCNADI::advance_propagator(
 
         // Apply exp(-w*local_ds/2) at start
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_in_full, _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Diffusion with full-step coefficients
         if(DIM == 3)
@@ -480,7 +420,7 @@ void CudaSolverCNADI::advance_propagator(
 
         // Apply exp(-w*local_ds/2) at end
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_out_full, _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Multiply mask
         if (d_q_mask != nullptr)
@@ -490,19 +430,19 @@ void CudaSolverCNADI::advance_propagator(
             {
                 ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 d_q_mask_full = d_q_full_in_[STREAM];
             }
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out_full, d_q_out_full, d_q_mask_full, 1.0, M);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
 
         if (use_reduced_basis)
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out_full, d_q_out, d_reduced_basis_indices_, n_basis_);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
     }
     catch(std::exception& exc)
@@ -546,7 +486,7 @@ void CudaSolverCNADI::advance_propagator_3d(
             _d_yl, _d_yd, _d_yh, nx[1],
             _d_zl, _d_zd, _d_zh, nx[2],
             d_temp[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
@@ -554,6 +494,7 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -561,15 +502,16 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q_dstar
         compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3], 
             _d_yl, _d_yd, _d_yh, nx[1], nx[2],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -577,6 +519,7 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -584,15 +527,16 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q^(n+1)
         compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[4], bc[5], 
             _d_zl, _d_zd, _d_zh, nx[1], nx[2],
             d_temp[STREAM], d_q_dstar[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
@@ -600,6 +544,7 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -607,8 +552,9 @@ void CudaSolverCNADI::advance_propagator_3d(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {
@@ -645,7 +591,7 @@ void CudaSolverCNADI::advance_propagator_2d(
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // gpu_error_check(cudaMemcpy(d_q_out, d_q_star, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
@@ -655,6 +601,7 @@ void CudaSolverCNADI::advance_propagator_2d(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -662,15 +609,16 @@ void CudaSolverCNADI::advance_propagator_2d(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q_dstar
         compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -678,6 +626,7 @@ void CudaSolverCNADI::advance_propagator_2d(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -685,8 +634,9 @@ void CudaSolverCNADI::advance_propagator_2d(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {
@@ -716,7 +666,7 @@ void CudaSolverCNADI::advance_propagator_1d(
             bc[0], bc[1],
             _d_xl, _d_xd, _d_xh,
             d_q_star[STREAM], d_q_in, nx[0]);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
             tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
@@ -727,7 +677,7 @@ void CudaSolverCNADI::advance_propagator_1d(
             tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {
@@ -761,7 +711,7 @@ void CudaSolverCNADI::advance_propagator_3d_step(
             _d_yl, _d_yd, _d_yh, nx[1],
             _d_zl, _d_zd, _d_zh, nx[2],
             d_temp[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
@@ -769,6 +719,7 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -776,15 +727,16 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q_dstar
         compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1], nx[2],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -792,6 +744,7 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -799,15 +752,16 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q^(n+1)
         compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[4], bc[5],
             _d_zl, _d_zd, _d_zh, nx[1], nx[2],
             d_temp[STREAM], d_q_dstar[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
@@ -815,6 +769,7 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -822,8 +777,9 @@ void CudaSolverCNADI::advance_propagator_3d_step(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {
@@ -854,7 +810,7 @@ void CudaSolverCNADI::advance_propagator_2d_step(
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
@@ -862,6 +818,7 @@ void CudaSolverCNADI::advance_propagator_2d_step(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -869,15 +826,16 @@ void CudaSolverCNADI::advance_propagator_2d_step(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         // Calculate q_dstar
         compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -885,6 +843,7 @@ void CudaSolverCNADI::advance_propagator_2d_step(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -892,8 +851,9 @@ void CudaSolverCNADI::advance_propagator_2d_step(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {
@@ -920,7 +880,7 @@ void CudaSolverCNADI::advance_propagator_1d_step(
             bc[0], bc[1],
             _d_xl, _d_xd, _d_xh,
             d_q_star[STREAM], d_q_in, nx[0]);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
             tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
@@ -931,7 +891,7 @@ void CudaSolverCNADI::advance_propagator_1d_step(
             tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch(std::exception& exc)
     {

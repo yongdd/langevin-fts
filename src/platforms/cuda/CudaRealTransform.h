@@ -24,6 +24,7 @@
 
 #include <cuda_runtime.h>
 #include <cufft.h>
+#include "CudaCommon.h"
 
 /**
  * Transform Type enumeration for DCT and DST.
@@ -95,15 +96,15 @@ private:
     CudaTransformType type_;     ///< Transform type
     cufftHandle plan_;           ///< cuFFT plan
     bool plan_created_ = false;  ///< plan_ holds a created plan
-    double* d_work_;             ///< Work buffer
-    double* d_x1_;               ///< Auxiliary buffer
+    CudaDeviceBuffer<double> d_work_;             ///< Work buffer
+    CudaDeviceBuffer<double> d_x1_;               ///< Auxiliary buffer
     // Optional lookup tables for DCT2/DCT3/DCT4 and DST2/3/4
-    double* dct2_sin_{nullptr};
-    double* dct2_cos_{nullptr};
-    double* dct3_sin_{nullptr};
-    double* dct3_cos_{nullptr};
-    double* dct4_sin_{nullptr};
-    double* dct4_cos_{nullptr};
+    CudaDeviceBuffer<double> dct2_sin_;
+    CudaDeviceBuffer<double> dct2_cos_;
+    CudaDeviceBuffer<double> dct3_sin_;
+    CudaDeviceBuffer<double> dct3_cos_;
+    CudaDeviceBuffer<double> dct4_sin_;
+    CudaDeviceBuffer<double> dct4_cos_;
     cudaStream_t stream_{0};     ///< CUDA stream for execution
     bool initialized_;
 
@@ -168,23 +169,23 @@ private:
     bool plan_x_created_ = false; ///< plan_x_ holds a created plan
     bool plan_y_created_ = false; ///< plan_y_ holds a created plan
 
-    double* d_work_;             ///< Work buffer
-    double* d_temp_;             ///< Temporary buffer
-    double* d_x1_;               ///< Auxiliary buffer
+    CudaDeviceBuffer<double> d_work_;             ///< Work buffer
+    CudaDeviceBuffer<double> d_temp_;             ///< Temporary buffer
+    CudaDeviceBuffer<double> d_x1_;               ///< Auxiliary buffer
 
     // Optional lookup tables for DCT2/DCT3/DCT4 and DST2/3/4
-    double* dct2_sin_x_{nullptr};
-    double* dct2_cos_x_{nullptr};
-    double* dct2_sin_y_{nullptr};
-    double* dct2_cos_y_{nullptr};
-    double* dct3_sin_x_{nullptr};
-    double* dct3_cos_x_{nullptr};
-    double* dct3_sin_y_{nullptr};
-    double* dct3_cos_y_{nullptr};
-    double* dct4_sin_x_{nullptr};
-    double* dct4_cos_x_{nullptr};
-    double* dct4_sin_y_{nullptr};
-    double* dct4_cos_y_{nullptr};
+    CudaDeviceBuffer<double> dct2_sin_x_;
+    CudaDeviceBuffer<double> dct2_cos_x_;
+    CudaDeviceBuffer<double> dct2_sin_y_;
+    CudaDeviceBuffer<double> dct2_cos_y_;
+    CudaDeviceBuffer<double> dct3_sin_x_;
+    CudaDeviceBuffer<double> dct3_cos_x_;
+    CudaDeviceBuffer<double> dct3_sin_y_;
+    CudaDeviceBuffer<double> dct3_cos_y_;
+    CudaDeviceBuffer<double> dct4_sin_x_;
+    CudaDeviceBuffer<double> dct4_cos_x_;
+    CudaDeviceBuffer<double> dct4_sin_y_;
+    CudaDeviceBuffer<double> dct4_cos_y_;
 
     bool initialized_;
     cudaStream_t stream_{0};     ///< CUDA stream for execution
@@ -290,29 +291,29 @@ private:
     bool plan_y_created_ = false; ///< plan_y_ holds a created plan
     bool plan_z_created_ = false; ///< plan_z_ holds a created plan
 
-    double* d_work_;             ///< Work buffer
-    double* d_temp_;             ///< Temporary buffer
-    double* d_x1_;               ///< Auxiliary buffer
+    CudaDeviceBuffer<double> d_work_;             ///< Work buffer
+    CudaDeviceBuffer<double> d_temp_;             ///< Temporary buffer
+    CudaDeviceBuffer<double> d_x1_;               ///< Auxiliary buffer
 
     // Optional lookup tables for DCT2/DCT3 (reduce sincos overhead)
-    double* dct2_sin_x_{nullptr};
-    double* dct2_cos_x_{nullptr};
-    double* dct2_sin_y_{nullptr};
-    double* dct2_cos_y_{nullptr};
-    double* dct2_sin_z_{nullptr};
-    double* dct2_cos_z_{nullptr};
-    double* dct3_sin_x_{nullptr};
-    double* dct3_cos_x_{nullptr};
-    double* dct3_sin_y_{nullptr};
-    double* dct3_cos_y_{nullptr};
-    double* dct3_sin_z_{nullptr};
-    double* dct3_cos_z_{nullptr};
-    double* dct4_sin_x_{nullptr};
-    double* dct4_cos_x_{nullptr};
-    double* dct4_sin_y_{nullptr};
-    double* dct4_cos_y_{nullptr};
-    double* dct4_sin_z_{nullptr};
-    double* dct4_cos_z_{nullptr};
+    CudaDeviceBuffer<double> dct2_sin_x_;
+    CudaDeviceBuffer<double> dct2_cos_x_;
+    CudaDeviceBuffer<double> dct2_sin_y_;
+    CudaDeviceBuffer<double> dct2_cos_y_;
+    CudaDeviceBuffer<double> dct2_sin_z_;
+    CudaDeviceBuffer<double> dct2_cos_z_;
+    CudaDeviceBuffer<double> dct3_sin_x_;
+    CudaDeviceBuffer<double> dct3_cos_x_;
+    CudaDeviceBuffer<double> dct3_sin_y_;
+    CudaDeviceBuffer<double> dct3_cos_y_;
+    CudaDeviceBuffer<double> dct3_sin_z_;
+    CudaDeviceBuffer<double> dct3_cos_z_;
+    CudaDeviceBuffer<double> dct4_sin_x_;
+    CudaDeviceBuffer<double> dct4_cos_x_;
+    CudaDeviceBuffer<double> dct4_sin_y_;
+    CudaDeviceBuffer<double> dct4_cos_y_;
+    CudaDeviceBuffer<double> dct4_sin_z_;
+    CudaDeviceBuffer<double> dct4_cos_z_;
 
     bool initialized_;
     cudaStream_t stream_{0};     ///< CUDA stream for execution

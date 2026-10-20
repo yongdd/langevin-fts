@@ -16,7 +16,7 @@
  * **Design Decision:**
  *
  * All simulations are conducted in fixed dimensions (1D, 2D, or 3D).
- * The FFT object is stored as `FFT<T>* fft_` which points to FftwFFT<T, DIM>
+ * The FFT object is stored as `std::unique_ptr<FFT<T>> fft_` which points to FftwFFT<T, DIM>
  * or MklFFT<T, DIM> based on the backend and the dimensionality. This avoids
  * maintaining separate fft_1d, fft_2d, fft_3d pointers when only one is ever
  * used per solver.
@@ -131,14 +131,14 @@ protected:
      * All simulations are conducted in fixed dimensions, so only one
      * transform object is needed per solver instance.
      *
-     * Uses FFT<T>* base class pointer to enable polymorphic calls without
+     * Uses an FFT<T> base class pointer to enable polymorphic calls without
      * dimension-specific casting or backend-specific dispatch.
      */
-    FFT<T>* fft_;
+    std::unique_ptr<FFT<T>> fft_;
 
     FFTBackend fft_backend_;  ///< Selected FFT backend (FFTW or MKL)
 
-    Pseudo<T>* pseudo;           ///< Pseudo-spectral operator helper
+    std::unique_ptr<Pseudo<T>> pseudo;   ///< Pseudo-spectral operator helper
 
     bool is_periodic_;           ///< True if all BCs are periodic
     int dim_;                    ///< Number of dimensions (1, 2, or 3)
@@ -336,14 +336,6 @@ protected:
      */
     void init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend);
 
-    /**
-     * @brief Clean up shared components.
-     *
-     * Deletes the FFT object and the Pseudo object and resets both pointers
-     * (idempotent). Called by ~CpuSolverPseudoBase, which also runs when a
-     * derived constructor throws after init_shared().
-     */
-    void cleanup_shared();
 
     /**
      * @brief Get bond factor for stress computation.
@@ -408,10 +400,10 @@ protected:
 
 public:
     /// Default constructor.
-    CpuSolverPseudoBase() : fft_(nullptr), pseudo(nullptr), is_periodic_(true), dim_(0), space_group_(nullptr) {}
+    CpuSolverPseudoBase() : is_periodic_(true), dim_(0), space_group_(nullptr) {}
 
     /// Virtual destructor. Frees the shared components (FFT, Pseudo).
-    virtual ~CpuSolverPseudoBase() { cleanup_shared(); }
+    virtual ~CpuSolverPseudoBase() = default;   // fft_ and pseudo are owning members
 
     /**
      * @brief Set space group for reduced basis operations.

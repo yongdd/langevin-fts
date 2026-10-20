@@ -22,6 +22,7 @@
 #define CUDA_SOLVER_PSEUDO_BASE_H_
 
 #include <array>
+#include <memory>
 #include <string>
 #include <vector>
 #include <map>
@@ -46,7 +47,7 @@ class CudaSolverPseudoBase : public CudaSolver<T>
 protected:
     ComputationBox<T>* cb;        ///< Computation box
     Molecules *molecules;         ///< Molecules container
-    Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities (Fourier basis, Boltzmann bond factors)
+    std::unique_ptr<Pseudo<T>> pseudo;   ///< Pseudo-spectral utilities (Fourier basis, Boltzmann bond factors)
     int n_streams;                ///< Number of parallel streams
     int dim_;                     ///< Number of dimensions (1, 2, or 3)
     bool is_periodic_;            ///< True if all BCs are periodic
@@ -56,24 +57,24 @@ protected:
     int max_fft_batch_;                      ///< Largest batch a derived solver transforms at once (1 or 2)
     cufftHandle plan_for_[MAX_STREAMS][2];   ///< Periodic BC: forward plans, index = batch - 1
     cufftHandle plan_bak_[MAX_STREAMS][2];   ///< Periodic BC: backward plans, index = batch - 1
-    CudaFFTBase<T>* fft_[MAX_STREAMS];       ///< Non-periodic BC: per-stream DCT/DST transform objects (issued on streams[i][0])
+    std::unique_ptr<CudaFFTBase<T>> fft_[MAX_STREAMS];       ///< Non-periodic BC: per-stream DCT/DST transform objects (issued on streams[i][0])
 
     // Stress reduction workspace (per stream)
     size_t temp_storage_bytes[MAX_STREAMS];
-    CuDeviceData<T> *d_temp_storage[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum[MAX_STREAMS];
-    CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
-    CuDeviceData<T> *d_q_multi[MAX_STREAMS];
-    cuDoubleComplex *d_qk_conj_[MAX_STREAMS];   ///< q2(-k) gather of the stress (complex fields; nullptr for real)
-    CuDeviceData<T> *d_stress_partial_[MAX_STREAMS];   ///< Per-block partial sums of the stress components
+    CudaDeviceBuffer<unsigned char> d_temp_storage[MAX_STREAMS];
+    CudaDeviceBuffer<CuDeviceData<T>> d_stress_sum[MAX_STREAMS];
+    CudaDeviceBuffer<CuDeviceData<T>> d_stress_sum_out[MAX_STREAMS];
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_multi[MAX_STREAMS];
+    CudaDeviceBuffer<cuDoubleComplex> d_qk_conj_[MAX_STREAMS];   ///< q2(-k) gather of the stress (complex fields; nullptr for real)
+    CudaDeviceBuffer<CuDeviceData<T>> d_stress_partial_[MAX_STREAMS];   ///< Per-block partial sums of the stress components
 
     // Space group symmetry (reduced basis)
     SpaceGroup* space_group_;                        ///< Space group pointer (nullptr if not used)
-    int* d_reduced_basis_indices_;                   ///< Device array: reduced -> full index mapping
-    int* d_full_to_reduced_map_;                     ///< Device array: full -> reduced index mapping
+    int* d_reduced_basis_indices_;                   ///< Device array: reduced -> full index mapping (lent by the backend)
+    int* d_full_to_reduced_map_;                     ///< Device array: full -> reduced index mapping (lent by the backend)
     int n_basis_;                                    ///< Number of reduced basis points
-    CuDeviceData<T> *d_q_full_in_[MAX_STREAMS];      ///< Work buffer: full grid input (per stream)
-    CuDeviceData<T> *d_q_full_out_[MAX_STREAMS];     ///< Work buffer: full grid output (per stream)
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_full_in_[MAX_STREAMS];      ///< Work buffer: full grid input (per stream)
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_full_out_[MAX_STREAMS];     ///< Work buffer: full grid output (per stream)
     int q_full_in_factor_;                           ///< d_q_full_in_ holds this many full-grid fields (2 for discrete stress)
 
     // CrysFFT fast path (crystallographic FFT on the physical sub-grid)
@@ -81,12 +82,12 @@ protected:
     CudaCrysFFTMode crysfft_mode_;
     bool crysfft_identity_map_;                      ///< True when reduced basis matches physical grid
     int crysfft_physical_size_;
-    int* d_crysfft_phys_to_reduced_;                 ///< Device map: physical index -> reduced index
-    int* d_crysfft_reduced_to_phys_;                 ///< Device map: reduced index -> physical index
-    int* d_crysfft_orbit_counts_;                    ///< Device orbit counts (stress fast path)
-    CudaCrysFFTBase* crysfft_[MAX_STREAMS];          ///< Per-stream CrysFFT objects
-    double* d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
-    double* d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
+    CudaDeviceBuffer<int> d_crysfft_phys_to_reduced_;   ///< Device map: physical index -> reduced index
+    CudaDeviceBuffer<int> d_crysfft_reduced_to_phys_;   ///< Device map: reduced index -> physical index
+    CudaDeviceBuffer<int> d_crysfft_orbit_counts_;      ///< Device orbit counts (stress fast path)
+    std::unique_ptr<CudaCrysFFTBase> crysfft_[MAX_STREAMS];   ///< Per-stream CrysFFT objects
+    CudaDeviceBuffer<double> d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
+    CudaDeviceBuffer<double> d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
 
     /**
      * @param max_fft_batch             Largest number of fields the derived solver

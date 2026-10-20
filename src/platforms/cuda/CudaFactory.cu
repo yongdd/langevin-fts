@@ -97,7 +97,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         // Reduce-memory mode computes one propagator at a time
         const int max_n_streams = this->reduce_memory ? 1 : INT_MAX;
         auto create_backend = [=]() {
-            return new CudaComputationBackend<T>(cb, molecules, solver_type, numerical_method, space_group, max_n_streams);
+            return std::make_unique<CudaComputationBackend<T>>(cb, molecules, solver_type, numerical_method, space_group, max_n_streams);
         };
 
         if (discrete && !this->reduce_memory)

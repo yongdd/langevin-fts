@@ -117,8 +117,7 @@ __global__ void ker_scale(double* data, double scale, int M)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
-    : nx_(nx), is_all_periodic_(true), plan_forward_(0), plan_backward_(0),
-      d_work_buffer_(nullptr), rt_forward_(nullptr), rt_backward_(nullptr)
+    : nx_(nx), is_all_periodic_(true), plan_forward_(0), plan_backward_(0)
 {
     for (int d = 0; d < DIM; ++d)
         bc_[d] = BoundaryCondition::PERIODIC;
@@ -141,7 +140,7 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
         else if (DIM == 1)
             total_complex_grid_ = nx_[0] / 2 + 1;
 
-        gpu_error_check(cudaMalloc((void**)&d_work_buffer_, sizeof(cuDoubleComplex) * total_complex_grid_));
+        d_work_buffer_.allocate(2 * total_complex_grid_);   // complex layout
 
         initPeriodicFFT();
     }
@@ -162,8 +161,7 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc)
-    : nx_(nx), bc_(bc), plan_forward_(0), plan_backward_(0),
-      d_work_buffer_(nullptr), rt_forward_(nullptr), rt_backward_(nullptr)
+    : nx_(nx), bc_(bc), plan_forward_(0), plan_backward_(0)
 {
     try
     {
@@ -208,7 +206,7 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
             else if (DIM == 1)
                 total_complex_grid_ = nx_[0] / 2 + 1;
 
-            gpu_error_check(cudaMalloc((void**)&d_work_buffer_, sizeof(cuDoubleComplex) * total_complex_grid_));
+            d_work_buffer_.allocate(2 * total_complex_grid_);   // complex layout
             initPeriodicFFT();
         }
         else
@@ -229,7 +227,7 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
             total_complex_grid_ = total_grid_;
 
             // Allocate work buffer for non-periodic transforms
-            gpu_error_check(cudaMalloc((void**)&d_work_buffer_, sizeof(double) * total_grid_));
+            d_work_buffer_.allocate(total_grid_);
 
             initNonPeriodicFFT();
         }
@@ -261,9 +259,7 @@ CudaFFT<T, DIM>::~CudaFFT()
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::release()
 {
-    if (d_work_buffer_ != nullptr)
-        cudaFree(d_work_buffer_);
-    d_work_buffer_ = nullptr;
+    d_work_buffer_.release();
 
     if (plan_forward_created_)
         cufftDestroy(plan_forward_);
@@ -272,24 +268,8 @@ void CudaFFT<T, DIM>::release()
     plan_forward_created_ = false;
     plan_backward_created_ = false;
 
-    // Delete CudaRealTransform objects (either may be null if construction failed)
-    if constexpr (DIM == 1)
-    {
-        delete static_cast<CudaRealTransform1D*>(rt_forward_);
-        delete static_cast<CudaRealTransform1D*>(rt_backward_);
-    }
-    else if constexpr (DIM == 2)
-    {
-        delete static_cast<CudaRealTransform2D*>(rt_forward_);
-        delete static_cast<CudaRealTransform2D*>(rt_backward_);
-    }
-    else if constexpr (DIM == 3)
-    {
-        delete static_cast<CudaRealTransform3D*>(rt_forward_);
-        delete static_cast<CudaRealTransform3D*>(rt_backward_);
-    }
-    rt_forward_ = nullptr;
-    rt_backward_ = nullptr;
+    rt_forward_.reset();
+    rt_backward_.reset();
 }
 
 //------------------------------------------------------------------------------
@@ -337,8 +317,8 @@ void CudaFFT<T, DIM>::initNonPeriodicFFT()
         CudaTransformType fwd_type = (bc_[0] == BoundaryCondition::REFLECTING) ? CUDA_DCT_2 : CUDA_DST_2;
         CudaTransformType bwd_type = (bc_[0] == BoundaryCondition::REFLECTING) ? CUDA_DCT_3 : CUDA_DST_3;
 
-        rt_forward_ = new CudaRealTransform1D(nx_[0], fwd_type);
-        rt_backward_ = new CudaRealTransform1D(nx_[0], bwd_type);
+        rt_forward_ = std::make_unique<RealTransform>(nx_[0], fwd_type);
+        rt_backward_ = std::make_unique<RealTransform>(nx_[0], bwd_type);
     }
     else if constexpr (DIM == 2)
     {
@@ -347,8 +327,8 @@ void CudaFFT<T, DIM>::initNonPeriodicFFT()
         CudaTransformType bwd_type_x = (bc_[0] == BoundaryCondition::REFLECTING) ? CUDA_DCT_3 : CUDA_DST_3;
         CudaTransformType bwd_type_y = (bc_[1] == BoundaryCondition::REFLECTING) ? CUDA_DCT_3 : CUDA_DST_3;
 
-        rt_forward_ = new CudaRealTransform2D(nx_[0], nx_[1], fwd_type_x, fwd_type_y);
-        rt_backward_ = new CudaRealTransform2D(nx_[0], nx_[1], bwd_type_x, bwd_type_y);
+        rt_forward_ = std::make_unique<RealTransform>(nx_[0], nx_[1], fwd_type_x, fwd_type_y);
+        rt_backward_ = std::make_unique<RealTransform>(nx_[0], nx_[1], bwd_type_x, bwd_type_y);
     }
     else if constexpr (DIM == 3)
     {
@@ -359,8 +339,8 @@ void CudaFFT<T, DIM>::initNonPeriodicFFT()
         CudaTransformType bwd_type_y = (bc_[1] == BoundaryCondition::REFLECTING) ? CUDA_DCT_3 : CUDA_DST_3;
         CudaTransformType bwd_type_z = (bc_[2] == BoundaryCondition::REFLECTING) ? CUDA_DCT_3 : CUDA_DST_3;
 
-        rt_forward_ = new CudaRealTransform3D(nx_[0], nx_[1], nx_[2], fwd_type_x, fwd_type_y, fwd_type_z);
-        rt_backward_ = new CudaRealTransform3D(nx_[0], nx_[1], nx_[2], bwd_type_x, bwd_type_y, bwd_type_z);
+        rt_forward_ = std::make_unique<RealTransform>(nx_[0], nx_[1], nx_[2], fwd_type_x, fwd_type_y, fwd_type_z);
+        rt_backward_ = std::make_unique<RealTransform>(nx_[0], nx_[1], nx_[2], bwd_type_x, bwd_type_y, bwd_type_z);
     }
 }
 
@@ -377,24 +357,24 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
 
         if (is_all_periodic_)
         {
-            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_);
+            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_.get());
 
             if constexpr (std::is_same<T, double>::value)
             {
-                cufftSetStream(plan_forward_, stream);
-                cufftExecD2Z(plan_forward_, d_rdata, d_complex);
+                cufft_error_check(cufftSetStream(plan_forward_, stream));
+                cufft_error_check(cufftExecD2Z(plan_forward_, d_rdata, d_complex));
             }
             else
             {
-                cufftSetStream(plan_forward_, stream);
-                cufftExecZ2Z(plan_forward_, reinterpret_cast<cuDoubleComplex*>(d_rdata),
-                             d_complex, CUFFT_FORWARD);
+                cufft_error_check(cufftSetStream(plan_forward_, stream));
+                cufft_error_check(cufftExecZ2Z(plan_forward_, reinterpret_cast<cuDoubleComplex*>(d_rdata),
+                             d_complex, CUFFT_FORWARD));
             }
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             ker_complex_to_interleaved<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_cdata, d_complex, total_complex_grid_);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -408,13 +388,8 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
                 // Real fields: copy the input into the output buffer (both hold
                 // total_grid_ values) and transform it there, so the input is kept
                 ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_cdata, d_rdata, total_grid_);
-                gpu_error_check(cudaPeekAtLastError());
-                if constexpr (DIM == 1)
-                    static_cast<CudaRealTransform1D*>(rt_forward_)->execute(d_cdata, stream);
-                else if constexpr (DIM == 2)
-                    static_cast<CudaRealTransform2D*>(rt_forward_)->execute(d_cdata, stream);
-                else if constexpr (DIM == 3)
-                    static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_cdata, stream);
+                gpu_error_check(cudaGetLastError());
+                rt_forward_->execute(d_cdata, stream);
                 return;
             }
             const int n_parts = 2;
@@ -422,20 +397,15 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
             {
                 ker_complex_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_work_buffer_, reinterpret_cast<cuDoubleComplex*>(d_rdata), part, total_grid_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 // Execute forward transform (DCT-2 or DST-2) on the given stream
-                if constexpr (DIM == 1)
-                    static_cast<CudaRealTransform1D*>(rt_forward_)->execute(d_work_buffer_, stream);
-                else if constexpr (DIM == 2)
-                    static_cast<CudaRealTransform2D*>(rt_forward_)->execute(d_work_buffer_, stream);
-                else if constexpr (DIM == 3)
-                    static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_work_buffer_, stream);
+                rt_forward_->execute(d_work_buffer_, stream);
 
                 // Copy to output (interleaved for complex fields)
                 ker_real_to_interleaved_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_cdata, d_work_buffer_, part, total_complex_grid_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
             }
         }
     }
@@ -458,30 +428,32 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
 
         if (is_all_periodic_)
         {
-            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_);
+            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_.get());
 
             ker_interleaved_to_complex<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_complex, d_cdata, total_complex_grid_);
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
 
             if constexpr (std::is_same<T, double>::value)
             {
-                cufftSetStream(plan_backward_, stream);
-                cufftExecZ2D(plan_backward_, d_complex, d_rdata);
+                cufft_error_check(cufftSetStream(plan_backward_, stream));
+                cufft_error_check(cufftExecZ2D(plan_backward_, d_complex, d_rdata));
 
                 ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_rdata, 1.0 / total_grid_, total_grid_);
+                gpu_error_check(cudaGetLastError());
             }
             else
             {
-                cufftSetStream(plan_backward_, stream);
-                cufftExecZ2Z(plan_backward_, d_complex,
-                             reinterpret_cast<cuDoubleComplex*>(d_rdata), CUFFT_INVERSE);
+                cufft_error_check(cufftSetStream(plan_backward_, stream));
+                cufft_error_check(cufftExecZ2Z(plan_backward_, d_complex,
+                             reinterpret_cast<cuDoubleComplex*>(d_rdata), CUFFT_INVERSE));
 
                 ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     reinterpret_cast<double*>(d_rdata), 1.0 / total_grid_, total_grid_ * 2);
+                gpu_error_check(cudaGetLastError());
             }
-            gpu_error_check(cudaPeekAtLastError());
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
@@ -497,16 +469,11 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
                 // Real fields: copy the coefficients into the output buffer and
                 // transform there, so the coefficients are kept
                 ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_rdata, d_cdata, total_grid_);
-                gpu_error_check(cudaPeekAtLastError());
-                if constexpr (DIM == 1)
-                    static_cast<CudaRealTransform1D*>(rt_backward_)->execute(d_rdata, stream);
-                else if constexpr (DIM == 2)
-                    static_cast<CudaRealTransform2D*>(rt_backward_)->execute(d_rdata, stream);
-                else if constexpr (DIM == 3)
-                    static_cast<CudaRealTransform3D*>(rt_backward_)->execute(d_rdata, stream);
+                gpu_error_check(cudaGetLastError());
+                rt_backward_->execute(d_rdata, stream);
                 // Normalize (DCT/DST round-trip scaling is 2*N per dimension)
                 ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_rdata, scale, total_grid_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
                 return;
             }
             const int n_parts = 2;
@@ -515,23 +482,19 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
                 // Copy input component to work buffer
                 ker_interleaved_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_work_buffer_, d_cdata, part, total_complex_grid_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
 
                 // Execute backward transform (DCT-3 or DST-3) on the given stream
-                if constexpr (DIM == 1)
-                    static_cast<CudaRealTransform1D*>(rt_backward_)->execute(d_work_buffer_, stream);
-                else if constexpr (DIM == 2)
-                    static_cast<CudaRealTransform2D*>(rt_backward_)->execute(d_work_buffer_, stream);
-                else if constexpr (DIM == 3)
-                    static_cast<CudaRealTransform3D*>(rt_backward_)->execute(d_work_buffer_, stream);
+                rt_backward_->execute(d_work_buffer_, stream);
 
                 // Normalize (DCT/DST round-trip scaling is 2*N per dimension)
                 ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work_buffer_, scale, total_grid_);
+                gpu_error_check(cudaGetLastError());
 
                 // Copy to output component
                 ker_real_to_complex_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     reinterpret_cast<cuDoubleComplex*>(d_rdata), d_work_buffer_, part, total_grid_);
-                gpu_error_check(cudaPeekAtLastError());
+                gpu_error_check(cudaGetLastError());
             }
         }
     }
@@ -558,16 +521,16 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, std::complex<double>* d_cdata, 
 
         if constexpr (std::is_same<T, double>::value)
         {
-            cufftSetStream(plan_forward_, stream);
-            cufftExecD2Z(plan_forward_, d_rdata, d_cdata_cu);
+            cufft_error_check(cufftSetStream(plan_forward_, stream));
+            cufft_error_check(cufftExecD2Z(plan_forward_, d_rdata, d_cdata_cu));
         }
         else
         {
-            cufftSetStream(plan_forward_, stream);
-            cufftExecZ2Z(plan_forward_, reinterpret_cast<cuDoubleComplex*>(d_rdata),
-                         d_cdata_cu, CUFFT_FORWARD);
+            cufft_error_check(cufftSetStream(plan_forward_, stream));
+            cufft_error_check(cufftExecZ2Z(plan_forward_, reinterpret_cast<cuDoubleComplex*>(d_rdata),
+                         d_cdata_cu, CUFFT_FORWARD));
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch (std::exception& exc)
     {
@@ -595,22 +558,24 @@ void CudaFFT<T, DIM>::backward_stream(std::complex<double>* d_cdata, T* d_rdata,
 
         if constexpr (std::is_same<T, double>::value)
         {
-            cufftSetStream(plan_backward_, stream);
-            cufftExecZ2D(plan_backward_, d_cdata_cu, d_rdata);
+            cufft_error_check(cufftSetStream(plan_backward_, stream));
+            cufft_error_check(cufftExecZ2D(plan_backward_, d_cdata_cu, d_rdata));
 
             ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_rdata, 1.0 / total_grid_, total_grid_);
+            gpu_error_check(cudaGetLastError());
         }
         else
         {
-            cufftSetStream(plan_backward_, stream);
-            cufftExecZ2Z(plan_backward_, d_cdata_cu,
-                         reinterpret_cast<cuDoubleComplex*>(d_rdata), CUFFT_INVERSE);
+            cufft_error_check(cufftSetStream(plan_backward_, stream));
+            cufft_error_check(cufftExecZ2Z(plan_backward_, d_cdata_cu,
+                         reinterpret_cast<cuDoubleComplex*>(d_rdata), CUFFT_INVERSE));
 
             ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 reinterpret_cast<double*>(d_rdata), 1.0 / total_grid_, total_grid_ * 2);
+            gpu_error_check(cudaGetLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaGetLastError());
     }
     catch (std::exception& exc)
     {

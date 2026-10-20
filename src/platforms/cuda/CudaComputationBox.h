@@ -63,21 +63,21 @@ class CudaComputationBox : public ComputationBox<T>
 {
 private:
     T *sum;                     ///< Host buffer for reduction result
-    CuDeviceData<T> *d_sum = nullptr;      ///< Device buffer for reduction intermediate
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum;       ///< Device buffer for reduction intermediate
 
-    CuDeviceData<T> *d_multiple = nullptr; ///< Temp storage for multi-component inner product
-    double *d_dv = nullptr;                ///< dV (volume element) in device memory
+    CudaDeviceBuffer<CuDeviceData<T>> d_multiple;  ///< Temp storage for multi-component inner product
+    CudaDeviceBuffer<double> d_dv;                 ///< dV (volume element) in device memory
 
     /// @name CUB Reduction Storage
     /// @{
     size_t temp_storage_bytes = 0;     ///< Size of CUB temporary storage
-    CuDeviceData<T> *d_temp_storage = nullptr;  ///< CUB temporary storage
-    CuDeviceData<T> *d_sum_out = nullptr;  ///< Output buffer for reduction
+    CudaDeviceBuffer<unsigned char> d_temp_storage;   ///< CUB temporary storage
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;      ///< Output buffer for reduction
     /// @}
 
     /// @name Space Group Support
     /// @{
-    int* d_orbit_counts_ = nullptr;  ///< Device copy of orbit counts for reduced basis
+    CudaDeviceBuffer<int> d_orbit_counts_;  ///< Device copy of orbit counts for reduced basis
     /// @}
 
     /**
@@ -86,9 +86,6 @@ private:
      * Allocates CUB temporary storage and device buffers.
      */
     void initialize();
-
-    /// Free the device buffers (idempotent; also used when a constructor throws).
-    void release();
 
 public:
     /**

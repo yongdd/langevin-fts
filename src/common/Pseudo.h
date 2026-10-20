@@ -116,7 +116,7 @@ protected:
      */
     std::array<double, 9> recip_vec_;
 
-    int *negative_k_idx = nullptr;  ///< Mapping from k to -k indices (for complex fields)
+    std::vector<int> negative_k_idx;  ///< Mapping from k to -k indices (for complex fields)
 
     /**
      * @brief Boltzmann bond factors for full step (per ds_index).
@@ -129,7 +129,7 @@ protected:
      *
      * ds_index is 0-based (from ContourLengthMapping).
      */
-    std::map<int, std::map<std::string, double*>> boltz_bond;
+    std::map<int, std::map<std::string, std::vector<double>>> boltz_bond;
 
     /**
      * @brief Boltzmann bond factors for half step (per ds_index).
@@ -141,7 +141,7 @@ protected:
      *
      * ds_index is 0-based (from ContourLengthMapping).
      */
-    std::map<int, std::map<std::string, double*>> boltz_bond_half;
+    std::map<int, std::map<std::string, std::vector<double>>> boltz_bond_half;
 
     /**
      * @brief Unique ds values for each ds_index.
@@ -165,9 +165,9 @@ protected:
      * For non-periodic BC: uses k² = (π*n/L)² directly (orthogonal only).
      * Note: vᵢ has units of 1/L², not 1/L like Cartesian wavevector.
      */
-    double *fourier_basis_x = nullptr;
-    double *fourier_basis_y = nullptr;
-    double *fourier_basis_z = nullptr;
+    std::vector<double> fourier_basis_x;
+    std::vector<double> fourier_basis_y;
+    std::vector<double> fourier_basis_z;
 
     /**
      * @brief Deformation vector v⊗v off-diagonal components for stress calculation.
@@ -180,9 +180,9 @@ protected:
      * These are zero for non-periodic BC (orthogonal grids only).
      * Used for angle stress components in triclinic systems.
      */
-    double *fourier_basis_xy = nullptr;
-    double *fourier_basis_xz = nullptr;
-    double *fourier_basis_yz = nullptr;
+    std::vector<double> fourier_basis_xy;
+    std::vector<double> fourier_basis_xz;
+    std::vector<double> fourier_basis_yz;
 
     int total_grid;          ///< Total real grid size
     int total_complex_grid;  ///< Total "complex" grid size
@@ -221,8 +221,6 @@ protected:
     void update_weighted_fourier_basis_mixed();
 
 private:
-    /// Free all host arrays (also after a failed construction); idempotent.
-    void release();
 
 public:
     /**

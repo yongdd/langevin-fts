@@ -68,95 +68,51 @@ CudaCrysFFT::CudaCrysFFT(
     : nx_logical_(nx_logical),
       cell_para_(cell_para),
       d_boltz_current_(nullptr),
-      ds_current_(0.0),
-      dct_forward_(nullptr),
-      dct_backward_(nullptr),
-      d_work_(nullptr)
+      ds_current_(0.0)
 {
-    try
+    // The owning members release what was acquired if a step below throws.
+    // Validate even grid sizes
+    for (int d = 0; d < 3; ++d)
     {
-        // Validate even grid sizes
-        for (int d = 0; d < 3; ++d)
+        if (nx_logical_[d] % 2 != 0)
         {
-            if (nx_logical_[d] % 2 != 0)
-            {
-                throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
-            }
+            throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
         }
-
-        // Physical grid: (N/2) in each dimension
-        nx_physical_ = {
-            nx_logical_[0] / 2,
-            nx_logical_[1] / 2,
-            nx_logical_[2] / 2
-        };
-
-        M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
-        M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
-
-        // Normalization: 1/M_logical for round-trip
-        norm_factor_ = 1.0 / static_cast<double>(M_logical_);
-
-        // Create CudaRealTransform objects for DCT-II and DCT-III
-        dct_forward_ = new CudaRealTransform3D(
-            nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
-        dct_backward_ = new CudaRealTransform3D(
-            nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
-
-        // Allocate device work buffer
-        gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
     }
-    catch (...)
-    {
-        release();
-        throw;
-    }
+
+    // Physical grid: (N/2) in each dimension
+    nx_physical_ = {
+        nx_logical_[0] / 2,
+        nx_logical_[1] / 2,
+        nx_logical_[2] / 2
+    };
+
+    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+
+    // Normalization: 1/M_logical for round-trip
+    norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+
+    // Create CudaRealTransform objects for DCT-II and DCT-III
+    dct_forward_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+    dct_backward_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+
+    // Allocate device work buffer
+    d_work_.allocate(M_physical_);
 }
 
 //------------------------------------------------------------------------------
 // Destructor
 //------------------------------------------------------------------------------
-CudaCrysFFT::~CudaCrysFFT()
-{
-    release();
-}
-
-//------------------------------------------------------------------------------
-// Release (idempotent; tolerates a partly built object)
-//------------------------------------------------------------------------------
-void CudaCrysFFT::release()
-{
-    freeBoltzmann();
-    freeMultiplierCaches();
-    for (double* d_ptr : spare_tables_)
-        cudaFree(d_ptr);
-    spare_tables_.clear();
-
-    delete dct_forward_;
-    delete dct_backward_;
-    dct_forward_ = nullptr;
-    dct_backward_ = nullptr;
-    if (d_work_) cudaFree(d_work_);
-    d_work_ = nullptr;
-}
+CudaCrysFFT::~CudaCrysFFT() = default;   // the owning members release the tables, transforms and buffers
 
 //------------------------------------------------------------------------------
 // Free cached stress multipliers
 //------------------------------------------------------------------------------
 void CudaCrysFFT::freeMultiplierCaches()
 {
-    for (double*& d_k2 : d_axis_k2_)
-    {
-        if (d_k2)
-        {
-            cudaFree(d_k2);
-            d_k2 = nullptr;
-        }
-    }
-    for (auto& kv : d_axis_boltz_k2_)
-    {
-        if (kv.second) cudaFree(kv.second);
-    }
+    for (CudaDeviceBuffer<double>& d_k2 : d_axis_k2_)
+        d_k2.release();
     d_axis_boltz_k2_.clear();
 }
 
@@ -165,10 +121,6 @@ void CudaCrysFFT::freeMultiplierCaches()
 //------------------------------------------------------------------------------
 void CudaCrysFFT::freeBoltzmann()
 {
-    for (auto& kv : d_boltzmann_)
-    {
-        if (kv.second) cudaFree(kv.second);
-    }
     d_boltzmann_.clear();
     d_boltz_current_ = nullptr;
 }
@@ -192,43 +144,33 @@ void CudaCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
     // before update_laplacian_operator() can change the cell; set_cell_para() must
     // not run while a kernel may still read the old tables.
     for (auto& kv : d_boltzmann_)
-        if (kv.second) spare_tables_.push_back(kv.second);
+        if (!kv.second.empty()) spare_tables_.push_back(std::move(kv.second));
     d_boltzmann_.clear();
     d_boltz_current_ = nullptr;
-    for (double*& d_k2 : d_axis_k2_)
-    {
-        if (d_k2) spare_tables_.push_back(d_k2);
-        d_k2 = nullptr;
-    }
+    for (CudaDeviceBuffer<double>& d_k2 : d_axis_k2_)
+        if (!d_k2.empty()) spare_tables_.push_back(std::move(d_k2));
     for (auto& kv : d_axis_boltz_k2_)
-        if (kv.second) spare_tables_.push_back(kv.second);
+        if (!kv.second.empty()) spare_tables_.push_back(std::move(kv.second));
     d_axis_boltz_k2_.clear();
     ds_current_ = 0.0;
 }
 
-double* CudaCrysFFT::uploadTable(const std::vector<double>& h)
+CudaDeviceBuffer<double> CudaCrysFFT::uploadTable(const std::vector<double>& h)
 {
-    double* d_ptr = nullptr;
+    CudaDeviceBuffer<double> d_table;
     if (!spare_tables_.empty())
     {
-        d_ptr = spare_tables_.back();
+        d_table = std::move(spare_tables_.back());
         spare_tables_.pop_back();
     }
     else
     {
-        gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
+        d_table.allocate(M_physical_);
     }
-    try
-    {
-        gpu_error_check(cudaMemcpyAsync(d_ptr, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
-        gpu_error_check(cudaStreamSynchronize(stream_));
-    }
-    catch (...)
-    {
-        cudaFree(d_ptr);
-        throw;
-    }
-    return d_ptr;
+    // on failure the local releases the table
+    gpu_error_check(cudaMemcpyAsync(d_table, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
+    gpu_error_check(cudaStreamSynchronize(stream_));
+    return d_table;
 }
 
 //------------------------------------------------------------------------------
@@ -245,7 +187,7 @@ void CudaCrysFFT::set_contour_step(double ds)
         generateBoltzmann(ds);
     }
 
-    d_boltz_current_ = d_boltzmann_[ds];
+    d_boltz_current_ = d_boltzmann_[ds].get();
 }
 
 //------------------------------------------------------------------------------
@@ -287,16 +229,7 @@ void CudaCrysFFT::generateBoltzmann(double ds)
         }
     }
 
-    double* d_boltz = uploadTable(h_boltz);
-    try
-    {
-        d_boltzmann_[ds] = d_boltz;
-    }
-    catch (...)
-    {
-        cudaFree(d_boltz);
-        throw;
-    }
+    d_boltzmann_[ds] = uploadTable(h_boltz);
 }
 
 //------------------------------------------------------------------------------
@@ -321,12 +254,12 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{}, ev4{};
     if (profile_this)
     {
-        cudaEventCreate(&ev0);
-        cudaEventCreate(&ev1);
-        cudaEventCreate(&ev2);
-        cudaEventCreate(&ev3);
-        cudaEventCreate(&ev4);
-        cudaEventRecord(ev0, stream_);
+        gpu_error_check(cudaEventCreate(&ev0));
+        gpu_error_check(cudaEventCreate(&ev1));
+        gpu_error_check(cudaEventCreate(&ev2));
+        gpu_error_check(cudaEventCreate(&ev3));
+        gpu_error_check(cudaEventCreate(&ev4));
+        gpu_error_check(cudaEventRecord(ev0, stream_));
     }
 
     // Determine working buffer to minimize memory copies
@@ -342,19 +275,20 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     }
 
     if (profile_this)
-        cudaEventRecord(ev1, stream_);
+        gpu_error_check(cudaEventRecord(ev1, stream_));
 
     // Step 1: Forward DCT-II (in-place)
     dct_forward_->execute(d_work);
 
     if (profile_this)
-        cudaEventRecord(ev2, stream_);
+        gpu_error_check(cudaEventRecord(ev2, stream_));
 
     // Step 2: Apply Boltzmann factor (in-place)
     kernel_apply_boltzmann_crys<<<blocks, threads, 0, stream_>>>(d_work, d_boltz_current_, M_physical_);
+    gpu_error_check(cudaGetLastError());
 
     if (profile_this)
-        cudaEventRecord(ev3, stream_);
+        gpu_error_check(cudaEventRecord(ev3, stream_));
 
     // Step 3: Backward DCT-III (in-place)
     // Normalization is already included in Boltzmann factor (pre-multiplied in generateBoltzmann)
@@ -362,14 +296,14 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
 
     if (profile_this)
     {
-        cudaEventRecord(ev4, stream_);
-        cudaEventSynchronize(ev4);
+        gpu_error_check(cudaEventRecord(ev4, stream_));
+        gpu_error_check(cudaEventSynchronize(ev4));
         float t_copy = 0.0f, t_fwd = 0.0f, t_boltz = 0.0f, t_bwd = 0.0f, t_total = 0.0f;
-        cudaEventElapsedTime(&t_copy, ev0, ev1);
-        cudaEventElapsedTime(&t_fwd, ev1, ev2);
-        cudaEventElapsedTime(&t_boltz, ev2, ev3);
-        cudaEventElapsedTime(&t_bwd, ev3, ev4);
-        cudaEventElapsedTime(&t_total, ev0, ev4);
+        gpu_error_check(cudaEventElapsedTime(&t_copy, ev0, ev1));
+        gpu_error_check(cudaEventElapsedTime(&t_fwd, ev1, ev2));
+        gpu_error_check(cudaEventElapsedTime(&t_boltz, ev2, ev3));
+        gpu_error_check(cudaEventElapsedTime(&t_bwd, ev3, ev4));
+        gpu_error_check(cudaEventElapsedTime(&t_total, ev0, ev4));
 
         std::cout << "[CrysFFT-Pmmm profile] M_phys=" << M_physical_
                   << " copy(ms)=" << t_copy
@@ -419,7 +353,7 @@ void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double
 
     // Apply raw multiplier with round-trip normalization
     kernel_apply_multiplier_crys<<<blocks, threads, 0, stream_>>>(d_work, d_multiplier, norm_factor_, M_physical_);
-    gpu_error_check(cudaPeekAtLastError());
+    gpu_error_check(cudaGetLastError());
 
     // Backward DCT-III (in-place)
     dct_backward_->execute(d_work);
@@ -471,8 +405,8 @@ const double* CudaCrysFFT::get_axis_k2_multiplier(int axes)
     if (axes < 1 || axes > 7)
         throw std::invalid_argument("CudaCrysFFT::get_axis_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z)");
 
-    if (d_axis_k2_[axes] != nullptr)
-        return d_axis_k2_[axes];
+    if (!d_axis_k2_[axes].empty())
+        return d_axis_k2_[axes].get();
 
     std::vector<double> kx2, ky2, kz2;
     computeAxisK2Host(kx2, ky2, kz2);
@@ -480,9 +414,8 @@ const double* CudaCrysFFT::get_axis_k2_multiplier(int axes)
     for (int i = 0; i < M_physical_; ++i)
         h_mult[i] = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
 
-    double* d_ptr = uploadTable(h_mult);
-    d_axis_k2_[axes] = d_ptr;
-    return d_ptr;
+    d_axis_k2_[axes] = uploadTable(h_mult);
+    return d_axis_k2_[axes].get();
 }
 
 //------------------------------------------------------------------------------
@@ -496,7 +429,7 @@ const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axes, double coeff)
     auto key = std::make_pair(axes, coeff);
     auto it = d_axis_boltz_k2_.find(key);
     if (it != d_axis_boltz_k2_.end())
-        return it->second;
+        return it->second.get();
 
     std::vector<double> kx2, ky2, kz2;
     computeAxisK2Host(kx2, ky2, kz2);
@@ -509,16 +442,8 @@ const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axes, double coeff)
         h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
     }
 
-    double* d_ptr = uploadTable(h_mult);
-    try
-    {
-        d_axis_boltz_k2_[key] = d_ptr;
-    }
-    catch (...)
-    {
-        cudaFree(d_ptr);
-        throw;
-    }
-
+    CudaDeviceBuffer<double> d_table = uploadTable(h_mult);
+    const double* d_ptr = d_table.get();     // stays valid: the map takes the same allocation
+    d_axis_boltz_k2_[key] = std::move(d_table);
     return d_ptr;
 }

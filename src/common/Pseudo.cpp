@@ -50,22 +50,17 @@ Pseudo<T>::Pseudo(
 
         // Don't allocate Boltzmann factors here; use add_ds_value() instead
 
-        // Allocate Fourier basis arrays (diagonal terms)
-        fourier_basis_x = new double[M_COMPLEX];
-        fourier_basis_y = new double[M_COMPLEX];
-        fourier_basis_z = new double[M_COMPLEX];
-        // Cross-terms for non-orthogonal systems (only used for periodic BC)
-        fourier_basis_xy = new double[M_COMPLEX];
-        fourier_basis_xz = new double[M_COMPLEX];
-        fourier_basis_yz = new double[M_COMPLEX];
+        // Fourier basis arrays: diagonal terms, then the cross-terms for
+        // non-orthogonal systems (only used for periodic BC)
+        for (std::vector<double>* basis : {&fourier_basis_x, &fourier_basis_y, &fourier_basis_z,
+                                           &fourier_basis_xy, &fourier_basis_xz, &fourier_basis_yz})
+            basis->resize(M_COMPLEX);
 
         // Negative frequency mapping only for complex fields with periodic BC
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
             if (is_all_periodic())
-                negative_k_idx = new int[M_COMPLEX];
-            else
-                negative_k_idx = nullptr;
+                negative_k_idx.resize(M_COMPLEX);
         }
 
         update_weighted_fourier_basis();
@@ -73,8 +68,6 @@ Pseudo<T>::Pseudo(
     }
     catch (std::exception& exc)
     {
-        // The destructor does not run for a partly constructed object
-        release();
         throw_without_line_number(exc.what());
     }
 }
@@ -83,43 +76,7 @@ Pseudo<T>::Pseudo(
 // Destructor
 //------------------------------------------------------------------------------
 template <typename T>
-Pseudo<T>::~Pseudo()
-{
-    release();
-}
-
-template <typename T>
-void Pseudo<T>::release()
-{
-    // Delete diagonal basis arrays
-    delete[] fourier_basis_x;
-    delete[] fourier_basis_y;
-    delete[] fourier_basis_z;
-    // Delete cross-term basis arrays
-    delete[] fourier_basis_xy;
-    delete[] fourier_basis_xz;
-    delete[] fourier_basis_yz;
-    fourier_basis_x = fourier_basis_y = fourier_basis_z = nullptr;
-    fourier_basis_xy = fourier_basis_xz = fourier_basis_yz = nullptr;
-
-    // nullptr unless complex fields with periodic BC
-    delete[] negative_k_idx;
-    negative_k_idx = nullptr;
-
-    // Delete Boltzmann factors for all ds_index values
-    for (const auto& ds_pair : boltz_bond)
-    {
-        for (const auto& item : ds_pair.second)
-            delete[] item.second;
-    }
-    for (const auto& ds_pair : boltz_bond_half)
-    {
-        for (const auto& item : ds_pair.second)
-            delete[] item.second;
-    }
-    boltz_bond.clear();
-    boltz_bond_half.clear();
-}
+Pseudo<T>::~Pseudo() = default;   // the arrays are std::vector members
 
 //------------------------------------------------------------------------------
 // Check if all BCs are periodic
@@ -151,7 +108,7 @@ double* Pseudo<T>::get_boltz_bond(std::string monomer_type, int ds_index)
         throw_with_line_number("ds_index " + std::to_string(ds_index) + " not found in boltz_bond. Call add_ds_value() and finalize_ds_values() first.");
     if (!boltz_bond[ds_index].contains(monomer_type))
         throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in boltz_bond[" + std::to_string(ds_index) + "].");
-    return boltz_bond[ds_index][monomer_type];
+    return boltz_bond[ds_index][monomer_type].data();
 }
 
 template <typename T>
@@ -161,49 +118,49 @@ double* Pseudo<T>::get_boltz_bond_half(std::string monomer_type, int ds_index)
         throw_with_line_number("ds_index " + std::to_string(ds_index) + " not found in boltz_bond_half. Call add_ds_value() and finalize_ds_values() first.");
     if (!boltz_bond_half[ds_index].contains(monomer_type))
         throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in boltz_bond_half[" + std::to_string(ds_index) + "].");
-    return boltz_bond_half[ds_index][monomer_type];
+    return boltz_bond_half[ds_index][monomer_type].data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_x()
 {
-    return fourier_basis_x;
+    return fourier_basis_x.data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_y()
 {
-    return fourier_basis_y;
+    return fourier_basis_y.data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_z()
 {
-    return fourier_basis_z;
+    return fourier_basis_z.data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_xy()
 {
-    return fourier_basis_xy;
+    return fourier_basis_xy.data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_xz()
 {
-    return fourier_basis_xz;
+    return fourier_basis_xz.data();
 }
 
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_yz()
 {
-    return fourier_basis_yz;
+    return fourier_basis_yz.data();
 }
 
 template <typename T>
 const int* Pseudo<T>::get_negative_frequency_mapping()
 {
-    return negative_k_idx;
+    return negative_k_idx.empty() ? nullptr : negative_k_idx.data();
 }
 
 //------------------------------------------------------------------------------
@@ -545,8 +502,8 @@ template <typename T>
 void Pseudo<T>::update_weighted_fourier_basis_periodic()
 {
     update_weighted_fourier_basis_periodic_impl<T>(
-        fourier_basis_x, fourier_basis_y, fourier_basis_z,
-        fourier_basis_xy, fourier_basis_xz, fourier_basis_yz,
+        fourier_basis_x.data(), fourier_basis_y.data(), fourier_basis_z.data(),
+        fourier_basis_xy.data(), fourier_basis_xz.data(), fourier_basis_yz.data(),
         nx, recip_metric_);
 }
 
@@ -661,7 +618,7 @@ void Pseudo<T>::update_negative_frequency_mapping() {}
 template <>
 void Pseudo<std::complex<double>>::update_negative_frequency_mapping()
 {
-    if (!is_all_periodic() || negative_k_idx == nullptr)
+    if (!is_all_periodic() || negative_k_idx.empty())
         return;
 
     const int DIM = nx.size();
@@ -743,12 +700,8 @@ void Pseudo<T>::add_ds_value(int ds_index, double ds_value)
         for (const auto& item : bond_lengths)
         {
             std::string monomer_type = item.first;
-            // Insert null slots first, so a failed allocation leaves no
-            // unowned array behind (release() skips the null entries)
-            double*& bond = boltz_bond[ds_index][monomer_type];
-            double*& bond_half = boltz_bond_half[ds_index][monomer_type];
-            bond = new double[M_COMPLEX];
-            bond_half = new double[M_COMPLEX];
+            boltz_bond[ds_index][monomer_type].resize(M_COMPLEX);
+            boltz_bond_half[ds_index][monomer_type].resize(M_COMPLEX);
         }
     }
 }
@@ -826,8 +779,8 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
     for (const auto& [monomer_type, bond_length] : bond_lengths)
     {
         double bond_length_sq = bond_length * bond_length;
-        double* _boltz_bond = boltz_bond[ds_idx][monomer_type];
-        double* _boltz_bond_half = boltz_bond_half[ds_idx][monomer_type];
+        double* _boltz_bond = boltz_bond[ds_idx][monomer_type].data();
+        double* _boltz_bond_half = boltz_bond_half[ds_idx][monomer_type].data();
         double prefactor = -bond_length_sq * 4.0 * PI * PI * local_ds / 6.0;
 
         for (int i = 0; i < tnx[0]; i++)
@@ -926,8 +879,8 @@ void Pseudo<T>::update_boltz_bond_mixed_for_ds_index(int ds_idx)
     for (const auto& [monomer_type, bond_length] : bond_lengths)
     {
         double bond_length_sq = bond_length * bond_length;
-        double* _boltz_bond = boltz_bond[ds_idx][monomer_type];
-        double* _boltz_bond_half = boltz_bond_half[ds_idx][monomer_type];
+        double* _boltz_bond = boltz_bond[ds_idx][monomer_type].data();
+        double* _boltz_bond_half = boltz_bond_half[ds_idx][monomer_type].data();
 
         // Compute prefactors based on BC
         std::array<double, 3> xfactor;

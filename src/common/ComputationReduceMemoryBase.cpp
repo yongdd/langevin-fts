@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <memory>
 #include <cmath>
 
 #include "ComputationReduceMemoryBase.h"
@@ -15,7 +16,7 @@ ComputationReduceMemoryBase<T>::ComputationReduceMemoryBase(
     PropagatorComputationOptimizer* propagator_computation_optimizer,
     SpaceGroup* space_group,
     int first_segment,
-    const std::function<ComputationBackend<T>*()>& create_backend)
+    const std::function<std::unique_ptr<ComputationBackend<T>>()>& create_backend)
     : ComputationCommon<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend),
       first_segment(first_segment), checkpoint_interval(1)
 {

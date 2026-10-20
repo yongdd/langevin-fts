@@ -17,6 +17,7 @@
 #define CUDA_COMPUTATION_BACKEND_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -38,34 +39,35 @@ private:
     CudaComputationBox<T>* cb;
     SpaceGroup* space_group;
     std::string chain_model;
-    CudaSolver<T>* solver;
-    CudaSolverPseudoDiscrete<T>* solver_discrete;  ///< solver, when the chains are discrete
+    std::unique_ptr<CudaSolver<T>> solver;
+    CudaSolverPseudoDiscrete<T>* solver_discrete;  ///< solver, when the chains are discrete (not owning)
     int n_streams;
     int n_basis;
     bool force_off_diagonal_stress;
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< [kernels, copies] per stream index
 
-    CuDeviceData<T>* d_q_unity;                     ///< All ones (full grid)
-    double* d_q_mask;                               ///< Mask in the propagator basis, or nullptr
-    int* d_reduced_basis_indices;                   ///< Space group: reduced -> full index
-    int* d_full_to_reduced_map;                     ///< Space group: full -> reduced index
-    CuDeviceData<T>* d_q_pair[MAX_STREAMS][2];      ///< Stress: [q_1 | q_2] double buffer per stream
-    CuDeviceData<T>* d_segment_stress[MAX_STREAMS]; ///< Stress: six sums of one segment per stream
-    CuDeviceData<T>* d_block_stress[MAX_STREAMS];   ///< Stress: weighted sum over the segments of a block
-    T* h_block_stress[MAX_STREAMS];                 ///< Stress: pinned host copy of d_block_stress
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_unity;                     ///< All ones (full grid)
+    CudaDeviceBuffer<double> d_q_mask;                               ///< Mask in the propagator basis, or empty
+    CudaDeviceBuffer<int> d_reduced_basis_indices;                   ///< Space group: reduced -> full index (lent to the solver)
+    CudaDeviceBuffer<int> d_full_to_reduced_map;                     ///< Space group: full -> reduced index (lent to the solver)
+    CudaDeviceBuffer<CuDeviceData<T>> d_q_pair[MAX_STREAMS][2];      ///< Stress: [q_1 | q_2] double buffer per stream
+    CudaDeviceBuffer<CuDeviceData<T>> d_segment_stress[MAX_STREAMS]; ///< Stress: six sums of one segment per stream
+    CudaDeviceBuffer<CuDeviceData<T>> d_block_stress[MAX_STREAMS];   ///< Stress: weighted sum over the segments of a block
+    CudaPinnedBuffer<T> h_block_stress[MAX_STREAMS];                 ///< Stress: pinned host copy of d_block_stress
     cudaEvent_t kernel_done[MAX_STREAMS];           ///< Stress: kernel stream reached this point
     cudaEvent_t copy_done[MAX_STREAMS];             ///< Stress: copy stream reached this point
-    CuDeviceData<T>* d_sum;                         ///< Scratch of sum_to_host()
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum;        ///< Scratch of sum_to_host()
 
     /// Discrete chains with a space group: exp(-w ds) in the reduced basis
-    std::map<std::string, CuDeviceData<T>*> d_exp_dw_reduced;
+    std::map<std::string, CudaDeviceBuffer<CuDeviceData<T>>> d_exp_dw_reduced;
 
     static CuDeviceData<T>* raw(BackendArray<T>* a) { return reinterpret_cast<CuDeviceData<T>*>(a); }
     static CuDeviceData<T>* raw(CheckpointArray<T>* a) { return reinterpret_cast<CuDeviceData<T>*>(a); }
     static BackendArray<T>* wrap(CuDeviceData<T>* a) { return reinterpret_cast<BackendArray<T>*>(a); }
 
-    /// Free everything this object holds; safe on a partly constructed object.
+    /// Destroy the solver, then the streams and events it runs on (the device
+    /// buffers are owning members); safe on a partly constructed object.
     void release();
 
 public:

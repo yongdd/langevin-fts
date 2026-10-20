@@ -40,36 +40,15 @@ CudaCircularBuffer<T>::CudaCircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    d_elems = new CuDeviceData<T>*[length]();
-    try
-    {
-        for(int i=0; i<length; i++)
-        {
-            gpu_error_check(cudaMalloc((void**)&d_elems[i], sizeof(T)*width));
-            gpu_error_check(cudaMemset(d_elems[i], 0,       sizeof(T)*width));
-        }
-    }
-    catch (...)
-    {
-        release();
-        throw;
-    }
-}
-template<typename T>
-CudaCircularBuffer<T>::~CudaCircularBuffer()
-{
-    release();
-}
-template<typename T>
-void CudaCircularBuffer<T>::release()
-{
-    if (d_elems == nullptr)
-        return;
+    d_elems.resize(length);
     for(int i=0; i<length; i++)
-        cudaFree(d_elems[i]);
-    delete[] d_elems;
-    d_elems = nullptr;
+    {
+        d_elems[i].allocate(width);
+        gpu_error_check(cudaMemset(d_elems[i], 0, sizeof(T)*width));
+    }
 }
+template<typename T>
+CudaCircularBuffer<T>::~CudaCircularBuffer() = default;
 template<typename T>
 void CudaCircularBuffer<T>::reset()
 {
@@ -89,7 +68,7 @@ template<typename T>
 CuDeviceData<T>* CudaCircularBuffer<T>::get_array(int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return d_elems[i];
+    return d_elems[i].get();
 }
 
 // Explicit template instantiation
