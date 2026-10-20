@@ -21,6 +21,8 @@ This document describes the class hierarchies, design patterns, and development 
 
 ## 1. Overview
 
+[Architecture.md](Architecture.md) shows all classes, their ownership and one iteration through them on one page.
+
 The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU, GPU) through a unified interface. All major computational classes are templates parameterized on:
 
 - `T` = `double` or `std::complex<double>` for real or complex field theories
@@ -57,18 +59,23 @@ AbstractFactory<T>                    [Abstract Base]
 ├── create_anderson_mixing()          [pure virtual]
 └── display_info()                    [pure virtual]
         │
-        ├── FftwFactory<T>             [CPU - FFTW backend]
-        │   └── Creates: CpuComputationBox, CpuComputation*,
-        │                CpuAndersonMixing, CpuSolver*
+        ├── FftwFactory<T>             [CPU - FFTW transforms]
+        │   └── Creates: CpuComputationBox, CpuAndersonMixing,
+        │                Computation* with a CpuComputationBackend
         │
-        ├── MklFactory<T>              [CPU - MKL backend]
-        │   └── Creates: CpuComputationBox, CpuComputation*,
-        │                CpuAndersonMixing, CpuSolver*
+        ├── MklFactory<T>              [CPU - MKL transforms]
+        │   └── Creates: CpuComputationBox, CpuAndersonMixing,
+        │                Computation* with a CpuComputationBackend
         │
-        └── CudaFactory<T>            [GPU Implementation]
-            └── Creates: CudaComputationBox, CudaComputation*,
-                         CudaAndersonMixing*, CudaSolver*
+        └── CudaFactory<T>            [GPU]
+            └── Creates: CudaComputationBox, CudaAndersonMixing[ReduceMemory],
+                         Computation* with a CudaComputationBackend
 ```
+
+`Computation*` is one of the platform-neutral computations (`ComputationContinuous`,
+`ComputationDiscrete`, `ComputationReduceMemoryContinuous`,
+`ComputationReduceMemoryDiscrete`), chosen from the chain model and `reduce_memory`. The
+backend creates the solver (`CpuSolver*` or `CudaSolver*`) from the numerical method.
 
 ### Platform Selection
 

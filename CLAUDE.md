@@ -242,8 +242,9 @@ The codebase uses the **abstract factory pattern** to support multiple computati
   - `src/platforms/cpu/`: CPU implementations using MKL or FFTW for FFT and linear algebra
   - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
 - **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
+- **Computation and backend**: the propagator computations (`src/common/Computation*.cpp`) are written once; every grid operation goes through `ComputationBackend` (`CpuComputationBackend`, `CudaComputationBackend`), which owns the platform's solver
 
-When adding new computational features, you must implement them for both platforms unless explicitly platform-specific.
+When adding new computational features, you must implement them for both platforms unless explicitly platform-specific: the order of a computation goes into `src/common/Computation*.cpp` once, new grid operations into both backends, numerical methods into both solver families. `docs/internals/Architecture.md` shows the whole class structure on one page.
 
 ### Core Components
 
@@ -429,7 +430,7 @@ Reduce mixing parameters:
 
 ### Where to Look When Things Go Wrong
 
-1. **Propagator issues**: `src/common/PropagatorComputation.h`, platform-specific solvers in `src/platforms/*/`
+1. **Propagator issues**: the computation order in `src/common/Computation*.cpp`, the grid operations in `src/platforms/*/C*ComputationBackend.*`, the solvers in `src/platforms/*/`
 2. **FFT problems**: `src/platforms/cpu/FftwFFT.cpp` or `src/platforms/cuda/CudaFFT.cu`
 3. **SCFT convergence**: `src/python/scft.py`, check Anderson mixing parameters
 4. **Memory errors**: Check `reduce_memory` option, verify GPU memory availability
@@ -651,6 +652,7 @@ Results must match:
 
 - **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
 - **Examples**: `examples/scft/`, `examples/lfts/` and `examples/clfts/` contain runnable simulation scripts
+- **Architecture**: `docs/internals/Architecture.md` (classes, ownership and one iteration on one page)
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 

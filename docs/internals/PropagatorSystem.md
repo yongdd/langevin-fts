@@ -270,27 +270,35 @@ std::vector<std::vector<std::tuple<std::string, int, int>>> schedule;
 
 ## 6. Execution
 
-### 6.1 GPU (CUDA Streams)
+The schedule is executed once for both platforms, in `ComputationContinuous::compute_propagators`
+and `ComputationDiscrete::compute_propagators` (`src/common`). The propagators of one group run
+concurrently on OpenMP threads; thread `i` passes stream index `i` to the backend, which runs the
+work on that OpenMP thread (CPU) or queues it on CUDA stream `i` (GPU). After each group the
+backend synchronizes, so the next group sees every propagator it depends on.
 
 ```cpp
-for (size_t job = 0; job < parallel_job->size(); job++) {
-    cudaStreamSynchronize(streams[job % n_streams]);
-    // Launch kernel on assigned stream
+for (const auto& parallel_job : sc->get_schedule())
+{
+    ParallelErrors errors;
+    #pragma omp parallel for num_threads(n_streams)
+    for (size_t job = 0; job < parallel_job.size(); job++)
+    {
+        errors.run([&]
+        {
+            const int STREAM = omp_get_thread_num();
+            // initial condition, then backend->advance_propagator(STREAM, q[n], q[n+1], ...)
+        });
+    }
+    backend->synchronize();   // CPU: nothing to do; CUDA: cudaDeviceSynchronize
+    errors.rethrow();         // an exception inside the loop reaches the caller
 }
 ```
 
-Stream count: `min(OMP_NUM_THREADS, MAX_STREAMS)` when the `OMP_NUM_THREADS` environment variable is set, otherwise `MAX_STREAMS`. The cap `MAX_STREAMS` (= 4) is defined in `CudaCommon.h`.
+Number of streams:
 
-### 6.2 CPU (OpenMP Threads)
-
-```cpp
-#pragma omp parallel for num_threads(n_streams)
-for (size_t job = 0; job < parallel_job->size(); job++) {
-    // Each thread computes a different propagator
-}
-```
-
-Default: 4 threads (configurable via `OMP_NUM_THREADS`)
+- CPU: `OMP_NUM_THREADS` when it is set, otherwise 4.
+- CUDA: `min(OMP_NUM_THREADS, MAX_STREAMS)` when `OMP_NUM_THREADS` is set, otherwise `MAX_STREAMS` (= 4, defined in `CudaCommon.h`).
+- Reduce-memory mode: one stream; the propagators are computed one at a time in schedule order.
 
 ---
 

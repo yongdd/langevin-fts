@@ -243,7 +243,7 @@ The measured savings (~92%) are slightly higher than this estimate because the w
 - Complex architectures with many blocks
 - Running multiple simulations concurrently
 
-**Restriction (space-group symmetry)**: `reduce_memory=True` is not available for discrete chains combined with space-group symmetry — the CPU implementation throws "Space group symmetry is not yet supported for discrete chains with reduce_memory=True." (On CUDA, the reduce-memory mode has the same restriction; standard mode supports discrete chains with a space group on both platforms.) Use continuous chains, standard mode, or drop the space group.
+`reduce_memory=True` works wherever the standard mode does (every chain model, numerical method, boundary condition and space group, on both platforms) and gives the same results.
 
 ### Quick Reference
 
@@ -258,11 +258,11 @@ The measured savings (~92%) are slightly higher than this estimate because the w
 
 ### Checkpointing Algorithm
 
-The checkpointing algorithm stores propagators only at strategic positions and recomputes intermediate values on-the-fly. For a propagator $q(\mathbf{r}, s)$ with $N$ segments:
+The checkpointing algorithm stores propagators only at strategic positions and recomputes intermediate values on-the-fly. Here $N$ is the total number of segments of all blocks, as in [Memory Scaling](#memory-scaling); for a single linear chain it is the number of segments of the chain:
 
 1. **During propagator computation**:
    - Compute propagator step by step: $q(\mathbf{r}, s+\Delta s) = \Gamma[q(\mathbf{r}, s)]$
-   - Store at checkpoint positions: segment 1, $N$, junctions, and every $2\sqrt{N}$ steps
+   - Store at checkpoint positions: the first segment of every propagator (0 for continuous, 1 for discrete chains), the segments other propagators start from, the start of every scheduled job, the segments of the partition functions, and every $\lceil 2\sqrt{N}\rceil$ steps; discrete chains also keep the half-bond states at junctions
    - Discard intermediate values
 
 2. **During concentration calculation** (block-based algorithm):
@@ -276,8 +276,8 @@ The checkpointing algorithm stores propagators only at strategic positions and r
 
 ### Block-Based Computation
 
-The concentration calculation requires products of forward and backward propagators:
-$$\phi(\mathbf{r}) = \sum_{n=0}^{N} c_n \cdot q(\mathbf{r}, n) \cdot q^\dagger(\mathbf{r}, N-n)$$
+The concentration of a block with $N_B$ segments requires products of forward and backward propagators:
+$$\phi(\mathbf{r}) = \sum_{n=0}^{N_B} c_n \cdot q(\mathbf{r}, n) \cdot q^\dagger(\mathbf{r}, N_B-n)$$
 
 Instead of recomputing all $q$ values at once, the block-based algorithm:
 1. Divides $n$ into blocks of size $2\sqrt{N}$
@@ -287,18 +287,22 @@ Instead of recomputing all $q$ values at once, the block-based algorithm:
 
 This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing redundant computation.
 
-### CUDA-Specific Optimizations
+### Implementation
 
-- **Pinned memory** (`cudaMallocHost`): Enables async host-device transfers
-- **Dual streams**: Overlap kernel execution with memory transfers
-- **Minimal device allocation**: Fixed workspace regardless of chain length
+Both platforms run the same code (`src/common/ComputationReduceMemory*.cpp`); the backend only
+decides where the arrays live.
 
-### CPU-Specific Details
-
-- **Block-based computation**: Processes concentration in blocks of $2\sqrt{N}$ for efficient checkpoint reuse
-- **Checkpoint spacing**: Stores $\sim\sqrt{N}/2$ checkpoints at intervals of $2\sqrt{N}$ segments
-- **Single-threaded recomputation**: Minimizes memory during checkpoint reconstruction
-- **FFT**: MKL or FFTW for spectral operations
+- **Checkpoints** are `CheckpointArray`s: pinned host memory (`cudaMallocHost`) on CUDA, system
+  RAM on the CPU. On CUDA they are copied asynchronously on stream 0, the only stream in this
+  mode; on the CPU they are plain copies.
+- **Recomputation workspace**: up to $\lceil 2\sqrt{N}\rceil$ segments of one propagator
+  (`q_recal`, no more than the longest block needs) plus four ping-pong fields, in GPU memory on
+  CUDA. The workspace therefore grows as $\sqrt{N}$.
+- **One stream**: propagators are computed one at a time, which keeps the workspace to a single
+  set of buffers.
+- **Same arithmetic as the standard mode**: the recomputed segments equal the stored ones, and
+  every sum over segment pairs runs in the same order, so both modes give identical results.
+- **Transforms**: MKL or FFTW on the CPU, cuFFT and the CUDA DCT/DST kernels on CUDA
 
 ## Troubleshooting
 
