@@ -686,6 +686,8 @@ void ComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
     validation::require_same_size(new_lx.size(), (size_t)dim, "new lx", "dim");
     validation::require_all_positive(new_lx, "new lx");
+    if (space_group_ != nullptr)
+        space_group_->check_cell(new_lx, get_angles_degrees());
 
     lx = new_lx;
 
@@ -721,6 +723,8 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
         validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
             "angles[" + std::to_string(i) + "]");
     }
+    if (space_group_ != nullptr)
+        space_group_->check_cell(new_lx, full_angles);
 
     lx = new_lx;
 
@@ -765,6 +769,8 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
 template <typename T>
 void ComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
+    if (sg != nullptr)
+        sg->check_cell(lx, get_angles_degrees());
     space_group_ = sg;
 
     if (sg != nullptr)

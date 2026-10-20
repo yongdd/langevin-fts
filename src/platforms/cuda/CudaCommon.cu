@@ -120,10 +120,10 @@ int CudaCommon::get_n_threads()
 // MAX_GRID_THREADS threads (see GridLimits.h)
 void CudaCommon::check_launch(int n_blocks, int n_threads)
 {
-    if (n_blocks < 1 || n_threads < 1 ||
+    if (n_blocks < 1 || n_threads < 1 || n_threads > 1024 ||
         static_cast<long long>(n_blocks) * n_threads > MAX_GRID_THREADS)
         throw_with_line_number("The CUDA launch of " + std::to_string(n_blocks) + " blocks x " +
-            std::to_string(n_threads) + " threads is not supported: at most " +
+            std::to_string(n_threads) + " threads is not supported: at most 1024 threads per block and " +
             std::to_string(MAX_GRID_THREADS) + " threads in total (LFTS_GPU_NUM_BLOCKS, LFTS_GPU_NUM_THREADS).");
 }
 void CudaCommon::set_n_blocks(int n_blocks)

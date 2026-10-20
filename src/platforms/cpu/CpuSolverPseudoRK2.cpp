@@ -158,7 +158,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         const bool crysfft_path = this->use_crysfft() && this->space_group_ != nullptr;
 
         // Work array, kept per thread (called from OpenMP parallel regions)
-        thread_local std::vector<double> k_q_in;
+        typename CpuSolverPseudoBase<T>::WorkArrays& work = this->work_arrays();
+        std::vector<double>& k_q_in = work.k_1;
         if (!crysfft_path)
             k_q_in.resize(coeff_size);
 
@@ -172,7 +173,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 
         // Thread-local buffers for expand/reduce (called from OpenMP parallel regions);
         // the CrysFFT path reads the reduced basis directly
-        thread_local std::vector<T> q_full_in_local, q_full_out_local;
+        std::vector<T>& q_full_in_local = work.q_full_in;
+        std::vector<T>& q_full_out_local = work.q_full_out;
 
         if (this->space_group_ != nullptr && !crysfft_path)
         {
@@ -200,8 +202,8 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         {
             if (crysfft_path)
             {
-                thread_local std::vector<double> phys_in;
-                thread_local std::vector<double> phys_out;
+                std::vector<double>& phys_in = work.phys_in;
+                std::vector<double>& phys_out = work.phys_out;
                 const int M_phys = this->get_crysfft_physical_size();
                 const bool identity = this->use_crysfft_identity_map();
                 if (static_cast<int>(phys_in.size()) != M_phys)

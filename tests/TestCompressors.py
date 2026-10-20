@@ -18,10 +18,13 @@ from polymerfts import LR, LRAM, PlatformSelector
 def cpu_platform():
     avail = PlatformSelector.avail_platforms()
     cpu = [p for p in avail if p.startswith("cpu")]
-    return "cpu-mkl" if "cpu-mkl" in avail else cpu[0]
+    return "cpu-mkl" if "cpu-mkl" in avail else (cpu[0] if cpu else None)
 
 
 def main():
+    if cpu_platform() is None:
+        print("SKIP: no CPU platform in this build")
+        return
     failed = []
     nx, lx = [8, 6, 4], [2.0, 1.5, 1.0]
     m = int(np.prod(nx))
@@ -33,7 +36,7 @@ def main():
 
     def residual(w):
         """-dH/dw = J(k) (w* - w) for a flat or (1, M) field."""
-        r = np.fft.irfftn(jk*np.fft.rfftn(np.reshape(w_star - np.ravel(w), nx)), nx)
+        r = np.fft.irfftn(jk*np.fft.rfftn(np.reshape(w_star - np.ravel(w), nx)), nx, axes=tuple(range(len(nx))))
         return np.reshape(r, np.shape(w))
 
     factory = PlatformSelector.create_factory(cpu_platform(), False, "real")

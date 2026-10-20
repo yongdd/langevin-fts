@@ -182,6 +182,24 @@ public:
     /// rhombohedral-axes settings of R groups (3-fold about [111]: a = b = c,
     /// alpha = beta = gamma) and for every other crystal system.
     bool uses_hexagonal_axes() const;
+
+    /**
+     * @brief Throw unless the cell belongs to the crystal system of the group.
+     *
+     * Otherwise the symmetry operations are not isometries of the box and a run
+     * converges to a constrained, unphysical state. Cubic: a = b = c and right
+     * angles; tetragonal: a = b and right angles; orthorhombic: right angles;
+     * hexagonal and hexagonal-axes trigonal: a = b, alpha = beta = 90,
+     * gamma = 120; rhombohedral-axes trigonal: a = b = c and
+     * alpha = beta = gamma. Lengths and angles agree to a relative 1e-6.
+     * Monoclinic and triclinic: every rotation preserves the cell metric
+     * (R^T G R = G to a relative 1e-6), which puts the monoclinic unique
+     * axis perpendicular to the other two.
+     *
+     * @param lx         Box lengths [a, b, c]
+     * @param angles_deg Lattice angles [alpha, beta, gamma] in degrees
+     */
+    void check_cell(const std::vector<double>& lx, const std::vector<double>& angles_deg) const;
     const std::vector<int>& get_nx() const { return nx_; }
     int get_total_grid() const { return total_grid_; }
     int get_n_reduced_basis() const { return n_irreducible_; }

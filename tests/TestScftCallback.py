@@ -19,7 +19,7 @@ from polymerfts import SCFT, IterationInfo, PlatformSelector
 def cpu_platform():
     avail = PlatformSelector.avail_platforms()
     cpu = [p for p in avail if p.startswith("cpu")]
-    return "cpu-mkl" if "cpu-mkl" in avail else cpu[0]
+    return "cpu-mkl" if "cpu-mkl" in avail else (cpu[0] if cpu else None)
 
 
 def lamella_params():
@@ -43,6 +43,9 @@ def initial_fields():
 
 
 def main():
+    if cpu_platform() is None:
+        print("SKIP: no CPU platform in this build")
+        return
     failed = []
 
     # A callback returning False stops the run

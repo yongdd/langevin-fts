@@ -154,7 +154,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 92 | ~7 min | Development validation |
+| **Full** | `ctest` | 93 | ~7 min | Development validation |
 
 ### Running Tests
 

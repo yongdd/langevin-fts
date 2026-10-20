@@ -23,7 +23,7 @@ from polymerfts import SCFT, LFTS, CLFTS, PlatformSelector, load_config, ConfigE
 def cpu_platform():
     avail = PlatformSelector.avail_platforms()
     cpu = [p for p in avail if p.startswith("cpu")]
-    return "cpu-mkl" if "cpu-mkl" in avail else cpu[0]
+    return "cpu-mkl" if "cpu-mkl" in avail else (cpu[0] if cpu else None)
 
 
 YAML = """
@@ -50,6 +50,9 @@ complex: "(-8)**0.5*np.pi"
 
 
 def main():
+    if cpu_platform() is None:
+        print("SKIP: no CPU platform in this build")
+        return
     failed = []
     cwd = os.getcwd()
     with tempfile.TemporaryDirectory() as d:

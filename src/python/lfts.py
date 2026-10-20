@@ -93,7 +93,7 @@ class LR:
         nx = self.nx
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.jk
-        w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx)*np.prod(nx), np.shape(w_current))
+        w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx, axes=tuple(range(len(nx))))*np.prod(nx), np.shape(w_current))
 
         return w_current + w_diff
 

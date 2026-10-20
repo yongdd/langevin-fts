@@ -165,8 +165,11 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         const int M_out = crysfft_path ? M_reduced : M_full;
 
         // Work arrays, kept per thread (called from OpenMP parallel regions)
-        thread_local std::vector<T> q_out1, q_out2;
-        thread_local std::vector<double> k_q_in1, k_q_in2;
+        typename CpuSolverPseudoBase<T>::WorkArrays& work = this->work_arrays();
+        std::vector<T>& q_out1 = work.q_1;
+        std::vector<T>& q_out2 = work.q_2;
+        std::vector<double>& k_q_in1 = work.k_1;
+        std::vector<double>& k_q_in2 = work.k_2;
         q_out1.resize(M_out);
         q_out2.resize(M_out);
         if (!crysfft_path)
@@ -187,7 +190,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         T* fft_in = q_in;
 
         // Thread-local buffer for expand (called from OpenMP parallel regions)
-        thread_local std::vector<T> q_full_in_local;
+        std::vector<T>& q_full_in_local = work.q_full_in;
 
         if (this->space_group_ != nullptr && !crysfft_path)
         {
@@ -203,8 +206,8 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         {
             if (crysfft_path)
             {
-                thread_local std::vector<double> phys_in;
-                thread_local std::vector<double> phys_out;
+                std::vector<double>& phys_in = work.phys_in;
+                std::vector<double>& phys_out = work.phys_out;
                 const int M_phys = this->get_crysfft_physical_size();
                 const bool identity = this->use_crysfft_identity_map();
                 if (static_cast<int>(phys_in.size()) != M_phys)
@@ -264,8 +267,8 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         {
             if (crysfft_path)
             {
-                thread_local std::vector<double> phys_in;
-                thread_local std::vector<double> phys_out;
+                std::vector<double>& phys_in = work.phys_in;
+                std::vector<double>& phys_out = work.phys_out;
                 const int M_phys = this->get_crysfft_physical_size();
                 const bool identity = this->use_crysfft_identity_map();
                 if (static_cast<int>(phys_in.size()) != M_phys)

@@ -19,7 +19,7 @@ from polymerfts import SCFT, SCFTResult, SpaceGroup, PlatformSelector
 def cpu_platform():
     avail = PlatformSelector.avail_platforms()
     cpu = [p for p in avail if p.startswith("cpu")]
-    return "cpu-mkl" if "cpu-mkl" in avail else cpu[0]
+    return "cpu-mkl" if "cpu-mkl" in avail else (cpu[0] if cpu else None)
 
 
 def params(nx, lx, **extra):
@@ -40,6 +40,9 @@ def params(nx, lx, **extra):
 
 
 def main():
+    if cpu_platform() is None:
+        print("SKIP: no CPU platform in this build")
+        return
     failed = []
 
     # ---- 1D lamella: result = attributes, full-grid fields, restart from result.w

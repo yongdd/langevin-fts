@@ -563,8 +563,8 @@ void SpaceGroup::to_reduced_basis(const double* full_field, double* reduced_fiel
 
     for (int f = 0; f < n_fields; ++f)
     {
-        const double* src = full_field + f * total_grid_;
-        double* dst = reduced_field + f * n_reduced;
+        const double* src = full_field + static_cast<size_t>(f) * total_grid_;
+        double* dst = reduced_field + static_cast<size_t>(f) * n_reduced;
 
         for (int i = 0; i < n_reduced; ++i)
         {
@@ -580,8 +580,8 @@ void SpaceGroup::reduced_to_irreducible(const double* reduced_field, double* irr
         const int n_reduced = n_irreducible_;
         for (int f = 0; f < n_fields; ++f)
         {
-            std::memcpy(irreducible_field + f * n_reduced,
-                        reduced_field + f * n_reduced,
+            std::memcpy(irreducible_field + static_cast<size_t>(f) * n_reduced,
+                        reduced_field + static_cast<size_t>(f) * n_reduced,
                         sizeof(double) * n_reduced);
         }
         return;
@@ -595,8 +595,8 @@ void SpaceGroup::reduced_to_irreducible(const double* reduced_field, double* irr
 
     for (int f = 0; f < n_fields; ++f)
     {
-        const double* src = reduced_field + f * n_reduced;
-        double* dst = irreducible_field + f * n_irreducible;
+        const double* src = reduced_field + static_cast<size_t>(f) * n_reduced;
+        double* dst = irreducible_field + static_cast<size_t>(f) * n_irreducible;
 
         std::fill(orbit_sums.begin(), orbit_sums.end(), 0.0);
         std::fill(orbit_weights.begin(), orbit_weights.end(), 0);
@@ -626,8 +626,8 @@ void SpaceGroup::irreducible_to_reduced(const double* irreducible_field, double*
         const int n_reduced = n_irreducible_;
         for (int f = 0; f < n_fields; ++f)
         {
-            std::memcpy(reduced_field + f * n_reduced,
-                        irreducible_field + f * n_reduced,
+            std::memcpy(reduced_field + static_cast<size_t>(f) * n_reduced,
+                        irreducible_field + static_cast<size_t>(f) * n_reduced,
                         sizeof(double) * n_reduced);
         }
         return;
@@ -638,8 +638,8 @@ void SpaceGroup::irreducible_to_reduced(const double* irreducible_field, double*
 
     for (int f = 0; f < n_fields; ++f)
     {
-        const double* src = irreducible_field + f * n_irreducible;
-        double* dst = reduced_field + f * n_reduced;
+        const double* src = irreducible_field + static_cast<size_t>(f) * n_irreducible;
+        double* dst = reduced_field + static_cast<size_t>(f) * n_reduced;
 
         for (int i = 0; i < n_reduced; ++i)
         {
@@ -655,8 +655,8 @@ void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_fi
 
     for (int f = 0; f < n_fields; ++f)
     {
-        const double* src = reduced_field + f * n_reduced;
-        double* dst = full_field + f * total_grid_;
+        const double* src = reduced_field + static_cast<size_t>(f) * n_reduced;
+        double* dst = full_field + static_cast<size_t>(f) * total_grid_;
 
         for (int i = 0; i < total_grid_; ++i)
         {
@@ -676,7 +676,7 @@ void SpaceGroup::symmetrize(double* field, int n_fields) const
 
     for (int f = 0; f < n_fields; ++f)
     {
-        double* data = field + f * total_grid_;
+        double* data = field + static_cast<size_t>(f) * total_grid_;
 
         // Reset orbit sums
         std::fill(orbit_sums.begin(), orbit_sums.end(), 0.0);
@@ -720,7 +720,7 @@ void SpaceGroup::symmetrize_reduced_basis(double* reduced_field, int n_fields) c
 
     for (int f = 0; f < n_fields; ++f)
     {
-        double* data = reduced_field + f * n_reduced;
+        double* data = reduced_field + static_cast<size_t>(f) * n_reduced;
 
         std::fill(orbit_sums.begin(), orbit_sums.end(), 0.0);
         std::fill(orbit_weights.begin(), orbit_weights.end(), 0);
@@ -1305,6 +1305,76 @@ void SpaceGroup::enable_physical_basis(PhysicalBasis basis)
         case PhysicalBasis::M3:      enable_m3_physical_basis(); break;
         case PhysicalBasis::ZMirror: enable_z_mirror_physical_basis(); break;
     }
+}
+
+void SpaceGroup::check_cell(const std::vector<double>& lx, const std::vector<double>& angles_deg) const
+{
+    if (lx.size() != 3 || angles_deg.size() != 3)
+        return;
+    auto same = [](double a, double b) { return std::abs(a - b) <= 1e-6 * std::max({std::abs(a), std::abs(b), 1.0}); };
+    const bool right_angles = same(angles_deg[0], 90.0) && same(angles_deg[1], 90.0) && same(angles_deg[2], 90.0);
+    const bool z_right = same(angles_deg[0], 90.0) && same(angles_deg[1], 90.0);
+
+    bool ok = true;
+    std::string need;
+    if (crystal_system_ == "Cubic")
+    {
+        ok = same(lx[0], lx[1]) && same(lx[0], lx[2]) && right_angles;
+        need = "lx[0] = lx[1] = lx[2] and an orthogonal cell (angles [90, 90, 90])";
+    }
+    else if (crystal_system_ == "Tetragonal")
+    {
+        ok = same(lx[0], lx[1]) && right_angles;
+        need = "lx[0] = lx[1] and an orthogonal cell (angles [90, 90, 90])";
+    }
+    else if (crystal_system_ == "Orthorhombic")
+    {
+        ok = right_angles;
+        need = "an orthogonal cell (angles [90, 90, 90])";
+    }
+    else if (crystal_system_ == "Hexagonal" || (crystal_system_ == "Trigonal" && uses_hexagonal_axes()))
+    {
+        ok = same(lx[0], lx[1]) && z_right && same(angles_deg[2], 120.0);
+        need = "lx[0] = lx[1] and angles [90, 90, 120]";
+    }
+    else if (crystal_system_ == "Trigonal")
+    {
+        ok = same(lx[0], lx[1]) && same(lx[0], lx[2]) && same(angles_deg[0], angles_deg[1])
+             && same(angles_deg[0], angles_deg[2]);
+        need = "lx[0] = lx[1] = lx[2] and alpha = beta = gamma (rhombohedral-axes setting)";
+    }
+    else
+    {
+        // Monoclinic and triclinic: every rotation R (lattice coordinates) must
+        // preserve the metric G of the cell, R^T G R = G; for a monoclinic group
+        // this puts the unique axis perpendicular to the other two
+        const double deg = std::acos(-1.0) / 180.0;
+        const double ca = std::cos(angles_deg[0] * deg), cb = std::cos(angles_deg[1] * deg), cg = std::cos(angles_deg[2] * deg);
+        const double G[3][3] = {{lx[0] * lx[0],      lx[0] * lx[1] * cg, lx[0] * lx[2] * cb},
+                                {lx[0] * lx[1] * cg, lx[1] * lx[1],      lx[1] * lx[2] * ca},
+                                {lx[0] * lx[2] * cb, lx[1] * lx[2] * ca, lx[2] * lx[2]}};
+        double g_max = 0.0;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                g_max = std::max(g_max, std::abs(G[i][j]));
+        for (const auto& Rot : rotations_)
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                {
+                    double g = 0.0;
+                    for (int k = 0; k < 3; ++k)
+                        for (int l = 0; l < 3; ++l)
+                            g += Rot[k][i] * G[k][l] * Rot[l][j];
+                    if (std::abs(g - G[i][j]) > 1e-6 * g_max)
+                        ok = false;
+                }
+        need = "the unique axis perpendicular to the other two (every symmetry operation must preserve the cell metric)";
+    }
+    if (!ok)
+        throw_with_line_number("The cell does not match the " + crystal_system_ + " crystal system of space group " +
+            spacegroup_symbol_ + ": it needs " + need + ". Got lx = [" + std::to_string(lx[0]) + ", " +
+            std::to_string(lx[1]) + ", " + std::to_string(lx[2]) + "], angles = [" + std::to_string(angles_deg[0]) +
+            ", " + std::to_string(angles_deg[1]) + ", " + std::to_string(angles_deg[2]) + "].");
 }
 
 bool SpaceGroup::uses_hexagonal_axes() const

@@ -39,6 +39,9 @@
 #include <map>
 #include <complex>
 #include <memory>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 #include "Exception.h"
 #include "Molecules.h"
@@ -89,6 +92,33 @@ template <typename T>
 class CpuSolverPseudoBase : public CpuSolver<T>
 {
 protected:
+    /**
+     * @brief Work arrays of one calling thread.
+     *
+     * The propagators run in OpenMP threads, so every thread needs its own
+     * arrays. They are owned by the solver and released with it (thread_local
+     * arrays would stay allocated until the threads end). Each step function
+     * and the stress routine use them from start to end of one call; nothing
+     * nests, so one set per thread is enough.
+     */
+    struct WorkArrays
+    {
+        std::vector<T> q_1, q_2;                     ///< Step results (RQM4 full step and half steps)
+        std::vector<T> q_full_in, q_full_out;        ///< Full-grid copies of reduced-basis propagators
+        std::vector<double> k_1, k_2;                ///< Spectral coefficients
+        std::vector<double> phys_in, phys_out;       ///< CrysFFT physical grid
+        std::vector<T> pair_1, pair_2;               ///< Stress: full-grid propagator pair
+        std::vector<double> phys_1, phys_2, phys_3;  ///< Stress: CrysFFT physical grid
+        std::vector<double> reduced, boltz, multiplier;  ///< Stress: reduced-basis sum, bond factor, multiplier
+    };
+
+    /// Work arrays of the calling thread (created on first use)
+    WorkArrays& work_arrays() const
+    {
+        std::lock_guard<std::mutex> lock(work_mutex_);
+        return work_arrays_[std::this_thread::get_id()];
+    }
+
     ComputationBox<T>* cb;       ///< Computation box for grid info
     Molecules* molecules;        ///< Molecules container
     std::string chain_model;     ///< Chain model identifier
@@ -449,6 +479,9 @@ protected:
     std::vector<T> compute_single_segment_stress(
         T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length) override;
 
+private:
+    mutable std::mutex work_mutex_;
+    mutable std::unordered_map<std::thread::id, WorkArrays> work_arrays_;   ///< Per-thread work arrays (see WorkArrays)
 };
 
 #endif

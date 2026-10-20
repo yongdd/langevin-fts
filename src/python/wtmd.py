@@ -125,7 +125,7 @@ class WTMD:
         # Calculate derivative of order parameter with respect to w_aux_k
         dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
         # Calculate derivative of order parameter with respect to w
-        dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx) * np.power(self.M, 2.0 - self.l) / self.V
+        dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
 
         # Add bias
         bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)

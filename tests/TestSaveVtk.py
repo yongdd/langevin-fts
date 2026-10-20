@@ -63,14 +63,24 @@ def main():
                 or not np.allclose(fields["w"], line, rtol=1e-6, atol=1e-6):
             failed.append(f"1D grid {header}")
 
-        # Hexagonal cell (gamma = 120 degrees): structured grid with lattice coordinates
-        save_vtk(path, rng.normal(size=(3, 3, 2)), [1.0, 1.0, 2.0], angles=[90.0, 90.0, 120.0])
-        header, points, _ = read_vtk(path)
+        # Hexagonal cell (gamma = 120 degrees): structured grid with lattice coordinates,
+        # every point in VTK order (x fastest), and the 2D form angles=[gamma]
+        a_vec = np.array([1.0, 0.0, 0.0])
         b_vec = np.array([np.cos(2*np.pi/3), np.sin(2*np.pi/3), 0.0])
-        expected_last = (2.5/3)*np.array([1.0, 0.0, 0.0]) + (2.5/3)*b_vec + (1.5/2)*np.array([0.0, 0.0, 2.0])
-        if header["DATASET"] != ["STRUCTURED_GRID"] or points.shape != (18, 3) \
-                or not np.allclose(points[-1], expected_last, atol=1e-9):
-            failed.append(f"hexagonal grid: {header['DATASET']}, last point {points[-1] if points is not None else None}")
+        c_vec = np.array([0.0, 0.0, 2.0])
+        save_vtk(path, rng.normal(size=(4, 3, 2)), [1.0, 1.0, 2.0], angles=[90.0, 90.0, 120.0])
+        header, points, _ = read_vtk(path)
+        expected = np.array([(i + 0.5)/4*a_vec + (j + 0.5)/3*b_vec + (k + 0.5)/2*c_vec
+                             for k in range(2) for j in range(3) for i in range(4)])
+        if header["DATASET"] != ["STRUCTURED_GRID"] or points is None or points.shape != expected.shape \
+                or not np.allclose(points, expected, atol=1e-9):
+            failed.append(f"hexagonal grid: {header['DATASET']}")
+        save_vtk(path, rng.normal(size=(4, 3)), [1.0, 1.0], angles=[120.0])
+        header, points, _ = read_vtk(path)
+        expected_2d = np.array([(i + 0.5)/4*a_vec + (j + 0.5)/3*b_vec + 0.5*np.array([0.0, 0.0, 1.0])
+                                for j in range(3) for i in range(4)])
+        if header["DATASET"] != ["STRUCTURED_GRID"] or points is None or not np.allclose(points, expected_2d, atol=1e-9):
+            failed.append("2D hexagonal grid with angles=[gamma]")
 
         # Errors
         for bad, kwargs in ((np.ones((2, 2, 2)) + 1j, {}), (np.ones(7), {"nx": [2, 2, 2]})):

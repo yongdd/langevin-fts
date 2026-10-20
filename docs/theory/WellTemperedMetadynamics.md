@@ -130,7 +130,7 @@ $$\text{bias} = V \cdot U'(\Psi) \cdot \frac{M^{2-\ell}}{V} \Psi^{1-\ell} \cdot 
 ```python
 up_hat = np.interp(psi, self.psi_range, self.up)
 dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
-dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx) * np.power(self.M, 2.0 - self.l) / self.V
+dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
 bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)
 langevin[self.langevin_idx] += bias
 ```

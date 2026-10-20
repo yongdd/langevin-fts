@@ -52,7 +52,9 @@ commits are omitted.
   Pmmm 12x12x10 or P6/mmm 24x24x30. Sizes divisible by 4, the CPU platforms and the
   irreducible basis were correct. The 1D DCT-II also packed its spectrum in place into the
   caller's N-double buffer, writing two doubles past its end (1D CUDA runs with reflecting
-  boundaries); it now packs into its own scratch buffer.
+  boundaries); it now packs into its own scratch buffer. The 1D DCT-III wrote its N/2 + 1
+  complex outputs into an N-double work buffer, one or two doubles past its end; the
+  buffer now holds them.
 - SCFT runs with an mmm orthorhombic group and the m3 basis (Pmmm, Pbca, Pnma, ... whenever
   `m3_crysfft_feasible()` holds: even nx, nz >= 16 and a compatible translation parity,
   e.g. Pmmm 10x10x18 or Pnma 12x12x16) saved scrambled full-grid fields: the
@@ -113,23 +115,42 @@ commits are omitted.
   also with a space group, and `w` is a dictionary like `initial_fields`, so a result can
   restart `SCFT.run`. `load_config` evaluates numpy expressions such as
   `"4.0*np.sqrt(3)/2"` with a restricted evaluator instead of `eval`; anything outside
-  numbers, arithmetic, `np.pi`, `np.e` and a list of elementwise functions, or with a
-  complex or non-finite value, stays a string.
+  numbers, arithmetic, `np.pi`, `np.e` and a list of elementwise functions, with a
+  complex or non-finite value, or nested deeply enough to exhaust the parser, stays a
+  string.
   `LFTS.from_file` and `CLFTS.from_file` join `SCFT.from_file`. `save_vtk` writes
   several fields per file, 1D/2D grids, flat arrays with `nx`, and non-orthogonal cells
-  (`angles`), places the points at the cell centres, and writes vectorized; its second
-  argument is now named `fields`. `LR` and `LRAM` return arrays in the shape of their
-  input; `LR` failed for flat fields.
+  (`angles`, also `[gamma]` for a 2D cell as in the params dictionary), places the points
+  at the cell centres, and writes vectorized; its second argument is now named `fields`.
+  `LR` and `LRAM` return arrays in the shape of their input; `LR` failed for flat fields.
+  `LR` and `WTMD` pass `axes` to `np.fft.irfftn` together with `s`; omitting it is
+  deprecated since NumPy 2.0 (results unchanged).
 - Grid-size limits (2026-10-20, `src/common/GridLimits.h`): grid arrays are indexed with
   32-bit integers, so a computation box or space group of more than 1,073,217,535 points (half of
   INT_MAX - 2^20, because the largest arrays hold two fields), Anderson mixing of more
   than 2,146,435,071 variables, and a CUDA launch of more than 2^20 threads
-  (`LFTS_GPU_NUM_BLOCKS` x `LFTS_GPU_NUM_THREADS`) are rejected with a clear error.
+  (`LFTS_GPU_NUM_BLOCKS` x `LFTS_GPU_NUM_THREADS`) or of more than 1024 threads per block
+  are rejected with a clear error.
   Before, the grid-point product could overflow silently and SCFT/L-FTS failed with a
-  pybind11 type error. The multi-component inner products (CUDA kernel and host loop)
-  now form their offsets in 64 bits, and the 2D DCT-4/DST-4 and DST-3 kernels no longer
+  pybind11 type error. The grid-point product of the Python box factory, the
+  multi-component inner products (CUDA kernel and host loop) and the space-group
+  offsets are formed in 64 bits, and the 2D DCT-4/DST-4 and DST-3 kernels no longer
   need one thread per row element (rows longer than 1024 points failed to launch).
-  Both limits are importable as `_core.MAX_GRID_POINTS` and `_core.MAX_GRID_ARRAY`.
+  The 1D CUDA DCT-II/III (reflecting) launched one block with a thread per point rounded
+  up to a power of two, and the DST-II/III (absorbing) a thread per pair of points, so 1D
+  reflecting grids longer than 1024 points and absorbing grids longer than 2046 points
+  could not run on CUDA; the kernels now loop, and a 1D line that does not fit in the
+  shared memory of a block (beyond 4096 points for the DCT-II with 48 KB per block) is
+  rejected with a message pointing to the CPU platforms, the default for 1D. Both limits are importable as `_core.MAX_GRID_POINTS` and `_core.MAX_GRID_ARRAY`.
+- A space group checks the cell against its crystal system when it is attached to a
+  computation box and on every box change (`set_lx`, `set_lattice_parameters`), in C++
+  (2026-10-20): cubic needs a = b = c and right angles, tetragonal a = b and right angles,
+  orthorhombic right angles, hexagonal (and trigonal in hexagonal axes) a = b with angles
+  [90, 90, 120], rhombohedral-axes trigonal a = b = c and alpha = beta = gamma, and
+  monoclinic and triclinic groups a cell metric that every rotation preserves (the
+  monoclinic unique axis perpendicular to the other two). `scft.py` checked its input
+  already; a `PropagatorSolver` with a space group ran on any cell, where the symmetry
+  operations are not isometries of the box.
 - Removed small features that carried disproportionate code: the ADAM optimizer
   (`optimizer.name` must be `am`), the `validation_runtime` option of L-FTS (SCFT, L-FTS
   and CL-FTS check the partition consistency once per run and raise `ValidationError`
@@ -267,7 +288,7 @@ commits are omitted.
   5.05 s.
 - CPU: the CrysFFT path of the RQM4, RK2 and discrete solvers no longer expands the
   propagator to the full grid every step, and their work arrays are kept per thread
-  (1.2-1.6x faster with Im-3m at 64^3).
+  by the solver and released with it (1.2-1.6x faster with Im-3m at 64^3).
 - Every CUDA kernel now loops over its index range, so results do not depend on the
   launch configuration.
 
@@ -287,8 +308,9 @@ commits are omitted.
   the chain-end stress fix; it was 5e-3), and the 3D mixed reflecting/absorbing case also
   runs for continuous chains (tolerance 1e-4, measured 1.2e-5, was 4.8e-3).
 - Tests (2026-10-20): `TestConfigFile`, `TestScftCallback`, `TestScftResult`,
-  `TestSaveVtk` and `TestCompressors` cover the Python helpers; `TestGridLimits` covers
-  the grid-size limits.
+  `TestSaveVtk` and `TestCompressors` cover the Python helpers (those that run a solver
+  skip on builds without a CPU platform); `TestGridLimits` covers the grid-size limits and
+  `TestSpaceGroupCell` the cell check of space groups.
 - Tests (2026-10-19): `TestStressComplexPlatforms` (complex stress on every platform, 64^3
   grid), `TestStressNonPeriodicRK2`, `TestComplexMask` (array handling and object
   lifetimes of the bindings), `TestLftsRun` (L-FTS/CL-FTS run loops and checkpoint

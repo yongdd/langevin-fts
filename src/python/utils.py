@@ -464,7 +464,7 @@ def _process_config_values(obj: Any) -> Any:
         if 'np.' in obj or 'numpy.' in obj:
             try:
                 return _eval_config_expression(obj)
-            except (SyntaxError, ValueError, ArithmeticError) as e:
+            except (SyntaxError, ValueError, ArithmeticError, RecursionError, MemoryError) as e:
                 # A string that LOOKS like a numpy expression but cannot be
                 # evaluated is almost certainly a typo in the config; passing
                 # it through silently would surface later as a confusing
@@ -512,8 +512,9 @@ def save_vtk(
     nx : list of int, optional
         Grid size, needed for flat arrays.
     angles : list of float, optional
-        Lattice angles [alpha, beta, gamma] in degrees. A non-orthogonal cell
-        is written as a structured grid with explicit point coordinates.
+        Lattice angles [alpha, beta, gamma] in degrees, or [gamma] for a 2D
+        cell. A non-orthogonal cell is written as a structured grid with
+        explicit point coordinates.
     """
     if not isinstance(fields, dict):
         fields = {field_name: fields}
@@ -542,6 +543,10 @@ def save_vtk(
     # Pad to three dimensions
     nx3 = nx + [1] * (3 - dim)
     lx3 = [float(x) for x in lx] + [1.0] * (3 - dim)
+    if angles is not None and len(angles) == 1:
+        angles = [90.0, 90.0, angles[0]]          # 2D: [gamma]
+    if angles is not None and len(angles) != 3:
+        raise ValueError(f"angles must be [alpha, beta, gamma] or [gamma], got {list(angles)}")
     alpha, beta, gamma = np.deg2rad(angles) if angles is not None else (np.pi/2,)*3
     orthogonal = np.allclose([alpha, beta, gamma], np.pi/2, atol=1e-10)
 

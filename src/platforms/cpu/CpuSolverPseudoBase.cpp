@@ -657,7 +657,7 @@ void CpuSolverPseudoBase<T>::crysfft_pmmm_axis_multiplier(
 {
     // Σ k_d² over the axes in the bit mask (1: x, 2: y, 4: z); discrete chains
     // fold the bond factor ĝ(k) into the multiplier
-    thread_local std::vector<double> weighted;
+    std::vector<double>& weighted = work_arrays().multiplier;
     const int M_phys = static_cast<int>(crysfft_kx2_.size());
     weighted.resize(M_phys);
     for (int i = 0; i < M_phys; ++i)
@@ -750,11 +750,12 @@ bool CpuSolverPseudoBase<T>::compute_stress_crysfft(
         const int M_phys = get_crysfft_physical_size();
         const auto& orbit_counts = space_group_->get_orbit_counts();
 
-        thread_local std::vector<double> phys_q1;
-        thread_local std::vector<double> phys_q2;
-        thread_local std::vector<double> phys_tmp;
-        thread_local std::vector<double> reduced_tmp;
-        thread_local std::vector<double> boltz;
+        WorkArrays& work = work_arrays();
+        std::vector<double>& phys_q1 = work.phys_1;
+        std::vector<double>& phys_q2 = work.phys_2;
+        std::vector<double>& phys_tmp = work.phys_3;
+        std::vector<double>& reduced_tmp = work.reduced;
+        std::vector<double>& boltz = work.boltz;
         if (static_cast<int>(phys_q1.size()) != M_phys)
         {
             phys_q1.resize(M_phys);
@@ -1034,13 +1035,13 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // ============================================================================
         const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
 
-        // Expand reduced basis → full grid. Thread-local buffers: this function
+        // Expand reduced basis → full grid. Per-thread work arrays: this function
         // is called from OpenMP parallel regions (block loops in compute_stress),
-        // so no shared class member may be used as scratch space here.
+        // so no shared scratch space may be used here.
         T* q_1_full = q_1;
         T* q_2_full = q_2;
-        thread_local std::vector<T> q_full_1_local;
-        thread_local std::vector<T> q_full_2_local;
+        std::vector<T>& q_full_1_local = work_arrays().pair_1;
+        std::vector<T>& q_full_2_local = work_arrays().pair_2;
         if (space_group_ != nullptr)
         {
             const int M_full = cb->get_total_grid();

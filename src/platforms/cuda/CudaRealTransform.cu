@@ -3734,12 +3734,39 @@ static void check_transform_length(CudaTransformType type, int N, const char* ax
     throw std::runtime_error(msg);
 }
 
+// Shared memory the 1D kernels of a transform stage one line in (see execute())
+static size_t shared_bytes_1d(CudaTransformType type, int N)
+{
+    const size_t nThread = static_cast<size_t>(pow2roundup(N));
+    switch (type) {
+        case CUDA_DCT_1: return sizeof(double) * pow2roundup((N - 1) / 2);
+        case CUDA_DCT_2: return sizeof(double) * nThread;
+        case CUDA_DCT_3: return sizeof(double) * (nThread + 2);
+        case CUDA_DST_1: return sizeof(double) * (N + 1);
+        case CUDA_DST_2: return sizeof(double) * N;
+        case CUDA_DST_3: return sizeof(double) * (N + 2);
+        default:         return 0;
+    }
+}
+
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
     : N_(N), type_(type), initialized_(false), d_work_(nullptr), d_x1_(nullptr)
 {
     try
     {
         check_transform_length(type_, N_, "N", 1);
+        {
+            int device = 0, max_shared = 0;
+            gpu_error_check(cudaGetDevice(&device));
+            gpu_error_check(cudaDeviceGetAttribute(&max_shared, cudaDevAttrMaxSharedMemoryPerBlock, device));
+            const size_t needed = shared_bytes_1d(type_, N_);
+            if (needed > static_cast<size_t>(max_shared))
+                throw std::runtime_error("CudaRealTransform: the 1D " + std::string(transform_type_name(type_)) +
+                    " of " + std::to_string(N_) + " points stages " + std::to_string(needed) +
+                    " bytes in shared memory, more than the " + std::to_string(max_shared) +
+                    " bytes a block may use on this GPU; use a CPU platform for this 1D grid "
+                    "(the default platform for 1D).");
+        }
         int fftSize = getFFTSize(type_, N_);
         bool z2z = usesZ2Z(type_);
 
@@ -3748,8 +3775,9 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
             gpu_error_check(cudaMalloc(&d_work_, sizeof(cufftDoubleComplex) * fftSize));
             gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * fftSize));
         } else {
-            int workSize = fftSize;
             int complexSize = fftSize / 2 + 1;
+            // DCT-3 runs its D2Z into d_work_ (complexSize complex values)
+            int workSize = std::max(fftSize, 2 * complexSize);
             gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * workSize));
             gpu_error_check(cudaMalloc(&d_x1_, sizeof(cufftDoubleComplex) * complexSize));
         }
@@ -3873,13 +3901,13 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemsetAsync(d_work_ + N + 1, 0, sizeof(double), stream_));
 
             // PreOp modifies work buffer in place
-            kernel_dct1_preOp<<<1, nT, nT * sizeof(double), stream_>>>(d_work_, d_x1_, N, nT);
+            kernel_dct1_preOp<<<1, std::min(nT, 256), nT * sizeof(double), stream_>>>(d_work_, d_x1_, N, nT);
 
             // Z2D FFT (in-place: treat d_work_ as complex, output real)
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
 
             // PostOp
-            kernel_dct1_postOp<<<1, N / 2 + 1, 0, stream_>>>(d_work_, d_x1_, N);
+            kernel_dct1_postOp<<<1, std::min(N / 2 + 1, 256), 0, stream_>>>(d_work_, d_x1_, N);
 
             // Copy result back
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * (N + 1), cudaMemcpyDeviceToDevice, stream_));
@@ -3887,17 +3915,17 @@ void CudaRealTransform1D::execute(double* d_data)
         }
         case CUDA_DCT_2: {
             // packed spectrum (N/2+1 complex) into d_x1_, which has room for it
-            kernel_dct2_preOp<<<1, nThread, 0, stream_>>>(d_data, d_x1_, N_);
+            kernel_dct2_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, d_x1_, N_);
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_x1_), d_work_);
-            kernel_dct2_postOp<<<1, nThread, sizeof(double) * nThread, stream_>>>(
+            kernel_dct2_postOp<<<1, std::min(nThread, 256), sizeof(double) * nThread, stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
         case CUDA_DCT_3: {
-            kernel_dct3_preOp<<<1, nThread, 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
+            kernel_dct3_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
             cufftExecD2Z(plan_, d_data, (cufftDoubleComplex*)d_work_);
-            kernel_dct3_postOp<<<1, nThread, sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
+            kernel_dct3_postOp<<<1, std::min(nThread, 256), sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
         }
@@ -3924,11 +3952,11 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (M + 2), stream_));
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp
-            kernel_dst1_preOp<<<1, nT, M * sizeof(double), stream_>>>(d_work_, M);
+            kernel_dst1_preOp<<<1, std::min(nT, 256), M * sizeof(double), stream_>>>(d_work_, M);
             // Z2D FFT of size M
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
             // PostOp
-            kernel_dst1_postOp<<<1, M / 2 + 1, 0, stream_>>>(d_work_, M);
+            kernel_dst1_postOp<<<1, std::min(M / 2 + 1, 256), 0, stream_>>>(d_work_, M);
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;
@@ -3939,11 +3967,11 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_));
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads from buffer[1..N]) - needs N/2+1 threads
-            kernel_dst2_preOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(d_work_, N_);
+            kernel_dst2_preOp<<<1, std::min(N_ / 2 + 1, 256), N_ * sizeof(double), stream_>>>(d_work_, N_);
             // Z2D FFT of size N
             cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_work_), d_work_);
             // PostOp
-            kernel_dst2_postOp<<<1, N_ / 2 + 1, N_ * sizeof(double), stream_>>>(
+            kernel_dst2_postOp<<<1, std::min(N_ / 2 + 1, 256), N_ * sizeof(double), stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
@@ -3955,11 +3983,11 @@ void CudaRealTransform1D::execute(double* d_data)
             gpu_error_check(cudaMemsetAsync(d_work_, 0, sizeof(double) * (N_ + 2), stream_));
             gpu_error_check(cudaMemcpyAsync(d_work_ + 1, d_data, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             // PreOp (reads buffer[0..N])
-            kernel_dst3_preOp<<<1, N_ / 2 + 1, 0, stream_>>>(d_work_, N_, dct2_sin_, dct2_cos_);
+            kernel_dst3_preOp<<<1, std::min(N_ / 2 + 1, 256), 0, stream_>>>(d_work_, N_, dct2_sin_, dct2_cos_);
             // D2Z FFT of size N
             cufftExecD2Z(plan_, d_work_, reinterpret_cast<cufftDoubleComplex*>(d_work_));
             // PostOp
-            kernel_dst3_postOp<<<1, N_ / 2 + 1, (N_ + 2) * sizeof(double), stream_>>>(d_work_, N_);
+            kernel_dst3_postOp<<<1, std::min(N_ / 2 + 1, 256), (N_ + 2) * sizeof(double), stream_>>>(d_work_, N_);
             // Output mapping: result[0..N-1] = buffer[1..N]
             gpu_error_check(cudaMemcpyAsync(d_data, d_work_ + 1, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;

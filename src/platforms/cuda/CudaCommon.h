@@ -154,7 +154,7 @@ private:
     int n_blocks;
     int n_threads;
 
-    /// Throw unless 1 <= n_blocks * n_threads <= MAX_GRID_THREADS
+    /// Throw unless n_threads <= 1024 and 1 <= n_blocks * n_threads <= MAX_GRID_THREADS
     static void check_launch(int n_blocks, int n_threads);
 
     // int n_gpus;
