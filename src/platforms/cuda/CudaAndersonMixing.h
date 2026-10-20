@@ -56,34 +56,35 @@ template <typename T>
 class CudaAndersonMixing : public AndersonMixing<T>
 {
 private:
-    CudaCircularBuffer<T> *d_cb_w_hist;        ///< Field history on GPU
-    CudaCircularBuffer<T> *d_cb_w_deriv_hist;  ///< Residual history on GPU
-    CircularBuffer<T> *cb_w_deriv_dots;        ///< Cached dot products (CPU)
-    T *w_deriv_dots;                            ///< Current residual dots
+    CudaCircularBuffer<T> *d_cb_w_hist = nullptr;        ///< Field history on GPU
+    CudaCircularBuffer<T> *d_cb_w_deriv_hist = nullptr;  ///< Residual history on GPU
+    CircularBuffer<T> *cb_w_deriv_dots = nullptr;        ///< Cached dot products (CPU)
+    T *w_deriv_dots = nullptr;                            ///< Current residual dots
 
     /// @name Least-squares solve arrays (on CPU)
     /// @{
-    T **u_nm;   ///< Matrix for normal equations
-    T *v_n;     ///< RHS vector
-    T *a_n;     ///< Solution coefficients
+    T **u_nm = nullptr;   ///< Matrix for normal equations
+    T *v_n = nullptr;     ///< RHS vector
+    T *a_n = nullptr;     ///< Solution coefficients
     /// @}
 
     /// @name Temporary GPU arrays
     /// @{
-    CuDeviceData<T> *d_w_current;  ///< Current field on GPU
-    CuDeviceData<T> *d_w_new;      ///< New field on GPU
-    CuDeviceData<T> *d_w_deriv;    ///< Residual on GPU
-    CuDeviceData<T> *d_sum;        ///< Reduction temp
+    CuDeviceData<T> *d_w_current = nullptr;  ///< Current field on GPU
+    CuDeviceData<T> *d_w_new = nullptr;      ///< New field on GPU
+    CuDeviceData<T> *d_w_deriv = nullptr;    ///< Residual on GPU
+    CuDeviceData<T> *d_sum = nullptr;        ///< Reduction temp
     /// @}
 
     /// @name CUB reduction storage
     /// @{
     size_t temp_storage_bytes = 0;
     CuDeviceData<T> *d_temp_storage = nullptr;
-    CuDeviceData<T> *d_sum_out;
+    CuDeviceData<T> *d_sum_out = nullptr;
     /// @}
 
     void print_array(int n, T *a);  ///< Debug helper
+    void release();  ///< Free all buffers; shared by the destructor and a failed constructor
 
 public:
     /**

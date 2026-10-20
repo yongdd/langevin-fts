@@ -36,6 +36,7 @@
 #include <thrust/system_error.h>
 #include <thrust/system/cuda/error.h>
 #include "Exception.h"
+#include "GridLimits.h"
 
 // // The maximum of GPUs
 // #define MAX_GPUS 2
@@ -75,6 +76,12 @@ template<typename T>
 using CuDeviceData = std::conditional_t<std::is_same_v<T, double>,               double,
                      std::conditional_t<std::is_same_v<T, std::complex<double>>, cuDoubleComplex, void>
 >;
+
+// Complex buffers are copied with sizeof(T)*n bytes and their pointers are
+// reinterpreted between the two types (reinterpret_map, raw casts), so the
+// host and device complex types must have the same size.
+static_assert(sizeof(std::complex<double>) == sizeof(cuDoubleComplex),
+              "std::complex<double> and cuDoubleComplex must have the same size");
 
 /**
  * @struct ComplexSumOp
@@ -146,6 +153,9 @@ class CudaCommon
 private:
     int n_blocks;
     int n_threads;
+
+    /// Throw unless 1 <= n_blocks * n_threads <= MAX_GRID_THREADS
+    static void check_launch(int n_blocks, int n_threads);
 
     // int n_gpus;
 
@@ -244,6 +254,16 @@ void throw_on_cuda_error(cudaError_t code, const char *file, int line, const cha
  * @param func Function name
  * @throws Exception if code != CUFFT_SUCCESS
  */
+/// Blocks for a grid-stride kernel over n elements: enough to cover n, capped at
+/// MAX_GRID_THREADS threads in total (the kernels loop over the rest), so that
+/// `i += blockDim.x * gridDim.x` stays within int (see GridLimits.h).
+inline int grid_blocks(long long n, int block_size)
+{
+    const long long blocks = (n + block_size - 1) / block_size;
+    const long long max_blocks = MAX_GRID_THREADS / block_size;
+    return static_cast<int>(blocks < 1 ? 1 : (blocks > max_blocks ? max_blocks : blocks));
+}
+
 inline void throw_on_cufft_error(cufftResult code, const char *file, int line, const char *func)
 {
     if (code != CUFFT_SUCCESS)
@@ -281,6 +301,12 @@ __global__ void ker_add_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1,
 __global__ void ker_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
 __global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
+/// dst = a*(scale*src1*w1) + b*src2: ker_multi(src1, w1, scale) followed by
+/// ker_lin_comb in one pass, with the same arithmetic (RQM4 Richardson step).
+__global__ void ker_multi_lin_comb(double* dst, double a, const double* src1, const double* w1, double scale,
+                                   double b, const double* src2, const int M);
+__global__ void ker_multi_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, const cuDoubleComplex* w1, double scale,
+                                   double b, const cuDoubleComplex* src2, const int M);
 __global__ void ker_lin_comb_exp(
     double* dst,
     const double* src1, const double* exp1, double a,

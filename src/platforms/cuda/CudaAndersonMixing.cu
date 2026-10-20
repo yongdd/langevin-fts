@@ -62,7 +62,7 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
         cb_w_deriv_dots = new CircularBuffer<T>(this->max_hist+1, this->max_hist+1);
 
         // define arrays for anderson mixing
-        this->u_nm = new T*[this->max_hist];
+        this->u_nm = new T*[this->max_hist]();
         for(int i=0; i<this->max_hist; i++)
             this->u_nm[i] = new T[this->max_hist];
         this->v_n = new T[this->max_hist];
@@ -90,29 +90,38 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
     }
     catch(std::exception& exc)
     {
+        release();
         throw_without_line_number(exc.what());
     }
 }
 template <typename T>
 CudaAndersonMixing<T>::~CudaAndersonMixing()
 {
-    delete d_cb_w_hist;
-    delete d_cb_w_deriv_hist;
-    delete cb_w_deriv_dots;
+    release();
+}
+template <typename T>
+void CudaAndersonMixing<T>::release()
+{
+    delete d_cb_w_hist;       d_cb_w_hist = nullptr;
+    delete d_cb_w_deriv_hist; d_cb_w_deriv_hist = nullptr;
+    delete cb_w_deriv_dots;   cb_w_deriv_dots = nullptr;
 
-    for (int i=0; i<this->max_hist; i++)
-        delete[] u_nm[i];
-    delete[] u_nm;
-    delete[] v_n;
-    delete[] a_n;
-    delete[] w_deriv_dots;
+    if (u_nm != nullptr)
+    {
+        for (int i=0; i<this->max_hist; i++)
+            delete[] u_nm[i];
+        delete[] u_nm;
+        u_nm = nullptr;
+    }
+    delete[] v_n;          v_n = nullptr;
+    delete[] a_n;          a_n = nullptr;
+    delete[] w_deriv_dots; w_deriv_dots = nullptr;
 
-    cudaFree(d_w_current);
-    cudaFree(d_w_deriv);
-    cudaFree(d_w_new);
-    cudaFree(d_sum);
-    cudaFree(d_sum_out);
-    cudaFree(d_temp_storage);
+    for (CuDeviceData<T>** d : {&d_w_current, &d_w_deriv, &d_w_new, &d_sum, &d_sum_out, &d_temp_storage})
+    {
+        cudaFree(*d);
+        *d = nullptr;
+    }
 }
 template <typename T>
 void CudaAndersonMixing<T>::reset_count()

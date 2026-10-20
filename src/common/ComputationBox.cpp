@@ -36,6 +36,7 @@
 #include <numbers>
 
 #include "ComputationBox.h"
+#include "GridLimits.h"
 #include "SpaceGroup.h"
 #include "ValidationUtils.h"
 
@@ -123,10 +124,16 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         for(int d=0; d<DIM; d++)
             dx.push_back(lx[d]/nx[d]);
 
-        // The number of grids
-        total_grid = 1;
+        // The number of grid points, multiplied in 64 bits: grid arrays are indexed
+        // with int, so larger grids are rejected (see GridLimits.h)
+        long long n_points = 1;
         for(int d=0; d<DIM; d++)
-            total_grid *= nx[d];
+            n_points *= nx[d];
+        if (n_points > MAX_GRID_POINTS)
+            throw_with_line_number("The grid has " + std::to_string(n_points) + " points; at most " +
+                std::to_string(MAX_GRID_POINTS) + " are supported, because grid arrays are indexed "
+                "with 32-bit integers and the largest of them hold two fields.");
+        total_grid = static_cast<int>(n_points);
 
         // Mask
         // Penetrable region == 1.0
@@ -301,10 +308,16 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         for(int d=0; d<DIM; d++)
             dx.push_back(lx[d]/nx[d]);
 
-        // The number of grids
-        total_grid = 1;
+        // The number of grid points, multiplied in 64 bits: grid arrays are indexed
+        // with int, so larger grids are rejected (see GridLimits.h)
+        long long n_points = 1;
         for(int d=0; d<DIM; d++)
-            total_grid *= nx[d];
+            n_points *= nx[d];
+        if (n_points > MAX_GRID_POINTS)
+            throw_with_line_number("The grid has " + std::to_string(n_points) + " points; at most " +
+                std::to_string(MAX_GRID_POINTS) + " are supported, because grid arrays are indexed "
+                "with 32-bit integers and the largest of them hold two fields.");
+        total_grid = static_cast<int>(n_points);
 
         // Mask
         if (mask != nullptr)
@@ -907,8 +920,9 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
         double dv_base = volume / total_grid;
         for (int n = 0; n < n_comp; n++)
         {
+            const size_t offset = static_cast<size_t>(n) * n_basis_;
             for (int i = 0; i < n_basis_; i++)
-                sum += static_cast<T>(orbit_counts_[i]) * g[i + n * n_basis_] * h[i + n * n_basis_];
+                sum += static_cast<T>(orbit_counts_[i]) * g[offset + i] * h[offset + i];
         }
         return sum * static_cast<T>(dv_base);
     }
@@ -917,8 +931,10 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
         // Full grid mode
         for (int n = 0; n < n_comp; n++)
         {
+            // n*total_grid may exceed int for large grids; offset in 64 bits
+            const size_t offset = static_cast<size_t>(n) * total_grid;
             for (int i = 0; i < total_grid; i++)
-                sum += dv[i] * g[i + n * total_grid] * h[i + n * total_grid];
+                sum += dv[i] * g[offset + i] * h[offset + i];
         }
         return sum;
     }

@@ -362,7 +362,7 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
         throw_with_line_number("CudaCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
     const int threads = 256;
-    const int blocks = (M_complex_xy_ + threads - 1) / threads;
+    const int blocks = grid_blocks(M_complex_xy_, threads);
 
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
     static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_DETAIL") != nullptr);

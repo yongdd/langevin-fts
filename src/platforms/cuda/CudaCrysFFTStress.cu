@@ -12,6 +12,7 @@
 
 #include <cub/device/device_reduce.cuh>
 
+#include "CrysFFTBasisMapping.h"
 #include "CudaCommon.h"
 #include "CudaCrysFFTRecursive3m.h"
 #include "Exception.h"
@@ -20,45 +21,38 @@
 namespace {
 
 /**
- * @brief Symmetrize equivalent axes and apply final scaling (single thread).
+ * @brief Spread the group sums over their axes and apply the final scaling (single thread).
  *
- * Space groups whose point-group operations permute axes (cubic: x,y,z;
- * tetragonal: x,y) make the per-axis multipliers k_d² non-orbit-invariant,
- * so the reduced-basis accumulation scrambles the individual components
- * (only their sum is invariant). Since the kernel q1·q2 is space-group
- * symmetric, the exact per-direction sum is the average over equivalent axes.
+ * d_stress[g] holds the sum for axis group g (see crysfft_stress_axis_groups);
+ * every axis of a group gets the group sum divided by the group size.
  *
- * @param d_stress Device array holding raw sums in [0..2]
- * @param sym_mode 0: none, 1: tetragonal (avg x,y), 2: cubic (avg x,y,z)
+ * @param d_stress Device array holding the group sums in [0..n_groups-1]
+ * @param masks    Axis masks of the groups (1: x, 2: y, 4: z)
  * @param s0,s1,s2 Final scale factors b²·M_full/L_d²
  */
 __global__ void ker_crysfft_stress_finalize(
-    double* d_stress, int sym_mode, double s0, double s1, double s2)
+    double* d_stress, int n_groups, int mask0, int mask1, int mask2, double s0, double s1, double s2)
 {
     if (blockIdx.x != 0 || threadIdx.x != 0)
         return;
 
-    double v0 = d_stress[0];
-    double v1 = d_stress[1];
-    double v2 = d_stress[2];
+    const int masks[3] = {mask0, mask1, mask2};
+    double group_sum[3] = {0.0, 0.0, 0.0};
+    for (int g = 0; g < n_groups; ++g)
+        group_sum[g] = d_stress[g];
 
-    if (sym_mode == 2)
+    double v[3] = {0.0, 0.0, 0.0};
+    for (int g = 0; g < n_groups; ++g)
     {
-        double avg = (v0 + v1 + v2) / 3.0;
-        v0 = avg;
-        v1 = avg;
-        v2 = avg;
-    }
-    else if (sym_mode == 1)
-    {
-        double avg = (v0 + v1) / 2.0;
-        v0 = avg;
-        v1 = avg;
+        const int n_axes = ((masks[g] & 1) != 0) + ((masks[g] & 2) != 0) + ((masks[g] & 4) != 0);
+        for (int d = 0; d < 3; ++d)
+            if (masks[g] & (1 << d))
+                v[d] = group_sum[g] / n_axes;
     }
 
-    d_stress[0] = v0 * s0;
-    d_stress[1] = v1 * s1;
-    d_stress[2] = v2 * s2;
+    d_stress[0] = v[0] * s0;
+    d_stress[1] = v[1] * s1;
+    d_stress[2] = v[2] * s2;
     // NOTE: only the three diagonal components are written (the fast path
     // serves orthogonal cells, whose cross terms are structurally zero).
     // Some callers allocate d_stress with exactly 3 elements, so indices
@@ -99,26 +93,36 @@ void cuda_crysfft_compute_single_segment_stress(
         d_q2_phys = args.d_phys_work;
     }
 
-    for (int d = 0; d < 3; ++d)
+    // One multiplier Σ_{d in group} k_d² per group of equivalent axes; the group
+    // sums go to d_segment_stress[0..n_groups-1] (see crysfft_stress_axis_groups)
+    const std::vector<int> groups = crysfft_stress_axis_groups(args.space_group->get_crystal_system());
+    for (size_t g = 0; g < groups.size(); ++g)
     {
-        // ===== Step 2: Apply per-axis multiplier (input is preserved) =====
+        const int axes = groups[g];
+
+        // ===== Step 2: Apply the group multiplier (input is preserved) =====
         if (args.mode == CudaCrysFFTMode::PmmmDct)
         {
             CudaCrysFFT* pmmm = static_cast<CudaCrysFFT*>(args.crysfft);
             const double* d_mult = args.include_bond_factor
-                ? pmmm->get_axis_boltz_k2_multiplier(d, coeff)
-                : pmmm->get_axis_k2_multiplier(d);
+                ? pmmm->get_axis_boltz_k2_multiplier(axes, coeff)
+                : pmmm->get_axis_k2_multiplier(axes);
             pmmm->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out, d_mult, args.stream);
         }
         else  // Recursive3m
         {
             CudaCrysFFTRecursive3m* rec = static_cast<CudaCrysFFTRecursive3m*>(args.crysfft);
             using MT = CudaCrysFFTRecursive3m::MultiplierType;
+            const bool bond = args.include_bond_factor;
             MT type;
-            if (args.include_bond_factor)
-                type = (d == 0) ? MT::ExpKx2 : (d == 1) ? MT::ExpKy2 : MT::ExpKz2;
-            else
-                type = (d == 0) ? MT::Kx2 : (d == 1) ? MT::Ky2 : MT::Kz2;
+            switch (axes)
+            {
+                case 1:  type = bond ? MT::ExpKx2  : MT::Kx2;  break;
+                case 2:  type = bond ? MT::ExpKy2  : MT::Ky2;  break;
+                case 4:  type = bond ? MT::ExpKz2  : MT::Kz2;  break;
+                case 3:  type = bond ? MT::ExpKxy2 : MT::Kxy2; break;
+                default: type = bond ? MT::ExpK2   : MT::K2;   break;
+            }
             rec->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out, type, coeff, args.stream);
         }
 
@@ -146,26 +150,24 @@ void cuda_crysfft_compute_single_segment_stress(
 
         size_t temp_bytes = args.cub_temp_bytes;
         cub::DeviceReduce::Sum(args.d_cub_temp, temp_bytes,
-                               args.d_reduce_buf, &d_segment_stress[d], args.n_basis, args.stream);
+                               args.d_reduce_buf, &d_segment_stress[g], args.n_basis, args.stream);
         gpu_error_check(cudaPeekAtLastError());
     }
 
-    // ===== Step 5: Symmetrize equivalent axes and scale =====
+    // ===== Step 5: Spread the group sums over their axes and scale =====
     // The multipliers above are weighted by Cartesian k_d² = (2πm_d/L_d)²,
     // while the standard path accumulates deformation-vector components
     // v_d² = k_d²/L_d². Divide each sum by L_d² so both paths return the
     // same V_dd, and scale by b²·M_full (FFT normalization convention).
-    const std::string& crystal_system = args.space_group->get_crystal_system();
-    int sym_mode = 0;
-    if (crystal_system == "Cubic")
-        sym_mode = 2;
-    else if (crystal_system == "Tetragonal")
-        sym_mode = 1;
+    int masks[3] = {0, 0, 0};
+    for (size_t g = 0; g < groups.size(); ++g)
+        masks[g] = groups[g];
 
     const double s0 = args.bond_length_sq * args.M_full / (args.lx[0] * args.lx[0]);
     const double s1 = args.bond_length_sq * args.M_full / (args.lx[1] * args.lx[1]);
     const double s2 = args.bond_length_sq * args.M_full / (args.lx[2] * args.lx[2]);
 
-    ker_crysfft_stress_finalize<<<1, 1, 0, args.stream>>>(d_segment_stress, sym_mode, s0, s1, s2);
+    ker_crysfft_stress_finalize<<<1, 1, 0, args.stream>>>(
+        d_segment_stress, static_cast<int>(groups.size()), masks[0], masks[1], masks[2], s0, s1, s2);
     gpu_error_check(cudaPeekAtLastError());
 }

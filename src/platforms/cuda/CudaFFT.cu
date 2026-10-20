@@ -403,18 +403,25 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
             // imaginary parts independently; coefficients are stored
             // interleaved as complex pairs (d_cdata then holds
             // 2*total_complex_grid_ doubles, matching the periodic layout).
-            const int n_parts = std::is_same<T, double>::value ? 1 : 2;
+            if constexpr (std::is_same<T, double>::value)
+            {
+                // Real fields: copy the input into the output buffer (both hold
+                // total_grid_ values) and transform it there, so the input is kept
+                ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_cdata, d_rdata, total_grid_);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (DIM == 1)
+                    static_cast<CudaRealTransform1D*>(rt_forward_)->execute(d_cdata, stream);
+                else if constexpr (DIM == 2)
+                    static_cast<CudaRealTransform2D*>(rt_forward_)->execute(d_cdata, stream);
+                else if constexpr (DIM == 3)
+                    static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_cdata, stream);
+                return;
+            }
+            const int n_parts = 2;
             for (int part = 0; part < n_parts; ++part)
             {
-                if constexpr (std::is_same<T, double>::value)
-                {
-                    ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work_buffer_, d_rdata, total_grid_);
-                }
-                else
-                {
-                    ker_complex_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                        d_work_buffer_, reinterpret_cast<cuDoubleComplex*>(d_rdata), part, total_grid_);
-                }
+                ker_complex_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_work_buffer_, reinterpret_cast<cuDoubleComplex*>(d_rdata), part, total_grid_);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // Execute forward transform (DCT-2 or DST-2) on the given stream
@@ -426,15 +433,8 @@ void CudaFFT<T, DIM>::forward_stream(T* d_rdata, double* d_cdata, cudaStream_t s
                     static_cast<CudaRealTransform3D*>(rt_forward_)->execute(d_work_buffer_, stream);
 
                 // Copy to output (interleaved for complex fields)
-                if constexpr (std::is_same<T, double>::value)
-                {
-                    ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_cdata, d_work_buffer_, total_complex_grid_);
-                }
-                else
-                {
-                    ker_real_to_interleaved_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                        d_cdata, d_work_buffer_, part, total_complex_grid_);
-                }
+                ker_real_to_interleaved_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_cdata, d_work_buffer_, part, total_complex_grid_);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }
@@ -492,19 +492,29 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
             for (int d = 0; d < DIM; ++d)
                 scale *= 1.0 / (2.0 * nx_[d]);
 
-            const int n_parts = std::is_same<T, double>::value ? 1 : 2;
+            if constexpr (std::is_same<T, double>::value)
+            {
+                // Real fields: copy the coefficients into the output buffer and
+                // transform there, so the coefficients are kept
+                ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_rdata, d_cdata, total_grid_);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (DIM == 1)
+                    static_cast<CudaRealTransform1D*>(rt_backward_)->execute(d_rdata, stream);
+                else if constexpr (DIM == 2)
+                    static_cast<CudaRealTransform2D*>(rt_backward_)->execute(d_rdata, stream);
+                else if constexpr (DIM == 3)
+                    static_cast<CudaRealTransform3D*>(rt_backward_)->execute(d_rdata, stream);
+                // Normalize (DCT/DST round-trip scaling is 2*N per dimension)
+                ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_rdata, scale, total_grid_);
+                gpu_error_check(cudaPeekAtLastError());
+                return;
+            }
+            const int n_parts = 2;
             for (int part = 0; part < n_parts; ++part)
             {
                 // Copy input component to work buffer
-                if constexpr (std::is_same<T, double>::value)
-                {
-                    ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work_buffer_, d_cdata, total_complex_grid_);
-                }
-                else
-                {
-                    ker_interleaved_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                        d_work_buffer_, d_cdata, part, total_complex_grid_);
-                }
+                ker_interleaved_part_to_real<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_work_buffer_, d_cdata, part, total_complex_grid_);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // Execute backward transform (DCT-3 or DST-3) on the given stream
@@ -519,15 +529,8 @@ void CudaFFT<T, DIM>::backward_stream(double* d_cdata, T* d_rdata, cudaStream_t 
                 ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work_buffer_, scale, total_grid_);
 
                 // Copy to output component
-                if constexpr (std::is_same<T, double>::value)
-                {
-                    ker_copy_data<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_rdata, d_work_buffer_, total_grid_);
-                }
-                else
-                {
-                    ker_real_to_complex_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                        reinterpret_cast<cuDoubleComplex*>(d_rdata), d_work_buffer_, part, total_grid_);
-                }
+                ker_real_to_complex_part<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    reinterpret_cast<cuDoubleComplex*>(d_rdata), d_work_buffer_, part, total_grid_);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }

@@ -410,6 +410,19 @@ Following crystallographic convention:
 "angles": [90.0, 90.0, 120.0]  # Hexagonal: alpha=90, beta=90, gamma=120
 ```
 
+### Parameter Files (YAML/JSON)
+
+The parameter dictionary can be read from a file:
+
+```python
+from polymerfts import SCFT, LFTS, load_config
+calc = SCFT.from_file("gyroid.yaml", max_iter=500)     # keyword arguments override file values
+sim  = LFTS.from_file("lamella.yaml", random_seed=12)  # CLFTS.from_file works the same way
+params = load_config("gyroid.yaml")                    # just the dictionary
+```
+
+The format follows the extension (`.yaml`, `.yml` or `.json`). A string value that uses numpy, such as `lx: ["4.0*np.sqrt(3)/2", 2.0]`, is evaluated as an arithmetic expression: numbers, `+ - * / **`, parentheses, `np.pi`, `np.e` and the one-argument functions `sqrt, cbrt, exp, log, log10, sin, cos, tan, arcsin, arccos, arctan, deg2rad, rad2deg, abs`. Every intermediate value must be a finite real number. Nothing else is executed; any other string containing `np.` is kept as text with a warning. A missing file raises `FileNotFoundError`; an unsupported extension, invalid YAML/JSON, an empty file or content that is not a dictionary raises `ConfigError`.
+
 ---
 
 ## Example Configurations

@@ -65,6 +65,7 @@ protected:
     CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
     cuDoubleComplex *d_qk_conj_[MAX_STREAMS];   ///< q2(-k) gather of the stress (complex fields; nullptr for real)
+    CuDeviceData<T> *d_stress_partial_[MAX_STREAMS];   ///< Per-block partial sums of the stress components
 
     // Space group symmetry (reduced basis)
     SpaceGroup* space_group_;                        ///< Space group pointer (nullptr if not used)

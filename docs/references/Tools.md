@@ -128,6 +128,22 @@ draw_polymer_architectures(calc.distinct_polymers, calc.ds, calc.segment_lengths
 
 Uses networkx and matplotlib; a graphviz layout is used when pygraphviz is installed.
 
+### 1.5 VTK Export for ParaView
+
+`save_vtk` writes fields as a legacy ASCII VTK file:
+
+```python
+from polymerfts import save_vtk
+result = calc.run(initial_fields=w, return_result=True)
+save_vtk("phi.vtk", result.phi, calc.prop_solver.get_lx(), nx=calc.prop_solver.nx,
+         angles=calc.prop_solver.get_angles_degrees())
+```
+
+- `fields` is one array (named by `field_name`, default `phi`) or a dictionary `{name: array}`, which puts several fields in one file. Arrays have the grid shape, or are flat when `nx` is given; 1D and 2D grids are padded to 3D.
+- Grid points sit at the cell centres, `(i + 1/2) * lx / nx`, as in the solvers. The outline ParaView draws through the points therefore lies half a cell inside the box; the walls of a non-periodic box are at 0 and `lx`.
+- With `angles` (degrees) of a non-orthogonal cell, the file is a structured grid with explicit point coordinates along the lattice vectors (`a` along x, `b` in the xy plane, as in `ComputationBox`).
+- Values are written as single-precision text; complex fields are rejected (write the real and imaginary parts separately).
+
 ## 2. PSCF Interoperability
 
 Tools for converting between langevin-fts and [PSCF](https://github.com/dmorse/pscfpp) formats.

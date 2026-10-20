@@ -161,9 +161,15 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
             : M_full;
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
-        // Use local buffer for thread safety (called from OpenMP parallel regions)
+        // The CrysFFT path works on the physical grid and returns the reduced basis;
+        // the other paths work on the full grid
+        const bool crysfft_path = this->use_crysfft() && this->space_group_ != nullptr;
+
+        // Work array, kept per thread (called from OpenMP parallel regions)
         int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
-        std::vector<double> k_q_in(coeff_size);
+        thread_local std::vector<double> k_q_in;
+        if (!crysfft_path)
+            k_q_in.resize(coeff_size);
 
         // Get Boltzmann factors for the correct ds_index
         const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
@@ -173,10 +179,11 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         T* fft_in = q_in;
         T* fft_out = q_out;
 
-        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions)
+        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions);
+        // the CrysFFT path reads the reduced basis directly
         thread_local std::vector<T> q_full_in_local, q_full_out_local;
 
-        if (this->space_group_ != nullptr)
+        if (this->space_group_ != nullptr && !crysfft_path)
         {
             // Reduced basis input/output: expand input, reduce output
             q_full_in_local.resize(M_full);
@@ -192,7 +199,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
 
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft() && this->space_group_ != nullptr)
+            if (crysfft_path)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
@@ -236,7 +243,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         }
 
         // Evaluate exp(-w*ds) in real space (the CrysFFT path applied it on the physical grid)
-        if (!(this->use_crysfft() && this->space_group_ != nullptr))
+        if (!crysfft_path)
         {
             for (int i = 0; i < M_full; ++i)
                 fft_out[i] *= _exp_dw[i];
@@ -285,9 +292,15 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             : M_full;
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
-        // Use local buffer for thread safety (called from OpenMP parallel regions)
+        // The CrysFFT path works on the physical grid and returns the reduced basis;
+        // the other paths work on the full grid
+        const bool crysfft_path = this->use_crysfft() && this->space_group_ != nullptr;
+
+        // Work array, kept per thread (called from OpenMP parallel regions)
         int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
-        std::vector<double> k_q_in(coeff_size);
+        thread_local std::vector<double> k_q_in;
+        if (!crysfft_path)
+            k_q_in.resize(coeff_size);
 
         // Discrete chains always use ds_index=0 (global ds)
         const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, 0);
@@ -296,10 +309,11 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         T* fft_in = q_in;
         T* fft_out = q_out;
 
-        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions)
+        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions);
+        // the CrysFFT path reads the reduced basis directly
         thread_local std::vector<T> q_full_in_local, q_full_out_local;
 
-        if (this->space_group_ != nullptr)
+        if (this->space_group_ != nullptr && !crysfft_path)
         {
             // Reduced basis input/output: expand input, reduce output
             q_full_in_local.resize(M_full);
@@ -315,7 +329,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft() && this->space_group_ != nullptr)
+            if (crysfft_path)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;

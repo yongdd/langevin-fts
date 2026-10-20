@@ -651,43 +651,22 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
  *
  * @see docs/theory/StressTensor.md for the derivation
  */
-// Space groups whose point-group operations permute axes (cubic: x,y,z;
-// tetragonal: x,y) make the per-axis multipliers k_d² non-orbit-invariant, so
-// the reduced-basis accumulation scrambles the individual components (only
-// their sum is invariant). Since the kernel q1·q2 is space-group symmetric, the
-// exact per-direction sum is the average over equivalent axes.
-static void symmetrize_axis_sums(const std::string& crystal_system, double sums[3])
-{
-    if (crystal_system == "Cubic")
-    {
-        const double avg = (sums[0] + sums[1] + sums[2]) / 3.0;
-        sums[0] = avg; sums[1] = avg; sums[2] = avg;
-    }
-    else if (crystal_system == "Tetragonal")
-    {
-        const double avg = (sums[0] + sums[1]) / 2.0;
-        sums[0] = avg; sums[1] = avg;
-    }
-}
-
 template <typename T>
 void CpuSolverPseudoBase<T>::crysfft_pmmm_axis_multiplier(
-    double* phys_in, double* phys_out, int axis, const double* boltz)
+    double* phys_in, double* phys_out, int axes, const double* boltz)
 {
-    const std::vector<double>* k2[3] = {&crysfft_kx2_, &crysfft_ky2_, &crysfft_kz2_};
-    const std::vector<double>& k2_axis = *k2[axis];
-    const double* multiplier = k2_axis.data();
-
-    // Discrete chains: fold the bond factor ĝ(k) into the multiplier
+    // Σ k_d² over the axes in the bit mask (1: x, 2: y, 4: z); discrete chains
+    // fold the bond factor ĝ(k) into the multiplier
     thread_local std::vector<double> weighted;
-    if (boltz != nullptr)
+    const int M_phys = static_cast<int>(crysfft_kx2_.size());
+    weighted.resize(M_phys);
+    for (int i = 0; i < M_phys; ++i)
     {
-        const int M_phys = static_cast<int>(k2_axis.size());
-        weighted.resize(M_phys);
-        for (int i = 0; i < M_phys; ++i)
-            weighted[i] = boltz[i] * k2_axis[i];
-        multiplier = weighted.data();
+        const double k_axes = ((axes & 1) ? crysfft_kx2_[i] : 0.0) + ((axes & 2) ? crysfft_ky2_[i] : 0.0)
+                            + ((axes & 4) ? crysfft_kz2_[i] : 0.0);
+        weighted[i] = (boltz != nullptr) ? boltz[i] * k_axes : k_axes;
     }
+    const double* multiplier = weighted.data();
 #ifdef USE_CPU_MKL
     if (crysfft_pmmm_mkl_)
     {
@@ -705,29 +684,38 @@ void CpuSolverPseudoBase<T>::crysfft_pmmm_axis_multiplier(
     throw_with_line_number("Pmmm CrysFFT requested but it is not initialized.");
 }
 
+// Recursive 3m multiplier type for an axis mask (1: x, 2: y, 4: z, 3: x+y, 7: all)
+template <typename MT>
+static MT recursive_multiplier_type(int axes, bool with_bond)
+{
+    switch (axes)
+    {
+        case 1: return with_bond ? MT::ExpKx2  : MT::Kx2;
+        case 2: return with_bond ? MT::ExpKy2  : MT::Ky2;
+        case 4: return with_bond ? MT::ExpKz2  : MT::Kz2;
+        case 3: return with_bond ? MT::ExpKxy2 : MT::Kxy2;
+        case 7: return with_bond ? MT::ExpK2   : MT::K2;
+    }
+    throw_with_line_number("Unsupported CrysFFT stress axis group " + std::to_string(axes) + ".");
+}
+
 template <typename T>
 bool CpuSolverPseudoBase<T>::crysfft_recursive_axis_multiplier(
-    double* phys_in, double* phys_out, int axis, bool with_bond, double coeff)
+    double* phys_in, double* phys_out, int axes, bool with_bond, double coeff)
 {
 #ifdef USE_CPU_MKL
     if (crysfft_recursive_mkl_)
     {
-        using MT = MklCrysFFTRecursive3m::MultiplierType;
-        static constexpr MT k_types[3]   = {MT::Kx2, MT::Ky2, MT::Kz2};
-        static constexpr MT exp_types[3] = {MT::ExpKx2, MT::ExpKy2, MT::ExpKz2};
         crysfft_recursive_mkl_->apply_multiplier(phys_in, phys_out,
-            with_bond ? exp_types[axis] : k_types[axis], with_bond ? coeff : 0.0);
+            recursive_multiplier_type<MklCrysFFTRecursive3m::MultiplierType>(axes, with_bond), with_bond ? coeff : 0.0);
         return true;
     }
 #endif
 #ifdef USE_CPU_FFTW
     if (crysfft_recursive_fftw_)
     {
-        using MT = FftwCrysFFTRecursive3m::MultiplierType;
-        static constexpr MT k_types[3]   = {MT::Kx2, MT::Ky2, MT::Kz2};
-        static constexpr MT exp_types[3] = {MT::ExpKx2, MT::ExpKy2, MT::ExpKz2};
         crysfft_recursive_fftw_->apply_multiplier(phys_in, phys_out,
-            with_bond ? exp_types[axis] : k_types[axis], with_bond ? coeff : 0.0);
+            recursive_multiplier_type<FftwCrysFFTRecursive3m::MultiplierType>(axes, with_bond), with_bond ? coeff : 0.0);
         return true;
     }
 #endif
@@ -804,21 +792,25 @@ bool CpuSolverPseudoBase<T>::compute_stress_crysfft(
             }
         }
 
-        // sums[d] = Σ_r n_orbit(r) q1(r) [F⁻¹ k_d² ĝ F q2](r) over the reduced basis
+        // sums[d] = Σ_r n_orbit(r) q1(r) [F⁻¹ k_d² ĝ F q2](r) over the reduced basis, one
+        // multiplier Σ_{d in group} k_d² per group of equivalent axes, shared equally by
+        // the axes of the group (see crysfft_stress_axis_groups)
         double sums[3] = {0.0, 0.0, 0.0};
-        for (int axis = 0; axis < 3; ++axis)
+        for (const int axes : crysfft_stress_axis_groups(space_group_->get_crystal_system()))
         {
             if (use_crysfft_pmmm())
-                crysfft_pmmm_axis_multiplier(phys_q2.data(), phys_tmp.data(), axis, with_bond ? boltz.data() : nullptr);
-            else if (!crysfft_recursive_axis_multiplier(phys_q2.data(), phys_tmp.data(), axis, with_bond, coeff))
+                crysfft_pmmm_axis_multiplier(phys_q2.data(), phys_tmp.data(), axes, with_bond ? boltz.data() : nullptr);
+            else if (!crysfft_recursive_axis_multiplier(phys_q2.data(), phys_tmp.data(), axes, with_bond, coeff))
                 return false;
             reduce_crysfft_to_reduced(phys_tmp.data(), reduced_tmp.data());
             double sum = 0.0;
             for (int i = 0; i < M_reduced; ++i)
                 sum += static_cast<double>(orbit_counts[i]) * q_1[i] * reduced_tmp[i];
-            sums[axis] = sum;
+            const int n_axes = ((axes & 1) != 0) + ((axes & 2) != 0) + ((axes & 4) != 0);
+            for (int d = 0; d < 3; ++d)
+                if (axes & (1 << d))
+                    sums[d] = sum / n_axes;
         }
-        symmetrize_axis_sums(space_group_->get_crystal_system(), sums);
 
         // The CrysFFT multipliers are Cartesian k_d² = (2πm_d/L_d)², while the
         // standard path accumulates deformation-vector components v_d² = k_d²/L_d²

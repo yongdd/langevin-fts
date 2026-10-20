@@ -91,7 +91,9 @@ commits are omitted.
   to 1.1 GB before. Errors thrown inside the parallel loops of the full-storage mode (out
   of memory while building a CrysFFT cache, a grafted polymer without its `q_init`)
   terminated the process; they now reach Python as exceptions (2026-10-20). The 3D DCT-1
-  and DST-1 transforms on CUDA did not check that their cuFFT plan was created.
+  and DST-1 transforms on CUDA did not check that their cuFFT plan was created. The CUDA
+  Anderson-mixing constructors and their history buffers now release their memory too
+  (they kept up to 1.4 GB after a failed construction for a 2x128^3 field).
 - Reduce-memory mode now gives results identical to full storage (it used separately
   written code): the CPU continuous solvent partition function was computed from
   exp(-w ds/2)^2 with uniform cell weights, ignoring a mask; the CUDA discrete variant
@@ -107,6 +109,27 @@ commits are omitted.
   `scft.py`). `LR`, `LRAM`, `load_config`, `save_vtk`, `SCFTResult` and `IterationInfo`
   stay importable from `polymerfts`. The `SystemSpec`/`*Options` layer tried during the
   2026-10 cleanup was removed again before release.
+- Python helpers (2026-10-20): `SCFTResult.phi` and `SCFTResult.w` are on the full grid
+  also with a space group, and `w` is a dictionary like `initial_fields`, so a result can
+  restart `SCFT.run`. `load_config` evaluates numpy expressions such as
+  `"4.0*np.sqrt(3)/2"` with a restricted evaluator instead of `eval`; anything outside
+  numbers, arithmetic, `np.pi`, `np.e` and a list of elementwise functions, or with a
+  complex or non-finite value, stays a string.
+  `LFTS.from_file` and `CLFTS.from_file` join `SCFT.from_file`. `save_vtk` writes
+  several fields per file, 1D/2D grids, flat arrays with `nx`, and non-orthogonal cells
+  (`angles`), places the points at the cell centres, and writes vectorized; its second
+  argument is now named `fields`. `LR` and `LRAM` return arrays in the shape of their
+  input; `LR` failed for flat fields.
+- Grid-size limits (2026-10-20, `src/common/GridLimits.h`): grid arrays are indexed with
+  32-bit integers, so a computation box or space group of more than 1,073,217,535 points (half of
+  INT_MAX - 2^20, because the largest arrays hold two fields), Anderson mixing of more
+  than 2,146,435,071 variables, and a CUDA launch of more than 2^20 threads
+  (`LFTS_GPU_NUM_BLOCKS` x `LFTS_GPU_NUM_THREADS`) are rejected with a clear error.
+  Before, the grid-point product could overflow silently and SCFT/L-FTS failed with a
+  pybind11 type error. The multi-component inner products (CUDA kernel and host loop)
+  now form their offsets in 64 bits, and the 2D DCT-4/DST-4 and DST-3 kernels no longer
+  need one thread per row element (rows longer than 1024 points failed to launch).
+  Both limits are importable as `_core.MAX_GRID_POINTS` and `_core.MAX_GRID_ARRAY`.
 - Removed small features that carried disproportionate code: the ADAM optimizer
   (`optimizer.name` must be `am`), the `validation_runtime` option of L-FTS (SCFT, L-FTS
   and CL-FTS check the partition consistency once per run and raise `ValidationError`
@@ -225,6 +248,29 @@ commits are omitted.
   the CUDA toolkit directories are always passed explicitly. Packaging with pip (`pyproject.toml`), conda (`conda-recipe/`) and
   Docker (`docker/`) was added (2026-01-09, fe3a54df).
 
+### Performance
+
+- CUDA, 2026-10-20, A10, 64^3, results unchanged except where noted. CN-ADI line solvers
+  were launched with 256 blocks for 4096 lines (16 busy blocks): 1.7x faster iterations.
+  CrysFFT stress applies one multiplier per group of equivalent axes (one pass instead of
+  three for cubic groups, two for tetragonal; stress changes at the 1e-14 level and the
+  CPU path does the same): BCC iterations 1.4x (continuous) and 1.8x (discrete) faster.
+  Box relaxation: the CrysFFT tables reuse their device buffers and are uploaded on
+  their own stream (BCC with box relaxation 80 -> 54 ms per iteration, plain RQM4
+  113 -> 107 ms). The segment stress sums all components in one pass with a
+  deterministic two-stage reduction (stress changes at the 1e-16 level; iterations
+  1.14x faster at 32^3, 1.06-1.09x at 64^3). The last RQM4 half-step factor is applied
+  inside the Richardson combination, real-field DCT/DST transforms run in the output
+  buffer, and the default launch is 1024 blocks. Block concentrations add up to 32
+  segment products per kernel launch instead of one (concentration time -35 to -40%,
+  results unchanged). The Gyroid example (32^3, box relaxation) runs in 4.5 s instead of
+  5.05 s.
+- CPU: the CrysFFT path of the RQM4, RK2 and discrete solvers no longer expands the
+  propagator to the full grid every step, and their work arrays are kept per thread
+  (1.2-1.6x faster with Im-3m at 64^3).
+- Every CUDA kernel now loops over its index range, so results do not depend on the
+  launch configuration.
+
 ### Added
 
 - Space-group reduced basis with CrysFFT fast paths (Pmmm DCT, Recursive 3m, ObliqueZ) and
@@ -240,6 +286,9 @@ commits are omitted.
   chain is 1e-5 instead of 1.5e-2 (the measured finite-difference mismatch is 3e-7 since
   the chain-end stress fix; it was 5e-3), and the 3D mixed reflecting/absorbing case also
   runs for continuous chains (tolerance 1e-4, measured 1.2e-5, was 4.8e-3).
+- Tests (2026-10-20): `TestConfigFile`, `TestScftCallback`, `TestScftResult`,
+  `TestSaveVtk` and `TestCompressors` cover the Python helpers; `TestGridLimits` covers
+  the grid-size limits.
 - Tests (2026-10-19): `TestStressComplexPlatforms` (complex stress on every platform, 64^3
   grid), `TestStressNonPeriodicRK2`, `TestComplexMask` (array handling and object
   lifetimes of the bindings), `TestLftsRun` (L-FTS/CL-FTS run loops and checkpoint

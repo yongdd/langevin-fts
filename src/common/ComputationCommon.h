@@ -14,6 +14,7 @@
 #ifndef COMPUTATION_COMMON_H_
 #define COMPUTATION_COMMON_H_
 
+#include <array>
 #include <exception>
 #include <functional>
 #include <map>
@@ -100,6 +101,23 @@ protected:
 
     /// Solvent concentrations and partition functions from the stored fields.
     void compute_solvent_concentrations();
+
+    /// Contour step ds of the block that propagator `key` belongs to.
+    double contour_step(const std::string& key) const;
+
+    /// Normalization of a block concentration, φ = norm · Σ_n c_n q q†:
+    /// norm = ds · volume fraction / alpha · n_repeated / Q.
+    T concentration_norm(const std::tuple<int, std::string, std::string>& block_key) const;
+
+    /// Stress of a block: the sum over its segments times the contour step ds.
+    void scale_by_contour_step(std::array<T, 6>& stress, const std::string& key_right) const;
+
+    /**
+     * @brief Sum the stresses of the blocks of each polymer into dq_dl and
+     *        convert them to lattice derivatives.
+     * @param stress_of_block One entry per block, in the order of phi_block.
+     */
+    void set_stress_from_blocks(const std::vector<std::array<T, 6>>& stress_of_block);
 
     /**
      * @brief Turn the summed v⊗v components in dq_dl into lattice-parameter

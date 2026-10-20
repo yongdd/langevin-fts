@@ -54,6 +54,7 @@
 #include <pybind11/stl_bind.h>
 #include <pybind11/numpy.h>
 
+#include "GridLimits.h"
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 #include "ComputationBox.h"
@@ -175,14 +176,14 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("multi_inner_product", [](ComputationBox<T>& obj, int n_comp, array_in<T> g, array_in<T> h)
         {
-            const int N = obj.get_n_basis();
+            const long long n_total = static_cast<long long>(n_comp) * obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
-            if (buf_g.size != n_comp * N) {
-                throw_with_line_number("Size of g (" + std::to_string(buf_g.size) + ") and n_comp * n_grid (" + std::to_string(n_comp * N) + ") must match.");
+            if (buf_g.size != n_total) {
+                throw_with_line_number("Size of g (" + std::to_string(buf_g.size) + ") and n_comp * n_grid (" + std::to_string(n_total) + ") must match.");
             }
-            if (buf_h.size != n_comp * N) {
-                throw_with_line_number("Size of h (" + std::to_string(buf_h.size) + ") and n_comp * n_grid (" + std::to_string(n_comp * N) + ") must match.");
+            if (buf_h.size != n_total) {
+                throw_with_line_number("Size of h (" + std::to_string(buf_h.size) + ") and n_comp * n_grid (" + std::to_string(n_total) + ") must match.");
             }
             return obj.multi_inner_product(n_comp, static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
         })
@@ -618,6 +619,9 @@ static py::array_t<double> sg_output_like(const py::buffer_info& in, int n_field
 
 PYBIND11_MODULE(_core, m)
 {
+    // Grid-size limits of the 32-bit grid indices (GridLimits.h)
+    m.attr("MAX_GRID_POINTS") = MAX_GRID_POINTS;
+    m.attr("MAX_GRID_ARRAY") = MAX_GRID_ARRAY;
 
 
     py::class_<Polymer>(m, "Polymer")

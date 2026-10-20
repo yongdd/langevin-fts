@@ -5,6 +5,7 @@
  * See CudaSolverPseudoBase.h.
  */
 
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <array>
@@ -21,6 +22,136 @@
 #include "CrysFFTSelector.h"
 #include "CrysFFTBasisMapping.h"
 #include "SpaceGroup.h"
+
+namespace {
+
+// Stress dyad sums V_c = Σ_k factor·integrand(k)·basis_c(k) for up to six components
+// in one pass over k: each block writes its partial sums, and a one-block kernel adds
+// the partials in block order, so the result does not depend on scheduling.
+constexpr int STRESS_THREADS = 256;      // threads per block of both stress kernels
+constexpr int STRESS_MAX_BLOCKS = 1024;  // capacity of the partial-sum buffer
+
+struct StressBases { const double* basis[6]; };
+
+__device__ inline double stress_zero(double) { return 0.0; }
+__device__ inline cuDoubleComplex stress_zero(cuDoubleComplex) { return make_cuDoubleComplex(0.0, 0.0); }
+__device__ inline void stress_add(double& acc, double v) { acc += v; }
+__device__ inline void stress_add(cuDoubleComplex& acc, cuDoubleComplex v) { acc.x += v.x; acc.y += v.y; }
+// Same product as ker_multi(dst, integrand, basis, factor)
+__device__ inline double stress_term(double integrand, double basis, double factor) { return factor * integrand * basis; }
+__device__ inline cuDoubleComplex stress_term(cuDoubleComplex integrand, double basis, double factor)
+{
+    return make_cuDoubleComplex(factor * integrand.x * basis, factor * integrand.y * basis);
+}
+
+// Warp sum (all 32 lanes take part; lane 0 gets the total)
+__device__ inline double stress_warp_sum(double v)
+{
+    for (int offset = 16; offset > 0; offset /= 2)
+        v += __shfl_down_sync(0xffffffff, v, offset);
+    return v;
+}
+__device__ inline cuDoubleComplex stress_warp_sum(cuDoubleComplex v)
+{
+    return make_cuDoubleComplex(stress_warp_sum(v.x), stress_warp_sum(v.y));
+}
+
+// Block sum of NC per-thread values (blockDim.x == STRESS_THREADS); thread 0 gets the totals
+template <typename TD, int NC>
+__device__ inline void stress_block_sum(TD (&acc)[NC])
+{
+    __shared__ TD sh[NC][STRESS_THREADS / 32];
+    const int lane = threadIdx.x & 31;
+    const int warp = threadIdx.x >> 5;
+    #pragma unroll
+    for (int c = 0; c < NC; ++c)
+    {
+        acc[c] = stress_warp_sum(acc[c]);
+        if (lane == 0)
+            sh[c][warp] = acc[c];
+    }
+    __syncthreads();
+    if (warp == 0)
+    {
+        #pragma unroll
+        for (int c = 0; c < NC; ++c)
+            acc[c] = stress_warp_sum(lane < STRESS_THREADS / 32 ? sh[c][lane] : stress_zero(TD{}));
+    }
+}
+
+template <typename TD, int NC>
+__global__ void ker_stress_dyad_partials(TD* partial, const TD* integrand, StressBases bases, double factor, int M)
+{
+    TD acc[NC];
+    #pragma unroll
+    for (int c = 0; c < NC; ++c)
+        acc[c] = stress_zero(TD{});
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        const TD v = integrand[i];
+        #pragma unroll
+        for (int c = 0; c < NC; ++c)
+            stress_add(acc[c], stress_term(v, bases.basis[c][i], factor));
+        i += blockDim.x * gridDim.x;
+    }
+    stress_block_sum<TD, NC>(acc);
+    if (threadIdx.x == 0)
+    {
+        #pragma unroll
+        for (int c = 0; c < NC; ++c)
+            partial[blockIdx.x * NC + c] = acc[c];
+    }
+}
+
+template <typename TD, int NC>
+__global__ void ker_stress_dyad_finalize(TD* out, const TD* partial, int n_partial)
+{
+    TD acc[NC];
+    #pragma unroll
+    for (int c = 0; c < NC; ++c)
+        acc[c] = stress_zero(TD{});
+    for (int b = threadIdx.x; b < n_partial; b += blockDim.x)
+    {
+        #pragma unroll
+        for (int c = 0; c < NC; ++c)
+            stress_add(acc[c], partial[b * NC + c]);
+    }
+    stress_block_sum<TD, NC>(acc);
+    if (threadIdx.x == 0)
+    {
+        #pragma unroll
+        for (int c = 0; c < NC; ++c)
+            out[c] = acc[c];
+    }
+}
+
+// out[0..NC-1] = Σ_i factor·integrand[i]·basis_c[i]: block partials, then their sum in block order
+template <typename TD, int NC>
+void launch_stress_dyads(TD* out, TD* partial, const TD* integrand, const StressBases& bases,
+                         double factor, int M, cudaStream_t stream)
+{
+    // About two elements per thread, at most STRESS_MAX_BLOCKS blocks
+    const int n_partial = std::max(1, std::min(STRESS_MAX_BLOCKS, (M + 2 * STRESS_THREADS - 1) / (2 * STRESS_THREADS)));
+    ker_stress_dyad_partials<TD, NC><<<n_partial, STRESS_THREADS, 0, stream>>>(partial, integrand, bases, factor, M);
+    ker_stress_dyad_finalize<TD, NC><<<1, STRESS_THREADS, 0, stream>>>(out, partial, n_partial);
+}
+
+template <typename TD>
+void launch_stress_dyads(TD* out, TD* partial, const TD* integrand, const StressBases& bases, int n_comp,
+                         double factor, int M, cudaStream_t stream)
+{
+    switch (n_comp)
+    {
+        case 1: launch_stress_dyads<TD, 1>(out, partial, integrand, bases, factor, M, stream); break;
+        case 2: launch_stress_dyads<TD, 2>(out, partial, integrand, bases, factor, M, stream); break;
+        case 3: launch_stress_dyads<TD, 3>(out, partial, integrand, bases, factor, M, stream); break;
+        case 6: launch_stress_dyads<TD, 6>(out, partial, integrand, bases, factor, M, stream); break;
+        default: throw_with_line_number("Unsupported number of stress components: " + std::to_string(n_comp));
+    }
+}
+
+}  // namespace
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -60,6 +191,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             d_stress_sum_out[i] = nullptr;
             d_q_multi[i] = nullptr;
             d_qk_conj_[i] = nullptr;
+            d_stress_partial_[i] = nullptr;
             d_q_full_in_[i] = nullptr;
             d_q_full_out_[i] = nullptr;
             crysfft_[i] = nullptr;
@@ -167,6 +299,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(T)*1));
             gpu_error_check(cudaMalloc((void**)&d_q_multi[i],         sizeof(T)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_stress_partial_[i], sizeof(T)*6*STRESS_MAX_BLOCKS));
             if constexpr (std::is_same<T, std::complex<double>>::value)
                 gpu_error_check(cudaMalloc((void**)&d_qk_conj_[i],    sizeof(cuDoubleComplex)*M_COMPLEX));
         }
@@ -242,6 +375,7 @@ void CudaSolverPseudoBase<T>::release_base()
         free_device(d_stress_sum_out[i]);
         free_device(d_q_multi[i]);
         free_device(d_qk_conj_[i]);
+        free_device(d_stress_partial_[i]);
         free_device(d_temp_storage[i]);
         temp_storage_bytes[i] = 0;
     }
@@ -864,52 +998,47 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         // ============================================================================
         const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
 
-        // One dyad component: V = Σ_k integrand(k) · basis(k) · basis_factor
-        auto accumulate = [&](const double* d_basis, int slot)
-        {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_basis, basis_factor, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[slot], M_COMPLEX, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
-        };
-
+        // Dyad components V_c = Σ_k integrand(k)·basis_c(k)·basis_factor, written to
+        // d_segment_stress[0..n_comp-1]
+        StressBases bases{};
+        int n_comp = 0;
+        auto add_component = [&](const double* d_basis) { bases.basis[n_comp++] = d_basis; };
         if ( DIM == 3 )
         {
-            accumulate(_d_fourier_basis_x, 0);   // V₁₁
-            accumulate(_d_fourier_basis_y, 1);   // V₂₂
-            accumulate(_d_fourier_basis_z, 2);   // V₃₃
+            add_component(_d_fourier_basis_x);   // V₁₁
+            add_component(_d_fourier_basis_y);   // V₂₂
+            add_component(_d_fourier_basis_z);   // V₃₃
 
             // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
             if (!is_orthogonal)
             {
-                accumulate(_d_fourier_basis_xy, 3);   // V₁₂
-                accumulate(_d_fourier_basis_xz, 4);   // V₁₃
-                accumulate(_d_fourier_basis_yz, 5);   // V₂₃
+                add_component(_d_fourier_basis_xy);   // V₁₂
+                add_component(_d_fourier_basis_xz);   // V₁₃
+                add_component(_d_fourier_basis_yz);   // V₂₃
             }
         }
         if ( DIM == 2 )
         {
             // For non-periodic BC, 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
             // so stress data is stored in fourier_basis_y and fourier_basis_z
-            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_y;
-            const double* _d_basis_yy = is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z;
-            const double* _d_basis_xy = is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz;
-
-            accumulate(_d_basis_xx, 0);   // V₁₁
-            accumulate(_d_basis_yy, 1);   // V₂₂
+            add_component(is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_y);   // V₁₁
+            add_component(is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z);   // V₂₂
 
             // V₁₂: only compute for non-orthogonal boxes
             if (!is_orthogonal)
-                accumulate(_d_basis_xy, 2);
+                add_component(is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz);
         }
         if ( DIM == 1 )
         {
             // For non-periodic BC, 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
             // so stress data is stored in fourier_basis_z
-            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_z;
-
-            accumulate(_d_basis_xx, 0);
+            add_component(is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_z);
         }
+
+        // One pass over k for all components, then the block partials in block order
+        launch_stress_dyads(d_segment_stress, d_stress_partial_[STREAM], d_q_multi[STREAM], bases, n_comp,
+                            basis_factor, M_COMPLEX, streams[STREAM][0]);
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {

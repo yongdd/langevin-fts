@@ -315,6 +315,10 @@ void CudaCrysFFTRecursive3m::release()
         free_cache_device(kv.second);
     multiplier_cache_.clear();
 
+    for (KCacheDevice& cache : spare_caches_)
+        free_cache_device(cache);
+    spare_caches_.clear();
+
     if (d_step1_)
         cudaFree(d_step1_);
     if (d_step2_)
@@ -420,9 +424,33 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache(do
     return build_k_cache_from_tempmat(tempmat);
 }
 
+// Axes a multiplier sums k_d² over (bit 0: x, 1: y, 2: z), and whether it
+// carries the bond factor exp(-k² coeff)
+static int multiplier_axes(CudaCrysFFTRecursive3m::MultiplierType type)
+{
+    using MT = CudaCrysFFTRecursive3m::MultiplierType;
+    switch (type)
+    {
+        case MT::Kx2:  case MT::ExpKx2:  return 1;
+        case MT::Ky2:  case MT::ExpKy2:  return 2;
+        case MT::Kz2:  case MT::ExpKz2:  return 4;
+        case MT::Kxy2: case MT::ExpKxy2: return 3;
+        case MT::K2:   case MT::ExpK2:   return 7;
+    }
+    return 0;
+}
+static bool multiplier_has_bond(CudaCrysFFTRecursive3m::MultiplierType type)
+{
+    using MT = CudaCrysFFTRecursive3m::MultiplierType;
+    return type == MT::ExpKx2 || type == MT::ExpKy2 || type == MT::ExpKz2
+        || type == MT::ExpKxy2 || type == MT::ExpK2;
+}
+
 CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache_from_multiplier(
     MultiplierType type, double coeff)
 {
+    const int axes = multiplier_axes(type);
+    const bool with_bond = multiplier_has_bond(type);
     std::vector<double> kx(nx_logical_[0]);
     std::vector<double> ky(nx_logical_[1]);
     std::vector<double> kz(nx_logical_[2]);
@@ -464,32 +492,8 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache_fr
                 double ky2 = ky[iy];
                 double kz2 = kz[iz];
                 double k2 = kx2 + ky2 + kz2;
-                double value = 0.0;
-
-                switch (type)
-                {
-                    case MultiplierType::Kx2:
-                        value = kx2;
-                        break;
-                    case MultiplierType::Ky2:
-                        value = ky2;
-                        break;
-                    case MultiplierType::Kz2:
-                        value = kz2;
-                        break;
-                    case MultiplierType::ExpKx2:
-                        value = std::exp(-k2 * coeff) * kx2;
-                        break;
-                    case MultiplierType::ExpKy2:
-                        value = std::exp(-k2 * coeff) * ky2;
-                        break;
-                    case MultiplierType::ExpKz2:
-                        value = std::exp(-k2 * coeff) * kz2;
-                        break;
-                    default:
-                        value = 0.0;
-                        break;
-                }
+                const double k_axes = ((axes & 1) ? kx2 : 0.0) + ((axes & 2) ? ky2 : 0.0) + ((axes & 4) ? kz2 : 0.0);
+                double value = with_bond ? std::exp(-k2 * coeff) * k_axes : k_axes;
 
                 tempmat[base + iz] = value * factor;
             }
@@ -545,16 +549,29 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
     mul_add_sub_by_seq(k_re_ptr, k_im_ptr, r_re_ptr, r_im_ptr, k_split_perm_ptr, seq3, halfsize);
 
+    // Reuse the buffers of a cache dropped by a cell change when one is left;
+    // allocating and copying on the default stream would stall the other streams
     KCacheDevice cache;
+    if (!spare_caches_.empty())
+    {
+        cache = spare_caches_.back();
+        spare_caches_.pop_back();
+    }
     try
     {
         for (int i = 0; i < 8; ++i)
         {
-            gpu_error_check(cudaMalloc(&cache.re[i], sizeof(double) * M_physical_));
-            gpu_error_check(cudaMalloc(&cache.im[i], sizeof(double) * M_physical_));
-            gpu_error_check(cudaMemcpy(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+            if (cache.re[i] == nullptr)
+                gpu_error_check(cudaMalloc(&cache.re[i], sizeof(double) * M_physical_));
+            if (cache.im[i] == nullptr)
+                gpu_error_check(cudaMalloc(&cache.im[i], sizeof(double) * M_physical_));
+            gpu_error_check(cudaMemcpyAsync(cache.re[i], k_re_host[i].data(), sizeof(double) * M_physical_,
+                                            cudaMemcpyHostToDevice, stream_));
+            gpu_error_check(cudaMemcpyAsync(cache.im[i], k_im_host[i].data(), sizeof(double) * M_physical_,
+                                            cudaMemcpyHostToDevice, stream_));
         }
+        // Complete before the host tables go away and before any stream uses the cache
+        gpu_error_check(cudaStreamSynchronize(stream_));
     }
     catch (...)
     {
@@ -576,13 +593,17 @@ void CudaCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_par
     }
     cell_para_ = cell_para;
 
+    // Keep the device buffers for the caches the next steps rebuild.
+    // Reusing the buffers is safe because the computations synchronize every stream
+    // before update_laplacian_operator() can change the cell; set_cell_para() must
+    // not run while a kernel may still read the old tables.
     for (auto& kv : k_cache_)
-        free_cache_device(kv.second);
+        spare_caches_.push_back(kv.second);
     k_cache_.clear();
     k_current_ = nullptr;
 
     for (auto& kv : multiplier_cache_)
-        free_cache_device(kv.second);
+        spare_caches_.push_back(kv.second);
     multiplier_cache_.clear();
 }
 
@@ -655,7 +676,7 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
         throw_with_line_number("CudaCrysFFTRecursive3m cufftExecD2Z failed.");
 
     const int threads = 256;
-    const int blocks = (M_complex_ + threads - 1) / threads;
+    const int blocks = grid_blocks(M_complex_, threads);
 
     ker_apply_k_3m<<<blocks, threads, 0, stream_>>>(
         d_step2_, d_step1_,
@@ -673,10 +694,8 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
 void CudaCrysFFTRecursive3m::apply_multiplier(
     double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream)
 {
-    // Kx2/Ky2/Kz2 do not depend on coeff; normalize the cache key
-    const bool uses_coeff =
-        (type == MultiplierType::ExpKx2 || type == MultiplierType::ExpKy2 || type == MultiplierType::ExpKz2);
-    auto key = std::make_pair(static_cast<int>(type), uses_coeff ? coeff : 0.0);
+    // Types without the bond factor do not depend on coeff; normalize the cache key
+    auto key = std::make_pair(static_cast<int>(type), multiplier_has_bond(type) ? coeff : 0.0);
 
     auto it = multiplier_cache_.find(key);
     if (it == multiplier_cache_.end())

@@ -55,7 +55,7 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
         cb_w_deriv_dots = new CircularBuffer<T>(this->max_hist+1, this->max_hist+1);
 
         // define arrays for anderson mixing
-        this->u_nm = new T*[this->max_hist];
+        this->u_nm = new T*[this->max_hist]();
         for(int i=0; i<this->max_hist; i++)
             this->u_nm[i] = new T[this->max_hist];
         this->v_n = new T[this->max_hist];
@@ -85,34 +85,39 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
     }
     catch(std::exception& exc)
     {
+        release();
         throw_without_line_number(exc.what());
     }
 }
 template <typename T>
 CudaAndersonMixingReduceMemory<T>::~CudaAndersonMixingReduceMemory()
 {
-    delete pinned_cb_w_hist;
-    delete pinned_cb_w_deriv_hist;
-    delete cb_w_deriv_dots;
+    release();
+}
+template <typename T>
+void CudaAndersonMixingReduceMemory<T>::release()
+{
+    delete pinned_cb_w_hist;       pinned_cb_w_hist = nullptr;
+    delete pinned_cb_w_deriv_hist; pinned_cb_w_deriv_hist = nullptr;
+    delete cb_w_deriv_dots;        cb_w_deriv_dots = nullptr;
 
-    for (int i=0; i<this->max_hist; i++)
-        delete[] u_nm[i];
-    delete[] u_nm;
-    delete[] v_n;
-    delete[] a_n;
-    delete[] w_deriv_dots;
-    
-    cudaFree(d_w_deriv);
-    cudaFree(d_w_new);
-    cudaFree(d_sum);
-    cudaFree(d_sum_out);
-    cudaFree(d_temp_storage);
+    if (u_nm != nullptr)
+    {
+        for (int i=0; i<this->max_hist; i++)
+            delete[] u_nm[i];
+        delete[] u_nm;
+        u_nm = nullptr;
+    }
+    delete[] v_n;          v_n = nullptr;
+    delete[] a_n;          a_n = nullptr;
+    delete[] w_deriv_dots; w_deriv_dots = nullptr;
 
-    cudaFree(d_w_hist1);
-    cudaFree(d_w_hist2);
-    cudaFree(d_w_deriv_hist1);
-    cudaFree(d_w_deriv_hist2);
-
+    for (CuDeviceData<T>** d : {&d_w_deriv, &d_w_new, &d_sum, &d_sum_out, &d_temp_storage,
+                                &d_w_hist1, &d_w_hist2, &d_w_deriv_hist1, &d_w_deriv_hist2})
+    {
+        cudaFree(*d);
+        *d = nullptr;
+    }
 }
 template <typename T>
 void CudaAndersonMixingReduceMemory<T>::reset_count()

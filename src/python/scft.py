@@ -46,9 +46,12 @@ class SCFTResult:
     iterations : int
         Number of iterations performed.
     phi : dict
-        Monomer concentration fields {monomer_type: array}.
-    w : np.ndarray
-        Potential fields, shape (M, total_grid).
+        Monomer concentration fields {monomer_type: array} on the full grid
+        (expanded from the reduced basis when a space group is used).
+    w : dict
+        Potential fields {monomer_type: array} on the full grid. They can be
+        passed back to SCFT.run as initial_fields, for example to continue a
+        parameter sweep from the previous solution.
     partition_functions : list
         Single-chain partition functions for each polymer type.
     stress : np.ndarray or None
@@ -67,7 +70,7 @@ class SCFTResult:
     error_level: float
     iterations: int
     phi: Dict[str, np.ndarray]
-    w: np.ndarray
+    w: Dict[str, np.ndarray]
     partition_functions: List[float]
     lx: List[float]
     nx: List[int]
@@ -478,6 +481,11 @@ class SCFT:
         optimizer = params["optimizer"]
         if optimizer["name"] != "am":
             raise ValueError(f"Invalid optimizer name: {optimizer['name']}. Only 'am' (Anderson mixing) is available.")
+        if n_var > _core.MAX_GRID_ARRAY:
+            raise ValidationError(
+                f"Anderson mixing would adjust {n_var} variables ({len(self.monomer_types)} fields of "
+                f"{n_field_var // len(self.monomer_types)} values); at most {_core.MAX_GRID_ARRAY} are supported "
+                "(32-bit indices). Use fewer grid points or a space group.")
         self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
             optimizer["max_hist"],     # maximum number of history
             optimizer["start_error"],  # when switch to AM from simple mixing
@@ -640,6 +648,18 @@ class SCFT:
 
         return phi, elapsed_time
 
+    def _to_full_grid(self, field: np.ndarray) -> np.ndarray:
+        """Expand a field of the working basis to the full grid (a copy without a space group)."""
+        if self.sg is None:
+            return np.array(field, dtype=np.float64)
+        # self.w and self.phi are stored in the irreducible basis. With a physical
+        # basis the reduced ordering differs even when the sizes coincide (mmm
+        # orthorhombic groups with the m3 basis), so the conversion is gated on
+        # the basis, not on the sizes.
+        if self.sg.physical_basis_name() != "irreducible":
+            field = self.sg.irreducible_to_reduced(field)
+        return self.sg.from_reduced_basis(field)
+
     def save_results(self, path):
         """Save SCFT results to file in MATLAB, JSON, or YAML format.
 
@@ -677,25 +697,13 @@ class SCFT:
             m_dic["space_group_symbol"] = self.sg.get_spacegroup_symbol()
             m_dic["space_group_hall_number"] = self.sg.get_hall_number()
 
-        def _field_to_full(field: np.ndarray) -> np.ndarray:
-            """Expand an irreducible-basis field to the full grid if a space group is set."""
-            if self.sg is None:
-                return field
-            # self.w and self.phi are stored in the irreducible basis. With a physical
-            # basis the reduced ordering differs even when the sizes coincide (mmm
-            # orthorhombic groups with the m3 basis), so the conversion is gated on
-            # the basis, not on the sizes.
-            if self.sg.physical_basis_name() != "irreducible":
-                field = self.sg.irreducible_to_reduced(field)
-            return self.sg.from_reduced_basis(field)
-
         # Add w fields to the dictionary (expand to full grid if space group is set)
         for i, name in enumerate(self.monomer_types):
-            m_dic["w_" + name] = _field_to_full(self.w[i])
+            m_dic["w_" + name] = self._to_full_grid(self.w[i])
 
         # Add concentrations to the dictionary (expand to full grid if space group is set)
         for name in self.monomer_types:
-            m_dic["phi_" + name] = _field_to_full(self.phi[name])
+            m_dic["phi_" + name] = self._to_full_grid(self.phi[name])
 
         # Convert numpy arrays to lists
         for data in m_dic:
@@ -874,8 +882,8 @@ class SCFT:
             If callback returns False, iteration stops early.
             Use for monitoring, checkpointing, or custom stopping criteria.
         return_result : bool, optional
-            If True, return an SCFTResult object (default: False).
-            For backward compatibility, results are also stored as attributes.
+            If True, return an SCFTResult object with the fields on the full
+            grid (default: False). The results are also stored as attributes.
 
         Attributes Set
         --------------
@@ -1082,8 +1090,8 @@ class SCFT:
                 free_energy=energy_total,
                 error_level=error_level,
                 iterations=iter,
-                phi=phi,
-                w=w,
+                phi={name: self._to_full_grid(phi[name]) for name in self.monomer_types},
+                w={name: self._to_full_grid(w[i]) for i, name in enumerate(self.monomer_types)},
                 partition_functions=total_partitions,
                 lx=list(self.prop_solver.get_lx()),
                 nx=list(self.prop_solver.nx),

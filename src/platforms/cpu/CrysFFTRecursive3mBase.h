@@ -215,6 +215,8 @@ template <typename Derived>
 class CrysFFTRecursive3mBase
 {
 public:
+    /// Stress multipliers: k_d² summed over some axes (Kxy2: x and y, K2: all),
+    /// times exp(-k² coeff) for the Exp types (discrete chains).
     enum class MultiplierType
     {
         Kx2,
@@ -222,8 +224,33 @@ public:
         Kz2,
         ExpKx2,
         ExpKy2,
-        ExpKz2
+        ExpKz2,
+        Kxy2,
+        K2,
+        ExpKxy2,
+        ExpK2
     };
+
+    /// Axes a multiplier sums k_d² over (bit 0: x, 1: y, 2: z).
+    static int multiplier_axes(MultiplierType type)
+    {
+        switch (type)
+        {
+            case MultiplierType::Kx2:  case MultiplierType::ExpKx2:  return 1;
+            case MultiplierType::Ky2:  case MultiplierType::ExpKy2:  return 2;
+            case MultiplierType::Kz2:  case MultiplierType::ExpKz2:  return 4;
+            case MultiplierType::Kxy2: case MultiplierType::ExpKxy2: return 3;
+            case MultiplierType::K2:   case MultiplierType::ExpK2:   return 7;
+        }
+        return 0;
+    }
+
+    /// Whether a multiplier carries the bond factor exp(-k² coeff).
+    static bool multiplier_has_bond(MultiplierType type)
+    {
+        return type == MultiplierType::ExpKx2 || type == MultiplierType::ExpKy2 || type == MultiplierType::ExpKz2
+            || type == MultiplierType::ExpKxy2 || type == MultiplierType::ExpK2;
+    }
 
     struct KCache {
         std::array<std::unique_ptr<double[]>, 8> re;
@@ -251,12 +278,7 @@ protected:
         std::map<double, KCache> k_cache;
         const KCache* k_current = nullptr;
         double coeff_current = std::numeric_limits<double>::quiet_NaN();
-        std::map<double, KCache> exp_kx2_cache;
-        std::map<double, KCache> exp_ky2_cache;
-        std::map<double, KCache> exp_kz2_cache;
-        std::unique_ptr<KCache> kx2_cache;
-        std::unique_ptr<KCache> ky2_cache;
-        std::unique_ptr<KCache> kz2_cache;
+        std::map<std::pair<MultiplierType, double>, KCache> multiplier_cache;   ///< keyed by (type, coeff)
         uint64_t epoch = 0;
     };
 
@@ -296,12 +318,7 @@ protected:
             state->k_cache.clear();
             state->k_current = nullptr;
             state->coeff_current = std::numeric_limits<double>::quiet_NaN();
-            state->exp_kx2_cache.clear();
-            state->exp_ky2_cache.clear();
-            state->exp_kz2_cache.clear();
-            state->kx2_cache.reset();
-            state->ky2_cache.reset();
-            state->kz2_cache.reset();
+            state->multiplier_cache.clear();
             state->epoch = epoch;
         }
         return *state;
@@ -455,84 +472,27 @@ protected:
         });
     }
 
-    /// Multiplier cache (kx^2, ky^2, kz^2, or exp(-k^2 coeff) times one of
-    /// them) used by apply_multiplier() for the stress calculation.
+    /// Multiplier cache (k_d² summed over the axes of the type, times
+    /// exp(-k² coeff) for the Exp types) used by apply_multiplier() for the stress.
     KCache generate_k_cache_from_multiplier(MultiplierType type, double coeff) const
     {
-        return generate_k_cache_impl([type, coeff](double kx2, double ky2, double kz2) {
-            double k2 = kx2 + ky2 + kz2;
-            double value = 0.0;
-
-            switch (type)
-            {
-                case MultiplierType::Kx2:
-                    value = kx2;
-                    break;
-                case MultiplierType::Ky2:
-                    value = ky2;
-                    break;
-                case MultiplierType::Kz2:
-                    value = kz2;
-                    break;
-                case MultiplierType::ExpKx2:
-                    value = std::exp(-k2 * coeff) * kx2;
-                    break;
-                case MultiplierType::ExpKy2:
-                    value = std::exp(-k2 * coeff) * ky2;
-                    break;
-                case MultiplierType::ExpKz2:
-                    value = std::exp(-k2 * coeff) * kz2;
-                    break;
-                default:
-                    value = 0.0;
-                    break;
-            }
-
-            return value;
+        const int axes = multiplier_axes(type);
+        const bool bond = multiplier_has_bond(type);
+        return generate_k_cache_impl([axes, bond, coeff](double kx2, double ky2, double kz2) {
+            const double k_axes = ((axes & 1) ? kx2 : 0.0) + ((axes & 2) ? ky2 : 0.0) + ((axes & 4) ? kz2 : 0.0);
+            return bond ? std::exp(-(kx2 + ky2 + kz2) * coeff) * k_axes : k_axes;
         });
     }
 
     const KCache& get_multiplier_cache(MultiplierType type, double coeff) const
     {
         ThreadState& state = get_thread_state();
-        switch (type)
-        {
-            case MultiplierType::Kx2:
-                if (!state.kx2_cache)
-                    state.kx2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-                return *state.kx2_cache;
-            case MultiplierType::Ky2:
-                if (!state.ky2_cache)
-                    state.ky2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-                return *state.ky2_cache;
-            case MultiplierType::Kz2:
-                if (!state.kz2_cache)
-                    state.kz2_cache = std::make_unique<KCache>(generate_k_cache_from_multiplier(type, 0.0));
-                return *state.kz2_cache;
-            case MultiplierType::ExpKx2:
-            {
-                auto it = state.exp_kx2_cache.find(coeff);
-                if (it == state.exp_kx2_cache.end())
-                    it = state.exp_kx2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
-                return it->second;
-            }
-            case MultiplierType::ExpKy2:
-            {
-                auto it = state.exp_ky2_cache.find(coeff);
-                if (it == state.exp_ky2_cache.end())
-                    it = state.exp_ky2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
-                return it->second;
-            }
-            case MultiplierType::ExpKz2:
-            {
-                auto it = state.exp_kz2_cache.find(coeff);
-                if (it == state.exp_kz2_cache.end())
-                    it = state.exp_kz2_cache.emplace(coeff, generate_k_cache_from_multiplier(type, coeff)).first;
-                return it->second;
-            }
-            default:
-                throw_with_line_number("Unsupported multiplier type.");
-        }
+        // Types without the bond factor do not depend on coeff
+        const auto key = std::make_pair(type, multiplier_has_bond(type) ? coeff : 0.0);
+        auto it = state.multiplier_cache.find(key);
+        if (it == state.multiplier_cache.end())
+            it = state.multiplier_cache.emplace(key, generate_k_cache_from_multiplier(type, coeff)).first;
+        return it->second;
     }
 
 public:

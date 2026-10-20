@@ -179,13 +179,8 @@ void ComputationReduceMemoryContinuous<T>::compute_concentrations()
                     this->backend->add_segment_products(0, phi, {{q, q_dagger, simpson[n]}});
                 });
 
-            // Normalization: local_ds * volume_fraction / alpha * n_repeated / Q
-            const int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
-            const double local_ds = this->molecules->get_contour_length_mapping().get_ds_from_index(ds_index);
-            Polymer& pc = this->molecules->get_polymer(p);
-            const T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*block.n_repeated)
-                           /this->single_polymer_partitions[p];
-            this->backend->normalize_concentration(0, phi, norm, nullptr);
+            // Normalization: ds * volume_fraction / alpha * n_repeated / Q
+            this->backend->normalize_concentration(0, phi, this->concentration_norm(key), nullptr);
         }
         this->backend->synchronize();
 
@@ -227,28 +222,13 @@ void ComputationReduceMemoryContinuous<T>::compute_stress()
                         for (int d = 0; d < 6; d++)
                             stress[d] += segment[d];
                     });
-
-                const int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
-                const double local_ds = this->molecules->get_contour_length_mapping().get_ds_from_index(ds_index);
-                for (int d = 0; d < 6; d++)
-                    stress[d] *= local_ds;
+                this->scale_by_contour_step(stress, key_right);
             }
             stress_of_block.push_back(stress);
         }
 
         // Sum the blocks of each polymer
-        for (int p = 0; p < this->molecules->get_n_polymer_types(); p++)
-            for (int d = 0; d < 6; d++)
-                this->dq_dl[p][d] = 0.0;
-        size_t b = 0;
-        for (const auto& [key, phi] : this->phi_block)
-        {
-            for (int d = 0; d < 6; d++)
-                this->dq_dl[std::get<0>(key)][d] += stress_of_block[b][d];
-            b++;
-        }
-
-        this->convert_stress_to_lattice_derivatives();
+        this->set_stress_from_blocks(stress_of_block);
     }
     catch (std::exception& exc)
     {

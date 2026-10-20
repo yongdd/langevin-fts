@@ -153,8 +153,14 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         // so allocate extra space
         int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
 
-        // Temporary arrays
-        std::vector<double> k_q_in(coeff_size);
+        // The CrysFFT path works on the physical grid and returns the reduced basis;
+        // the other paths work on the full grid
+        const bool crysfft_path = this->use_crysfft() && this->space_group_ != nullptr;
+
+        // Work array, kept per thread (called from OpenMP parallel regions)
+        thread_local std::vector<double> k_q_in;
+        if (!crysfft_path)
+            k_q_in.resize(coeff_size);
 
         // Get Boltzmann factors for the correct ds_index
         const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
@@ -164,10 +170,11 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         T* fft_in = q_in;
         T* fft_out = q_out;
 
-        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions)
+        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions);
+        // the CrysFFT path reads the reduced basis directly
         thread_local std::vector<T> q_full_in_local, q_full_out_local;
 
-        if (this->space_group_ != nullptr)
+        if (this->space_group_ != nullptr && !crysfft_path)
         {
             q_full_in_local.resize(M_full);
             q_full_out_local.resize(M_full);
@@ -182,7 +189,7 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
 
         // ===== RK2: Single full step =====
         // Step 1: exp(-w·ds/2) * q_in
-        if (!(this->use_crysfft() && this->space_group_ != nullptr))
+        if (!crysfft_path)
         {
             for (int i = 0; i < M_full; ++i)
                 fft_out[i] = _exp_dw[i] * fft_in[i];
@@ -191,7 +198,7 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         // Step 2-4: Forward FFT -> multiply by Boltzmann factor -> Backward FFT
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft() && this->space_group_ != nullptr)
+            if (crysfft_path)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
@@ -241,7 +248,7 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         // Step 5: exp(-w·ds/2) * result
         if constexpr (std::is_same_v<T, double>)
         {
-            if (!(this->use_crysfft() && this->space_group_ != nullptr))
+            if (!crysfft_path)
             {
                 for (int i = 0; i < M_full; ++i)
                     fft_out[i] *= _exp_dw[i];

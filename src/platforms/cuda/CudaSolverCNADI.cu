@@ -37,6 +37,12 @@
 #include <numbers>
 #include "CudaSolverCNADI.h"
 
+// The line solvers below give one thread to each grid line, so a launch sized
+// for whole grids (CudaCommon blocks x threads) would leave most blocks idle:
+// a 64^3 grid has 4096 lines per direction. Launch one 64-thread block per 64 lines.
+constexpr int LINE_THREADS = 64;
+static inline int line_blocks(int n_lines) { return (n_lines + LINE_THREADS - 1)/LINE_THREADS; }
+
 CudaSolverCNADI::CudaSolverCNADI(
     ComputationBox<double>* cb,
     Molecules *molecules,
@@ -544,14 +550,14 @@ void CudaSolverCNADI::advance_propagator_3d(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
@@ -567,14 +573,14 @@ void CudaSolverCNADI::advance_propagator_3d(
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
@@ -590,14 +596,14 @@ void CudaSolverCNADI::advance_propagator_3d(
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_z, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, shmem_z, streams[STREAM][0]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
@@ -645,14 +651,14 @@ void CudaSolverCNADI::advance_propagator_2d(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[1]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
@@ -668,14 +674,14 @@ void CudaSolverCNADI::advance_propagator_2d(
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
@@ -713,12 +719,12 @@ void CudaSolverCNADI::advance_propagator_1d(
         gpu_error_check(cudaPeekAtLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
                 d_offset, 1, 1, nx[0]);
         else
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
         gpu_error_check(cudaPeekAtLastError());
@@ -759,14 +765,14 @@ void CudaSolverCNADI::advance_propagator_3d_step(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
@@ -782,14 +788,14 @@ void CudaSolverCNADI::advance_propagator_3d_step(
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
@@ -805,14 +811,14 @@ void CudaSolverCNADI::advance_propagator_3d_step(
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_z, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, shmem_z, streams[STREAM][0]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
@@ -852,14 +858,14 @@ void CudaSolverCNADI::advance_propagator_2d_step(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[1]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
@@ -875,14 +881,14 @@ void CudaSolverCNADI::advance_propagator_2d_step(
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(nx[0]), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(nx[0]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
@@ -917,12 +923,12 @@ void CudaSolverCNADI::advance_propagator_1d_step(
         gpu_error_check(cudaPeekAtLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
                 d_offset, 1, 1, nx[0]);
         else
-            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+            tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
         gpu_error_check(cudaPeekAtLastError());

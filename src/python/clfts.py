@@ -27,6 +27,7 @@ from .utils import (
     process_random_copolymer,
     draw_polymer_architectures,
     calculate_sigma,
+    load_config,
 )
 
 # OpenMP environment variables
@@ -62,6 +63,17 @@ class CLFTS:
     >>> sim = CLFTS(params)
     >>> sim.run(initial_fields={"A": w_A, "B": w_B})
     """
+
+    @classmethod
+    def from_file(cls, path, random_seed=None, **overrides):
+        """Create a simulation from a YAML or JSON parameter file.
+
+        Reads the file with utils.load_config, applies the keyword overrides
+        and calls the constructor, as SCFT.from_file does.
+        """
+        params = load_config(path)
+        params.update(overrides)
+        return cls(params, random_seed=random_seed)
 
     def __init__(self, params, random_seed=None):
         """Initialize the Complex Langevin FTS simulation."""

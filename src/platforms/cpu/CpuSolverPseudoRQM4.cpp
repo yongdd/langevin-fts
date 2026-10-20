@@ -159,10 +159,21 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // so allocate extra space
         int coeff_size = this->complex_coeffs() ? M_COMPLEX * 2 : M_COMPLEX;
 
-        // Temporary arrays
-        std::vector<T> q_out1(M_full), q_out2(M_full);
-        std::vector<double> k_q_in1(coeff_size);
-        std::vector<double> k_q_in2(coeff_size);
+        // The CrysFFT path works on the physical grid and returns the reduced basis;
+        // the other paths work on the full grid
+        const bool crysfft_path = this->use_crysfft() && this->space_group_ != nullptr;
+        const int M_out = crysfft_path ? M_reduced : M_full;
+
+        // Work arrays, kept per thread (called from OpenMP parallel regions)
+        thread_local std::vector<T> q_out1, q_out2;
+        thread_local std::vector<double> k_q_in1, k_q_in2;
+        q_out1.resize(M_out);
+        q_out2.resize(M_out);
+        if (!crysfft_path)
+        {
+            k_q_in1.resize(coeff_size);
+            k_q_in2.resize(coeff_size);
+        }
 
         // Get Boltzmann factors for the correct ds_index
         const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
@@ -171,13 +182,14 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
         const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, ds_index);
 
-        // Determine input pointer (expand reduced basis if space_group is set)
+        // Determine input pointer (expand reduced basis if space_group is set;
+        // the CrysFFT path reads the reduced basis directly)
         T* fft_in = q_in;
 
         // Thread-local buffer for expand (called from OpenMP parallel regions)
         thread_local std::vector<T> q_full_in_local;
 
-        if (this->space_group_ != nullptr)
+        if (this->space_group_ != nullptr && !crysfft_path)
         {
             q_full_in_local.resize(M_full);
             // Expand reduced basis → full grid
@@ -189,7 +201,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // ===== Step 1: Full step =====
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft() && this->space_group_ != nullptr)
+            if (crysfft_path)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
@@ -219,7 +231,6 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
                     phys_out[i] *= _exp_dw[ridx];
                 }
 
-                q_out1.resize(M_reduced);
                 this->reduce_crysfft_to_reduced(phys_out.data(), q_out1.data());
             }
             else
@@ -251,7 +262,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         // ===== Step 2: Two half steps =====
         if constexpr (std::is_same_v<T, double>)
         {
-            if (this->use_crysfft() && this->space_group_ != nullptr)
+            if (crysfft_path)
             {
                 thread_local std::vector<double> phys_in;
                 thread_local std::vector<double> phys_out;
@@ -288,7 +299,6 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
                     phys_in[i] *= _exp_dw_half[ridx];
                 }
 
-                q_out2.resize(M_reduced);
                 this->reduce_crysfft_to_reduced(phys_in.data(), q_out2.data());
             }
             else
@@ -337,7 +347,6 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 
         // ===== RQM4: Richardson extrapolation =====
         // Result goes into q_out2 (reuse buffer)
-        const int M_out = (this->use_crysfft() && this->space_group_ != nullptr) ? M_reduced : M_full;
         for (int i = 0; i < M_out; ++i)
             q_out2[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 
@@ -355,7 +364,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         else
         {
             // No space group - copy result to output
-            std::copy(q_out2.begin(), q_out2.end(), q_out);
+            std::copy(q_out2.begin(), q_out2.begin() + M_full, q_out);
         }
 
         // Apply the mask on the output. The computation box stores the mask in the

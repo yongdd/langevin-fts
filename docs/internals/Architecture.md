@@ -159,4 +159,4 @@ Reduce-memory mode runs the same steps one propagator at a time, keeping q only 
 - A computation owns its backend, the scheduler, the concentration fields and the propagator storage; the backend is deleted last.
 - A backend owns its solver, and on CUDA the streams, events and scratch buffers.
 - A solver owns its transforms, its `Pseudo` tables, its CrysFFT objects and its Boltzmann factors.
-- The computation, backend, box, solver and transform constructors release what they already hold when they throw, so a failed construction (for example out of GPU memory) can be retried in the same process. The CUDA Anderson-mixing constructors do not yet. Errors inside the parallel loops reach Python as exceptions.
+- The computation, backend, box, solver, transform and Anderson-mixing constructors release what they already hold when they throw, so a failed construction (for example out of GPU memory) can be retried in the same process. Errors inside the parallel loops reach Python as exceptions.

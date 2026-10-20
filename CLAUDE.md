@@ -154,7 +154,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 86 | ~7 min | Development validation |
+| **Full** | `ctest` | 92 | ~7 min | Development validation |
 
 ### Running Tests
 
@@ -305,10 +305,14 @@ Exposes C++ classes to Python as the `_core` module. All C++ computational objec
 ### CUDA Implementation Details
 
 CUDA code uses:
-- **Multiple streams** (up to 4): Parallel propagator computations on GPU
+- **Multiple streams** (up to 4): Parallel propagator computations on GPU. One OpenMP thread drives each stream, so the stream count is `OMP_NUM_THREADS` (at most 4), and `OMP_MAX_ACTIVE_LEVELS=0` serializes them (on an A10 an iteration then took 1.5x as long at 32³ and 6-9% longer at 64³-128³ than with `1`)
 - **cuFFT**: GPU-accelerated Fast Fourier Transforms
 - **Shared memory**: Tridiagonal solvers for real-space methods use shared memory for performance
 - **Pinned memory**: Host-device transfers use pinned circular buffers for efficiency
+- **Kernels loop over their index range**: every element-wise kernel uses a grid-stride loop (`while (i < M) { ...; i += blockDim.x * gridDim.x; }`), so it is correct for any launch configuration; kernels that give one block a row or a whole 1D transform loop over rows with `gridDim.x` and over the row with `blockDim.x`. Write new kernels the same way. The default launch is 1024 blocks of 256 threads (`LFTS_GPU_NUM_BLOCKS`, `LFTS_GPU_NUM_THREADS` override it); line solvers (CN-ADI) size their launch to the number of grid lines
+- **No new OpenMP regions in per-iteration host code of the CUDA path**: a `#pragma omp parallel for` in the box-change table update made the Gyroid example 3x slower (its threads competed with spinning threads elsewhere in the process; `OMP_WAIT_POLICY=PASSIVE` hid it) and was removed. Host work there stays serial or moves to the GPU
+- **Launch shape**: element kernels launched to cover an array use `grid_blocks(n, block_size)` (`CudaCommon.h`), which caps the grid at `MAX_GRID_THREADS` = 2^20 threads so the stride loop cannot overflow `int`
+- **No allocation or default-stream copies inside the propagator loop**: `cudaMalloc`/`cudaFree` and synchronous `cudaMemcpy` serialize all streams. Tables rebuilt after a box change reuse their device buffers and are uploaded with `cudaMemcpyAsync` on the object's own stream
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
 
@@ -394,7 +398,8 @@ The `platform` parameter controls which computational backend is used:
 | **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
 | **GPU architecture errors** | Configure with `-DPOLYMERFTS_CUDA_ARCHITECTURES=...` listing only supported compute capabilities |
 | **Memory issues** | Set `"reduce_memory": True` in parameters |
-| **Single CPU core usage** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports |
+| **Run on one CPU core** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports. This disables OpenMP; on CUDA it also runs the propagator streams one after another, so GPU runs keep `"1"` |
+| **GPU or CPU underused** | Set `OMP_NUM_THREADS` before imports: it is the number of propagators computed concurrently (CPU threads, or CUDA streams up to 4). The Python classes default it to 1 when unset; the examples use 2 with `OMP_MAX_ACTIVE_LEVELS="1"` |
 
 ### SCFT Not Converging
 

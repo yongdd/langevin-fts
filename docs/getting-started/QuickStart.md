@@ -106,8 +106,11 @@ import os
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"
 
 # Option 2: Use multiple threads
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "4"
 ```
+
+`OMP_NUM_THREADS` is the number of propagators computed at the same time: CPU threads, or CUDA streams (at most 4) on the GPU. Option 1 therefore also makes a GPU run compute its propagators one after another; GPU runs should use Option 2 (the examples use 2 threads).
 
 ### GPU Selection
 

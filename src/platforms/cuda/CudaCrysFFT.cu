@@ -36,8 +36,10 @@ __global__ void kernel_apply_boltzmann_crys(
     int M)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= M) return;
-    d_data[idx] *= d_boltz[idx];
+    while (idx < M) {
+        d_data[idx] *= d_boltz[idx];
+        idx += blockDim.x * gridDim.x;
+    }
 }
 
 /**
@@ -50,8 +52,10 @@ __global__ void kernel_apply_multiplier_crys(
     int M)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= M) return;
-    d_data[idx] *= d_multiplier[idx] * norm;
+    while (idx < M) {
+        d_data[idx] *= d_multiplier[idx] * norm;
+        idx += blockDim.x * gridDim.x;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -124,6 +128,9 @@ void CudaCrysFFT::release()
 {
     freeBoltzmann();
     freeMultiplierCaches();
+    for (double* d_ptr : spare_tables_)
+        cudaFree(d_ptr);
+    spare_tables_.clear();
 
     delete dct_forward_;
     delete dct_backward_;
@@ -138,12 +145,12 @@ void CudaCrysFFT::release()
 //------------------------------------------------------------------------------
 void CudaCrysFFT::freeMultiplierCaches()
 {
-    for (int axis = 0; axis < 3; ++axis)
+    for (double*& d_k2 : d_axis_k2_)
     {
-        if (d_axis_k2_[axis])
+        if (d_k2)
         {
-            cudaFree(d_axis_k2_[axis]);
-            d_axis_k2_[axis] = nullptr;
+            cudaFree(d_k2);
+            d_k2 = nullptr;
         }
     }
     for (auto& kv : d_axis_boltz_k2_)
@@ -179,9 +186,49 @@ void CudaCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
     }
 
     cell_para_ = cell_para;
-    freeBoltzmann();
-    freeMultiplierCaches();
+
+    // Keep the device buffers for the tables the next steps rebuild.
+    // Reusing the buffers is safe because the computations synchronize every stream
+    // before update_laplacian_operator() can change the cell; set_cell_para() must
+    // not run while a kernel may still read the old tables.
+    for (auto& kv : d_boltzmann_)
+        if (kv.second) spare_tables_.push_back(kv.second);
+    d_boltzmann_.clear();
+    d_boltz_current_ = nullptr;
+    for (double*& d_k2 : d_axis_k2_)
+    {
+        if (d_k2) spare_tables_.push_back(d_k2);
+        d_k2 = nullptr;
+    }
+    for (auto& kv : d_axis_boltz_k2_)
+        if (kv.second) spare_tables_.push_back(kv.second);
+    d_axis_boltz_k2_.clear();
     ds_current_ = 0.0;
+}
+
+double* CudaCrysFFT::uploadTable(const std::vector<double>& h)
+{
+    double* d_ptr = nullptr;
+    if (!spare_tables_.empty())
+    {
+        d_ptr = spare_tables_.back();
+        spare_tables_.pop_back();
+    }
+    else
+    {
+        gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
+    }
+    try
+    {
+        gpu_error_check(cudaMemcpyAsync(d_ptr, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
+        gpu_error_check(cudaStreamSynchronize(stream_));
+    }
+    catch (...)
+    {
+        cudaFree(d_ptr);
+        throw;
+    }
+    return d_ptr;
 }
 
 //------------------------------------------------------------------------------
@@ -240,11 +287,9 @@ void CudaCrysFFT::generateBoltzmann(double ds)
         }
     }
 
-    double* d_boltz = nullptr;
-    gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_physical_));
+    double* d_boltz = uploadTable(h_boltz);
     try
     {
-        gpu_error_check(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
         d_boltzmann_[ds] = d_boltz;
     }
     catch (...)
@@ -268,7 +313,7 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     if (d_boltz_current_ == nullptr)
         throw_with_line_number("CudaCrysFFT::set_contour_step must be called before diffusion().");
     int threads = 256;
-    int blocks = (M_physical_ + threads - 1) / threads;
+    int blocks = grid_blocks(M_physical_, threads);
 
     static std::atomic<bool> profile_once{false};
     static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM") != nullptr);
@@ -359,7 +404,7 @@ void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double
 {
     set_stream(stream);
     int threads = 256;
-    int blocks = (M_physical_ + threads - 1) / threads;
+    int blocks = grid_blocks(M_physical_, threads);
 
     // Same in-place strategy as diffusion(): work directly on the output buffer
     double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
@@ -419,51 +464,36 @@ void CudaCrysFFT::computeAxisK2Host(std::vector<double>& kx2, std::vector<double
 }
 
 //------------------------------------------------------------------------------
-// Cached device multiplier: k_axis² (continuous chain stress)
+// Cached device multiplier: Σ k_d² over an axis mask (continuous chain stress)
 //------------------------------------------------------------------------------
-const double* CudaCrysFFT::get_axis_k2_multiplier(int axis)
+const double* CudaCrysFFT::get_axis_k2_multiplier(int axes)
 {
-    if (axis < 0 || axis > 2)
-        throw std::invalid_argument("CudaCrysFFT::get_axis_k2_multiplier: axis must be 0, 1, or 2");
+    if (axes < 1 || axes > 7)
+        throw std::invalid_argument("CudaCrysFFT::get_axis_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z)");
 
-    if (d_axis_k2_[axis] != nullptr)
-        return d_axis_k2_[axis];
+    if (d_axis_k2_[axes] != nullptr)
+        return d_axis_k2_[axes];
 
     std::vector<double> kx2, ky2, kz2;
     computeAxisK2Host(kx2, ky2, kz2);
-    const std::vector<double>* selected[3] = {&kx2, &ky2, &kz2};
+    std::vector<double> h_mult(M_physical_);
+    for (int i = 0; i < M_physical_; ++i)
+        h_mult[i] = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
 
-    // Upload all three axes at once (they share the host computation)
-    for (int a = 0; a < 3; ++a)
-    {
-        if (d_axis_k2_[a] != nullptr)
-            continue;
-        double* d_ptr = nullptr;
-        gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
-        try
-        {
-            gpu_error_check(cudaMemcpy(d_ptr, selected[a]->data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
-        }
-        catch (...)
-        {
-            cudaFree(d_ptr);
-            throw;
-        }
-        d_axis_k2_[a] = d_ptr;
-    }
-
-    return d_axis_k2_[axis];
+    double* d_ptr = uploadTable(h_mult);
+    d_axis_k2_[axes] = d_ptr;
+    return d_ptr;
 }
 
 //------------------------------------------------------------------------------
-// Cached device multiplier: exp(-k²·coeff)·k_axis² (discrete chain stress)
+// Cached device multiplier: exp(-k²·coeff)·Σ k_d² (discrete chain stress)
 //------------------------------------------------------------------------------
-const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axis, double coeff)
+const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axes, double coeff)
 {
-    if (axis < 0 || axis > 2)
-        throw std::invalid_argument("CudaCrysFFT::get_axis_boltz_k2_multiplier: axis must be 0, 1, or 2");
+    if (axes < 1 || axes > 7)
+        throw std::invalid_argument("CudaCrysFFT::get_axis_boltz_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z)");
 
-    auto key = std::make_pair(axis, coeff);
+    auto key = std::make_pair(axes, coeff);
     auto it = d_axis_boltz_k2_.find(key);
     if (it != d_axis_boltz_k2_.end())
         return it->second;
@@ -475,15 +505,13 @@ const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axis, double coeff)
     for (int i = 0; i < M_physical_; ++i)
     {
         double k2 = kx2[i] + ky2[i] + kz2[i];
-        double axis_k2 = (axis == 0) ? kx2[i] : (axis == 1) ? ky2[i] : kz2[i];
+        double axis_k2 = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
         h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
     }
 
-    double* d_ptr = nullptr;
-    gpu_error_check(cudaMalloc(&d_ptr, sizeof(double) * M_physical_));
+    double* d_ptr = uploadTable(h_mult);
     try
     {
-        gpu_error_check(cudaMemcpy(d_ptr, h_mult.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
         d_axis_boltz_k2_[key] = d_ptr;
     }
     catch (...)

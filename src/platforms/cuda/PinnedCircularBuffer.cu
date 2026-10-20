@@ -39,20 +39,36 @@ PinnedCircularBuffer<T>::PinnedCircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    elems = new T*[length];
-    for(int i=0; i<length; i++)
+    elems = new T*[length]();
+    try
     {
-        gpu_error_check(cudaMallocHost((void**)&elems[i], sizeof(T)*width));
-        for(int j=0; j<width; j++)
-            elems[i][j] = 0.0;
+        for(int i=0; i<length; i++)
+        {
+            gpu_error_check(cudaMallocHost((void**)&elems[i], sizeof(T)*width));
+            for(int j=0; j<width; j++)
+                elems[i][j] = 0.0;
+        }
+    }
+    catch (...)
+    {
+        release();
+        throw;
     }
 }
 template <typename T>
 PinnedCircularBuffer<T>::~PinnedCircularBuffer()
 {
+    release();
+}
+template <typename T>
+void PinnedCircularBuffer<T>::release()
+{
+    if (elems == nullptr)
+        return;
     for(int i=0; i<length; i++)
         cudaFreeHost(elems[i]);
     delete[] elems;
+    elems = nullptr;
 }
 template <typename T>
 void PinnedCircularBuffer<T>::reset()

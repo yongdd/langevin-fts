@@ -119,6 +119,47 @@ void ComputationCommon<T>::compute_solvent_concentrations()
 }
 
 template <typename T>
+double ComputationCommon<T>::contour_step(const std::string& key) const
+{
+    const int ds_index = PropagatorCode::get_ds_index_from_key(key);
+    return this->molecules->get_contour_length_mapping().get_ds_from_index(ds_index);
+}
+
+template <typename T>
+T ComputationCommon<T>::concentration_norm(const std::tuple<int, std::string, std::string>& block_key) const
+{
+    const int p = std::get<0>(block_key);
+    const auto& block = this->propagator_computation_optimizer->get_computation_block(block_key);
+    Polymer& pc = this->molecules->get_polymer(p);
+    return (contour_step(std::get<2>(block_key))*pc.get_volume_fraction()/pc.get_alpha()*block.n_repeated)
+           /this->single_polymer_partitions[p];
+}
+
+template <typename T>
+void ComputationCommon<T>::scale_by_contour_step(std::array<T, 6>& stress, const std::string& key_right) const
+{
+    const double ds = contour_step(key_right);
+    for (int d = 0; d < 6; d++)
+        stress[d] *= ds;
+}
+
+template <typename T>
+void ComputationCommon<T>::set_stress_from_blocks(const std::vector<std::array<T, 6>>& stress_of_block)
+{
+    for (int p = 0; p < this->molecules->get_n_polymer_types(); p++)
+        for (int d = 0; d < 6; d++)
+            this->dq_dl[p][d] = 0.0;
+    size_t b = 0;
+    for (const auto& item : this->phi_block)
+    {
+        for (int d = 0; d < 6; d++)
+            this->dq_dl[std::get<0>(item.first)][d] += stress_of_block[b][d];
+        b++;
+    }
+    convert_stress_to_lattice_derivatives();
+}
+
+template <typename T>
 void ComputationCommon<T>::check_stress_supported(const std::string& method) const
 {
     if (method == "realspace")

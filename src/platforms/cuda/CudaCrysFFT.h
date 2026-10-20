@@ -86,14 +86,18 @@ private:
     cudaStream_t stream_{0};      ///< CUDA stream for execution
 
     // Cached stress multipliers (device memory)
-    double* d_axis_k2_[3] = {nullptr, nullptr, nullptr};          ///< k_axis² per axis
-    std::map<std::pair<int, double>, double*> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·k_axis² per (axis, coeff)
+    double* d_axis_k2_[8] = {};                                   ///< Σ k_d² per axis mask
+    std::map<std::pair<int, double>, double*> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
 
     /// Generate Boltzmann factors for given ds.
     void generateBoltzmann(double ds);
 
     /// Free Boltzmann factor memory.
     void freeBoltzmann();
+    /// Device table of M_physical_ values from h (a spare buffer when one is left),
+    /// copied on stream_ and complete on return
+    double* uploadTable(const std::vector<double>& h);
+    std::vector<double*> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
 
     /// Free cached stress multiplier arrays.
     void freeMultiplierCaches();
@@ -151,25 +155,25 @@ public:
     void apply_multiplier(double* d_q_in, double* d_q_out, const double* d_multiplier, cudaStream_t stream);
 
     /**
-     * @brief Device array of Cartesian k_axis² on the physical DCT grid.
+     * @brief Device array of Cartesian Σ k_d² over some axes on the physical DCT grid.
      *
      * Used for the CrysFFT stress fast path (continuous chains).
      * Cached; invalidated when the cell parameters change.
      *
-     * @param axis 0=x, 1=y, 2=z
+     * @param axes Bit mask of the axes, 1=x, 2=y, 4=z (for example 7: |k|²)
      */
-    const double* get_axis_k2_multiplier(int axis);
+    const double* get_axis_k2_multiplier(int axes);
 
     /**
-     * @brief Device array of exp(-k²·coeff)·k_axis² on the physical DCT grid.
+     * @brief Device array of exp(-k²·coeff)·Σ k_d² over some axes on the physical DCT grid.
      *
      * Used for the CrysFFT stress fast path (discrete chains).
-     * Cached per (axis, coeff); invalidated when the cell parameters change.
+     * Cached per (axes, coeff); invalidated when the cell parameters change.
      *
-     * @param axis  0=x, 1=y, 2=z
+     * @param axes  Bit mask of the axes, 1=x, 2=y, 4=z
      * @param coeff Bond factor coefficient (b²·ds/6)
      */
-    const double* get_axis_boltz_k2_multiplier(int axis, double coeff);
+    const double* get_axis_boltz_k2_multiplier(int axes, double coeff);
 
     // Getters
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

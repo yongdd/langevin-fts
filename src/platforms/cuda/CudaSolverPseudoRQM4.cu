@@ -281,6 +281,9 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             fft_out = d_q_full_out_[STREAM];
         }
 
+        // The last factor exp(-w*ds/4) of the two half steps (with the FFT
+        // normalization) is applied inside the Richardson combination below
+        double half_step_scale = 1.0;
         if (is_periodic_)
         {
             // ============================================================
@@ -330,9 +333,8 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             fft_backward(STREAM, d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], 1);
             gpu_error_check(cudaPeekAtLastError());
 
-            // step 1/4: Evaluate exp(-w*ds/4) in real space.
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/static_cast<double>(M), M);
-            gpu_error_check(cudaPeekAtLastError());
+            // step 1/4: exp(-w*ds/4) and 1/M follow in the Richardson combination
+            half_step_scale = 1.0/static_cast<double>(M);
         }
         else
         {
@@ -387,14 +389,15 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             gpu_error_check(cudaPeekAtLastError());
 
             fft_[STREAM]->backward_stream(d_rk_in_2_one[STREAM], d_q_step_2, streams[STREAM][0]);
-
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0, M);
-            gpu_error_check(cudaPeekAtLastError());
+            // exp(-w*ds/4) follows in the Richardson combination
         }
 
         // ===== RQM4: Richardson extrapolation =====
-        // Compute linear combination with 4/3 and -1/3 ratio
-        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
+        // q = 4/3 q(ds/2 twice) - 1/3 q(ds), the half-step result taking its last
+        // factor exp(-w*ds/4) (and the FFT normalization) here
+        ker_multi_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            fft_out, 4.0/3.0, d_q_step_2_one[STREAM], _d_exp_dw_half, half_step_scale,
+            -1.0/3.0, d_q_step_1_one[STREAM], M);
         gpu_error_check(cudaPeekAtLastError());
 
         // Multiply mask (on full grid)

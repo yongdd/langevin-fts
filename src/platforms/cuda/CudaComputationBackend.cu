@@ -26,6 +26,54 @@ CuDeviceData<T> to_device_scalar(T value)
         return stdToCuDoubleComplex(value);
 }
 
+/// Segment pairs added to a concentration in one launch (passed as kernel parameters)
+constexpr int MAX_PAIRS_PER_LAUNCH = 32;
+
+template <typename TD>
+struct SegmentProducts
+{
+    const TD* q_1[MAX_PAIRS_PER_LAUNCH];
+    const TD* q_2[MAX_PAIRS_PER_LAUNCH];
+    double weight[MAX_PAIRS_PER_LAUNCH];
+    int n;
+};
+
+// phi += Σ_k weight_k q_1k q_2k in the order of the pairs, with the same arithmetic as one
+// ker_add_multi per pair, but phi is read and written once per launch
+__global__ void ker_add_segment_products(double* phi, SegmentProducts<double> p, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double acc = phi[i];
+        for (int k = 0; k < p.n; ++k)
+            acc += p.weight[k] * p.q_1[k][i] * p.q_2[k][i];
+        phi[i] = acc;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_add_segment_products(cuDoubleComplex* phi, SegmentProducts<cuDoubleComplex> p, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        cuDoubleComplex acc = phi[i];
+        for (int k = 0; k < p.n; ++k)
+        {
+            const cuDoubleComplex a = p.q_1[k][i];
+            const cuDoubleComplex b = p.q_2[k][i];
+            const double w = p.weight[k];
+            const double tx = w * (a.x * b.x - a.y * b.y);
+            const double ty = w * (a.x * b.y + a.y * b.x);
+            acc.x += tx;
+            acc.y += ty;
+        }
+        phi[i] = acc;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 }  // namespace
 
 template <typename T>
@@ -503,9 +551,19 @@ void CudaComputationBackend<T>::add_segment_products(
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    for (const SegmentPair<T>& pair : pairs)
-        ker_add_multi<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(
-            raw(phi), raw(pair.q_1), raw(pair.q_2), pair.weight, n_basis);
+    // Up to MAX_PAIRS_PER_LAUNCH pairs per launch, in order
+    SegmentProducts<CuDeviceData<T>> chunk{};
+    for (size_t first = 0; first < pairs.size(); first += MAX_PAIRS_PER_LAUNCH)
+    {
+        chunk.n = static_cast<int>(std::min<size_t>(MAX_PAIRS_PER_LAUNCH, pairs.size() - first));
+        for (int k = 0; k < chunk.n; ++k)
+        {
+            chunk.q_1[k] = raw(pairs[first + k].q_1);
+            chunk.q_2[k] = raw(pairs[first + k].q_2);
+            chunk.weight[k] = pairs[first + k].weight;
+        }
+        ker_add_segment_products<<<N_BLOCKS, N_THREADS, 0, streams[stream][0]>>>(raw(phi), chunk, n_basis);
+    }
     gpu_error_check(cudaPeekAtLastError());
 }
 

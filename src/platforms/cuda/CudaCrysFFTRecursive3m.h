@@ -28,8 +28,9 @@ public:
      * @brief Multiplier selection for the stress fast path.
      *
      * Mirrors the CPU CrysFFTRecursive3mBase::MultiplierType:
-     * - Kx2/Ky2/Kz2:       Cartesian k_axis² (continuous chains)
-     * - ExpKx2/ExpKy2/ExpKz2: exp(-k²·coeff)·k_axis² (discrete chains)
+     * - Kx2/Ky2/Kz2, Kxy2 (x and y), K2 (all): Cartesian k_d² summed over
+     *   those axes (continuous chains)
+     * - Exp...: the same times exp(-k²·coeff) (discrete chains)
      */
     enum class MultiplierType
     {
@@ -38,7 +39,11 @@ public:
         Kz2,
         ExpKx2,
         ExpKy2,
-        ExpKz2
+        ExpKz2,
+        Kxy2,
+        K2,
+        ExpKxy2,
+        ExpK2
     };
 
     CudaCrysFFTRecursive3m(
@@ -101,6 +106,10 @@ private:
 
     /// Multiplier caches for the stress fast path, keyed by (type, coeff)
     std::map<std::pair<int, double>, KCacheDevice> multiplier_cache_;
+
+    /// Device buffers of the caches dropped by the last cell change; the next
+    /// cache builds reuse them instead of allocating (all caches have one shape)
+    std::vector<KCacheDevice> spare_caches_;
 
     cufftHandle plan_r2c_{};
     cufftHandle plan_c2r_{};

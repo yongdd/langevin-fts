@@ -161,7 +161,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 86 | ~7 min | Development validation |
+| **Full** | `ctest` | 92 | ~7 min | Development validation |
 
 **Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
 

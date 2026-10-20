@@ -4,6 +4,7 @@
  */
 
 #include "SpaceGroup.h"
+#include "GridLimits.h"
 #include "Exception.h"
 #include "CrysFFTSelector.h"
 #include <cstring>
@@ -114,8 +115,14 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
             std::to_string(hall_number_));
     }
 
-    // Compute total grid size
-    total_grid_ = nx_[0] * nx_[1] * nx_[2];
+    // Compute total grid size, in 64 bits: the space group is created before the
+    // computation box and must reject the same grids (see GridLimits.h)
+    const long long n_points = static_cast<long long>(nx_[0]) * nx_[1] * nx_[2];
+    if (n_points > MAX_GRID_POINTS)
+        throw_with_line_number("The grid has " + std::to_string(n_points) + " points; at most " +
+            std::to_string(MAX_GRID_POINTS) + " are supported, because grid arrays are indexed "
+            "with 32-bit integers and the largest of them hold two fields.");
+    total_grid_ = static_cast<int>(n_points);
 
     // Get space group info from spglib
     SpglibSpacegroupType spg_type = spg_get_spacegroup_type(hall_number_);

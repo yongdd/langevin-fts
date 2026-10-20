@@ -62,43 +62,44 @@ class CudaAndersonMixingReduceMemory : public AndersonMixing<T>
 private:
     /// @name Pinned Memory History
     /// @{
-    PinnedCircularBuffer<T> *pinned_cb_w_hist;        ///< Field history (pinned)
-    PinnedCircularBuffer<T> *pinned_cb_w_deriv_hist;  ///< Residual history (pinned)
+    PinnedCircularBuffer<T> *pinned_cb_w_hist = nullptr;        ///< Field history (pinned)
+    PinnedCircularBuffer<T> *pinned_cb_w_deriv_hist = nullptr;  ///< Residual history (pinned)
     /// @}
 
-    CircularBuffer<T> *cb_w_deriv_dots;  ///< Cached dot products
-    T *w_deriv_dots;
+    CircularBuffer<T> *cb_w_deriv_dots = nullptr;  ///< Cached dot products
+    T *w_deriv_dots = nullptr;
 
     /// @name Least-squares arrays
     /// @{
-    T **u_nm;
-    T *v_n;
-    T *a_n;
+    T **u_nm = nullptr;
+    T *v_n = nullptr;
+    T *a_n = nullptr;
     /// @}
 
     /// @name Temporary GPU arrays
     /// @{
-    CuDeviceData<T> *d_w_new;
-    CuDeviceData<T> *d_w_deriv;
-    CuDeviceData<T> *d_sum;
+    CuDeviceData<T> *d_w_new = nullptr;
+    CuDeviceData<T> *d_w_deriv = nullptr;
+    CuDeviceData<T> *d_sum = nullptr;
     /// @}
 
     /// @name GPU buffers for history access (2 pairs)
     /// @{
-    CuDeviceData<T> *d_w_hist1;        ///< First history entry on GPU
-    CuDeviceData<T> *d_w_hist2;        ///< Second history entry on GPU
-    CuDeviceData<T> *d_w_deriv_hist1;  ///< First residual history on GPU
-    CuDeviceData<T> *d_w_deriv_hist2;  ///< Second residual history on GPU
+    CuDeviceData<T> *d_w_hist1 = nullptr;        ///< First history entry on GPU
+    CuDeviceData<T> *d_w_hist2 = nullptr;        ///< Second history entry on GPU
+    CuDeviceData<T> *d_w_deriv_hist1 = nullptr;  ///< First residual history on GPU
+    CuDeviceData<T> *d_w_deriv_hist2 = nullptr;  ///< Second residual history on GPU
     /// @}
 
     /// @name CUB reduction storage
     /// @{
     size_t temp_storage_bytes = 0;
     CuDeviceData<T> *d_temp_storage = nullptr;
-    CuDeviceData<T> *d_sum_out;
+    CuDeviceData<T> *d_sum_out = nullptr;
     /// @}
 
     void print_array(int n, T *a);
+    void release();  ///< Free all buffers; shared by the destructor and a failed constructor
 
 public:
     /**

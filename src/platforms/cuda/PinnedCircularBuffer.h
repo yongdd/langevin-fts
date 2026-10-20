@@ -68,7 +68,8 @@ private:
     int width;    ///< Size of each array
     int start;    ///< Index of oldest element
     int n_items;  ///< Current number of items
-    T** elems;    ///< Array of pinned memory pointers
+    T** elems = nullptr;    ///< Array of pinned memory pointers
+    void release();  ///< Free the arrays; shared by the destructor and a failed constructor
 
 public:
     /**

@@ -8,6 +8,7 @@ from scipy.io import savemat, loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
+from . import _core
 from .validation import validate_lfts_params, ValidationError
 from .utils import (
     parse_chi_n,
@@ -15,6 +16,7 @@ from .utils import (
     process_random_copolymer,
     draw_polymer_architectures,
     calculate_sigma,
+    load_config,
 )
 from .smearing import Smearing
 from .wtmd import WTMD
@@ -89,10 +91,9 @@ class LR:
             Updated field values, same shape as w_current.
         """
         nx = self.nx
-        w_diff = np.zeros_like(w_current)
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.jk
-        w_diff[0] = np.reshape(np.fft.irfftn(w_diff_k, nx), np.prod(nx))*np.prod(nx)
+        w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx)*np.prod(nx), np.shape(w_current))
 
         return w_current + w_diff
 
@@ -158,12 +159,12 @@ class LRAM:
         """
         nx = self.lr.nx
 
-        w_lr_old = w_current.copy()
+        w_lr_old = np.reshape(w_current, [1, np.prod(nx)])
         w_lr_new = np.reshape(self.lr.calculate_new_fields(w_lr_old, negative_h_deriv, old_error_level, error_level), [1, np.prod(nx)])
         w_diff = w_lr_new - w_lr_old
-        w_new = np.reshape(self.am.calculate_new_fields(w_lr_new, w_diff, old_error_level, error_level), [1, np.prod(nx)])
+        w_new = self.am.calculate_new_fields(w_lr_new, w_diff, old_error_level, error_level)
 
-        return w_new
+        return np.reshape(w_new, np.shape(w_current))
 
 
 class LFTS:
@@ -203,6 +204,17 @@ class LFTS:
 
     Complete scripts: examples/lfts/ (Lamella.py, Gyroid.py, MixtureBlockRandom.py).
     """
+    @classmethod
+    def from_file(cls, path, random_seed=None, **overrides):
+        """Create a simulation from a YAML or JSON parameter file.
+
+        Reads the file with utils.load_config, applies the keyword overrides
+        and calls the constructor, as SCFT.from_file does.
+        """
+        params = load_config(path)
+        params.update(overrides)
+        return cls(params, random_seed=random_seed)
+
     def __init__(self, params, random_seed=None):
 
         # Validate input parameters
@@ -310,8 +322,13 @@ class LFTS:
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
+            n_am = int(len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]))
+            if n_am > _core.MAX_GRID_ARRAY:
+                raise ValidationError(
+                    f"Anderson mixing would adjust {n_am} variables ({len(self.mpt.aux_fields_imag_idx)} imaginary fields "
+                    f"of {int(np.prod(params['nx']))} points); at most {_core.MAX_GRID_ARRAY} are supported (32-bit indices).")
             am = self.prop_solver.create_anderson_mixing(
-                len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
+                n_am,                                                      # the number of variables
                 params["compressor"]["max_hist"],                          # maximum number of history
                 params["compressor"]["start_error"],                       # when switch to AM from simple mixing
                 params["compressor"]["mix_min"],                           # minimum mixing rate of simple mixing

@@ -366,9 +366,9 @@ protected:
     bool compute_stress_crysfft(const T* q_1, const T* q_2, double bond_length_sq,
                                 const double* boltz_bond, std::vector<T>& stress);
     /// phys_out = DCT^-1[ k_axis^2 (boltz) DCT[phys_in] ] through the Pmmm CrysFFT (boltz may be nullptr).
-    void crysfft_pmmm_axis_multiplier(double* phys_in, double* phys_out, int axis, const double* boltz);
+    void crysfft_pmmm_axis_multiplier(double* phys_in, double* phys_out, int axes, const double* boltz);
     /// Same through the recursive-3m CrysFFT; returns false when no recursive object exists.
-    bool crysfft_recursive_axis_multiplier(double* phys_in, double* phys_out, int axis, bool with_bond, double coeff);
+    bool crysfft_recursive_axis_multiplier(double* phys_in, double* phys_out, int axes, bool with_bond, double coeff);
     /// Accumulate Σ_k kernel(k) v_i v_j from complex Fourier coefficients (periodic BC).
     void accumulate_stress_periodic(const double* qk_1, const double* qk_2, double bond_length_sq,
                                     const double* boltz_bond, bool is_orthogonal, std::vector<T>& stress) const;

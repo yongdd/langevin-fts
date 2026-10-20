@@ -4,7 +4,9 @@ This module provides common utility functions and constants used across
 the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
+import ast
 import json
+import operator
 import re
 import warnings
 from pathlib import Path
@@ -336,6 +338,12 @@ def load_config(path: Union[str, Path]) -> Dict[str, Any]:
     Supports YAML (.yaml, .yml) and JSON (.json) formats.
     Automatically detects format from file extension.
 
+    String values that use numpy, such as ``"4.0*np.sqrt(3)/2"``, are
+    evaluated: numbers, ``+ - * / **``, parentheses, ``np.pi``, ``np.e`` and
+    the elementwise functions in ``CONFIG_NP_FUNCTIONS`` are allowed, and
+    nothing else is executed. Any other string containing ``np.`` is kept as
+    it is, with a warning.
+
     Parameters
     ----------
     path : str or Path
@@ -388,11 +396,54 @@ def load_config(path: Union[str, Path]) -> Dict[str, Any]:
     return params
 
 
+# Numpy names a configuration expression may use
+CONFIG_NP_CONSTANTS = ("pi", "e")
+CONFIG_NP_FUNCTIONS = ("sqrt", "cbrt", "exp", "log", "log10", "sin", "cos", "tan",
+                       "arcsin", "arccos", "arctan", "deg2rad", "rad2deg", "abs")
+_CONFIG_OPERATORS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+                     ast.Div: operator.truediv, ast.Pow: operator.pow}
+
+
+def _eval_config_expression(text: str) -> float:
+    """Value of an arithmetic expression such as "4.0*np.sqrt(3)/2".
+
+    Evaluates the parsed expression node by node instead of calling eval, so
+    only numbers, + - * / **, unary signs, np.pi, np.e and the functions in
+    CONFIG_NP_FUNCTIONS (one argument each) can appear, and every intermediate
+    value must be a finite real number. Raises ValueError otherwise.
+    """
+    def is_np(node):
+        return isinstance(node, ast.Name) and node.id in ("np", "numpy")
+
+    def finite_real(x, node):
+        # (-8)**0.5 is complex in Python, np.sqrt(-1) is nan, np.log(0) is -inf
+        if isinstance(x, complex) or not np.isfinite(x):
+            raise ValueError(f"'{ast.unparse(node)}' is not a finite real number")
+        return float(x)
+
+    def value(node):
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return float(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in _CONFIG_OPERATORS:
+            return finite_real(_CONFIG_OPERATORS[type(node.op)](value(node.left), value(node.right)), node)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            return value(node.operand) if isinstance(node.op, ast.UAdd) else -value(node.operand)
+        if isinstance(node, ast.Attribute) and is_np(node.value) and node.attr in CONFIG_NP_CONSTANTS:
+            return float(getattr(np, node.attr))
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and is_np(node.func.value)
+                and node.func.attr in CONFIG_NP_FUNCTIONS and len(node.args) == 1 and not node.keywords):
+            return finite_real(getattr(np, node.func.attr)(value(node.args[0])), node)
+        raise ValueError(f"'{ast.unparse(node)}' is not allowed in a configuration expression")
+
+    with np.errstate(all="ignore"):
+        return value(ast.parse(text.strip(), mode="eval").body)
+
+
 def _process_config_values(obj: Any) -> Any:
-    """Process configuration values, evaluating special expressions.
+    """Process configuration values, evaluating numpy expressions.
 
     Handles:
-    - String expressions like "4.0*np.sqrt(3)/2" for lx
+    - String expressions like "4.0*np.sqrt(3)/2" for lx (see _eval_config_expression)
     - Nested dictionaries and lists
 
     Parameters
@@ -410,21 +461,18 @@ def _process_config_values(obj: Any) -> Any:
     elif isinstance(obj, list):
         return [_process_config_values(item) for item in obj]
     elif isinstance(obj, str):
-        # Try to evaluate numpy expressions
         if 'np.' in obj or 'numpy.' in obj:
             try:
-                # Safe evaluation with only numpy functions
-                result = eval(obj, {"np": np, "numpy": np, "__builtins__": {}})
-                return result
-            except Exception as e:
-                # A string that LOOKS like a numpy expression but fails to
-                # evaluate is almost certainly a typo in the config; passing
+                return _eval_config_expression(obj)
+            except (SyntaxError, ValueError, ArithmeticError) as e:
+                # A string that LOOKS like a numpy expression but cannot be
+                # evaluated is almost certainly a typo in the config; passing
                 # it through silently would surface later as a confusing
                 # type error. Warn so the user can fix the expression.
                 warnings.warn(
                     f"Config value {obj!r} looks like a numpy expression but "
-                    f"failed to evaluate ({e}); using the raw string instead.")
-                return obj  # Return original string if evaluation fails
+                    f"was not evaluated ({e}); using the raw string instead.")
+                return obj
         return obj
     else:
         return obj
@@ -436,41 +484,93 @@ def _process_config_values(obj: Any) -> Any:
 
 def save_vtk(
     path: Union[str, Path],
-    field: np.ndarray,
+    fields: Union[np.ndarray, Dict[str, np.ndarray]],
     lx: List[float],
-    field_name: str = "phi"
+    field_name: str = "phi",
+    nx: Optional[List[int]] = None,
+    angles: Optional[List[float]] = None,
 ) -> None:
-    """Save 3D field as VTK file for ParaView visualization.
+    """Save fields as a legacy VTK file for ParaView.
+
+    The grid points sit at the cell centres, (i + 1/2) * lx / nx along each
+    lattice vector, as in the solvers, so the outline ParaView draws through
+    the points lies half a cell inside the box (the walls of a non-periodic
+    box are at 0 and lx).
 
     Parameters
     ----------
     path : str or Path
         Output file path (should end with .vtk).
-    field : np.ndarray
-        3D field data, shape (nx, ny, nz).
+    fields : np.ndarray or dict
+        One real field, or {name: field} to store several fields in one file
+        (for example SCFTResult.phi). A field has the grid shape (1D, 2D or 3D),
+        or is flat when nx is given.
     lx : list of float
-        Box dimensions [lx, ly, lz].
+        Box lengths, one per dimension.
     field_name : str
-        Name for the scalar field (default: "phi").
+        Name of the field when a single array is given (default: "phi").
+    nx : list of int, optional
+        Grid size, needed for flat arrays.
+    angles : list of float, optional
+        Lattice angles [alpha, beta, gamma] in degrees. A non-orthogonal cell
+        is written as a structured grid with explicit point coordinates.
     """
-    if field.ndim != 3:
-        raise ValueError(f"Field must be 3D, got {field.ndim}D")
+    if not isinstance(fields, dict):
+        fields = {field_name: fields}
+    if not fields:
+        raise ValueError("No field to save")
 
-    nx, ny, nz = field.shape
+    if nx is None:
+        nx = list(np.shape(next(iter(fields.values()))))
+    nx = [int(n) for n in nx]
+    dim = len(nx)
+    if not 1 <= dim <= 3 or len(lx) != dim:
+        raise ValueError(f"nx and lx must have the same length 1, 2 or 3, got nx={nx}, lx={list(lx)}")
+    n_points = int(np.prod(nx))
 
-    with open(path, 'w') as f:
+    # Fields in VTK point order (x fastest); names without spaces
+    data = {}
+    for name, field in fields.items():
+        field = np.asarray(field)
+        if np.iscomplexobj(field):
+            raise ValueError(f"Field '{name}' is complex; VTK stores real values "
+                             "(save the real and imaginary parts separately)")
+        if field.size != n_points:
+            raise ValueError(f"Field '{name}' has {field.size} values, the grid {nx} has {n_points}")
+        data[str(name).replace(" ", "_")] = np.reshape(field, nx).ravel(order="F")
+
+    # Pad to three dimensions
+    nx3 = nx + [1] * (3 - dim)
+    lx3 = [float(x) for x in lx] + [1.0] * (3 - dim)
+    alpha, beta, gamma = np.deg2rad(angles) if angles is not None else (np.pi/2,)*3
+    orthogonal = np.allclose([alpha, beta, gamma], np.pi/2, atol=1e-10)
+
+    with open(path, "w") as f:
         f.write("# vtk DataFile Version 3.0\n")
         f.write("Polymer field data\n")
         f.write("ASCII\n")
-        f.write("DATASET STRUCTURED_POINTS\n")
-        f.write(f"DIMENSIONS {nx} {ny} {nz}\n")
-        f.write("ORIGIN 0 0 0\n")
-        f.write(f"SPACING {lx[0]/nx} {lx[1]/ny} {lx[2]/nz}\n")
-        f.write(f"POINT_DATA {nx*ny*nz}\n")
-        f.write(f"SCALARS {field_name} float 1\n")
-        f.write("LOOKUP_TABLE default\n")
-
-        for k in range(nz):
-            for j in range(ny):
-                for i in range(nx):
-                    f.write(f"{field[i, j, k]:.6f}\n")
+        if orthogonal:
+            spacing = [lx3[d]/nx3[d] for d in range(3)]
+            f.write("DATASET STRUCTURED_POINTS\n")
+            f.write("DIMENSIONS %d %d %d\n" % tuple(nx3))
+            f.write("ORIGIN %.10g %.10g %.10g\n" % tuple(0.5*h for h in spacing))
+            f.write("SPACING %.10g %.10g %.10g\n" % tuple(spacing))
+        else:
+            # Lattice vectors as in ComputationBox: a along x, b in the xy plane
+            a = lx3[0]*np.array([1.0, 0.0, 0.0])
+            b = lx3[1]*np.array([np.cos(gamma), np.sin(gamma), 0.0])
+            cx = np.cos(beta)
+            cy = (np.cos(alpha) - np.cos(beta)*np.cos(gamma))/np.sin(gamma)
+            c = lx3[2]*np.array([cx, cy, np.sqrt(max(1.0 - cx*cx - cy*cy, 0.0))])
+            frac = [(np.arange(nx3[d]) + 0.5)/nx3[d] for d in range(3)]
+            fz, fy, fx = np.meshgrid(frac[2], frac[1], frac[0], indexing="ij")   # x fastest after ravel
+            points = np.outer(fx.ravel(), a) + np.outer(fy.ravel(), b) + np.outer(fz.ravel(), c)
+            f.write("DATASET STRUCTURED_GRID\n")
+            f.write("DIMENSIONS %d %d %d\n" % tuple(nx3))
+            f.write("POINTS %d double\n" % n_points)
+            np.savetxt(f, points, fmt="%.10g")
+        f.write("POINT_DATA %d\n" % n_points)
+        for name, values in data.items():
+            f.write("SCALARS %s float 1\n" % name)
+            f.write("LOOKUP_TABLE default\n")
+            np.savetxt(f, values, fmt="%.7g")

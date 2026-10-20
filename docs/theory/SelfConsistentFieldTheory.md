@@ -247,6 +247,21 @@ final_box = calculation.cb.get_lx()
 calculation.save_results("fields.json")
 ```
 
+`run` also accepts a progress callback and can return the results as one object:
+
+```python
+def monitor(info):                      # info: IterationInfo
+    print(info.iteration, info.error_level, info.energy, info.lx)
+    return False if info.iteration == 200 else None   # False stops the run
+
+result = calculation.run(initial_fields={"A": w_A, "B": w_B},
+                         on_iteration=monitor, return_result=True)
+result.converged, result.free_energy, result.phi["A"]   # fields on the full grid
+calculation.run(initial_fields=result.w)               # restart from the solution
+```
+
+`SCFTResult.phi` and `SCFTResult.w` are dictionaries of full-grid arrays, also with a space group, so `result.w` can start the next run of a parameter sweep.
+
 ### 5.2 Manual SCFT Implementation
 
 For educational purposes, here's a simplified SCFT loop:
