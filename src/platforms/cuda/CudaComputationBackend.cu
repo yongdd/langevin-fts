@@ -219,7 +219,12 @@ BackendArray<T>* CudaComputationBackend<T>::allocate()
 {
     CuDeviceData<T>* d_a = nullptr;
     gpu_error_check(cudaMalloc((void**)&d_a, sizeof(T)*n_basis));
-    gpu_error_check(cudaMemset(d_a, 0, sizeof(T)*n_basis));
+    const cudaError_t err = cudaMemset(d_a, 0, sizeof(T)*n_basis);
+    if (err != cudaSuccess)
+    {
+        cudaFree(d_a);
+        gpu_error_check(err);
+    }
     return wrap(d_a);
 }
 
@@ -289,20 +294,33 @@ void CudaComputationBackend<T>::update_dw(std::map<std::string, const T*> w_inpu
         for (const auto& item : w_input)
         {
             const std::string& monomer_type = item.first;
-            if (d_exp_dw_reduced.find(monomer_type) == d_exp_dw_reduced.end())
+            auto found = d_exp_dw_reduced.find(monomer_type);
+            if (found == d_exp_dw_reduced.end())
             {
-                gpu_error_check(cudaMalloc((void**)&d_exp_dw_reduced[monomer_type], sizeof(T)*n_basis));
+                // Enter the buffer only once it exists, so a failed allocation can be retried
+                CuDeviceData<T>* d_new = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_new, sizeof(T)*n_basis));
+                try
+                {
+                    found = d_exp_dw_reduced.emplace(monomer_type, d_new).first;
+                }
+                catch (...)
+                {
+                    cudaFree(d_new);
+                    throw;
+                }
             }
+            CuDeviceData<T>* d_exp_dw_basis  = found->second;
             CuDeviceData<T>* d_exp_dw_solver = solver->d_exp_dw.at(0).at(monomer_type);
             if (solver_discrete->exp_dw_stored_reduced())
             {
-                gpu_error_check(cudaMemcpy(d_exp_dw_reduced[monomer_type], d_exp_dw_solver,
+                gpu_error_check(cudaMemcpy(d_exp_dw_basis, d_exp_dw_solver,
                                            sizeof(T)*n_basis, cudaMemcpyDeviceToDevice));
             }
             else
             {
                 ker_reduce_to_basis<<<N_BLOCKS, N_THREADS>>>(
-                    d_exp_dw_reduced[monomer_type], d_exp_dw_solver, d_reduced_basis_indices, n_basis);
+                    d_exp_dw_basis, d_exp_dw_solver, d_reduced_basis_indices, n_basis);
                 gpu_error_check(cudaPeekAtLastError());
             }
         }

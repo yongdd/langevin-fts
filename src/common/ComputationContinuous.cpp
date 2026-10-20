@@ -158,12 +158,24 @@ void ComputationContinuous<T>::advance_propagator_single_segment(T* q_init, T* q
         const Block& block = this->molecules->get_polymer(p).get_block(v, u);
         const int ds_index = this->molecules->get_contour_length_mapping().get_ds_index(block.contour_length);
 
-        BackendArray<T>* q_in_b  = this->backend->allocate();
-        BackendArray<T>* q_out_b = this->backend->allocate();
-        this->backend->copy_from_host(0, q_in_b, q_init);
-        this->backend->advance_propagator(0, q_in_b, q_out_b, block.monomer_type, ds_index);
-        this->backend->synchronize();
-        this->backend->copy_to_host(q_out, q_out_b);
+        // Two temporary fields, freed also when a step throws
+        BackendArray<T>* q_in_b  = nullptr;
+        BackendArray<T>* q_out_b = nullptr;
+        try
+        {
+            q_in_b  = this->backend->allocate();
+            q_out_b = this->backend->allocate();
+            this->backend->copy_from_host(0, q_in_b, q_init);
+            this->backend->advance_propagator(0, q_in_b, q_out_b, block.monomer_type, ds_index);
+            this->backend->synchronize();
+            this->backend->copy_to_host(q_out, q_out_b);
+        }
+        catch (...)
+        {
+            this->backend->deallocate(q_in_b);
+            this->backend->deallocate(q_out_b);
+            throw;
+        }
         this->backend->deallocate(q_in_b);
         this->backend->deallocate(q_out_b);
     }

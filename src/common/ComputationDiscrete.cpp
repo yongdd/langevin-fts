@@ -220,12 +220,24 @@ void ComputationDiscrete<T>::advance_propagator_single_segment(T* q_init, T* q_o
     {
         const std::string monomer_type = this->molecules->get_polymer(p).get_block(v, u).monomer_type;
 
-        BackendArray<T>* q_in_b  = this->backend->allocate();
-        BackendArray<T>* q_out_b = this->backend->allocate();
-        this->backend->copy_from_host(0, q_in_b, q_init);
-        this->backend->advance_propagator(0, q_in_b, q_out_b, monomer_type, 0);
-        this->backend->synchronize();
-        this->backend->copy_to_host(q_out, q_out_b);
+        // Two temporary fields, freed also when a step throws
+        BackendArray<T>* q_in_b  = nullptr;
+        BackendArray<T>* q_out_b = nullptr;
+        try
+        {
+            q_in_b  = this->backend->allocate();
+            q_out_b = this->backend->allocate();
+            this->backend->copy_from_host(0, q_in_b, q_init);
+            this->backend->advance_propagator(0, q_in_b, q_out_b, monomer_type, 0);
+            this->backend->synchronize();
+            this->backend->copy_to_host(q_out, q_out_b);
+        }
+        catch (...)
+        {
+            this->backend->deallocate(q_in_b);
+            this->backend->deallocate(q_out_b);
+            throw;
+        }
         this->backend->deallocate(q_in_b);
         this->backend->deallocate(q_out_b);
     }

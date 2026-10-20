@@ -105,6 +105,7 @@ public:
 
     /// Allocate one field of get_n_basis() elements, set to zero.
     virtual BackendArray<T>* allocate() = 0;
+    /// Free a field from allocate(); nullptr is ignored.
     virtual void deallocate(BackendArray<T>* a) = 0;
 
     /// dst = src, where src is a host array of get_n_basis() elements.
