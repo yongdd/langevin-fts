@@ -84,17 +84,6 @@ template <typename T>
 class CpuSolverPseudoRK2 : public CpuSolverPseudoBase<T>
 {
 protected:
-    /**
-     * @brief Get Boltzmann bond factor for stress computation.
-     *
-     * For continuous chains, stress computation does not include the
-     * Boltzmann bond factor (it's absorbed into the RK2 scheme).
-     *
-     * @return nullptr (continuous chains don't use boltz_bond in stress)
-     */
-    const double* get_stress_boltz_bond(
-        std::string monomer_type, bool is_half_bond_length) const override;
-
 public:
     /**
      * @brief Construct pseudo-spectral solver for continuous chains.

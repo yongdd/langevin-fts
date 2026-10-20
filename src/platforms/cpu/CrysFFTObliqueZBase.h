@@ -14,6 +14,8 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
+#include <thread>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -67,11 +69,16 @@ protected:
         const double* boltz_current = nullptr;
         double ds_current = std::numeric_limits<double>::quiet_NaN();
         uint64_t epoch = 0;
-        uint64_t instance_id = 0;
     };
+    mutable std::atomic<uint64_t> cache_epoch_{1};   ///< bumped to invalidate every thread's cache
+    /// Unique per object, never reused: lets a thread recognise the object its
+    /// remembered cache slot belongs to (see get_thread_state()).
     inline static std::atomic<uint64_t> next_instance_id_{1};
-    uint64_t instance_id_{0};
-    mutable std::atomic<uint64_t> cache_epoch_{1};
+    const uint64_t instance_id_{next_instance_id_.fetch_add(1, std::memory_order_relaxed)};
+    mutable std::mutex thread_states_mutex_;
+    /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
+    /// owned by this object so that they are released together with it.
+    mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
 
     Derived& derived() { return static_cast<Derived&>(*this); }
     const Derived& derived() const { return static_cast<const Derived&>(*this); }
@@ -135,25 +142,32 @@ protected:
         return metric;
     }
 
+    /// Cache of the calling thread (owned by this object, see thread_states_).
     ThreadState& get_thread_state() const
     {
-        struct ThreadLocalStates
+        // Each thread remembers the slot it used last, tagged with the object's
+        // id, so the usual case (one object per thread) takes no lock. The slot
+        // is looked up under the lock only when the thread switches object; the
+        // map keeps references valid across insertions, and a stale remembered
+        // pointer is never followed because ids are not reused.
+        struct LastSlot { uint64_t instance_id = 0; ThreadState* state = nullptr; };
+        thread_local LastSlot last;
+        if (last.instance_id != instance_id_)
         {
-            std::unordered_map<const CrysFFTObliqueZBase*, ThreadState> states;
-        };
-        thread_local ThreadLocalStates tls;
-
-        ThreadState& state = tls.states[this];
-        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
-        if (state.instance_id != instance_id_ || state.epoch != epoch)
-        {
-            state.boltzmann.clear();
-            state.boltz_current = nullptr;
-            state.ds_current = std::numeric_limits<double>::quiet_NaN();
-            state.epoch = epoch;
-            state.instance_id = instance_id_;
+            std::lock_guard<std::mutex> lock(thread_states_mutex_);
+            last.state = &thread_states_[std::this_thread::get_id()];
+            last.instance_id = instance_id_;
         }
-        return state;
+        ThreadState* state = last.state;
+        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
+        if (state->epoch != epoch)
+        {
+            state->boltzmann.clear();
+            state->boltz_current = nullptr;
+            state->ds_current = std::numeric_limits<double>::quiet_NaN();
+            state->epoch = epoch;
+        }
+        return *state;
     }
 
     double* generateBoltzmann(double ds) const
@@ -245,8 +259,7 @@ public:
         std::array<double, 9> /*trans_part*/)
         : nx_logical_(nx_logical),
           cell_para_(cell_para),
-          recip_metric_(compute_recip_metric(cell_para)),
-          instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
+          recip_metric_(compute_recip_metric(cell_para))
     {
         for (int d = 0; d < 3; ++d)
         {

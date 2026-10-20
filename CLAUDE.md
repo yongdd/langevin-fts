@@ -313,7 +313,7 @@ CUDA code uses:
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
 
-**cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** Several solvers rely on this pattern to avoid corruption after IFFT operations.
+**cuFFT Input Corruption Warning**: cuFFT overwrites the input buffer of complex-to-real transforms (Z2D) even when they are out-of-place. The cuFFT User's Guide (section "Data Layout") states: "Out-of-place complex-to-real FFT will always overwrite input buffer." **Always copy the input to a work buffer before a Z2D transform if the input must be preserved.** Several solvers rely on this pattern after IFFT operations. The guide says nothing about real-to-complex transforms (D2Z); measured with CUDA 11.8 on an A10 (1D/2D/3D, batch 1 and 2), D2Z left its input unchanged while Z2D overwrote it in 2D and 3D. The shared stress routine feeds the propagator pair straight into a batched D2Z and the caller reuses the pair afterwards.
 
 ## Running Simulations
 
@@ -574,7 +574,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 - Laplacian operator updates (`update_laplacian_operator`)
 - Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
 
-The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the cuFFT plans and DCT/DST objects (`fft_forward`/`fft_backward`/`fft_`), the space-group/CrysFFT setup (index maps from the platform-independent `CrysFFTBasisMapping.h`), `update_laplacian_operator`, the shared `update_dw_impl` and the stress reduction buffers. Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
+The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the cuFFT plans and DCT/DST objects (`fft_forward`/`fft_backward`/`fft_`), the space-group/CrysFFT setup (index maps from the platform-independent `CrysFFTBasisMapping.h`), `update_laplacian_operator`, the shared `update_dw_impl`, and `compute_single_segment_stress` itself (the derived classes only supply `stress_scratch`, the workspaces they lend; the discrete solver also overrides `get_stress_boltz_bond`). Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
 
 **Computation Class Hierarchy**: `CpuComputationCommon<T>` / `CudaComputationCommon<T>` hold what the full-storage (`*ComputationBase`) and reduce-memory (`*ComputationReduceMemoryBase`) variants share (solver and scheduler handles, partition getters, and on the CPU the concentration getters). Propagator storage and the `compute_*` algorithms stay in the variant classes on purpose, so each variant can be changed independently.
 
@@ -582,7 +582,7 @@ Derived classes implement chain-model-specific behavior:
 - `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
 - `advance_propagator`: Different algorithms (RQM4 vs simple step)
 - `advance_propagator_half_bond_step`: Discrete-specific implementation
-- `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
+- `get_stress_boltz_bond`: the base returns nullptr (continuous chains); the discrete solver overrides it with boltz_bond
 
 **Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
 

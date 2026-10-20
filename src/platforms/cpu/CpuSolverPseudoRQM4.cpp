@@ -97,17 +97,6 @@ CpuSolverPseudoRQM4<T>::~CpuSolverPseudoRQM4()
 }
 
 //------------------------------------------------------------------------------
-// Get stress Boltzmann bond factor
-//------------------------------------------------------------------------------
-template <typename T>
-const double* CpuSolverPseudoRQM4<T>::get_stress_boltz_bond(
-    std::string /*monomer_type*/, bool /*is_half_bond_length*/) const
-{
-    // Continuous chains don't use boltz_bond factor in stress computation
-    return nullptr;
-}
-
-//------------------------------------------------------------------------------
 // Update dw (Boltzmann factors from field)
 //------------------------------------------------------------------------------
 template <typename T>

@@ -29,14 +29,15 @@ private:
 
     std::vector<double> dct_cos_;
     std::vector<double> dct_sin_;
-    double dct_scale_fwd_{1.0};
-    double dct_scale_bwd_{1.0};
 
     void initFFTPlans();
-    void calibrateDCTScale();
 
     void applyDCT2ForwardZ(const double* in, double* out) const;
     void applyDCT3BackwardZ(const double* in, double* out) const;
+
+    /// Shared pipeline of diffusion() and apply_multiplier():
+    /// DCT-II(z) -> r2c FFT(xy) -> multiply -> c2r FFT(xy) -> DCT-III(z) -> normalize.
+    void apply_spectral_multiplier(const double* q_in, double* q_out, const double* multiplier) const;
 
 public:
     MklCrysFFTObliqueZ(

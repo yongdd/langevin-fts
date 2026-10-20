@@ -16,6 +16,7 @@
 #include "CudaFFT.h"
 #include "CudaTypeDispatch.h"
 #include "CudaCrysFFT.h"
+#include "CudaCrysFFTStress.h"
 #include "CudaCrysFFTRecursive3m.h"
 #include "CudaCrysFFTObliqueZ.h"
 #include "CrysFFTSelector.h"
@@ -58,6 +59,7 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             d_stress_sum[i] = nullptr;
             d_stress_sum_out[i] = nullptr;
             d_q_multi[i] = nullptr;
+            d_qk_conj_[i] = nullptr;
             d_q_full_in_[i] = nullptr;
             d_q_full_out_[i] = nullptr;
             crysfft_[i] = nullptr;
@@ -152,6 +154,8 @@ CudaSolverPseudoBase<T>::CudaSolverPseudoBase(
             gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(T)*1));
             gpu_error_check(cudaMalloc((void**)&d_q_multi[i],         sizeof(T)*M_COMPLEX));
+            if constexpr (std::is_same<T, std::complex<double>>::value)
+                gpu_error_check(cudaMalloc((void**)&d_qk_conj_[i],    sizeof(cuDoubleComplex)*M_COMPLEX));
         }
         for(int i=0; i<n_streams; i++)
         {
@@ -199,6 +203,7 @@ CudaSolverPseudoBase<T>::~CudaSolverPseudoBase()
         cudaFree(d_stress_sum[i]);
         cudaFree(d_stress_sum_out[i]);
         cudaFree(d_q_multi[i]);
+        if (d_qk_conj_[i] != nullptr) cudaFree(d_qk_conj_[i]);
         cudaFree(d_temp_storage[i]);
     }
     for(int i=0; i<n_streams; i++)
@@ -599,6 +604,273 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
         }
         gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaDeviceSynchronize());
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Stress of one segment (shared by RQM4, RK2 and the discrete chain)
+//------------------------------------------------------------------------------
+template <typename T>
+const double* CudaSolverPseudoBase<T>::get_stress_boltz_bond(
+    [[maybe_unused]] const std::string& monomer_type, [[maybe_unused]] bool is_half_bond_length) const
+{
+    return nullptr;   // continuous chains: the bond factor is already in the propagator
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::compute_single_segment_stress(
+    const int STREAM,
+    CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
+    std::string monomer_type, bool is_half_bond_length)
+{
+    try{
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            if (!is_periodic_)
+                throw_with_line_number(
+                    "Stress computation for complex fields with non-periodic "
+                    "boundary conditions is not implemented.");
+        }
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int DIM = this->cb->get_dim();
+        const int M = this->cb->get_total_grid();
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
+
+        const auto& bond_lengths = this->molecules->get_bond_lengths();
+        auto bond_it = bond_lengths.find(monomer_type);
+        if (bond_it == bond_lengths.end())
+            throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
+        double bond_length_sq = bond_it->second * bond_it->second;
+        if (is_half_bond_length)
+            bond_length_sq *= 0.5;
+
+        // Chain-model-specific Boltzmann bond factor (nullptr for continuous chains).
+        // The discrete chain multiplies exp(-k^2 b^2 ds/6) * b^2 into the integrand
+        // and weights the basis tables with 1; continuous chains weight them with b^2.
+        const double* _d_boltz_bond = get_stress_boltz_bond(monomer_type, is_half_bond_length);
+        const double basis_factor = (_d_boltz_bond != nullptr) ? 1.0 : bond_length_sq;
+
+        const double* _d_fourier_basis_x = pseudo->get_fourier_basis_x();
+        const double* _d_fourier_basis_y = pseudo->get_fourier_basis_y();
+        const double* _d_fourier_basis_z = pseudo->get_fourier_basis_z();
+        const double* _d_fourier_basis_xy = pseudo->get_fourier_basis_xy();
+        const double* _d_fourier_basis_xz = pseudo->get_fourier_basis_xz();
+        const double* _d_fourier_basis_yz = pseudo->get_fourier_basis_yz();
+        const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
+
+        // =====================================================================
+        // CrysFFT stress fast path (reduced grid, no full-grid FFT)
+        // Mirrors CpuSolverPseudoBase::compute_single_segment_stress.
+        // ObliqueZ and all other cases fall through to the standard path.
+        // =====================================================================
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (std::is_same_v<T, double>)
+        {
+            // NOTE: The CrysFFT fast path computes only the diagonal sums
+            // (V₁₁, V₂₂, V₃₃). This is fine because crystal systems eligible
+            // for CrysFFT are orthogonal and never optimize angles. If the
+            // force-off-diagonal flag is set (angle optimization active),
+            // fall back to the standard path below — which can compute the
+            // cross terms — instead of silently returning zeros for them.
+            if (use_crysfft_ && space_group_ != nullptr && is_periodic_ && DIM == 3
+                && this->cb->is_orthogonal()
+                && !this->force_off_diagonal_stress_
+                && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m))
+            {
+                const std::vector<double> lx_vec = this->cb->get_lx();
+
+                CudaCrysFFTStressArgs args{};
+                args.crysfft = crysfft_[STREAM];
+                args.mode = crysfft_mode_;
+                args.identity_map = crysfft_identity_map_;
+                args.M_phys = crysfft_physical_size_;
+                args.n_basis = n_basis_;
+                args.M_full = M;
+                args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
+                args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
+                args.d_orbit_counts = d_crysfft_orbit_counts_;
+                args.d_phys_work = d_crysfft_in_[STREAM];
+                args.d_phys_out = d_crysfft_out_[STREAM];
+                args.d_reduce_buf = d_stress_sum[STREAM];
+                args.d_cub_temp = d_temp_storage[STREAM];
+                args.cub_temp_bytes = temp_storage_bytes[STREAM];
+                args.space_group = space_group_;
+                args.lx[0] = lx_vec[0];
+                args.lx[1] = lx_vec[1];
+                args.lx[2] = lx_vec[2];
+                args.bond_length_sq = bond_length_sq;
+                args.include_bond_factor = (_d_boltz_bond != nullptr);   // discrete chains
+                args.global_ds = (_d_boltz_bond != nullptr) ? this->molecules->get_global_ds() : 0.0;
+                args.stream = streams[STREAM][0];
+
+                cuda_crysfft_compute_single_segment_stress(
+                    args, d_q_pair, &d_q_pair[n_basis_], d_segment_stress);
+                return;
+            }
+        }
+
+        const StressScratch scratch = stress_scratch(STREAM);
+
+        // Space group without CrysFFT fast path: the propagator pair arrives in
+        // the reduced basis (packed at stride n_basis_). Expand both propagators
+        // to the full grid into a contiguous 2*M buffer for the batched FFT.
+        CuDeviceData<T>* d_q_pair_full = d_q_pair;
+        if (space_group_ != nullptr)
+        {
+            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+            if constexpr (std::is_same_v<T, double>)
+            {
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    scratch.pair_full, d_q_pair, d_full_to_reduced_map_, M);
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    &scratch.pair_full[M], &d_q_pair[n_basis_], d_full_to_reduced_map_, M);
+                gpu_error_check(cudaPeekAtLastError());
+                d_q_pair_full = scratch.pair_full;
+            }
+            else
+            {
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+            }
+        }
+
+        if (is_periodic_)
+        {
+            // Periodic BC: batched forward FFT of both propagators
+            fft_forward(STREAM, d_q_pair_full, scratch.qk_pair, 2);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // [type-specific algorithm] Real fields store the Hermitian half-spectrum, so the
+            // conjugate product is formed directly; complex fields need the -k index map.
+            // Multiply two propagators in the fourier spaces
+            if constexpr (std::is_same<T, double>::value)
+                ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &scratch.qk_pair[0], &scratch.qk_pair[M_COMPLEX], M_COMPLEX);
+            else
+            {
+                // Gather q2(-k) into a separate buffer: an in-place gather through the
+                // k -> -k map (an involution) would race.
+                ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj_[STREAM], &scratch.qk_pair[M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &scratch.qk_pair[0], d_qk_conj_[STREAM], 1.0, M_COMPLEX);
+            }
+            gpu_error_check(cudaPeekAtLastError());
+        }
+        else
+        {
+            // Non-periodic BC: use CudaFFT (DCT/DST)
+            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+            if constexpr (!std::is_same<T, double>::value)
+            {
+                throw_with_line_number("Stress computation with non-periodic BC is only supported for real fields (double).");
+            }
+            else
+            {
+                double* d_q1 = d_q_pair_full;
+                double* d_q2 = &d_q_pair_full[M];
+
+                fft_[STREAM]->forward_stream(d_q1, scratch.rk_1, streams[STREAM][0]);
+                fft_[STREAM]->forward_stream(d_q2, scratch.rk_2, streams[STREAM][0]);
+
+                // Multiply (real coefficients for non-periodic BC)
+                // Per-mode Parseval weights (2 interior / 1 special modes) are folded
+                // into the fourier_basis tables by Pseudo::update_weighted_fourier_basis_mixed.
+                // CudaFFT's real-coefficient forward is 2x the textbook DCT-II/DST-II
+                // convention per transformed dimension (CudaRealTransform matches FFTW's
+                // unnormalized REDFT10/RODFT10, while the CPU FftwFFT/MklFFT scale by 0.5);
+                // the coefficient product therefore carries 4^DIM, compensated here.
+                // (All dimensions are r2r here: mixed periodic/non-periodic is rejected.)
+                const double dct_scale = std::pow(0.25, DIM);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], scratch.rk_1, scratch.rk_2, dct_scale, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+            }
+        }
+
+        // Discrete chains: Boltzmann bond factor exp(-k²·b²·ds/6) and b² (already
+        // halved for half-bond steps) into the integrand
+        if (_d_boltz_bond != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+
+        // fourier_basis arrays contain v⊗v dyad components of the deformation
+        // vector v = 2π g⁻¹ m (units 1/L², NOT the Cartesian wavevector):
+        // _d_fourier_basis_x = v₁², _d_fourier_basis_xy = v₁v₂, etc.
+        // The accumulated sums V_ij = Σ kernel·v_i·v_j are converted to
+        // lattice-parameter derivatives in compute_stress().
+        // No cross-term corrections needed.
+
+        // ============================================================================
+        // PERFORMANCE-CRITICAL: Orthogonal box optimization
+        // ============================================================================
+        // For orthogonal boxes (all angles = 90°), the cross-term sums (V₁₂, V₁₃, V₂₃)
+        // are not computed: angle optimization is inactive for orthogonal crystal
+        // systems, so those slots are never consumed. This optimization
+        // reduces the number of GPU kernel calls from 6 to 3 for 3D boxes,
+        // providing ~10% speedup when box_is_altering=True.
+        //
+        // DO NOT REMOVE THIS OPTIMIZATION without benchmarking! We have experienced
+        // performance regressions before when this check was accidentally removed.
+        // See git history for commit 6d1dc54 which caused a regression by always
+        // computing all 6 components.
+        //
+        // Explicit opt-in: force_off_diagonal_stress_ (set when angle optimization
+        // is active) disables the skip so that angle derivatives are available
+        // even when the box is at exactly 90° angles. The skip remains the default.
+        // ============================================================================
+        const bool is_orthogonal = this->cb->is_orthogonal() && !this->force_off_diagonal_stress_;
+
+        // One dyad component: V = Σ_k integrand(k) · basis(k) · basis_factor
+        auto accumulate = [&](const double* d_basis, int slot)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_basis, basis_factor, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+            cuda_reduce_sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[slot], M_COMPLEX, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
+        };
+
+        if ( DIM == 3 )
+        {
+            accumulate(_d_fourier_basis_x, 0);   // V₁₁
+            accumulate(_d_fourier_basis_y, 1);   // V₂₂
+            accumulate(_d_fourier_basis_z, 2);   // V₃₃
+
+            // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
+            if (!is_orthogonal)
+            {
+                accumulate(_d_fourier_basis_xy, 3);   // V₁₂
+                accumulate(_d_fourier_basis_xz, 4);   // V₁₃
+                accumulate(_d_fourier_basis_yz, 5);   // V₂₃
+            }
+        }
+        if ( DIM == 2 )
+        {
+            // For non-periodic BC, 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
+            // so stress data is stored in fourier_basis_y and fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_y;
+            const double* _d_basis_yy = is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z;
+            const double* _d_basis_xy = is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz;
+
+            accumulate(_d_basis_xx, 0);   // V₁₁
+            accumulate(_d_basis_yy, 1);   // V₂₂
+
+            // V₁₂: only compute for non-orthogonal boxes
+            if (!is_orthogonal)
+                accumulate(_d_basis_xy, 2);
+        }
+        if ( DIM == 1 )
+        {
+            // For non-periodic BC, 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
+            // so stress data is stored in fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_z;
+
+            accumulate(_d_basis_xx, 0);
+        }
     }
     catch(std::exception& exc)
     {

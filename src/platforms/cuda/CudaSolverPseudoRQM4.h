@@ -155,25 +155,7 @@ public:
     void advance_propagator_half_bond_step(
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
-    /**
-     * @brief Compute stress contribution from one segment.
-     *
-     * Computes ∂ln(Q)/∂θ in Fourier space by multiplying forward and backward
-     * propagators with weighted basis functions. Cross-term corrections for
-     * non-orthogonal boxes are included.
-     *
-     * For continuous chains: Φ(k) = 1 (bond factor already in propagator).
-     *
-     * @param STREAM           Stream index for concurrent execution
-     * @param d_q_pair         Forward and backward propagators (device)
-     * @param d_segment_stress Output: stress in Voigt notation
-     *                         [σ₁, σ₂, σ₃, σ₁₂, σ₁₃, σ₂₃] (device, 6 components)
-     * @param monomer_type     Monomer type for segment length
-     * @param is_half_bond_length Ignored for continuous chains
-     */
-    void compute_single_segment_stress(
-        const int STREAM,
-        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
-        std::string monomer_type, bool is_half_bond_length) override;
+    /// Scratch buffers lent to CudaSolverPseudoBase::compute_single_segment_stress()
+    typename Base::StressScratch stress_scratch(int STREAM) override;
 };
 #endif

@@ -1,6 +1,7 @@
 import sys
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from polymerfts import PropagatorSolver, _core
 
@@ -46,8 +47,12 @@ def test_convergence_order_lite_rqm4_and_rk2():
         return
 
     rng = np.random.default_rng(2025)
-    # Per testing guidelines: use field amplitude std ~ 5.
-    w_a = rng.normal(0.0, 5.0, size=128)
+    # Per testing guidelines: use field amplitude std ~ 5. The field is smoothed
+    # (Gaussian filter, as in TestStressNonPeriodic) so that the methods are in
+    # their asymptotic regime at these ds; white noise on a 0.03 grid gives
+    # apparent orders of 1.5 (RQM4) and 1.4 (RK2) instead of 4 and 2.
+    w_a = gaussian_filter(rng.normal(0.0, 5.0, size=128), sigma=3.0, mode="wrap")
+    w_a *= 5.0 / w_a.std()
 
     # Reference solution with a much smaller ds.
     q_ref = _partition_for(ds=0.0025, method="rqm4", w_a=w_a, platform=platform)

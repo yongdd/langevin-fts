@@ -155,18 +155,10 @@ public:
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type) override;
 
-    /**
-     * @brief Compute stress from one segment.
-     *
-     * @param STREAM           Stream index
-     * @param d_q_pair         Propagator product
-     * @param d_segment_stress Output stress
-     * @param monomer_type     Monomer type
-     * @param is_half_bond_length True for half-bond contribution
-     */
-    void compute_single_segment_stress(
-        const int STREAM,
-        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
-        std::string monomer_type, bool is_half_bond_length) override;
+    /// Scratch buffers lent to CudaSolverPseudoBase::compute_single_segment_stress()
+    typename Base::StressScratch stress_scratch(int STREAM) override;
+    /// Boltzmann bond factor of the stress integrand (see CudaSolverPseudoBase)
+    const double* get_stress_boltz_bond(
+        const std::string& monomer_type, bool is_half_bond_length) const override;
 };
 #endif

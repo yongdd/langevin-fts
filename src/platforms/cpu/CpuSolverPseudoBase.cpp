@@ -972,6 +972,13 @@ void CpuSolverPseudoBase<T>::accumulate_stress_nonperiodic(
 }
 
 template <typename T>
+const double* CpuSolverPseudoBase<T>::get_stress_boltz_bond(
+    std::string /*monomer_type*/, bool /*is_half_bond_length*/) const
+{
+    return nullptr;   // continuous chains: the bond factor is already in the propagator
+}
+
+template <typename T>
 std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length)
 {

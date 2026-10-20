@@ -40,6 +40,25 @@ class CudaRealTransform2D;
 class CudaRealTransform3D;
 
 /**
+ * @brief Stream-aware spectral transform interface implemented by every CudaFFT<T, DIM>.
+ *
+ * The solvers hold their per-stream DCT/DST objects through this interface so
+ * that the transforms are issued on the propagator's stream, like the kernels
+ * around them. The FFT<T> forward()/backward() methods run on the legacy
+ * default stream and serialize with every other stream.
+ */
+template <typename T>
+class CudaFFTBase : public FFT<T>
+{
+public:
+    virtual ~CudaFFTBase() = default;
+    virtual void forward_stream(T* d_rdata, double* d_cdata, cudaStream_t stream) = 0;
+    virtual void backward_stream(double* d_cdata, T* d_rdata, cudaStream_t stream) = 0;
+    virtual void forward_stream(T* d_rdata, std::complex<double>* d_cdata, cudaStream_t stream) = 0;
+    virtual void backward_stream(std::complex<double>* d_cdata, T* d_rdata, cudaStream_t stream) = 0;
+};
+
+/**
  * @class CudaFFT
  * @brief GPU spectral transform implementation for all boundary conditions.
  *
@@ -56,7 +75,7 @@ class CudaRealTransform3D;
  * - Stream-aware for concurrent execution
  */
 template <typename T, int DIM>
-class CudaFFT : public FFT<T>
+class CudaFFT : public CudaFFTBase<T>
 {
 private:
     std::array<int, DIM> nx_;                    ///< Grid dimensions
@@ -123,7 +142,7 @@ public:
      * @param d_cdata Output transformed data on device
      * @param stream  CUDA stream for async execution
      */
-    void forward_stream(T* d_rdata, double* d_cdata, cudaStream_t stream);
+    void forward_stream(T* d_rdata, double* d_cdata, cudaStream_t stream) override;
 
     /**
      * @brief Backward transform (real coefficient interface) with explicit stream.
@@ -134,7 +153,7 @@ public:
      * @param d_rdata Output real data on device
      * @param stream  CUDA stream for async execution
      */
-    void backward_stream(double* d_cdata, T* d_rdata, cudaStream_t stream);
+    void backward_stream(double* d_cdata, T* d_rdata, cudaStream_t stream) override;
 
     /**
      * @brief Forward FFT (complex output interface, periodic BC only) with explicit stream.
@@ -145,7 +164,7 @@ public:
      *
      * @throws Exception if any dimension is non-periodic
      */
-    void forward_stream(T* d_rdata, std::complex<double>* d_cdata, cudaStream_t stream);
+    void forward_stream(T* d_rdata, std::complex<double>* d_cdata, cudaStream_t stream) override;
 
     /**
      * @brief Backward FFT (complex input interface, periodic BC only) with explicit stream.
@@ -156,7 +175,7 @@ public:
      *
      * @throws Exception if any dimension is non-periodic
      */
-    void backward_stream(std::complex<double>* d_cdata, T* d_rdata, cudaStream_t stream);
+    void backward_stream(std::complex<double>* d_cdata, T* d_rdata, cudaStream_t stream) override;
 
     // Override pure virtual methods from FFT<T> base class
     void forward(T* rdata, double* cdata) override { forward_stream(rdata, cdata, 0); }

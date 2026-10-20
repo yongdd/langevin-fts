@@ -116,128 +116,9 @@ void MklCrysFFTObliqueZ::initFFTPlans()
         dct_sin_[k] = std::sin(theta);
     }
 
-    // Calibrate DCT scaling to match FFTW's native DCT behavior
-    calibrateDCTScale();
-}
-
-//------------------------------------------------------------------------------
-// Calibrate DCT scaling factors to ensure round-trip accuracy
-// This calibration computes scale factors by testing with a known input
-// and comparing FFT-based DCT output against the direct computation
-//------------------------------------------------------------------------------
-void MklCrysFFTObliqueZ::calibrateDCTScale()
-{
-    const int N = nx_physical_[2];  // Nz/2
-
-    // Generate test signal
-    std::vector<double> x(N);
-    for (int i = 0; i < N; ++i)
-        x[i] = std::sin(0.13 * (i + 1)) + 0.1 * (i + 1);
-
-    // Compute exact DCT-II using direct formula with extended precision
-    // DCT-II: X[k] = sum_{n=0}^{N-1} x[n] * cos(pi*k*(2n+1)/(2N))
-    std::vector<double> dct_exact(N, 0.0);
-    for (int k = 0; k < N; ++k)
-    {
-        double sum = 0.0;
-        for (int n = 0; n < N; ++n)
-        {
-            // Use explicit angle calculation for better precision
-            double angle = M_PI * k * (2.0 * n + 1.0) / (2.0 * N);
-            sum += x[n] * std::cos(angle);
-        }
-        dct_exact[k] = sum;
-    }
-
-    // Compute FFT-based DCT-II (single transform for calibration)
-    std::vector<double> z_extended(2 * N);
-    std::vector<std::complex<double>> z_freq(N + 1);
-
-    // Create mirrored sequence
-    for (int iz = 0; iz < N; ++iz)
-        z_extended[iz] = x[iz];
-    for (int iz = 0; iz < N; ++iz)
-        z_extended[2 * N - 1 - iz] = x[iz];
-
-    // Single forward FFT for calibration
-    DFTI_DESCRIPTOR_HANDLE plan_calib = nullptr;
-    MKL_LONG Nz_calib = 2 * N;
-    mkl_dfti_check(DftiCreateDescriptor(&plan_calib, DFTI_DOUBLE, DFTI_REAL, 1, Nz_calib), "DftiCreateDescriptor (calibration)");
-    mkl_dfti_check(DftiSetValue(plan_calib, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, calibration)");
-    mkl_dfti_check(DftiSetValue(plan_calib, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, calibration)");
-    mkl_dfti_check(DftiCommitDescriptor(plan_calib), "DftiCommitDescriptor (calibration)");
-
-    mkl_dfti_check(DftiComputeForward(plan_calib, z_extended.data(), z_freq.data()), "DftiComputeForward (calibration)");
-
-    // Extract FFT-based DCT-II (without calibration)
-    std::vector<double> dct_fft(N);
-    for (int k = 0; k < N; ++k)
-    {
-        double re = z_freq[k].real();
-        double im = z_freq[k].imag();
-        dct_fft[k] = 0.5 * (re * dct_cos_[k] + im * dct_sin_[k]);
-    }
-
-    // Compute forward scale: dct_exact / dct_fft (least squares)
-    double num = 0.0, den = 0.0;
-    for (int k = 0; k < N; ++k)
-    {
-        num += dct_exact[k] * dct_fft[k];
-        den += dct_fft[k] * dct_fft[k];
-    }
-    dct_scale_fwd_ = (den > 0.0) ? (num / den) : 1.0;
-
-    // Now test round-trip to get backward scale
-    // Apply forward scale to get corrected DCT coefficients
-    std::vector<double> dct_scaled(N);
-    for (int k = 0; k < N; ++k)
-        dct_scaled[k] = dct_fft[k] * dct_scale_fwd_;
-
-    // Apply inverse twiddle factors
-    for (int k = 0; k < N; ++k)
-    {
-        double xk = dct_scaled[k] / dct_scale_fwd_;  // Undo forward scale for inverse
-        z_freq[k] = std::complex<double>(2.0 * xk * dct_cos_[k], 2.0 * xk * dct_sin_[k]);
-    }
-    z_freq[N] = std::complex<double>(0.0, 0.0);
-
-    // Backward FFT
-    mkl_dfti_check(DftiComputeBackward(plan_calib, z_freq.data(), z_extended.data()), "DftiComputeBackward (calibration)");
-
-    // Extract DCT-III result
-    std::vector<double> idct_fft(N);
-    const double scale_z = 1.0 / (2.0 * N);
-    for (int iz = 0; iz < N; ++iz)
-        idct_fft[iz] = z_extended[iz] * scale_z;
-
-    // Compute backward scale: x / idct_fft (to get original back)
-    num = 0.0;
-    den = 0.0;
-    for (int i = 0; i < N; ++i)
-    {
-        num += x[i] * idct_fft[i];
-        den += idct_fft[i] * idct_fft[i];
-    }
-    dct_scale_bwd_ = (den > 0.0) ? (num / den) : 1.0;
-
-    // Verify calibration: compute round-trip error
-    double max_err = 0.0;
-    for (int i = 0; i < N; ++i)
-    {
-        double err = std::abs(idct_fft[i] * dct_scale_bwd_ - x[i]);
-        max_err = std::max(max_err, err);
-    }
-
-    // Debug: print calibration info for first instance only
-    static bool printed = false;
-    if (!printed && std::getenv("FTS_DEBUG_OBLIQUEZ_CALIB"))
-    {
-        std::fprintf(stderr, "[MklCrysFFTObliqueZ] N=%d, scale_fwd=%.15e, scale_bwd=%.15e, round_trip_err=%.15e\n",
-                     N, dct_scale_fwd_, dct_scale_bwd_, max_err);
-        printed = true;
-    }
-
-    DftiFreeDescriptor(&plan_calib);
+    // No scale factors: 0.5*(Re cos + Im sin) of the mirrored-sequence FFT is
+    // exactly the textbook DCT-II, and the unnormalized 2N-point inverse of the
+    // twiddled spectrum divided by 2N returns the signal.
 }
 
 //------------------------------------------------------------------------------
@@ -284,7 +165,7 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
     // Batched FFT along z
     mkl_dfti_check(DftiComputeForward(plan_dct_forward_z_, buffers.z_extended.get(), buffers.z_freq.get()), "DftiComputeForward (z DCT-II)");
 
-    // Extract DCT-II coefficients with twiddle factors and calibration
+    // Extract DCT-II coefficients with twiddle factors
     for (int ixy = 0; ixy < howmany; ++ixy)
     {
         const int base_half = ixy * Nz2;
@@ -296,8 +177,7 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
             // Twiddle factor: exp(-i*pi*k/(2*Nz2)) = cos - i*sin
             // DCT-II[k] = Re(FFT[k] * exp(-i*theta)) = Re*cos + Im*sin
             // Factor 0.5 because mirrored sequence FFT gives 2x the DCT-II
-            // Apply forward calibration scale
-            out[base_half + k] = 0.5 * (re * dct_cos_[k] + im * dct_sin_[k]) * dct_scale_fwd_;
+            out[base_half + k] = 0.5 * (re * dct_cos_[k] + im * dct_sin_[k]);
         }
     }
 }
@@ -331,15 +211,13 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
     }
 
     // Apply twiddle factors to create symmetric spectrum
-    // Divide by forward scale to undo the calibration from DCT-II
-    const double inv_fwd_scale = 1.0 / dct_scale_fwd_;
     for (int ixy = 0; ixy < howmany; ++ixy)
     {
         const int base_half = ixy * Nz2;
         const int base_freq = ixy * freq_stride;
         for (int k = 0; k < Nz2; ++k)
         {
-            double xk = in[base_half + k] * inv_fwd_scale;
+            const double xk = in[base_half + k];
             // Twiddle factor: exp(i*pi*k/(2*Nz2)) = cos + i*sin
             // Factor 2 for inverse mirroring
             buffers.z_freq.get()[base_freq + k] = std::complex<double>(
@@ -354,10 +232,10 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
     // Batched backward FFT along z
     mkl_dfti_check(DftiComputeBackward(plan_dct_backward_z_, buffers.z_freq.get(), buffers.z_extended.get()), "DftiComputeBackward (z DCT-III)");
 
-    // Extract first half (DCT-III result) with normalization and backward calibration
+    // Extract first half (DCT-III result) with normalization
     // IFFT returns 2N values, we take the first N
-    // Total normalization: 1/(2N) = 1/Nz, times backward calibration
-    const double scale = dct_scale_bwd_ / static_cast<double>(Nz);
+    // Total normalization: 1/(2N) = 1/Nz
+    const double scale = 1.0 / static_cast<double>(Nz);
     for (int ixy = 0; ixy < howmany; ++ixy)
     {
         const int base_half = ixy * Nz2;
@@ -365,6 +243,61 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
         for (int iz = 0; iz < Nz2; ++iz)
             out[base_half + iz] = buffers.z_extended.get()[base_full + iz] * scale;
     }
+}
+
+//------------------------------------------------------------------------------
+// Shared pipeline of diffusion() and apply_multiplier():
+// DCT-II(z) -> FFT(xy) -> multiply -> IFFT(xy) -> DCT-III(z) -> normalize
+//------------------------------------------------------------------------------
+void MklCrysFFTObliqueZ::apply_spectral_multiplier(const double* q_in, double* q_out, const double* multiplier) const
+{
+    const int Nx = nx_logical_[0];
+    const int Ny = nx_logical_[1];
+
+    struct ThreadBuffers
+    {
+        std::unique_ptr<double[]> real_in;
+        std::unique_ptr<double[]> real_tmp;
+        std::unique_ptr<std::complex<double>[]> complex;
+        int size_real = 0;
+        int size_complex = 0;
+    };
+    thread_local ThreadBuffers buffers;
+    if (buffers.size_real != M_physical_ || buffers.size_complex != M_complex_)
+    {
+        buffers.real_in.reset(new double[M_physical_]);
+        buffers.real_tmp.reset(new double[M_physical_]);
+        buffers.complex.reset(new std::complex<double>[M_complex_]);
+        buffers.size_real = M_physical_;
+        buffers.size_complex = M_complex_;
+    }
+
+    // Step 1: Copy input
+    std::memcpy(buffers.real_in.get(), q_in, sizeof(double) * M_physical_);
+
+    // Step 2: DCT-II along Z
+    applyDCT2ForwardZ(buffers.real_in.get(), buffers.real_tmp.get());
+
+    // Step 3: Batched 2D FFT along XY (strided)
+    mkl_dfti_check(DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get()), "DftiComputeForward (xy)");
+
+    // Step 4: Apply the spectral multiplier (Boltzmann factor or stress multiplier)
+    for (int i = 0; i < M_complex_; ++i)
+        buffers.complex.get()[i] *= multiplier[i];
+
+    // Step 5: Batched 2D IFFT along XY (strided)
+    mkl_dfti_check(DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get()), "DftiComputeBackward (xy)");
+
+    // Step 6: DCT-III along Z
+    applyDCT3BackwardZ(buffers.real_tmp.get(), buffers.real_in.get());
+
+    // Step 7: Apply overall normalization
+    // DCT round trip: already normalized in DCT-III (1/Nz)
+    // XY FFT round trip: MKL DFTI uses unnormalized transforms,
+    // so only 1/(Nx * Ny) remains
+    const double xy_norm = 1.0 / static_cast<double>(Nx * Ny);
+    for (int i = 0; i < M_physical_; ++i)
+        q_out[i] = buffers.real_in.get()[i] * xy_norm;
 }
 
 //------------------------------------------------------------------------------
@@ -376,101 +309,10 @@ void MklCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
     if (!state.boltz_current)
         throw_with_line_number("MklCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
-    const int Nx = nx_logical_[0];
-    const int Ny = nx_logical_[1];
-
-    struct ThreadBuffers
-    {
-        std::unique_ptr<double[]> real_in;
-        std::unique_ptr<double[]> real_tmp;
-        std::unique_ptr<std::complex<double>[]> complex;
-        int size_real = 0;
-        int size_complex = 0;
-    };
-    thread_local ThreadBuffers buffers;
-    if (buffers.size_real != M_physical_ || buffers.size_complex != M_complex_)
-    {
-        buffers.real_in.reset(new double[M_physical_]);
-        buffers.real_tmp.reset(new double[M_physical_]);
-        buffers.complex.reset(new std::complex<double>[M_complex_]);
-        buffers.size_real = M_physical_;
-        buffers.size_complex = M_complex_;
-    }
-
-    // Step 1: Copy input
-    std::memcpy(buffers.real_in.get(), q_in, sizeof(double) * M_physical_);
-
-    // Step 2: DCT-II along Z
-    applyDCT2ForwardZ(buffers.real_in.get(), buffers.real_tmp.get());
-
-    // Step 3: Batched 2D FFT along XY (strided)
-    mkl_dfti_check(DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get()), "DftiComputeForward (xy)");
-
-    // Step 4: Apply Boltzmann factor
-    for (int i = 0; i < M_complex_; ++i)
-        buffers.complex.get()[i] *= state.boltz_current[i];
-
-    // Step 5: Batched 2D IFFT along XY (strided)
-    mkl_dfti_check(DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get()), "DftiComputeBackward (xy)");
-
-    // Step 6: DCT-III along Z
-    applyDCT3BackwardZ(buffers.real_tmp.get(), buffers.real_in.get());
-
-    // Step 7: Apply overall normalization
-    // DCT round trip: already normalized in DCT-III (1/Nz)
-    // XY FFT round trip: MKL DFTI uses unnormalized transforms
-    // Total: 1/(Nx * Ny * Nz) = norm_factor_ * 2 (because DCT-III has 1/Nz built in)
-    // Actually DCT-II to DCT-III has factor 2, and we divided by Nz in DCT-III
-    // So we need: 1/(Nx * Ny) for XY normalization
-    const double xy_norm = 1.0 / static_cast<double>(Nx * Ny);
-    for (int i = 0; i < M_physical_; ++i)
-        q_out[i] = buffers.real_in.get()[i] * xy_norm;
+    apply_spectral_multiplier(q_in, q_out, state.boltz_current);
 }
 
 void MklCrysFFTObliqueZ::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)
 {
-    const int Nx = nx_logical_[0];
-    const int Ny = nx_logical_[1];
-
-    struct ThreadBuffers
-    {
-        std::unique_ptr<double[]> real_in;
-        std::unique_ptr<double[]> real_tmp;
-        std::unique_ptr<std::complex<double>[]> complex;
-        int size_real = 0;
-        int size_complex = 0;
-    };
-    thread_local ThreadBuffers buffers;
-    if (buffers.size_real != M_physical_ || buffers.size_complex != M_complex_)
-    {
-        buffers.real_in.reset(new double[M_physical_]);
-        buffers.real_tmp.reset(new double[M_physical_]);
-        buffers.complex.reset(new std::complex<double>[M_complex_]);
-        buffers.size_real = M_physical_;
-        buffers.size_complex = M_complex_;
-    }
-
-    // Step 1: Copy input
-    std::memcpy(buffers.real_in.get(), q_in, sizeof(double) * M_physical_);
-
-    // Step 2: DCT-II along Z
-    applyDCT2ForwardZ(buffers.real_in.get(), buffers.real_tmp.get());
-
-    // Step 3: Batched 2D FFT along XY (strided)
-    mkl_dfti_check(DftiComputeForward(plan_fft_forward_xy_, buffers.real_tmp.get(), buffers.complex.get()), "DftiComputeForward (xy)");
-
-    // Step 4: Apply multiplier
-    for (int i = 0; i < M_complex_; ++i)
-        buffers.complex.get()[i] *= multiplier[i];
-
-    // Step 5: Batched 2D IFFT along XY (strided)
-    mkl_dfti_check(DftiComputeBackward(plan_fft_backward_xy_, buffers.complex.get(), buffers.real_tmp.get()), "DftiComputeBackward (xy)");
-
-    // Step 6: DCT-III along Z
-    applyDCT3BackwardZ(buffers.real_tmp.get(), buffers.real_in.get());
-
-    // Step 7: Apply overall normalization
-    const double xy_norm = 1.0 / static_cast<double>(Nx * Ny);
-    for (int i = 0; i < M_physical_; ++i)
-        q_out[i] = buffers.real_in.get()[i] * xy_norm;
+    apply_spectral_multiplier(q_in, q_out, multiplier);
 }

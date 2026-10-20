@@ -15,6 +15,8 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
+#include <thread>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -256,40 +258,53 @@ protected:
         std::unique_ptr<KCache> ky2_cache;
         std::unique_ptr<KCache> kz2_cache;
         uint64_t epoch = 0;
-        uint64_t instance_id = 0;
     };
 
+    mutable std::atomic<uint64_t> cache_epoch_{1};   ///< bumped to invalidate every thread's cache
+    /// Unique per object, never reused: lets a thread recognise the object its
+    /// remembered cache slot belongs to (see get_thread_state()).
     inline static std::atomic<uint64_t> next_instance_id_{1};
-    uint64_t instance_id_{0};
-    mutable std::atomic<uint64_t> cache_epoch_{1};
+    const uint64_t instance_id_{next_instance_id_.fetch_add(1, std::memory_order_relaxed)};
+    mutable std::mutex thread_states_mutex_;
+    /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
+    /// owned by this object so that they are released together with it.
+    mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
 
     Derived& derived() { return static_cast<Derived&>(*this); }
     const Derived& derived() const { return static_cast<const Derived&>(*this); }
 
+    /// Cache of the calling thread (owned by this object, see thread_states_).
     ThreadState& get_thread_state() const
     {
-        struct ThreadLocalStates {
-            std::unordered_map<const CrysFFTRecursive3mBase*, ThreadState> states;
-        };
-        thread_local ThreadLocalStates tls;
-
-        ThreadState& state = tls.states[this];
-        uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
-        if (state.instance_id != instance_id_ || state.epoch != epoch)
+        // Each thread remembers the slot it used last, tagged with the object's
+        // id, so the usual case (one object per thread) takes no lock. The slot
+        // is looked up under the lock only when the thread switches object; the
+        // map keeps references valid across insertions, and a stale remembered
+        // pointer is never followed because ids are not reused.
+        struct LastSlot { uint64_t instance_id = 0; ThreadState* state = nullptr; };
+        thread_local LastSlot last;
+        if (last.instance_id != instance_id_)
         {
-            state.k_cache.clear();
-            state.k_current = nullptr;
-            state.coeff_current = std::numeric_limits<double>::quiet_NaN();
-            state.exp_kx2_cache.clear();
-            state.exp_ky2_cache.clear();
-            state.exp_kz2_cache.clear();
-            state.kx2_cache.reset();
-            state.ky2_cache.reset();
-            state.kz2_cache.reset();
-            state.epoch = epoch;
-            state.instance_id = instance_id_;
+            std::lock_guard<std::mutex> lock(thread_states_mutex_);
+            last.state = &thread_states_[std::this_thread::get_id()];
+            last.instance_id = instance_id_;
         }
-        return state;
+        ThreadState* state = last.state;
+        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
+        if (state->epoch != epoch)
+        {
+            state->k_cache.clear();
+            state->k_current = nullptr;
+            state->coeff_current = std::numeric_limits<double>::quiet_NaN();
+            state->exp_kx2_cache.clear();
+            state->exp_ky2_cache.clear();
+            state->exp_kz2_cache.clear();
+            state->kx2_cache.reset();
+            state->ky2_cache.reset();
+            state->kz2_cache.reset();
+            state->epoch = epoch;
+        }
+        return *state;
     }
 
     void generate_twiddle_factors()
@@ -316,7 +331,20 @@ protected:
         twiddle_factor(tasks, nx_physical_);
     }
 
-    KCache generate_k_cache(double coeff) const
+    /**
+     * @brief Build the folded 2x2y2z k-space cache for a per-mode value.
+     *
+     * Shared body of generate_k_cache() and generate_k_cache_from_multiplier().
+     * Tabulates the squared wavevector components kx^2, ky^2, kz^2 of the
+     * logical grid, fills the full grid with value_at(kx2, ky2, kz2) / M_logical,
+     * splits it into 8 octants, applies the 2x2y2z butterflies and multiplies
+     * with the (parity-permuted) twiddle factors.
+     *
+     * @tparam ValueFn Callable with signature double(double kx2, double ky2, double kz2).
+     * @param value_at Per-mode value before the 1/M_logical normalization.
+     */
+    template <typename ValueFn>
+    KCache generate_k_cache_impl(ValueFn&& value_at) const
     {
         using namespace crys_recursive_3m;
 
@@ -358,7 +386,7 @@ protected:
             kz[iz] = temp * temp * factor_Lz;
         }
 
-        // Build full-size tempmat with exp(-k^2 * coeff)
+        // Build full-size tempmat with value_at(kx^2, ky^2, kz^2) / M_logical
         std::vector<double> tempmat(static_cast<size_t>(M_logical_));
         double factor = 1.0 / static_cast<double>(M_logical_);
 
@@ -369,7 +397,7 @@ protected:
                 size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
                 for (int iz = 0; iz < nx_logical_[2]; ++iz)
                 {
-                    tempmat[base + iz] = std::exp(-(kx[ix] + ky[iy] + kz[iz]) * coeff) * factor;
+                    tempmat[base + iz] = value_at(kx[ix], ky[iy], kz[iz]) * factor;
                 }
             }
         }
@@ -419,137 +447,49 @@ protected:
         return cache;
     }
 
+    /// Boltzmann cache exp(-k^2 coeff) used by diffusion().
+    KCache generate_k_cache(double coeff) const
+    {
+        return generate_k_cache_impl([coeff](double kx2, double ky2, double kz2) {
+            return std::exp(-(kx2 + ky2 + kz2) * coeff);
+        });
+    }
+
+    /// Multiplier cache (kx^2, ky^2, kz^2, or exp(-k^2 coeff) times one of
+    /// them) used by apply_multiplier() for the stress calculation.
     KCache generate_k_cache_from_multiplier(MultiplierType type, double coeff) const
     {
-        using namespace crys_recursive_3m;
+        return generate_k_cache_impl([type, coeff](double kx2, double ky2, double kz2) {
+            double k2 = kx2 + ky2 + kz2;
+            double value = 0.0;
 
-        KCache cache;
-        for (int i = 0; i < 8; ++i)
-        {
-            cache.re[i] = std::make_unique<double[]>(M_physical_);
-            cache.im[i] = std::make_unique<double[]>(M_physical_);
-        }
-
-        const double Lx = cell_para_[0];
-        const double Ly = cell_para_[1];
-        const double Lz = cell_para_[2];
-
-        std::vector<double> kx(nx_logical_[0]);
-        std::vector<double> ky(nx_logical_[1]);
-        std::vector<double> kz(nx_logical_[2]);
-
-        double factor_Lx = 2.0 * M_PI / Lx;
-        factor_Lx *= factor_Lx;
-        double factor_Ly = 2.0 * M_PI / Ly;
-        factor_Ly *= factor_Ly;
-        double factor_Lz = 2.0 * M_PI / Lz;
-        factor_Lz *= factor_Lz;
-
-        for (int ix = 0; ix < nx_logical_[0]; ++ix)
-        {
-            int temp = (ix > nx_logical_[0] / 2) ? (nx_logical_[0] - ix) : ix;
-            kx[ix] = temp * temp * factor_Lx;
-        }
-        for (int iy = 0; iy < nx_logical_[1]; ++iy)
-        {
-            int temp = (iy > nx_logical_[1] / 2) ? (nx_logical_[1] - iy) : iy;
-            ky[iy] = temp * temp * factor_Ly;
-        }
-        for (int iz = 0; iz < nx_logical_[2]; ++iz)
-        {
-            int temp = (iz > nx_logical_[2] / 2) ? (nx_logical_[2] - iz) : iz;
-            kz[iz] = temp * temp * factor_Lz;
-        }
-
-        std::vector<double> tempmat(static_cast<size_t>(M_logical_));
-        double factor = 1.0 / static_cast<double>(M_logical_);
-
-        for (int ix = 0; ix < nx_logical_[0]; ++ix)
-        {
-            for (int iy = 0; iy < nx_logical_[1]; ++iy)
+            switch (type)
             {
-                size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
-                for (int iz = 0; iz < nx_logical_[2]; ++iz)
-                {
-                    double kx2 = kx[ix];
-                    double ky2 = ky[iy];
-                    double kz2 = kz[iz];
-                    double k2 = kx2 + ky2 + kz2;
-                    double value = 0.0;
-
-                    switch (type)
-                    {
-                        case MultiplierType::Kx2:
-                            value = kx2;
-                            break;
-                        case MultiplierType::Ky2:
-                            value = ky2;
-                            break;
-                        case MultiplierType::Kz2:
-                            value = kz2;
-                            break;
-                        case MultiplierType::ExpKx2:
-                            value = std::exp(-k2 * coeff) * kx2;
-                            break;
-                        case MultiplierType::ExpKy2:
-                            value = std::exp(-k2 * coeff) * ky2;
-                            break;
-                        case MultiplierType::ExpKz2:
-                            value = std::exp(-k2 * coeff) * kz2;
-                            break;
-                        default:
-                            value = 0.0;
-                            break;
-                    }
-
-                    tempmat[base + iz] = value * factor;
-                }
+                case MultiplierType::Kx2:
+                    value = kx2;
+                    break;
+                case MultiplierType::Ky2:
+                    value = ky2;
+                    break;
+                case MultiplierType::Kz2:
+                    value = kz2;
+                    break;
+                case MultiplierType::ExpKx2:
+                    value = std::exp(-k2 * coeff) * kx2;
+                    break;
+                case MultiplierType::ExpKy2:
+                    value = std::exp(-k2 * coeff) * ky2;
+                    break;
+                case MultiplierType::ExpKz2:
+                    value = std::exp(-k2 * coeff) * kz2;
+                    break;
+                default:
+                    value = 0.0;
+                    break;
             }
-        }
 
-        // Split into 8 octants
-        std::array<std::unique_ptr<double[]>, 8> k_split;
-        for (int i = 0; i < 8; ++i)
-        {
-            k_split[i] = std::make_unique<double[]>(M_physical_);
-        }
-
-        std::array<double*, 8> k_split_ptr;
-        for (int i = 0; i < 8; ++i) k_split_ptr[i] = k_split[i].get();
-
-        mat_split(tempmat.data(), k_split_ptr, nx_logical_);
-
-        // Apply 2x2y2z decomposition
-        std::array<int, 3> halfsize = nx_physical_;
-        constexpr std::array<std::pair<int, int>, 4> seq0{{{0,4},{1,5},{2,6},{3,7}}};
-        constexpr std::array<std::pair<int, int>, 4> seq1{{{0,2},{1,3},{4,6},{5,7}}};
-        constexpr std::array<std::pair<int, int>, 4> seq2{{{0,1},{2,3},{4,5},{6,7}}};
-        add_sub_by_seq(k_split_ptr, seq0, halfsize);
-        add_sub_by_seq(k_split_ptr, seq1, halfsize);
-        add_sub_by_seq(k_split_ptr, seq2, halfsize);
-
-        // Multiply with twiddle factors. Twiddle r_p pairs with
-        // S_{fold_perm_[p]} (translation-parity permutation; identity when all
-        // generator translations are even in grid units).
-        constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
-        std::array<double*, 8> cache_re_ptr, cache_im_ptr, r_re_ptr, r_im_ptr;
-        std::array<double*, 8> k_split_perm_ptr;
-        for (int i = 0; i < 8; ++i)
-        {
-            cache_re_ptr[i] = cache.re[i].get();
-            cache_im_ptr[i] = cache.im[i].get();
-            r_re_ptr[i] = r_re_[i].get();
-            r_im_ptr[i] = r_im_[i].get();
-            k_split_perm_ptr[i] = k_split[fold_perm_[i]].get();
-        }
-
-        mul_add_sub_by_seq(
-            cache_re_ptr, cache_im_ptr,
-            r_re_ptr, r_im_ptr,
-            k_split_perm_ptr,
-            seq3, halfsize);
-
-        return cache;
+            return value;
+        });
     }
 
     const KCache& get_multiplier_cache(MultiplierType type, double coeff) const
@@ -602,8 +542,7 @@ public:
         std::array<double, 9> translational_part)
         : nx_logical_(nx_logical),
           cell_para_(cell_para),
-          translational_part_(translational_part),
-          instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
+          translational_part_(translational_part)
     {
         for (int d = 0; d < 3; ++d)
         {

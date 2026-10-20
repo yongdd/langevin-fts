@@ -112,6 +112,25 @@ commits are omitted.
   `get_computation_propagators` lost its misspelled name.
 - CL-FTS uses the same idioms as L-FTS (propagator solver accessors, architecture figures,
   material-conservation and partition checks); `calculate_sigma` lives in `utils`.
+- CUDA: `compute_single_segment_stress` lives once in `CudaSolverPseudoBase` (as on the CPU
+  side); RQM4, RK2 and the discrete solver supply the bond factor and their scratch
+  buffers. RK2 now transforms the propagator pair in one batched cuFFT call like the
+  other two (2026-10-20).
+- CUDA non-periodic boundaries: the DCT/DST transforms and the kernels around them are
+  issued on the propagator's stream (`CudaFFTBase::forward_stream`), like the periodic
+  cuFFT path; they ran on the legacy default stream, which serialized the streams
+  (2026-10-20). Results are unchanged.
+- `TestConvergenceOrderLite` uses a Gaussian-smoothed field (white noise on a 0.03 grid is
+  outside the asymptotic regime at ds = 0.04-0.01) and now passes: RQM4 order 3.6, RK2 2.0.
+- CPU CrysFFT (2026-10-20): the Recursive3m k-cache generator and the ObliqueZ DCT pipelines
+  exist once (about 300 lines removed); the ObliqueZ DCT scale factors are the analytic
+  constants (FFTW: 2 forward, REDFT01 backward; MKL: none) instead of a least-squares
+  calibration run at construction, which changes results only at round-off; the
+  per-thread Boltzmann/k caches are owned by the CrysFFT object (a map keyed by thread
+  id; each thread remembers its slot, so the steady state takes no lock) instead of
+  thread-local maps keyed by the object's address, so they are released when the object
+  is destroyed (long sessions that create many solvers no longer accumulate stale
+  tables in every worker thread).
 - Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
   errors (on in CI); `POLYMERFTS_CUDA_ARCHITECTURES` selects the compute capabilities;

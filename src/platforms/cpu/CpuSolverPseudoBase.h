@@ -317,15 +317,15 @@ protected:
      * @brief Get bond factor for stress computation.
      *
      * Returns the appropriate multiplier for stress coefficient:
-     * - Continuous: Returns nullptr (no bond factor in stress)
-     * - Discrete: Returns bond function ĝ(k) or half-bond ĝ^(1/2)(k)
+     * - Continuous (default): Returns nullptr (no bond factor in stress)
+     * - Discrete (override): Returns bond function ĝ(k) or half-bond ĝ^(1/2)(k)
      *
      * @param monomer_type Monomer type
      * @param is_half_bond_length Whether using half bond length
      * @return Pointer to bond function array, or nullptr if not applicable
      */
     virtual const double* get_stress_boltz_bond(
-        std::string monomer_type, bool is_half_bond_length) const = 0;
+        std::string monomer_type, bool is_half_bond_length) const;
 
     // ---- space group / CrysFFT setup (set_space_group) ----------------------
     /// Drop every CrysFFT object and index map.

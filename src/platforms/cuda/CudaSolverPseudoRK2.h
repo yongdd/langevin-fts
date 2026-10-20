@@ -65,8 +65,9 @@ class CudaCrysFFTBase;
  *
  * **Memory per Stream:**
  *
- * - d_q_step_1, d_q_step_2: Workspace arrays
- * - d_qk_in_*: Fourier space buffers
+ * - d_q_work: real-space workspace (2*M: advance_propagator() uses the first
+ *   half, the stress computation both halves as the contiguous propagator pair)
+ * - d_qk_work: Fourier-space workspace (2*M_COMPLEX, same split)
  */
 template <typename T>
 class CudaSolverPseudoRK2 : public CudaSolverPseudoBase<T>
@@ -87,14 +88,12 @@ private:
 
     /// @name Workspace Arrays (per stream)
     /// @{
-    CuDeviceData<T> *d_q_step_1[MAX_STREAMS];          ///< Workspace 1
-    CuDeviceData<T> *d_q_step_2[MAX_STREAMS];          ///< Workspace 2
+    CuDeviceData<T> *d_q_work[MAX_STREAMS];            ///< Real-space workspace (2*M)
     /// @}
 
     /// @name Fourier Space Buffers (periodic BC - complex coefficients)
     /// @{
-    cuDoubleComplex *d_qk_in_1[MAX_STREAMS];           ///< Complex coefficients buffer 1
-    cuDoubleComplex *d_qk_in_2[MAX_STREAMS];           ///< Complex coefficients buffer 2
+    cuDoubleComplex *d_qk_work[MAX_STREAMS];           ///< Complex coefficients workspace (2*M_COMPLEX)
     /// @}
 
     /// @name Spectral Space Buffers (non-periodic BC - real coefficients)
@@ -144,18 +143,7 @@ public:
     void advance_propagator_half_bond_step(
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
-    /**
-     * @brief Compute stress from one segment.
-     *
-     * @param STREAM           Stream index
-     * @param d_q_pair         Product of forward and backward propagators
-     * @param d_segment_stress Output stress contribution
-     * @param monomer_type     Monomer type
-     * @param is_half_bond_length Ignored for continuous
-     */
-    void compute_single_segment_stress(
-        const int STREAM,
-        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
-        std::string monomer_type, bool is_half_bond_length) override;
+    /// Scratch buffers lent to CudaSolverPseudoBase::compute_single_segment_stress()
+    typename Base::StressScratch stress_scratch(int STREAM) override;
 };
 #endif

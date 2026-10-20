@@ -32,6 +32,7 @@
 #include "ComputationBox.h"
 #include "Pseudo.h"
 #include "FFT.h"
+#include "CudaFFT.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"   // CudaCrysFFTBase, CudaCrysFFTMode
@@ -55,7 +56,7 @@ protected:
     int max_fft_batch_;                      ///< Largest batch a derived solver transforms at once (1 or 2)
     cufftHandle plan_for_[MAX_STREAMS][2];   ///< Periodic BC: forward plans, index = batch - 1
     cufftHandle plan_bak_[MAX_STREAMS][2];   ///< Periodic BC: backward plans, index = batch - 1
-    FFT<T>* fft_[MAX_STREAMS];               ///< Non-periodic BC: per-stream DCT/DST transform objects
+    CudaFFTBase<T>* fft_[MAX_STREAMS];       ///< Non-periodic BC: per-stream DCT/DST transform objects (issued on streams[i][0])
 
     // Stress reduction workspace (per stream)
     size_t temp_storage_bytes[MAX_STREAMS];
@@ -63,6 +64,7 @@ protected:
     CuDeviceData<T> *d_stress_sum[MAX_STREAMS];
     CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
+    cuDoubleComplex *d_qk_conj_[MAX_STREAMS];   ///< q2(-k) gather of the stress (complex fields; nullptr for real)
 
     // Space group symmetry (reduced basis)
     SpaceGroup* space_group_;                        ///< Space group pointer (nullptr if not used)
@@ -113,6 +115,33 @@ protected:
         const std::string& device, const std::map<std::string, const T*>& w_input,
         bool with_half, double factor, double factor_half);
 
+    /**
+     * @brief Device scratch a derived solver lends to compute_single_segment_stress().
+     *
+     * Buffers of the derived solver that are free while one segment's stress is
+     * computed: pair_full takes the two propagators expanded to the full grid
+     * (2*M; reduced-basis runs only), qk_pair their batched forward FFT
+     * (2*M_COMPLEX), rk_1/rk_2 the real DCT/DST coefficients (M_COMPLEX each,
+     * non-periodic BC; nullptr when periodic).
+     */
+    struct StressScratch
+    {
+        CuDeviceData<T>* pair_full;
+        cuDoubleComplex* qk_pair;
+        double* rk_1;
+        double* rk_2;
+    };
+    virtual StressScratch stress_scratch(int STREAM) = 0;
+
+    /**
+     * @brief Boltzmann bond factor multiplied into the stress integrand.
+     *
+     * The default (continuous chains) returns nullptr; the discrete chain
+     * overrides it with exp(-k^2 b^2 ds/6) (half-bond variant when requested).
+     */
+    virtual const double* get_stress_boltz_bond(
+        const std::string& monomer_type, bool is_half_bond_length) const;
+
 private:
     /// Create the cuFFT plans (periodic BC) or the DCT/DST objects (non-periodic BC).
     void init_fft();
@@ -124,6 +153,28 @@ private:
 
 public:
     virtual ~CudaSolverPseudoBase();
+
+    /**
+     * @brief Stress contribution of one segment: V_ij = sum_k q1(k) q2(-k) v_i v_j.
+     *
+     * Shared by RQM4, RK2 and the discrete chain; they differ only in the
+     * Boltzmann bond factor (get_stress_boltz_bond()) and in the scratch
+     * buffers they lend (stress_scratch()). Paths: CrysFFT fast path for
+     * orthogonal 3D reduced-basis runs, batched cuFFT for periodic BC, DCT/DST
+     * for non-periodic BC (real fields). Cross terms are accumulated only for
+     * non-orthogonal boxes or when force_off_diagonal_stress_ is set.
+     *
+     * @param STREAM           Stream index for concurrent execution
+     * @param d_q_pair         Forward and backward propagators (device, contiguous,
+     *                         the second at offset n_basis_ / total_grid)
+     * @param d_segment_stress Output: [V11, V22, V33, V12, V13, V23] (device)
+     * @param monomer_type     Monomer type (bond length)
+     * @param is_half_bond_length Half-bond contribution (discrete chain)
+     */
+    void compute_single_segment_stress(
+        const int STREAM,
+        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
+        std::string monomer_type, bool is_half_bond_length) override;
 
     void set_space_group(
         SpaceGroup* sg,
