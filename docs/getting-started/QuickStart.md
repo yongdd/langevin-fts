@@ -1,7 +1,5 @@
 # Quick Start Guide
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This guide helps you run your first polymer field theory simulation.
 
 ## Prerequisites

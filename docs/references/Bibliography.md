@@ -1,7 +1,5 @@
 # References
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document lists the key publications underlying the implementation of this polymer field theory simulation library.
 
 ## Primary Citation

@@ -1,7 +1,5 @@
 # Features
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 ## Overview
 
 - **Core library**: C++/CUDA propagator computation with Python bindings. Unified API across chain models, dimensions, and platforms.

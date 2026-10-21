@@ -1,7 +1,5 @@
 # Tools Reference
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document describes the utility scripts in the `tools/` directory for visualization, data conversion, and post-processing of simulation results.
 
 ## Table of Contents

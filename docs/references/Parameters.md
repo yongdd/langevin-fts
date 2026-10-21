@@ -1,7 +1,5 @@
 # Parameter Reference
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document provides a complete reference for all simulation parameters.
 
 ## Table of Contents

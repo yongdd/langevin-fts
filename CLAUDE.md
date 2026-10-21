@@ -347,7 +347,7 @@ The `examples/scft/phases/` directory contains examples using space group symmet
 - **Memory savings**: Proportional to grid reduction ratio
 - **Speedup**: when the group allows it, the propagator itself is computed on the reduced physical sub-grid through the crystallographic FFT (CrysFFT) fast path — Pmmm DCT (mirror planes in x/y/z), recursive 3m (3m translations) or ObliqueZ (z-mirror, any cell with α = β = 90°, e.g. hexagonal) — instead of the full-grid FFT; otherwise only the field operations shrink. Measured speedups (e.g. 3-5x for Im-3m through the 3m path, 1.1-1.4x for hexagonal groups through ObliqueZ) are tabulated in `docs/internals/FFTImplementation.md` (CrysFFT and Performance Benchmarks sections)
 
-**Hexagonal/trigonal support**: Hexagonal and trigonal space groups (e.g., P6₃/mmc) are fully supported. Historically they produced X-shaped artifacts and biased free energies (~10⁻³) because cell-centered grid points `(i+0.5)/N` map to cell boundaries under hexagonal rotations (row sum = 0 annihilates the 0.5 offset). This was resolved in the main branch by (1) a hybrid orbit convention for hexagonal-axes settings — node-centered in-plane coordinates `i/N` with cell-centered z — making every symmetry map an exact integer operation, and (2) a group-invariant (first-Brillouin-zone, minimal-metric-form) alias representative for the k-space diffusion and stress operators, which restores exact point-group symmetry of the discretized operators on oblique cells. Space-group on/off results now agree to machine precision for all supported crystal systems. Rhombohedral-axes R settings require `nx = ny = nz` (violations are rejected with an explicit error). The `star` branch's Fourier star basis is an alternative approach and is no longer required for correctness.
+**Hexagonal/trigonal support**: Hexagonal and trigonal space groups (e.g., P6₃/mmc) are fully supported. Under hexagonal rotations cell-centered grid points `(i+0.5)/N` would map to cell boundaries (a row sum of 0 annihilates the 0.5 offset), which shows up as X-shaped artifacts and a ~10⁻³ free-energy bias. Two mechanisms prevent this: (1) a hybrid orbit convention for hexagonal-axes settings — node-centered in-plane coordinates `i/N` with cell-centered z — makes every symmetry map an exact integer operation, and (2) a group-invariant (first-Brillouin-zone, minimal-metric-form) alias representative for the k-space diffusion and stress operators keeps the exact point-group symmetry of the discretized operators on oblique cells. Space-group on/off results agree to machine precision for all supported crystal systems. Rhombohedral-axes R settings require `nx = ny = nz` (violations are rejected with an explicit error). Details: `docs/theory/SpaceGroup.md` (How Hexagonal/Trigonal Groups Are Handled).
 
 Example usage in params:
 
@@ -701,13 +701,6 @@ python scripts/check_latex.py
 ```
 
 It reads every tracked `*.md` outside `devel/` and reports math in the `$...$`/`$$...$$` form, stray `$`, math blocks inside lists, `|` in table math, and formulas KaTeX cannot parse. VS Code's built-in preview renders the `math` blocks but shows inline `` $`...`$ `` with quote marks around it; GitHub is the reference.
-
-### Document Notices
-
-Every LLM-written document in `docs/` (and `examples/*.md`) carries one of two notices as a blockquote on line 3. New documents get the warning; only the maintainer switches a document to the verified note.
-
-- Not yet verified: `> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.`
-- Verified by the author: `> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.`
 
 ## Key References
 

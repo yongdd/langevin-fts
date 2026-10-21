@@ -1,7 +1,5 @@
 # Self-Consistent Field Theory (SCFT)
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document describes the self-consistent field theory (SCFT) implementation for finding saddle-point solutions in polymer field theory.
 
 ## Table of Contents

@@ -1,7 +1,5 @@
 # Chain Propagators and Polymer Statistics
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document describes how to compute chain propagators, partition functions, and concentrations for polymers in external potential fields.
 
 ## Table of Contents

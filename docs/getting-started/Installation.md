@@ -1,7 +1,5 @@
 # Installation
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 ```bash
 # Clone repository
 git clone https://github.com/yongdd/langevin-fts.git

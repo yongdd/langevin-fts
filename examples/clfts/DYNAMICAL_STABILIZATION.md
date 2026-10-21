@@ -1,7 +1,5 @@
 # Dynamical Stabilization for Complex Langevin Field-Theoretic Simulations
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
-
 ## Overview
 
 Complex Langevin field-theoretic simulations (CL-FTS) can suffer from numerical instabilities known as "hot spots" - localized regions where the imaginary part of the exchange field grows uncontrollably. This document describes the dynamical stabilization method implemented in this library, based on Willis & Matsen, *J. Chem. Phys.* **161**, 244903 (2024).

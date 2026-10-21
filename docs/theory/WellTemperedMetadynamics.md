@@ -1,7 +1,5 @@
 # Well-Tempered Metadynamics (WTMD)
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 Well-tempered metadynamics (WTMD) is an enhanced sampling technique that overcomes energy barriers between competing phases by adding a history-dependent bias potential. This enables efficient location of phase transitions such as the order-disorder transition (ODT) in block copolymer melts.
 
 ## Table of Contents

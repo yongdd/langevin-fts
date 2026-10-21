@@ -1,7 +1,5 @@
 # Langevin Field-Theoretic Simulation (L-FTS)
 
-> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
-
 This document describes Langevin field-theoretic simulation (L-FTS), which includes compositional fluctuations beyond mean-field theory.
 
 ## Table of Contents
