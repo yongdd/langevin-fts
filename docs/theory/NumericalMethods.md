@@ -20,11 +20,11 @@ This document provides comprehensive documentation of the numerical methods avai
 
 ### Quick Reference
 
-| Method | Order | Solver Type | Speed (vs CN-ADI2) | Material Conservation |
+| Method | Order | Solver Type | Speed (vs CN-ADI2, Section 6) | Material Conservation |
 |--------|-------|-------------|-------------------|----------------------|
-| **RQM4** | 4th | Pseudo-spectral | 3.0x faster | Exact (~10⁻¹⁶) |
-| **RK2** | 2nd | Pseudo-spectral | 7.8x faster | Exact (~10⁻¹⁶) |
-| **CN-ADI2** | 2nd | Real-space | baseline | Exact (~10⁻¹⁵) |
+| **RQM4** | 4th | Pseudo-spectral | 1.4x slower | Exact (10⁻¹⁶–10⁻¹⁴, round-off) |
+| **RK2** | 2nd | Pseudo-spectral | 1.4x faster | Exact (10⁻¹⁶–10⁻¹⁴, round-off) |
+| **CN-ADI2** | 2nd | Real-space | baseline | Exact (10⁻¹⁶–10⁻¹⁴, round-off) |
 
 ### Decision Guide
 
@@ -113,10 +113,10 @@ G = \begin{pmatrix} L_a^2 & L_a L_b \cos\gamma & L_a L_c \cos\beta \\ L_a L_b \c
 
 #### Reciprocal Lattice
 
-The reciprocal metric tensor $`g^{-1} = (2\pi)^2 G^{-1}`$ gives the squared wavevector magnitude:
+The reciprocal metric tensor $`G^* = G^{-1}`$ gives the squared wavevector magnitude:
 
 ```math
-|\mathbf{k}|^2 = g_{11}^* n_1^2 + g_{22}^* n_2^2 + g_{33}^* n_3^2 + 2g_{12}^* n_1 n_2 + 2g_{13}^* n_1 n_3 + 2g_{23}^* n_2 n_3
+|\mathbf{k}|^2 = (2\pi)^2 \sum_{i,j} G_{ij}^* n_i n_j = (2\pi)^2 \left( G_{11}^* n_1^2 + G_{22}^* n_2^2 + G_{33}^* n_3^2 + 2G_{12}^* n_1 n_2 + 2G_{13}^* n_1 n_3 + 2G_{23}^* n_2 n_3 \right)
 ```
 
 For **orthogonal systems** ($`\alpha = \beta = \gamma = 90°`$), the cross-terms vanish:
@@ -161,7 +161,7 @@ q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}
 - **2nd-order accuracy** in $`\Delta s`$ (convergence order ≈ 2.0)
 - Time-reversible (due to symmetric splitting)
 - 2 FFTs per step
-- Fastest method (2.6x faster than RQM4 per iteration)
+- Fastest method (2.0x less total run time than RQM4 at Ns = 1000 in the benchmark of Section 6)
 
 > **Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains described in Park et al. (2019) [5]. Both use the same Boltzmann factor $`e^{-b^2 k^2 \Delta s / 6}`$ in Fourier space.
 
@@ -226,13 +226,15 @@ where $`\hat{g}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\r
 For each wavevector index $`(n_1, n_2, n_3)`$:
 
 ```
-k_sq = g_inv_11 * n1^2 + g_inv_22 * n2^2 + g_inv_33 * n3^2
-     + 2 * g_inv_12 * n1 * n2
-     + 2 * g_inv_13 * n1 * n3
-     + 2 * g_inv_23 * n2 * n3
+k_sq = (2*pi)^2 * ( G_star_11 * n1^2 + G_star_22 * n2^2 + G_star_33 * n3^2
+                  + 2 * G_star_12 * n1 * n2
+                  + 2 * G_star_13 * n1 * n3
+                  + 2 * G_star_23 * n2 * n3 )
 
 boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 ```
+
+For non-orthogonal cells, each index triple is first replaced by its alias $`(n_1 + a_1 N_1, n_2 + a_2 N_2, n_3 + a_3 N_3)`$, $`a_i \in \lbrace -1, 0, 1 \rbrace`$, with the smallest $`|\mathbf{k}|^2`$, so that the discrete operator keeps the point-group symmetry of the cell.
 
 ---
 
@@ -258,13 +260,13 @@ x_i = \left(i + \frac{1}{2}\right) \Delta x, \quad i = 0, 1, \ldots, N-1
 
 ### 4.2 CN-ADI2 (Crank-Nicolson ADI)
 
-The Crank-Nicolson method is a semi-implicit scheme that is unconditionally stable:
+The diffusion part of each step uses the Crank-Nicolson method, a semi-implicit scheme that is unconditionally stable:
 
 ```math
 (I - \frac{\Delta s}{2} L) q^{n+1} = (I + \frac{\Delta s}{2} L) q^n
 ```
 
-where $`L`$ is the discrete Laplacian operator combined with the potential term.
+where $`L = \frac{b^2}{6}\nabla_h^2`$ is the discrete Laplacian operator. The field enters by symmetric splitting: the propagator is multiplied by $`e^{-w \Delta s/2}`$ before this diffusion step and again after it.
 
 **ADI Splitting (3D):**
 
@@ -300,9 +302,11 @@ Material conservation requires that forward and backward partition functions are
 
 | Method | Conservation | Mechanism |
 |--------|--------------|-----------|
-| **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: $`e^{-w \cdot ds/2} \cdot e^{L \cdot ds} \cdot e^{-w \cdot ds/2}`$ |
-| **RK2** | Exact (~10⁻¹⁶) | Same symmetric splitting as RQM4 |
-| **CN-ADI2** | Exact (~10⁻¹⁵) | Symmetric Crank-Nicolson time stepping |
+| **RQM4** | Exact | Symmetric splitting: $`e^{-w \cdot ds/2} \cdot e^{L \cdot ds} \cdot e^{-w \cdot ds/2}`$ |
+| **RK2** | Exact | Same symmetric splitting as RQM4 |
+| **CN-ADI2** | Exact | Symmetric Crank-Nicolson time stepping |
+
+The remaining mismatch is round-off and does not depend on the method. For an AB diblock ($`f = 0.4`$) on a 32³ grid with $`ds = 0.01`$ and random fields of standard deviation 5, the largest relative deviation of $`Q`$ along the chain (reported by `check_total_partition()`) is $`2\times10^{-16}`$–$`3\times10^{-15}`$ on CUDA and about $`2\times10^{-14}`$ on cpu-mkl, for all three methods and for periodic, reflecting and absorbing boundaries; the mean of the total concentration differs from 1 by at most $`1.1\times10^{-15}`$ (CUDA) and $`8\times10^{-15}`$ (cpu-mkl).
 
 **Reference**: Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312
 
@@ -310,24 +314,17 @@ Material conservation requires that forward and backward partition functions are
 
 ## 6. Performance Benchmarks
 
-The benchmarks below reproduce Fig. 1 from Song et al., *Chinese J. Polym. Sci.* **2018**, 36, 488-496.
-
-> **Note**: **ETDRK4** and **CN-ADI4-LR** are not supported in the current codebase. The benchmark data below are retained for historical comparison only.
+The benchmarks below use the system of Fig. 1 from Song et al., *Chinese J. Polym. Sci.* **2018**, 36, 488-496 (gyroid of a continuous-chain AB diblock with f = 0.375 at χN = 18 on a 32³ grid), but in a fixed cubic box of L = 3.65 $`bN^{1/2}`$ instead of the stress-free cell used there (about 3.81 $`bN^{1/2}`$).
 
 ### Benchmark Configuration
 
-- **Platform**: NVIDIA A10 GPU (CUDA)
-- **System**: AB diblock copolymer, Gyroid phase
-- **Conditions**: f = 0.375, χN = 18, M = 32³, L = 3.65
-- **SCFT convergence**: tolerance = 10⁻⁹
+- **Platform**: NVIDIA A10 GPU (CUDA), `OMP_MAX_ACTIVE_LEVELS=0` and `OMP_NUM_THREADS=4`, so the two propagators of each iteration are computed one after another
+- **System**: AB diblock copolymer, continuous chains, $`b_A = b_B`$, Gyroid phase
+- **Conditions**: f = 0.375, χN = 18, M = 32³, L = 3.65 (box fixed), Ns = 1/ds
+- **Initial field**: gyroid level-set field as in `examples/scft/Gyroid.py`, with amplitudes 0.3 and 0.1
+- **Optimizer**: Anderson mixing, `max_hist` = 20, `start_error` = 10⁻², `mix_init` = `mix_min` = 0.02
+- **SCFT convergence**: tolerance = 10⁻⁹ (reached after 240–300 iterations)
 - **Max iterations**: 2000
-- **Date**: 2026-01-15
-
-### Convergence Plot
-
-![Contour Convergence](../figures/figure1_song2018.png)
-
-**(a)** Pseudo-spectral 4th-order methods (RQM4, ETDRK4) show 4th-order convergence, while RK2 shows 2nd-order convergence. **(b)** Real-space methods: CN-ADI2 shows 2nd-order convergence, CN-ADI4-LR shows 4th-order convergence. Note: Real-space methods use F_ref = -0.47935 due to finite-difference spatial discretization. **(c)** Execution time comparison for all methods.
 
 ### Free Energy vs Contour Steps (Ns)
 
@@ -335,81 +332,65 @@ The benchmarks below reproduce Fig. 1 from Song et al., *Chinese J. Polym. Sci.*
 |--------|-------|-------|--------|--------|--------|---------|
 | **RQM4** | -0.477010930978363 | -0.476977370031310 | -0.476974360495475 | -0.476974130350877 | -0.476974114332803 | -0.476974113395157 |
 | **RK2** | -0.475796762870488 | -0.476698716000712 | -0.476906701588300 | -0.476957357088977 | -0.476969930359763 | -0.476972400411139 |
-| **ETDRK4** | -0.476935495624106 | -0.476971516036433 | -0.476973944733011 | -0.476974102472743 | -0.476974112524746 | -0.476974113087715 |
 | **CN-ADI2** | -0.477733629652859 | -0.478950812741258 | -0.479251268938022 | -0.479326309667460 | -0.479345088848207 | -0.479348787593391 |
-| **CN-ADI4-LR** | -0.479362551579412 | -0.479352016719520 | -0.479351370587765 | -0.479351351917473 | -0.479351354344542 | -0.479351354862727 |
 
 ### Error vs Contour Steps
 
-**Pseudo-spectral methods** ($`F_{\rm ref}`$ = -0.476974113087715):
+**Pseudo-spectral methods** (reference value $`F_{\rm ref}`$ = -0.476974113087715):
 
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
 |--------|-------|-------|--------|--------|--------|---------|
 | **RQM4** | 3.6818e-05 | 3.2569e-06 | 2.4741e-07 | 1.7263e-08 | 1.2451e-09 | 3.0744e-10 |
 | **RK2** | 1.1774e-03 | 2.7540e-04 | 6.7411e-05 | 1.6756e-05 | 4.1827e-06 | 1.7127e-06 |
-| **ETDRK4** | 3.8617e-05 | 2.5971e-06 | 1.6835e-07 | 1.0615e-08 | 5.6297e-10 | (ref) |
 
-**Real-space methods** ($`F_{\rm ref}`$ = -0.479351354862727):
+**Real-space method** (reference value $`F_{\rm ref}`$ = -0.479351354862727, which differs from the pseudo-spectral value because of the finite-difference spatial discretization):
 
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
 |--------|-------|-------|--------|--------|--------|---------|
 | **CN-ADI2** | 1.6177e-03 | 4.0054e-04 | 1.0009e-04 | 2.5045e-05 | 6.2662e-06 | 2.5675e-06 |
-| **CN-ADI4-LR** | 1.1197e-05 | 6.6162e-07 | 1.5492e-08 | 3.1779e-09 | 7.5084e-10 | (ref) |
 
 ### Convergence Order Analysis
 
-| Ns transition | ETDRK4 order | RQM4 order | RK2 order |
-|---------------|--------------|------------|-----------|
-| 40 → 80 | 3.89 | 3.50 | 2.10 |
-| 80 → 160 | 3.95 | 3.72 | 2.06 |
-| 160 → 320 | 3.97 | 3.86 | 2.13 |
-| 320 → 640 | 3.98 | 3.92 | 2.61 |
+Orders computed from the errors above, $`\log_2(\text{error}_{N_s} / \text{error}_{2N_s})`$:
+
+| Ns transition | RQM4 order | RK2 order | CN-ADI2 order |
+|---------------|------------|-----------|---------------|
+| 40 → 80 | 3.50 | 2.10 | 2.01 |
+| 80 → 160 | 3.72 | 2.03 | 2.00 |
+| 160 → 320 | 3.84 | 2.01 | 2.00 |
+| 320 → 640 | 3.79 | 2.00 | 2.00 |
 
 ### Execution Time Comparison
 
+Total time of the SCFT setup and iterations:
+
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
 |--------|-------|-------|--------|--------|--------|---------|
-| **RQM4** | 4.3 s | 8.2 s | 15.7 s | 30.7 s | 60.7 s | 94.3 s |
-| **RK2** | 3.1 s | 4.4 s | 7.3 s | 12.9 s | 23.4 s | 36.0 s |
-| **ETDRK4** | 8.7 s | 16.7 s | 32.6 s | 64.7 s | 128.4 s | 199.8 s |
-| **CN-ADI2** | 11.8 s | 22.9 s | 45.5 s | 90.3 s | 180.1 s | 282.0 s |
-| **CN-ADI4-LR** | 35.4 s | 68.7 s | 136.5 s | 270.9 s | 540.3 s | 846.0 s |
+| **RQM4** | 4.1 s | 6.8 s | 12.5 s | 23.6 s | 45.6 s | 70.6 s |
+| **RK2** | 2.5 s | 3.9 s | 6.6 s | 12.2 s | 23.4 s | 36.0 s |
+| **CN-ADI2** | 3.2 s | 4.9 s | 8.8 s | 16.8 s | 32.0 s | 49.2 s |
 
 ### Speedup Summary (at Ns=1000)
 
 | Method | Speedup (vs CN-ADI2) |
 |--------|----------------------|
-| **RK2** | **7.8x faster** |
-| **RQM4** | **3.0x faster** |
-| **ETDRK4** | 1.4x faster |
+| **RK2** | **1.4x faster** |
+| **RQM4** | 1.4x slower |
 | **CN-ADI2** | baseline |
-| **CN-ADI4-LR** | 3.0x slower |
+
+The ratios depend on the grid. One propagator computation of the same diblock (ds = 0.01, one stream, A10) takes 24, 90 and 889 ms with RQM4, 12, 32 and 327 ms with RK2, and 19, 53 and 856 ms with CN-ADI2 on 32³, 64³ and 128³ grids.
 
 ### Key Findings
 
-1. **RK2 is the fastest method** - 2.6x faster than RQM4 per iteration, but only 2nd-order accurate
-2. **RQM4 is the fastest 4th-order pseudo-spectral method** - 2x faster than ETDRK4 per iteration
-3. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.47697411
-4. **RK2 achieves 2nd-order convergence** - converges to F = -0.47697240 (differs by ~1.7e-6 from 4th-order methods)
-5. **CN-ADI4-LR achieves 4th-order convergence** with ~3x cost of CN-ADI2
-6. **CN-ADI methods** converge to a different free energy (F = -0.47935) due to finite-difference spatial discretization error
-
-### ETDRK4 vs RQM4
-
-Both methods achieve **4th-order convergence** with comparable accuracy. The implementation uses:
-
-| Factor | RQM4 | ETDRK4 |
-|--------|------|--------|
-| Speed | **~2x faster** | Slower (more FFTs per step) |
-| Implementation | Operator splitting + Richardson extrapolation | Krogstad scheme (no operator splitting) |
-| Coefficients | Pre-computed Boltzmann factors | Kassam-Trefethen contour integral |
-| Error coefficient | Slightly larger | Slightly smaller |
-
-**Recommendation**: Use **RQM4** for standard simulations due to its speed advantage. **ETDRK4** (Krogstad scheme) achieves similar accuracy with slightly smaller error coefficients but requires more computation per step.
+1. **RK2 is the fastest method** - 2.0x less total run time than RQM4 at Ns = 1000, but only 2nd-order accurate
+2. **RQM4 achieves 4th-order convergence** - converges to F = -0.47697411
+3. **RK2 achieves 2nd-order convergence** - converges to F = -0.47697240 (differs by ~1.7e-6 from RQM4)
+4. **CN-ADI2** converges to a different free energy (F = -0.47935) due to finite-difference spatial discretization error
+5. **CN-ADI2** needs 1.3-1.4x less run time than RQM4 at every Ns of this benchmark (32³ grid); at 128³ the two take about the same time per step
 
 ### Pseudo-Spectral vs Real-Space Discrepancy
 
-The CN-ADI methods converge to a free energy (F = -0.47935) that differs from pseudo-spectral methods (F = -0.47697) by approximately 0.5%. This arises from different spatial discretization approaches:
+The CN-ADI2 method converges to a free energy (F = -0.47935) that differs from pseudo-spectral methods (F = -0.47697) by approximately 0.5%. This arises from different spatial discretization approaches:
 
 - **Pseudo-spectral**: Use spectral (Fourier) representation, achieving exponential convergence for smooth periodic fields
 - **Real-space**: Use finite-difference approximations, introducing $`O(\Delta x^2)`$ spatial error
@@ -477,7 +458,7 @@ Cross-terms in $`|\mathbf{k}|^2`$ vanish. Off-diagonal stress components are zer
 \alpha = \beta = 90°, \quad \gamma = 120°
 ```
 
-Cross-term $`g_{12}^*`$ is non-zero.
+Cross-term $`G_{12}^*`$ is non-zero.
 
 **Constraints:**
 - $`L_a = L_b \neq L_c`$ (2 independent lengths)
@@ -489,7 +470,7 @@ Cross-term $`g_{12}^*`$ is non-zero.
 \alpha = \gamma = 90°, \quad \beta \neq 90°
 ```
 
-Cross-term $`g_{13}^*`$ is non-zero.
+Cross-term $`G_{13}^*`$ is non-zero.
 
 **Constraints:**
 - $`L_a`$, $`L_b`$, $`L_c`$ all independent (3 lengths)

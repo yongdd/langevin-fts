@@ -403,7 +403,7 @@ The `platform` parameter controls which computational backend is used:
 | **GPU architecture errors** | Configure with `-DPOLYMERFTS_CUDA_ARCHITECTURES=...` listing only supported compute capabilities |
 | **Memory issues** | Set `"reduce_memory": True` in parameters |
 | **Run on one CPU core** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports. This disables OpenMP; on CUDA it also runs the propagator streams one after another, so GPU runs keep `"1"` |
-| **GPU or CPU underused** | Set `OMP_NUM_THREADS` before imports: it is the number of propagators computed concurrently (CPU threads, or CUDA streams up to 4). The Python classes default it to 1 when unset; the examples use 2 with `OMP_MAX_ACTIVE_LEVELS="1"` |
+| **GPU or CPU underused** | Set `OMP_NUM_THREADS` before imports: it is the number of propagators computed concurrently (CPU threads, or CUDA streams up to 4; one at a time with `reduce_memory`). The Python classes default it to 1 when unset; the examples use 2 with `OMP_MAX_ACTIVE_LEVELS="1"` |
 
 ### SCFT Not Converging
 
@@ -412,8 +412,9 @@ Reduce mixing parameters:
 ```python
 "optimizer": {
     "name": "am",
-    "mix_min": 0.01,    # reduce from default
-    "mix_init": 0.01,   # reduce from default
+    "max_hist": 20,
+    "mix_min": 0.01,    # reduce from 0.1
+    "mix_init": 0.01,   # reduce from 0.1
     "start_error": 1e-2
 }
 ```
@@ -558,9 +559,9 @@ Alternating Direction Implicit method with Crank-Nicolson time stepping:
 
 | Method | Order | Material Conservation | Best For | Limitations |
 |--------|-------|----------------------|----------|-------------|
-| RQM4 | 4th | Exact (~10⁻¹⁶) | General use, default choice | None |
-| RK2 | 2nd | Exact (~10⁻¹⁶) | Fast iterations | Lower accuracy |
-| CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
+| RQM4 | 4th | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | General use, default choice | None |
+| RK2 | 2nd | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | Fast iterations | Lower accuracy |
+| CN-ADI2 | 2nd | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | Periodic mixed with non-periodic boundaries (e.g. thin films) | Lower accuracy, continuous chains only |
 
 All methods support periodic, reflecting, and absorbing boundary conditions.
 

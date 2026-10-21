@@ -29,7 +29,7 @@ This document provides a complete reference for all simulation parameters.
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `bc` | list[str] | Boundary conditions (6 values for 3D) | `["periodic"]*6` |
+| `bc` | list[str] | Boundary conditions, low and high side of each direction (6 values for 3D) | `["periodic"] * (2 * dim)` |
 
 **Boundary condition types:**
 - `"periodic"`: Cyclic boundary (uses FFT)
@@ -39,8 +39,8 @@ This document provides a complete reference for all simulation parameters.
 Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implements these boundary conditions using ghost cells.
 
 **Restrictions:**
-- Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require **uniform** boundary conditions: all-periodic, all-reflecting, or all-absorbing. Mixing periodic with non-periodic directions raises an error on all platforms.
-- Mixed boundary conditions (e.g., periodic in x/y, reflecting in z) require `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot use mixed boundary conditions at all.
+- Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require every direction to be periodic or every direction to be non-periodic; each non-periodic direction may be reflecting or absorbing independently of the others (e.g. reflecting in x and z, absorbing in y). Mixing periodic with non-periodic directions raises an error on all platforms.
+- Mixing periodic and non-periodic directions (e.g., periodic in x/y, reflecting in z) requires `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot mix periodic and non-periodic directions.
 - Stress computation (and therefore `box_is_altering`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
 
 **Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
@@ -88,6 +88,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 - `"length"`: Contour length (float)
 - `"v"`: Start vertex (optional for linear chains)
 - `"u"`: End vertex (optional for linear chains)
+- `"fraction"`: (Optional) Random copolymer, see below
 
 ```python
 "distinct_polymers": [{
@@ -98,6 +99,8 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
     ]
 }]
 ```
+
+**Random copolymer:** a polymer with a single block that has a `"fraction"` dictionary, e.g. `{"type": "R", "length": 1.0, "fraction": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/lfts/MixtureBlockRandom.py`).
 
 ### Polymer Architectures
 
@@ -156,7 +159,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 
 **Restrictions:**
 - `numerical_method` applies to the **continuous** chain model only. For `"chain_model": "discrete"`, the parameter is ignored (a note is printed) and the dedicated discrete-chain pseudo-spectral solver is always used.
-- `"cn-adi2"` is the only method that supports mixing periodic and non-periodic boundary conditions; the pseudo-spectral methods require uniform boundary conditions (see [Boundary Conditions](#boundary-conditions)).
+- `"cn-adi2"` is the only method that supports mixing periodic and non-periodic boundary conditions; the pseudo-spectral methods require every direction to be periodic or every direction to be non-periodic (see [Boundary Conditions](#boundary-conditions)).
 
 See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
@@ -169,6 +172,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 | `platform` | str | Computational backend | Auto-selected |
 
 **Available platforms:**
+- `"auto"`: automatic selection (the default; see below)
 - `"cuda"`: NVIDIA GPU (cuFFT)
 - `"cpu-mkl"`: CPU (Intel MKL library)
 - `"cpu-fftw"`: CPU (FFTW library, GPL license)
@@ -181,7 +185,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 
 ## SCFT Parameters
 
-`SCFT(params)` reads the shared parameters above plus the keys below.
+`SCFT(params)` reads the shared parameters above plus the keys below. These keys and `space_group` are read by `SCFT` only; `LFTS` and `CLFTS` ignore them (a `space_group` given to them has no effect).
 
 ### Optimizer
 
@@ -295,7 +299,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 | `mix_min` | float | Minimum mixing parameter | `0.01` |
 | `mix_init` | float | Initial mixing parameter | `0.01` |
 
-For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `KeyError`).
+For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `KeyError`). `"lr"` and `"lram"` require exactly one imaginary auxiliary field; otherwise `LFTS` raises `ValidationError`.
 
 ### Well-Tempered Metadynamics (Optional)
 
@@ -315,6 +319,8 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | `update_freq` | int | Statistics update frequency | `1000` |
 | `recording_period` | int | Data recording frequency | `100000` |
 
+WTMD requires a 3D grid (`nx` with three entries).
+
 ### Other L-FTS Options
 
 | Parameter | Type | Description |
@@ -328,12 +334,12 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 
 ## CL-FTS Parameters
 
-`CLFTS(params, random_seed=None)` (complex Langevin) reads the shared parameters, `langevin`, `recording` and `verbose_level` exactly as L-FTS does (no `compressor` or `saddle`: all fields fluctuate), plus:
+`CLFTS(params, random_seed=None)` (complex Langevin) reads the shared parameters, `langevin` and `recording` exactly as L-FTS does (no `compressor`, `saddle` or `wtmd`: all fields fluctuate), and `verbose_level` (0, 1 or 2; 0 prints nothing per Langevin step, 1 and 2 both print one status line per step), plus:
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value | `100.0` |
-| `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $`i\,\alpha_{ds}\,\mathrm{Im}[W_-]`$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Typical: 0.01–0.1 for $`\bar{N} \ge 10^5`$ | `0.0` |
+| `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $`i\,\alpha_{ds}\,\mathrm{Im}[W_-]`$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Willis & Matsen used 0.001 at $`\bar{N} = 10^6`$–$`10^7`$ and 0.01–0.02 at $`\bar{N} = 10^5`$; 0.1 already biased their results | `0.0` |
 | `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability | none |
 
 ---
@@ -349,7 +355,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 
 When `True`:
 - Stores only checkpoints every ~$`2\sqrt{N_{tot}}`$ contour steps, i.e. ~$`\sqrt{N_{tot}}/2`$ checkpoints per propagator (where $`N_{tot}`$ is the total number of contour steps)
-- Reduces memory by ~90%
+- Reduces the memory that grows with the grid and the number of contour steps: for `examples/scft/Gyroid.py` (AB diblock, $`ds = 0.01`$) the GPU memory of the process on an A10 falls from 332 to 254 MiB on its 32³ grid and from 1064 to 420 MiB on a 64³ grid, of which about 236 MiB is the CUDA context. The CUDA checkpoints are kept in pinned host memory, which raises the host memory at 64³ from 298 to 494 MiB. On cpu-mkl the peak host memory at 64³ falls from 783 to 448 MiB
 - Increases computation time by 2-4x
 
 `reduce_memory=True` works with every chain model and with space-group symmetry, including **discrete chains combined with a space group**, on both CPU and CUDA (see [SpaceGroup.md](../theory/SpaceGroup.md)).
@@ -358,7 +364,7 @@ When `True`:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `space_group` | dict | Space group constraints |
+| `space_group` | dict | Space group constraints (SCFT only) |
 
 ```python
 "space_group": {
@@ -490,7 +496,7 @@ params = {
 
 ### Non-Periodic Boundaries (Confined Film)
 
-All numerical methods support **uniform** non-periodic boundary conditions (all-reflecting or all-absorbing): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions.
+All numerical methods support boundary conditions that are non-periodic in every direction (reflecting or absorbing, chosen per direction): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions.
 
 ```python
 params = {

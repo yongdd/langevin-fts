@@ -191,12 +191,12 @@ Options: `--mkl ON|OFF`, `--fftw ON|OFF`, `--cuda AUTO|ON|OFF` (default all ON; 
 when working offline (then `scikit-build-core`, `pybind11` and `numpy` must be
 installed in the conda environment). To keep an older release, check it out in
 a separate work tree and run the script from there (releases from 0.10.0 on;
-older tags ship no `pyproject.toml`, so build them with `make install` from
+the older tags ship no `pyproject.toml`, so build them with `make install` from
 their own build directory instead):
 
 ```bash
-git worktree add ../langevin-fts-0.10.0 v0.10.0
-(cd ../langevin-fts-0.10.0 && scripts/install_versioned.sh)
+git worktree add ../langevin-fts-<version> v<version>
+(cd ../langevin-fts-<version> && scripts/install_versioned.sh)
 ```
 
 For quick comparisons during development, the package staged in

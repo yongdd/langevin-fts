@@ -25,13 +25,13 @@ params = {
 
 Memory usage depends on:
 - $`M`$: Total grid points (e.g., $`64^3 = 262,144`$)
-- $`N`$: Total segments across all propagators
+- $`N`$: Total number of segments of all blocks
 - $`C`$: Number of checkpoints (checkpoints are stored every $`\lceil 2\sqrt{N} \rceil`$ steps, giving approximately $`\sqrt{N}/2`$ checkpoints for each propagator)
 
 | Mode | Memory Complexity | Computation Complexity |
 |------|-------------------|------------------------|
 | Standard | $`O(N \times M)`$ | $`O(N \times M)`$ |
-| Memory-Saving | $`O(C \times M) \approx O(\sqrt{N} \times M)`$ | $`O(N \times \sqrt{N} \times M)`$ |
+| Memory-Saving | $`O(C \times M) \approx O(\sqrt{N} \times M)`$ | $`O(N \times M)`$, about 3-4 times the work of the standard mode |
 
 ## CUDA (GPU) Platform
 
@@ -320,8 +320,6 @@ decides where the arrays live.
 params["reduce_memory"] = True
 ```
 
-**Note**: This does not work for discrete chains with space-group symmetry (`reduce_memory=True` + discrete + space group throws on CPU, and discrete + space group is unsupported on CUDA altogether). See the restriction in [Choosing the Right Mode](#choosing-the-right-mode).
-
 ### Slow Performance with Memory-Saving
 - Consider if standard mode fits in memory
 - Check if polymer has high symmetry (star, dendritic) for better performance
@@ -329,13 +327,9 @@ params["reduce_memory"] = True
 
 ### Verifying Memory Mode is Active
 
-In debug builds, look for these messages:
-```
-# Standard mode
-"--------- Discrete Chain Solver, GPU Version ---------"
-
-# Memory-saving mode
-"--------- Discrete Chain Solver, GPU Memory Saving Version (Checkpointing) ---------"
+No message reports the mode. The `reduce_memory` attribute of the `PropagatorSolver` holds it; the SCFT, L-FTS and CL-FTS classes keep their solver in `prop_solver`:
+```python
+print(simulation.prop_solver.reduce_memory)  # True in memory-saving mode
 ```
 
 ## References

@@ -276,7 +276,7 @@ phi_B = solver.get_concentration("B")
 
 ### 7.2 Accessing Individual Propagators
 
-With `reduce_memory=False`, individual propagator steps can be accessed:
+Individual propagator steps can be accessed (with `reduce_memory=True` the requested step is recomputed from the stored checkpoints):
 
 ```python
 # Get propagator at specific contour step

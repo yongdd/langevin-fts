@@ -19,14 +19,14 @@ This document describes the utility scripts in the `tools/` directory for visual
 | File | Language | Description |
 |------|----------|-------------|
 | `plot_2d_density.m` | MATLAB | Plot 2D monomer density from `fields.mat` |
-| `plot_2d_density.ipynb` | Python | Same functionality as Jupyter notebook |
-| `plot_2d_slice.m` | MATLAB | Extract and plot a 2D slice from 3D density data |
-| `plot_3d_isodensity.m` | MATLAB | Render 3D isodensity surfaces with lighting |
-| `plot_3d_isodensity.ipynb` | Python | Same functionality as Jupyter notebook |
+| `plot_2d_density.ipynb` | Python | Plot `phi_A` and `phi_B` of a 2D `.mat` file (set the file name in the notebook) |
+| `plot_2d_slice.m` | MATLAB | Extract and plot a 2D slice from 3D density data in `fields_002000.mat` |
+| `plot_3d_isodensity.m` | MATLAB | Render 3D isodensity surfaces with lighting from `fields_002000.mat` |
+| `plot_3d_isodensity.ipynb` | Python | Interactive Plotly isosurfaces of `fields_002000.mat` |
 
 **Usage (MATLAB):**
 ```matlab
-% Copy script to directory containing fields.mat
+% Run in the directory that holds the input file (edit the file name in the script if needed)
 cd /path/to/simulation
 matlab -nodisplay -r "run('/path/to/tools/plot_3d_isodensity.m'); exit"
 ```
@@ -37,7 +37,7 @@ cd /path/to/simulation
 jupyter notebook /path/to/tools/plot_2d_density.ipynb
 ```
 
-**Output:** PNG image files (`2d_density.png`, `2d_slice_image.png`, `isodensity.png`)
+**Output:** the MATLAB scripts write PNG image files (`2d_density.png`, `2d_slice_image.png`, `isodensity.png`); the notebooks only display the figures.
 
 ### 1.2 Structure Function
 
@@ -75,7 +75,7 @@ These tools visualize Well-Tempered Metadynamics (WTMD) simulation output, inclu
 
 **Usage (basic statistics):**
 ```matlab
-% Copy script to directory containing wtmd_statistics_*.mat
+% Run in the directory that holds the wtmd_statistics_*.mat files
 cd /path/to/simulation/data_simulation
 matlab -nodisplay -r "run('/path/to/tools/plot_wtmd_statistics.m'); exit"
 ```
@@ -113,7 +113,7 @@ where $`z_\infty`$ is the renormalization factor from the discrete chain model.
 - `dpsi`: Order parameter bin width
 
 **Reference:**
-- T. M. Beardsley and M. W. Matsen, "Using metadynamics to locate the order-disorder transition of diblock copolymer melts," *J. Chem. Phys.* **2022**, 157, 114902
+- T. M. Beardsley and M. W. Matsen, "Well-tempered metadynamics applied to field-theoretic simulations of diblock copolymer melts," *J. Chem. Phys.* **2022**, 157, 114902
 
 ---
 
@@ -220,10 +220,10 @@ where $`z_\infty`$ is the renormalization factor computed by these scripts.
 **Method:** Computes $`z_\infty`$ using discrete chain bond functions:
 
 ```math
-z_\infty = 1 - \frac{1 + 2\sum_{i=1}^{N_{\text{bond}}} P_i + P_{\text{cont}}}{\sqrt{\bar{N}} \cdot N \cdot \Delta V}
+z_\infty = 1 - \frac{1 + 2\left(\sum_{i=1}^{N_{\text{bond}}} P_i + P_{\text{cont}}\right)}{\sqrt{\bar{N}} \cdot N \cdot \Delta V}
 ```
 
-where $`P_i`$ are discrete bond contributions and $`P_{\text{cont}}`$ is a continuous chain correction for the tail.
+where $`P_i`$ are the discrete bond contributions ($`N_{\text{bond}} = 100`$) and $`P_{\text{cont}} = 2\,(3N/2\pi)^{3/2}\,\Delta V/\sqrt{N_{\text{bond}} + 1/2}`$ is the continuous-chain estimate of the remaining terms $`i > N_{\text{bond}}`$.
 
 **Usage:**
 ```matlab
@@ -317,7 +317,7 @@ Simulation output files (`fields_XXXXXX.mat`) contain:
 
 L-FTS and CL-FTS checkpoints additionally hold `initial_params`, `langevin_step`, `dt`, `eigenvalues`, `aux_fields_real`/`aux_fields_imag`, the noise array `normal_noise_prev` and the random-generator state (`random_generator`, `random_state_state`, `random_state_inc`), which `continue_run()` restores. CL-FTS stores complex fields as `w_A_real`/`w_A_imag` and `phi_A_real`/`phi_A_imag`.
 
-**SCFT results** (`SCFT.save_results(path)`, `.mat`, `.json` or `.yaml` by extension) contain `initial_params`, `dim`, `nx`, `lx`, `monomer_types`, `chi_n`, `chain_model`, `ds`, `eigenvalues`, `matrix_a`, `matrix_a_inverse`, `w_<type>` and `phi_<type>` on the full grid (expanded from the reduced basis when a space group was used), and `space_group_symbol`/`space_group_hall_number` if one was used. Load `.json` with `json.load` and `.yaml` with `yaml.safe_load`; arrays are stored as lists there.
+**SCFT results** (`SCFT.save_results(path)`, `.mat`, `.json` or `.yaml` by extension) contain `initial_params`, `dim`, `nx`, `lx`, `angles`, `monomer_types`, `chi_n`, `chain_model`, `ds`, `eigenvalues`, `matrix_a`, `matrix_a_inverse`, `w_<type>` and `phi_<type>` on the full grid (expanded from the reduced basis when a space group was used), and `space_group_symbol`/`space_group_hall_number` if one was used. Load `.json` with `json.load` and `.yaml` with `yaml.safe_load`; arrays are stored as lists there.
 
 ### 5.2 Reading Files
 
@@ -336,7 +336,7 @@ phi_A = data['phi_A'].reshape(nx)
 data = load("fields_000200.mat");
 nx = data.nx;
 lx = data.lx;
-phi_A = reshape(data.phi_A, nx);
+phi_A = permute(reshape(data.phi_A, flip(nx)), numel(nx):-1:1);  % stored with the last index fastest
 ```
 
 ### 5.3 Structure Function Files
@@ -346,8 +346,10 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | Variable | Description |
 |----------|-------------|
 | `nx`, `lx` | Grid and box dimensions |
-| `structure_function_A_A` | $`\langle \phi_A(k) \phi_A(-k) \rangle`$ |
-| `structure_function_A_B` | $`\langle \phi_A(k) \phi_B(-k) \rangle`$ |
-| `structure_function_B_B` | $`\langle \phi_B(k) \phi_B(-k) \rangle`$ |
+| `structure_function_A_A` | $`S_{AA}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_A^*(\mathbf{k}) \rangle`$ |
+| `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B^*(\mathbf{k}) \rangle`$ |
+| `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B^*(\mathbf{k}) \rangle`$ |
+
+$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$ and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#5-structure-functions).
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).

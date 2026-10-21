@@ -25,7 +25,7 @@ The propagator system:
 2. **Optimizes** by detecting and reusing equivalent computations
 3. **Schedules** parallel execution across multiple streams/threads
 
-**Typical speedup**: 1.5-3x for branched polymers compared to single-stream execution.
+**Measured speedup** (A10 GPU, ds = 0.01, time of one propagator and concentration computation): computing independent propagators on 4 CUDA streams instead of 1 gives 1.9x for the bottle-brush of `examples/scft/BottleBrushLamella3D.py` (50 side chains, discrete chains) on a 32³ grid but 1.1x on 64³, and 1.0–1.1x for the 9-arm star of `examples/scft/Star9ArmsGyroid.py` and for a comb with 9 side chains on either grid. Merging equivalent propagators (item 2, `aggregate_propagator_computation`) saves more: with one stream it gives 3.6x for the bottle-brush and 2.0x for the comb, and nothing for the star, whose identical arms are computed once either way.
 
 ---
 
@@ -67,9 +67,7 @@ The code format is used during propagator code generation and encodes the polyme
 [Dependencies]MonomerTypeN
 ```
 
-Where N is:
-- **Continuous chains**: `length_index`
-- **Discrete chains**: `n_segment`
+Where N is the block's `length_index` for both chain models (the keys are generated from the `ContourLengthMapping`).
 
 **Examples:**
 
@@ -112,7 +110,7 @@ When identical propagator branches are detected, they are merged to reduce redun
 [dep_code1,dep_code2,...]MonomerType+ds_index
 ```
 
-> **Note**: Inside brackets, dependencies use the DK format (without the original segment count N) plus the sliced n_segment or length_index. The outer key uses DK+M format where M is the ds_index.
+> **Note**: Inside brackets, dependencies use the DK format (without the original length_index N) plus the sliced length_index (always 0, continuous chains) or the sliced n_segment (discrete chains). The outer key uses DK+M format where M is the ds_index.
 
 **Examples:**
 
@@ -150,7 +148,7 @@ Aggregated key: [(D4)B1,(E4)B1]B+0
 
 ## 3. Initial Conditions
 
-The dependency part **D** of the propagator code determines the initial condition $`q(\mathbf{r}, 0)`$.
+The dependency part **D** of the propagator code determines the initial condition. The formulas below are for continuous chains, which start at $`q(\mathbf{r}, 0)`$; the discrete case follows at the end of this section.
 
 ### Free End (Empty D)
 
@@ -172,7 +170,7 @@ where $`n_i`$ is the repetition count (from `:n` notation, default 1).
 
 ### Aggregated Computation (D with Square Brackets)
 
-For aggregated propagators (e.g., `[(A3)B0,(C3)D0]E+0`):
+For aggregated propagators (e.g., `[(A3)B0,(C3)B0]B+0`; the aggregated propagators all continue the same block, so they share its monomer type):
 
 ```math
 q(\mathbf{r}, 0) = \sum_{i} n_i \cdot q_i(\mathbf{r}, N_i)
@@ -185,6 +183,10 @@ For user-specified initial conditions (e.g., `{wall}A+0`):
 ```math
 q(\mathbf{r}, 0) = q_{\text{init}}[\text{name}](\mathbf{r})
 ```
+
+### Discrete Chains
+
+Discrete chains start at $`q(\mathbf{r}, 1)`$: at a free end or grafting point it is the value above times $`e^{-w(\mathbf{r})\Delta s}`$; at a junction the product is taken over the half-bond states $`q_i(\mathbf{r}, N_i + 1/2)`$ of the branches and followed by a half-bond step and $`e^{-w(\mathbf{r})\Delta s}`$; an aggregated sum is formed from junction values (then a half-bond step and $`e^{-w(\mathbf{r})\Delta s}`$) or from sliced segments (then a full bond step) (`ComputationDiscrete::compute_propagators`).
 
 ---
 
@@ -211,8 +213,10 @@ Height 2: ((A3)D4(B3)E4)F+0       (runs after D and E complete)
 For each propagator, compute when it can start:
 
 ```
-resolved_time[key] = max(end_time of all dependencies)
+resolved_time[key] = max over dependencies of (start_time[dep] + max(n_segment needed from dep, 1))
 ```
+
+A propagator can thus start before a dependency ends, when it needs only the first segments of that dependency (e.g. a free-end propagator shared by blocks of different lengths).
 
 ### Step 3: Greedy Stream Assignment
 
@@ -339,26 +343,32 @@ scheduler.display(propagators);
 
 ### Example Output
 
-For a star polymer with 3 arms (A, B, C) meeting at a junction:
+For a star polymer with 3 arms A, B and C of contour length 1.0 meeting at a junction (continuous chains, ds = 0.1, no aggregation, 4 streams):
 
 ```
 === Propagator Schedule ===
-A+0:
+C+0:
     n_segment=10, start=0, end=10
 B+0:
     n_segment=10, start=0, end=10
-C+0:
+A+0:
     n_segment=10, start=0, end=10
-(A10B10C10)D+0:
-    n_segment=5, start=10, end=15
+(B1C1)A+0:
+    n_segment=10, start=10, end=20
+(A1C1)B+0:
+    n_segment=10, start=10, end=20
+(A1B1)C+0:
+    n_segment=10, start=10, end=20
 
 === Time Slices ===
 Time 0-10:
-    A+0: segments 0-10
-    B+0: segments 0-10
     C+0: segments 0-10
-Time 10-15:
-    (A10B10C10)D+0: segments 0-5
+    B+0: segments 0-10
+    A+0: segments 0-10
+Time 10-20:
+    (A1C1)B+0: segments 0-10
+    (A1B1)C+0: segments 0-10
+    (B1C1)A+0: segments 0-10
 ```
 
 ---
@@ -367,14 +377,13 @@ Time 10-15:
 
 ### When Scheduling Helps
 
-- **Block copolymers**: AB diblock has 2 propagators per height level (2x speedup)
-- **Branched polymers**: Star, comb, dendritic have many independent branches (higher speedup)
+- **Small grids with several independent propagators**: on an A10 at 32³, two streams make an AB diblock iteration 1.5x faster and four streams make the bottle-brush computation 1.9x faster
 - **Polymer mixtures**: Multiple polymer species computed simultaneously
 
 ### When Scheduling Has Less Impact
 
 - **Single homopolymer**: Only 1 propagator per height level (no parallelism)
-- **GPU with large grids**: Single propagator already saturates the GPU
+- **GPU with large grids**: Single propagator already saturates the GPU (on 64³, 1.0-1.1x for the bottle-brush, star and comb above; 6-9% for an AB diblock on 64³-128³)
 
 ### Key Comparison
 

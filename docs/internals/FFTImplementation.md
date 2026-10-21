@@ -45,15 +45,17 @@ The library provides spectral transforms for solving the modified diffusion equa
 
 ### 2.2 Boundary Conditions and Symmetry
 
+A "point" is a grid index and a "half-point" lies halfway between two indices (a cell face of the cell-centered grid).
+
 | Type | Left Boundary | Right Boundary | Physical Meaning |
 |------|---------------|----------------|------------------|
-| DCT-1 | Even at point | Even at point | Neumann-Neumann |
-| DCT-2 | Even at half-point | Even at point | Mixed boundary |
-| DCT-3 | Even at point | Even at half-point | Mixed boundary |
-| DCT-4 | Even at half-point | Even at half-point | Half-sample symmetric |
+| DCT-1 | Even at point $`n=0`$ | Even at point $`n=N`$ | Neumann-Neumann (node-centered) |
+| DCT-2 | Even at half-point $`n=-1/2`$ | Even at half-point $`n=N-1/2`$ | Neumann-Neumann (cell-centered; reflecting BC) |
+| DCT-3 | Even at point $`n=0`$ | Odd at point $`n=N`$ | Neumann-Dirichlet |
+| DCT-4 | Even at half-point $`n=-1/2`$ | Odd at half-point $`n=N-1/2`$ | Neumann-Dirichlet (half-sample) |
 
 **Inverse relationships:**
-- DCT-1 is self-inverse: DCT-1(DCT-1(x)) = 2(N-1) · x (for N+1 point array)
+- DCT-1 is self-inverse: DCT-1(DCT-1(x)) = 2N · x (for an N+1 point array)
 - DCT-2 and DCT-3 are inverses: DCT-3(DCT-2(x)) = 2N · x
 - DCT-4 is self-inverse: DCT-4(DCT-4(x)) = 2N · x
 
@@ -67,6 +69,10 @@ The CUDA implementation uses the Fast Cosine Transform (FCT) method [1], which u
 | DCT-2 | N | Z2D | ~2x |
 | DCT-3 | N | D2Z | ~2x |
 | DCT-4 | 2N | Z2Z | Phase rotation |
+
+In 2D and 3D, DCT-1 and DST-1 transform the whole mirror-extended array
+($`2N_x \times 2N_y \times 2N_z`$ points, $`2(N_x+1) \times 2(N_y+1) \times 2(N_z+1)`$ for DST-1) with one FFT,
+so the N-point saving of the type-1 rows applies to 1D transforms only.
 
 ---
 
@@ -85,10 +91,10 @@ The CUDA implementation uses the Fast Cosine Transform (FCT) method [1], which u
 
 | Type | Left Boundary | Right Boundary | Physical Meaning |
 |------|---------------|----------------|------------------|
-| DST-1 | Odd at point | Odd at point | Dirichlet-Dirichlet |
-| DST-2 | Odd at half-point | Odd at point | Mixed boundary |
-| DST-3 | Odd at point | Odd at half-point | Mixed boundary |
-| DST-4 | Odd at half-point | Odd at half-point | Half-sample antisymmetric |
+| DST-1 | Odd at point $`n=-1`$ | Odd at point $`n=N`$ | Dirichlet-Dirichlet (node-centered) |
+| DST-2 | Odd at half-point $`n=-1/2`$ | Odd at half-point $`n=N-1/2`$ | Dirichlet-Dirichlet (cell-centered; absorbing BC) |
+| DST-3 | Odd at point $`n=-1`$ | Even at point $`n=N-1`$ | Dirichlet-Neumann |
+| DST-4 | Odd at half-point $`n=-1/2`$ | Even at half-point $`n=N-1/2`$ | Dirichlet-Neumann (half-sample) |
 
 **Inverse relationships:**
 - DST-1 is self-inverse: DST-1(DST-1(x)) = 2(N+1) · x
@@ -100,8 +106,8 @@ The CUDA implementation uses the Fast Cosine Transform (FCT) method [1], which u
 | DST Type | FFT Size | FFT Type | Traditional Size | Speedup |
 |----------|----------|----------|-----------------|---------|
 | DST-1 | N+1 | Z2D | 2(N+1) | ~2x |
-| DST-2 | N | Z2D | 4N | ~4x |
-| DST-3 | N | D2Z | 4N | ~4x |
+| DST-2 | N | Z2D | 2N | ~2x |
+| DST-3 | N | D2Z | 2N | ~2x |
 | DST-4 | 2N | Z2Z | 2N | Phase rotation |
 
 ---
@@ -152,14 +158,14 @@ Both DCT and DST follow FFTW's unnormalized convention.
 
 | Transform | Round-trip Scale |
 |-----------|------------------|
-| 1D DCT-1 | 2(N-1) for N+1 points |
+| 1D DCT-1 | 2N for N+1 points |
 | 1D DCT-2/3/4 | 2N |
-| 2D DCT-1 | 4(N_x-1)(N_y-1) |
+| 2D DCT-1 | 4 N_x N_y for (N_x+1)(N_y+1) points |
 | 2D DCT-2/3/4 | 4 N_x N_y |
-| 3D DCT-1 | 8(N_x-1)(N_y-1)(N_z-1) |
+| 3D DCT-1 | 8 N_x N_y N_z for (N_x+1)(N_y+1)(N_z+1) points |
 | 3D DCT-2/3/4 | 8 N_x N_y N_z |
 
-Multi-dimensional normalization is the product of the per-dimension factors (DCT-1 contributes 2(N-1) per dimension; types 2/3/4 contribute 2N).
+Multi-dimensional normalization is the product of the per-dimension factors (DCT-1 contributes 2N per dimension of N+1 points; types 2/3/4 contribute 2N per dimension of N points).
 
 ### DST Normalization Factors
 
@@ -226,15 +232,22 @@ CrysFFT is enabled automatically when:
 - Fields are real-valued
 - Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis)
 
-**Selection order:**
+**Selection order:** an enabled physical basis (Section 6.4) fixes the variant:
+3m recursive for the m3 basis, Pmmm DCT for the Pmmm basis and ObliqueZ for the
+z-mirror basis. With the irreducible basis the cell must be orthogonal and `Nx`,
+`Ny`, `Nz` all even, and the first applicable variant is used:
+
 1. **3m recursive** if the space group provides 3m translations, the
    translation-parity fold permutation is valid (every generator translation
    must be an integral number of grid cells with a bijective parity map — see
    `Recursive3mFoldParity.h`; e.g. for Fddd's quarter-cell glides at most one
    of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8`
 2. **Pmmm DCT** if space group has mirror planes in x/y/z
-3. **ObliqueZ** if space group has z-mirror with α=β=90°
+3. **ObliqueZ** if space group has a z-mirror
 4. Fall back to standard FFT
+
+A cell with α=β=90° and γ≠90° (e.g. hexagonal) therefore uses ObliqueZ only with the
+z-mirror physical basis.
 
 The 3m fold pairs each twiddle factor with the Boltzmann sub-array selected by
 the translation-parity permutation; glide translations by an odd number of
@@ -255,7 +268,12 @@ Fddd, which has no pure mirror, ends on the standard FFT.
 | 3m physical | (Nx/2)(Ny/2)(Nz/2) | Identity (none) |
 | Z-mirror physical | Nx * Ny * (Nz/2) | Identity (none) |
 
-The solver automatically selects the fastest compatible physical basis.
+The solver uses the basis the `SpaceGroup` holds. SCFT (`scft.py`) enables one
+automatically: for an orthogonal cell the m3 basis when the recursive 3m CrysFFT is
+feasible, otherwise the Pmmm basis; for a cell with α=β=90° and γ≠90° the z-mirror
+basis; the irreducible basis stays when none applies. With `PropagatorSolver`, enable a
+basis on the `SpaceGroup` before passing it (`enable_m3_physical_basis()`,
+`enable_pmmm_physical_basis()`, `enable_z_mirror_physical_basis()`).
 
 ### 6.5 Phase Support Table
 
@@ -292,7 +310,7 @@ The solver automatically selects the fastest compatible physical basis.
 - `MklCrysFFTRecursive3m`: Recursive 3m algorithm
 - `MklCrysFFTObliqueZ`: DCT-z + FFT-xy
 
-`CpuSolverPseudoBase` holds CrysFFT members for both backends (`crysfft_*_fftw_` and `crysfft_*_mkl_`) and uses whichever library the build enables.
+`CpuSolverPseudoBase` holds CrysFFT members for both backends (`crysfft_*_fftw_` and `crysfft_*_mkl_`) and uses the library of the selected platform (`cpu-mkl` or `cpu-fftw`).
 
 **Threading**: FFTW/MKL multithreading is disabled; concurrency is handled at the solver level (OpenMP over propagators). Thread-local buffers are used to avoid race conditions.
 
@@ -358,39 +376,39 @@ transform.execute(d_data);
 
 ### 8.1 DCT/DST Numerical Accuracy
 
-All DCT/DST implementations achieve machine precision (< 4×10⁻¹⁶ relative error) when compared to FFTW.
+Relative error against FFTW (maximum absolute difference divided by the largest FFTW value; 3D transforms of uniform random input on 32³ and 64³ grids): the CUDA transforms (all types) and the MKL DCT/DST types 1-3 agree to machine precision (< 7×10⁻¹⁶); the MKL DCT-4 and DST-4 (TT interface) agree to 4×10⁻¹⁴ on 32³ and 7×10⁻¹³ on 64³.
 
 ### 8.2 FFTW vs MKL Benchmark (CPU)
 
-**Setup**: 3D transforms, single-threaded, Intel Xeon
+**Setup**: 3D transforms, single-threaded, AMD EPYC 7543 (`tests/BenchmarkMklFftw`)
 
 The MKL implementation (`MklRealTransform`) uses:
 - **DCT-IV, DST-IV**: MKL TT interface, O(N log N)
 - **DCT-II, DCT-III, DST-II, DST-III**: FFT-based N-point algorithm with precomputed twiddle factors (Makhoul), O(N log N)
-- **DCT-I, DST-I**: FFT-based via symmetric/antisymmetric extension (2(N-1)- and 2(N+1)-point FFTs), O(N log N)
+- **DCT-I, DST-I**: FFT-based via symmetric/antisymmetric extension (for N points: 2(N-1)- and 2(N+1)-point FFTs), O(N log N)
 
 | Transform | 32³ | 48³ | 64³ |
 |-----------|-----|-----|-----|
-| DFT | 0.55× | 1.09× | 0.76× |
-| DCT-2 | 0.82× | 1.16× | 1.06× |
-| DCT-3 | 0.78× | 1.20× | 1.10× |
-| DST-2 | 0.79× | 1.28× | 1.03× |
-| DST-3 | 0.74× | 1.18× | 1.01× |
+| DFT | 0.54× | 1.09× | 0.77× |
+| DCT-2 | 0.80× | 1.23× | 1.04× |
+| DCT-3 | 0.78× | 1.17× | 1.08× |
+| DST-2 | 0.78× | 1.28× | 1.02× |
+| DST-3 | 0.74× | 1.12× | 0.95× |
 
 Speedup = FFTW time / MKL time (>1× means MKL is faster)
 
-### 8.4 CrysFFT Benchmark (64³, Im-3m BCC)
+### 8.3 CrysFFT Benchmark (64³, Im-3m BCC)
 
-**Setup**: nx=[64,64,64], coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
+**Setup**: nx=[64,64,64], coeff=0.01, 200 iterations, NVIDIA A10 GPU; CPU: FFTW, one thread, AMD EPYC 7543 (`tests/TestCrysFFTBench 64 64 64 200 --cpu --obliquez`)
 
 | Platform | Standard FFT | 3m physical | Pmmm physical |
 |----------|-------------|-------------|---------------|
 | CUDA | 0.177 ms | 0.056 ms (3.1x) | 0.091 ms (2.0x) |
-| CPU | 2.09 ms | 0.41 ms (5.1x) | 0.58 ms (3.6x) |
+| CPU | 2.00 ms | 0.43 ms (4.6x) | 0.60 ms (3.3x) |
 
-### 8.5 ObliqueZ Benchmark (64³, Hexagonal P6/mmm)
+### 8.4 ObliqueZ Benchmark (64³, Hexagonal P6/mmm)
 
-**Setup**: nx=[64,64,64], γ=120°, coeff=0.01, 200 iterations, NVIDIA A10 GPU, CPU (4 threads)
+**Setup**: nx=[64,64,64], γ=120°, coeff=0.01, 200 iterations, NVIDIA A10 GPU; CPU: FFTW, one thread, AMD EPYC 7543 (same benchmark)
 
 | Platform | Standard FFT | ObliqueZ |
 |----------|-------------|----------|

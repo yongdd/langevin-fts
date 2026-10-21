@@ -36,8 +36,8 @@
 | Custom initial conditions | Arbitrary initial conditions at chain ends (core library) |
 | Impenetrable regions | Masked regions where polymers cannot enter (core library) |
 | Boundary conditions | Periodic (FFT), reflecting (DCT), absorbing (DST) (core library) |
-| Space groups | 230 space groups via spglib (beta) |
-| CrysFFT | Symmetry-accelerated FFT: Pmmm (BCC), 3m (Gyroid), hexagonal (HCP, PL) (beta) |
+| Space groups | All 230 space groups in the core `SpaceGroup` class (3D, via spglib); SCFT accepts the orthorhombic to cubic groups, numbers 16–230 (beta) |
+| CrysFFT | Symmetry-accelerated FFT: 3m recursive (BCC, FCC, Gyroid, DD), Pmmm DCT as fallback for groups with x/y/z mirror planes, ObliqueZ z-mirror (HCP, PL) (beta) |
 | Non-orthogonal box | Monoclinic and triclinic unit cells with arbitrary angles |
 | Crystal system constraints | Orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic |
 | Well-Tempered Metadynamics | Enhanced sampling for phase transitions (L-FTS) |

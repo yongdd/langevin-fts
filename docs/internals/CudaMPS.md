@@ -6,8 +6,8 @@ When running multiple simulations on the same GPU, NVIDIA's default time-slicing
 
 | Scenario | Without MPS | With MPS |
 |----------|-------------|----------|
-| Small grid (16^3), 2 processes | 2x slower per process | ~5% slower per process |
-| Medium grid (40^3), 2 processes | 2x slower per process | ~1.6x slower per process |
+| Small grid (16^3), 2 processes | 2.1x slower per process | 1.06x slower per process |
+| Medium grid (40^3), 2 processes | 2.1x slower per process | 1.6x slower per process |
 | Separate GPUs | No benefit | No benefit (not needed) |
 
 **Use MPS when:**
@@ -36,7 +36,7 @@ nvidia-cuda-mps-control -d
 ### Run Programs
 
 ```bash
-# Client processes must NOT set CUDA_VISIBLE_DEVICES
+# Client processes leave CUDA_VISIBLE_DEVICES unset (see Important Notes)
 # Only set the pipe directory so they connect to the MPS daemon
 export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps-$USER
 unset CUDA_VISIBLE_DEVICES
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
 ## Important Notes
 
-1. **Client must not set `CUDA_VISIBLE_DEVICES`**: The MPS daemon already owns the GPU. If a client process sets `CUDA_VISIBLE_DEVICES`, it will get a "no CUDA-capable device" error.
+1. **Leave `CUDA_VISIBLE_DEVICES` unset in the clients**: A client's `CUDA_VISIBLE_DEVICES` is read relative to the devices the MPS daemon sees. With the daemon started on `CUDA_VISIBLE_DEVICES=2`, a client that also sets `CUDA_VISIBLE_DEVICES=2` gets a "no CUDA-capable device is detected" error (the MPS server log reports an invalid GPU ID), while a client with `CUDA_VISIBLE_DEVICES=0` or with the variable unset runs on GPU 2.
 
 2. **Use `spawn`, not `fork`**: CUDA contexts are not fork-safe. Always use `mp.get_context("spawn")` when creating child processes.
 
@@ -146,15 +146,17 @@ if __name__ == "__main__":
 
 ## Benchmark Results (NVIDIA A10, ds=1/40, continuous chain, RQM4)
 
+Speedup is the throughput of two simultaneous runs relative to one run alone: $`2\, t_\text{single} / t_\text{per process}`$. A speedup $`S`$ therefore makes each process $`2/S`$ times slower than a single run; these factors are the ones in the table above. Each process runs the worker of [Usage from Python](#usage-from-python) with the grid set to 16^3 or 40^3 (`lx` = 4), repeating `compute_propagators` for about 10 s, with `OMP_NUM_THREADS` unset in a 4-CPU job. With `OMP_NUM_THREADS=2` a single 16^3 run takes half as long and MPS gives 1.47x at 16^3 (1.26x at 40^3).
+
 ### Same GPU, 2 processes
 
 | Grid | Without MPS | With MPS |
 |------|-------------|----------|
-| 16^3 | 0.90x (slower than single) | **1.81x** speedup |
-| 40^3 | 0.79x (slower than single) | **1.21x** speedup |
+| 16^3 | 0.94x (slower than single) | **1.89x** speedup |
+| 40^3 | 0.94x (slower than single) | **1.25x** speedup |
 
 ### Separate GPUs (MPS not needed)
 
 | Grid | Speedup |
 |------|---------|
-| 40^3 | **1.86x** |
+| 40^3 | **2.0x** |

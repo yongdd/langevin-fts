@@ -94,11 +94,13 @@ With finite compressibility $`\zeta N`$, the pressure field is known:
 w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})
 ```
 
-In SCFT iteration, the same projection residual $`\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}`$ is used for the fluctuation part, while the field means are pinned to the saddle-point values:
+In SCFT iteration, the same projection residual $`\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}`$ is used for the fluctuation part. With `"fts_consistent_energy": True`, the field means are pinned to the saddle-point values:
 
 ```math
 \langle w_i \rangle = \sum_j X_{ij} \langle \phi_j \rangle + \xi, \qquad \xi = \zeta N \left( \left\langle \sum_j \phi_j \right\rangle - 1 \right)
 ```
+
+With the default (`False`), the field means keep their initial values.
 
 See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on the compressible SCFT iteration.
 
@@ -161,15 +163,16 @@ After Hubbard-Stratonovich transformation:
 **Per chain unit:**
 
 ```math
-\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M-1} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M-1} \frac{\Omega_i S_i}{\lambda_i} - \Omega_M + \frac{1}{2M} \left( \mathbf{s}^T \mathbf{e} - \sum_{i=1}^{M-1} \frac{S_i^2}{\lambda_i} \right) \right]
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ -\sum_{i=1}^{M-1} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M-1} \frac{\Omega_i S_i}{\lambda_i} - \Omega_M + \frac{1}{2M} \left( \mathbf{s}^T \mathbf{e} - \sum_{i=1}^{M-1} \frac{S_i^2}{\lambda_i} \right) \right]
 ```
 
 where:
 - $`C = \rho_0 R_0^3 / N`$: dimensionless chain number density
 - $`\bar{N} = C^2`$: invariant polymerization index
-- $`O`$: orthogonal matrix of $`PXP`$ with $`OO^T = M`$
-- $`\mathbf{s}^T = \mathbf{e}^T X / M`$ and $`\mathbf{S} = O^T \mathbf{s} / M`$
-- $`\lambda_i`$: eigenvalues of $`PXP`$
+- $`P_\perp = I - \mathbf{e}\mathbf{e}^T / M`$: orthogonal projector onto the composition modes (not the $`P`$ of Section 1.3)
+- $`O`$: orthogonal matrix of eigenvectors of $`P_\perp X P_\perp`$ with $`OO^T = M`$ (each column has length $`\sqrt{M}`$; the last column is $`\mathbf{e}`$, the pressure field $`\Omega_M`$)
+- $`\mathbf{s}^T = \mathbf{e}^T X / M`$ and $`\mathbf{S} = O^T \mathbf{s}`$, with the same $`O`$ as in the field transformation below
+- $`\lambda_i`$: eigenvalues of $`P_\perp X P_\perp`$
 
 ### 2.4 Field Transformations
 
@@ -230,7 +233,7 @@ U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \left\lbrace \sum_{i,j} \chi_{ij} \
 **Per chain unit:**
 
 ```math
-\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M} \frac{\Omega_i S_i}{\lambda_i} + \frac{1}{2} \left( \zeta N - \sum_{i=1}^{M} \frac{S_i^2}{M\lambda_i} \right) \right]
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ -\sum_{i=1}^{M} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M} \frac{\Omega_i S_i}{\lambda_i} + \frac{1}{2} \left( \zeta N - \sum_{i=1}^{M} \frac{S_i^2}{M\lambda_i} \right) \right]
 ```
 
 where:
@@ -300,7 +303,8 @@ omega = mpt.to_aux_fields(w)          # Monomer → Auxiliary
 # Compute Hamiltonian
 # molecules: C++ Molecules object; total_partitions: list of Q_p;
 # cb: ComputationBox object (required, used for volume averages)
-H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb)
+# The constant U_ref is left out unless include_const_term=True
+H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb, include_const_term=True)
 
 # Compute functional derivatives
 h_deriv = mpt.compute_func_deriv(omega, phi, field_indices)
@@ -323,7 +327,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 | `matrix_o` | Orthogonal matrix $`O`$ (eigenvectors) |
 | `matrix_a` | Mapping matrix $`A = O`$ |
 | `matrix_a_inv` | Inverse mapping $`A^{-1} = O^T / M`$ |
-| `eigenvalues` | Eigenvalues $`\lambda_i`$ of $`PXP`$ or $`U`$ |
+| `eigenvalues` | Eigenvalues $`\lambda_i`$ of $`P_\perp X P_\perp`$ or $`U`$ |
 | `aux_fields_real_idx` | Indices of real auxiliary fields |
 | `aux_fields_imag_idx` | Indices of imaginary auxiliary fields |
 

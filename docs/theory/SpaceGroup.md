@@ -43,7 +43,7 @@ avoid gather/scatter mapping during diffusion steps. See
 ### Symmetry Operations
 
 A space group is a set of symmetry operations that leave the crystal structure invariant. Each symmetry operation is a pair $`(\mathbf{R}, \mathbf{t})`$ where:
-- $`\mathbf{R}`$: 3×3 rotation/reflection matrix (orthogonal, $`\mathbf{R}^T \mathbf{R} = \mathbf{I}`$)
+- $`\mathbf{R}`$: 3×3 integer rotation/reflection matrix acting on fractional coordinates; it preserves the cell metric, $`\mathbf{R}^T \mathbf{g} \mathbf{R} = \mathbf{g}`$ ($`\mathbf{g}`$: metric tensor of the cell), and is orthogonal only on orthogonal cells (the hexagonal $`\mathbf{R}_6`$ below is not)
 - $`\mathbf{t}`$: translation vector in fractional coordinates
 
 Applied to a point $`\mathbf{p}`$ in fractional coordinates:
@@ -215,9 +215,11 @@ w_symmetrized = sg.symmetrize(w_full)
 
 ### Physical Bases for CrysFFT
 
-When CrysFFT is available (periodic 3D only), the solver may switch the reduced
-basis from the irreducible mesh to a **physical basis** to avoid gather/scatter
-mapping during diffusion. This selection is automatic:
+When CrysFFT is available (periodic 3D only), the reduced basis can be switched
+from the irreducible mesh to a **physical basis** to avoid gather/scatter
+mapping during diffusion. SCFT makes this choice automatically; with
+`PropagatorSolver`, enable a basis on the `SpaceGroup` (`enable_*_physical_basis()`)
+before passing it in. SCFT chooses:
 
 - **Orthogonal boxes** (α = β = γ = 90°, even grid): the 3m physical basis
   (1/8 grid) is preferred when the space group provides the required 3m
@@ -225,12 +227,14 @@ mapping during diffusion. This selection is automatic:
   generator translation must be an integral number of grid cells with a
   bijective parity map — e.g. for Fddd's quarter-cell d-glides at most one
   of $`n_x/4`$, $`n_y/4`$, $`n_z/4`$ may be odd), and $`n_z/2 \ge 8`$; otherwise the
-  solver falls back to the Pmmm physical basis (1/8 grid, requires mirror
+  Pmmm physical basis is used (1/8 grid, requires mirror
   planes along x, y, z).
 - **Non-orthogonal cells with an orthogonal z-axis** (α = β = 90°, γ
-  arbitrary — e.g. hexagonal or monoclinic-γ cells): the z-mirror (ObliqueZ)
+  arbitrary — e.g. hexagonal cells): the z-mirror (ObliqueZ)
   physical basis (1/2 grid) is used when the space group has a z-mirror
-  operation and $`n_z`$ is even.
+  $`(x, y, -z + t_z)`$ with integral x and y translations and $`t_z = 0`$ or
+  $`\tfrac{1}{2}`$, and $`n_z`$ is even ($`n_z`$ must be a multiple of 4 when
+  $`t_z = \tfrac{1}{2}`$, as for P6_3/mmc).
 - If no physical basis applies, the irreducible basis is used.
 
 ## Crystal Systems and Grid Constraints
@@ -254,11 +258,11 @@ Some space groups require grid dimensions to be divisible by specific numbers:
 | Ia-3d (Gyroid) | 4 | 1/4, 3/4 translations |
 | Fd-3m (Diamond) | 4 | 1/4, 3/4 translations |
 | Im-3m (BCC) | 2 | 1/2 translations |
-| P6_3/mmc (HCP) | 2 | 1/2 translations |
+| P6_3/mmc (HCP) | 2 (nz only) | 1/2 translation along z (6_3 screw) |
 
-The required divisor is computed from the denominators of the translation
-components of the symmetry operations (e.g. a 1/4 translation requires the
-grid to be divisible by 4).
+The required divisor is computed per axis from the denominators of the
+translation components of the symmetry operations along that axis (e.g. a 1/4
+translation requires the grid to be divisible by 4).
 
 ## Class Methods
 
@@ -266,7 +270,7 @@ grid to be divisible by 4).
 |--------|-------------|
 | `to_reduced_basis(fields)` | Convert full fields to irreducible representation |
 | `from_reduced_basis(reduced)` | Reconstruct full fields from reduced |
-| `symmetrize(fields)` | Average fields over orbits for perfect symmetry |
+| `symmetrize(fields)` | Average fields over the classes of the active basis: the full space-group orbits on the irreducible basis, only the physical-basis classes once a physical basis is enabled |
 | `symmetrize_reduced_basis(reduced)` | Average a reduced-basis field in place over the full space-group orbits (a physical basis can hold several representatives of one orbit) |
 | `reduced_to_irreducible(reduced)` | Map a reduced-basis (physical sub-grid) field to the irreducible-orbit representation |
 | `irreducible_to_reduced(irreducible)` | Map an irreducible-orbit field back to the reduced (physical) basis |
@@ -292,9 +296,9 @@ Metadata is exposed through getter methods (not attributes):
 | `enable_pmmm_physical_basis()` / `using_pmmm_physical_basis()` | Switch the reduced basis to the Pmmm physical sub-grid (1/8 grid) / query whether it is active |
 | `enable_m3_physical_basis()` / `using_m3_physical_basis()` | Switch to the M3 physical sub-grid (1/8 even-index grid) / query whether it is active |
 | `enable_z_mirror_physical_basis()` / `using_z_mirror_physical_basis()` | Switch to the z-mirror physical basis (half grid along z) / query whether it is active |
-| `get_reduced_basis_indices()` | Flat grid indices of the irreducible points |
-| `get_full_to_reduced_map()` | Map from full grid to irreducible point index |
-| `get_orbit_counts()` | Orbit size for each irreducible point |
+| `get_reduced_basis_indices()` | Flat grid indices of the reduced-basis points (the irreducible points, or the physical sub-grid when a physical basis is enabled) |
+| `get_full_to_reduced_map()` | Map from full grid index to reduced-basis index |
+| `get_orbit_counts()` | Number of grid points mapped to each reduced-basis point (the orbit size on the irreducible basis) |
 | `get_nx()` | Grid dimensions |
 | `get_total_grid()` | Total number of grid points |
 
@@ -305,11 +309,11 @@ Hexagonal crystal systems (P6_3/mmc, etc.) require special attention:
 - Lattice: a = b, c independent
 - Angles: α = β = 90°, γ = 120° (pass `"angles": [90, 90, 120]` in params)
 - Grid: nx = ny (first two dimensions must be equal)
-- All dimensions must be divisible by 2 (for P6_3/mmc, from its 1/2 translations)
+- nz must be even (for P6_3/mmc, from the 1/2 translation of its 6_3 screw); nx = ny may be odd
 
 **Example:**
 ```python
-nx = [48, 48, 96]  # a = b, c different, all divisible by 2
+nx = [48, 48, 96]  # a = b, c different, nz even
 sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
 ```
 
@@ -337,8 +341,9 @@ $`\frac{(i+0.5) - (j+0.5)}{N} = \frac{i-j}{N}`$ — the $`0.5`$ offset is
 annihilated, so a cell **center** is mapped onto a cell **boundary**, which
 is not a grid point. No rounding rule can fix this: the cell-centered grid
 is simply not invariant under the in-plane hexagonal rotations, and forcing
-nearest-point assignment produces wrong orbit partitions at almost every
-grid point (99.5% of points for P6_3/mmc on 24×24×16).
+nearest-point assignment produces wrong orbits at every grid point (for
+P6_3/mmc on 24×24×16, every point has images on cell boundaries, and after
+rounding the images of no point form a set closed under the group).
 
 The fix is a **hybrid convention** used only for hexagonal-axes settings:
 

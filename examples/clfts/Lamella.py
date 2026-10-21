@@ -52,11 +52,11 @@ params = {
     "zeta_n": 100.0,
 
     # Dynamical stabilization for complex Langevin (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024))
-    # Adds iαds·N·Im[W-] to exchange field forces to prevent hot spots.
-    # Recommended values based on N̄:
-    #   N̄ >= 10^7: αds = 0.001 or less
-    #   N̄ ~  10^5: αds = 0.01 - 0.02
-    #   N̄ ~  10^4: αds = 0.1 or higher (may bias statistics)
+    # Adds iαds·Im[W-] to exchange field forces to prevent hot spots.
+    # Values used by Willis & Matsen (larger values bias the statistics):
+    #   N̄ ~ 10^6 - 10^7: αds = 0.001
+    #   N̄ ~ 10^5:        αds = 0.01 - 0.02
+    #   N̄ ~ 10^4:        no reliable value without smearing
     # Set to 0.0 to disable stabilization.
     "dynamic_stabilization": 0.01,
 

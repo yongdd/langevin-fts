@@ -93,11 +93,11 @@ The discrete formula is derived from the continuum definition (Section 3.1) by a
 
 where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
 
-> **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) uses $`1/M^2`$ normalization:
+> **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) puts $`1/M^2`$ inside the $`\ell`$-th root:
 > ```math
-> \Psi_{\text{paper}} = \frac{1}{M^2} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
+> \Psi_{\text{paper}} = \left( \frac{1}{M^2} \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
 > ```
-> Our implementation uses $`1/M`$ normalization instead, which makes $`\Psi`$ an intensive quantity—consistent regardless of the number of natural periods in the simulation box.
+> so that $`\Psi_{\text{paper}} = \sqrt{M}\,\Psi`$ for $`\ell = 4`$. Our implementation uses $`1/M`$ outside the root instead, which makes $`\Psi`$ an intensive quantity—consistent regardless of the number of natural periods in the simulation box.
 
 **Multi-monomer systems:** For systems with more than two monomer types, the "exchange field" is the auxiliary field with the **most negative eigenvalue** (i.e., largest magnitude among negative eigenvalues). This is determined automatically from the eigenvalue decomposition of the interaction matrix (same as [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts)).
 
@@ -276,7 +276,6 @@ wtmd = WTMD(
 | `store_order_parameter(psi, dH)` | Store $`\Psi`$ and $`dH/d\chi`$ for statistics |
 | `update_statistics()` | Update $`U(\Psi)`$ and $`U'(\Psi)`$ via FFT convolution |
 | `write_data(filename)` | Save statistics to .mat file |
-| `get_free_energy()` | Return $`(\Psi, F(\Psi))`$ arrays |
 
 ### 6.3 Integration with LFTS
 
@@ -307,8 +306,10 @@ params = {
 simulation = LFTS(params=params)
 simulation.run(initial_fields=w)
 
-# Access free energy after simulation
-psi_bins, free_energy = simulation.wtmd.get_free_energy()
+# Free energy from the stored bias (Section 5.1); wtmd.u holds U / CV
+wtmd = simulation.wtmd
+psi_bins = wtmd.psi_range
+free_energy = -(1.0 + wtmd.dT) / wtmd.dT * wtmd.u * wtmd.CV
 ```
 
 ### 6.4 Langevin Loop Integration
@@ -366,7 +367,7 @@ if langevin_step % wtmd.recording_period == 0:
 From Beardsley & Matsen (2022):
 
 1. **Initial runs**: Scan across ODT to bracket transition and estimate $`\Psi`$ values
-2. **$`\sigma_\Psi`$**: Should allow migration of ~$`\sigma_\Psi`$ between hill depositions
+2. **Hill deposition rate**: Slow enough for $`\Psi`$ to migrate a distance of ~$`\sigma_\Psi`$ between hill depositions (the paper adds a hill every $`10^3`$ Langevin steps); $`\sigma_\Psi`$ itself should keep $`U(\Psi)`$ smooth without smearing its features
 3. **$`\Delta T`$**: Start with underestimate; increase if needed (keeping previous $`U(\Psi)`$)
 4. **Convergence**: $`U(\Psi)`$ shape stabilizes after ~$`10^6`$ Langevin steps
 
@@ -382,8 +383,10 @@ params["chi_n"] = {"A,B": 13.15}  # Near expected ODT
 simulation = LFTS(params=params)
 simulation.run(initial_fields=w)
 
-# 2. Get free energy and histogram
-psi_bins, F = simulation.wtmd.get_free_energy()
+# 2. Get free energy and histogram (Section 5.1)
+wtmd = simulation.wtmd
+psi_bins = wtmd.psi_range
+F = -(1.0 + wtmd.dT) / wtmd.dT * wtmd.u * wtmd.CV
 P = np.exp(-F)  # Unnormalized probability
 
 # 3. Find peaks and compare areas
@@ -400,8 +403,10 @@ P = np.exp(-F)  # Unnormalized probability
 ### 8.3 Checkpoint and Resume
 
 ```python
-# WTMD state is automatically saved in wtmd_statistics_*.mat files
-# at every recording_period steps
+# The WTMD bias (U, U' and I0) is stored in the fields_*.mat checkpoints, written
+# every recording["recording_period"] steps, and continue_run() restores it from there.
+# The wtmd_statistics_*.mat files are output only; the I1 (dH/dchi) accumulation
+# restarts from zero after a resume.
 
 # Resume simulation from checkpoint
 simulation.continue_run("fields_100000.mat")
@@ -445,7 +450,7 @@ barrier values:
 
 ## 10. Limitations
 
-### 9.1 Order Parameter Sensitivity
+### 10.1 Order Parameter Sensitivity
 
 WTMD works well when $`\Psi`$ clearly distinguishes competing phases:
 
@@ -456,7 +461,7 @@ WTMD works well when $`\Psi`$ clearly distinguishes competing phases:
 | **Spherical ↔ Disorder** | Poor | Similar morphologies |
 | **Gyroid ↔ Disorder** | Poor | Similar networks + competing phases |
 
-### 9.2 Competing Phases
+### 10.2 Competing Phases
 
 In the complex phase window (gyroid region), multiple phases may compete:
 - Gyroid (G)
@@ -466,7 +471,7 @@ In the complex phase window (gyroid region), multiple phases may compete:
 
 A single order parameter may not distinguish all these phases.
 
-### 9.3 Potential Solutions
+### 10.3 Potential Solutions
 
 1. **Alternative order parameters**: Machine learning could help design better $`\Psi`$
 2. **Multiple order parameters**: Extend WTMD to 2D or higher

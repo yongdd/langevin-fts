@@ -91,7 +91,7 @@ For large systems that exceed GPU memory:
 params["reduce_memory"] = True
 ```
 
-This stores only checkpoints and recomputes intermediate values, reducing memory by ~90% at the cost of 2-4x slower execution.
+This stores only checkpoints and recomputes intermediate values, which cuts the memory that grows with the grid and the number of contour steps (for `examples/scft/Gyroid.py` on a 64³ grid the GPU memory falls from 1064 to 420 MiB) at the cost of 2-4x slower execution.
 
 ### Multi-threading Settings
 
@@ -108,7 +108,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "4"
 ```
 
-`OMP_NUM_THREADS` is the number of propagators computed at the same time: CPU threads, or CUDA streams (at most 4) on the GPU. Option 1 therefore also makes a GPU run compute its propagators one after another; GPU runs should use Option 2 (the examples use 2 threads).
+`OMP_NUM_THREADS` is the number of propagators computed at the same time: CPU threads, or CUDA streams (at most 4) on the GPU. Option 1 therefore also makes a GPU run compute its propagators one after another; GPU runs should use Option 2 (the examples use 2 threads). With `reduce_memory` the propagators are always computed one at a time.
 
 ### GPU Selection
 
@@ -127,6 +127,7 @@ If SCFT doesn't converge, reduce the mixing parameters:
 ```python
 "optimizer": {
     "name": "am",
+    "max_hist": 20,
     "mix_min": 0.01,      # Reduce from 0.1
     "mix_init": 0.01,     # Reduce from 0.1
     "start_error": 1e-2

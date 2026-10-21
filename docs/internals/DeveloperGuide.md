@@ -327,14 +327,15 @@ CpuSolver<T>                                  [Abstract Base]
         │           ├── advance_propagator_half_bond_step()
         │           └── get_stress_boltz_bond(): returns boltz_bond
         │
-        └── CpuSolverCNADI<T>                  [Finite Difference]
+        └── CpuSolverCNADI                     [Finite Difference; CpuSolver<double>, real fields only]
             └── CN-ADI with tridiagonal solver
 ```
 
 The CUDA side mirrors this layout. `CudaSolver<T>` is the abstract base;
-`CudaSolverPseudoBase<T>` (`src/platforms/cuda/CudaSolverPseudoBase.h`) owns what the
-three pseudo-spectral solvers share -- computation box, `Pseudo` helper, streams, the
-stress reduction workspace, the space-group reduced basis and the CrysFFT fast path --
+`CudaSolverPseudoBase<T>` (`src/platforms/cuda/CudaSolverPseudoBase.h`) holds what the
+three pseudo-spectral solvers share -- it uses the computation box and the backend's streams,
+and owns the `Pseudo` helper, the stress reduction workspace, the space-group work buffers
+and the CrysFFT fast path --
 and implements `set_space_group()`, `update_laplacian_operator()` and the shared
 `update_dw_impl()`. It also owns the spectral transforms: cuFFT plans for periodic boundaries
 (`fft_forward()` / `fft_backward()`, batch of 1 or 2 fields, the largest batch is a
@@ -397,7 +398,7 @@ AndersonMixing<T>                             [Abstract Base]
 ├── n_var           - number of field variables
 ├── max_hist        - maximum history length
 ├── mix_min/mix_init - mixing parameter bounds
-├── calculate_new_fields(w_new, w_current, w_deriv) [pure virtual]
+├── calculate_new_fields(w_new, w_current, w_deriv, old_error_level, error_level) [pure virtual]
 └── reset_count()   [virtual, empty default; overridden by the platform classes]
         │
         ├── CpuAndersonMixing<T>              [CPU Implementation]
@@ -421,7 +422,7 @@ Polymers are represented as **acyclic graphs** (trees):
 ```
 Block                                         [Block Specification]
 ├── monomer_type    - e.g., "A", "B"
-├── contour_length  - relative length (0 to 1)
+├── contour_length  - length relative to N_Ref (may exceed 1)
 ├── v, u            - connecting vertices
 └── n_segment       - discretized segment count
 
@@ -431,14 +432,14 @@ Polymer                                       [Single Chain Type]
 ├── blocks[]        - vector of Block
 ├── adjacent_nodes  - graph adjacency list
 └── Methods:
-    ├── get_block(i), get_n_blocks()
-    ├── get_adjacent_nodes(v)
+    ├── get_block(v, u), get_n_blocks()
+    ├── get_adjacent_nodes()
     └── display_architecture()
 
 Molecules                                     [System Container]
 ├── model_name      - "continuous" or "discrete"
 ├── ds              - contour step size
-├── bond_lengths    - {monomer: (a/a_ref)²}
+├── bond_lengths    - {monomer: a/a_ref}
 ├── polymer_types[] - vector of Polymer
 └── Methods:
     ├── add_polymer(phi, blocks)
@@ -622,7 +623,7 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 ### New Numerical Methods
 
 1. Implement the solver in both `cpu/` and `cuda/` directories
-2. Add the method to the factory classes
+2. Add its name to the method check in the factory classes and the solver choice to the constructors of both backends (`CpuComputationBackend`, `CudaComputationBackend`)
 3. Update parameter validation in Python modules
 4. Add tests and benchmarks
 
@@ -685,7 +686,7 @@ If GPU and CPU give different results:
 
 1. Run same test on both `cuda` and CPU platforms - results should match to ~10⁻¹³
 2. Check partition function consistency: `solver.check_total_partition()` should pass
-3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within machine precision (~10⁻¹⁵)
+3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within round-off (10⁻¹⁵–10⁻¹⁴)
 
 ---
 

@@ -53,6 +53,8 @@ where:
 - $`X`$: the $`\chi N`$ matrix
 - $`P = I - \frac{\mathbf{e}\mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}`$: projection matrix
 
+At the saddle point $`X \boldsymbol{\phi} - P \mathbf{w}`$ is the uniform vector $`\mathbf{e} / (\mathbf{e}^T X^{-1} \mathbf{e})`$ (since $`P \mathbf{e} = 0`$ and $`\sum_i \phi_i = 1`$), so the spatial mean of each component is subtracted, $`R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle`$, and the residual vanishes at the saddle point.
+
 ### 2.3 Example: AB Diblock Copolymer
 
 For AB-type systems:
@@ -160,7 +162,7 @@ where $`\lambda`$ is the mixing parameter and $`\tau`$ is the iteration number.
 Anderson mixing accelerates convergence by using history of previous iterations:
 
 ```math
-w^{(n+1)} = w^{(n)} + \lambda R_w^{(n)} - \sum_{i=1}^{m} c_i \left[ (w^{(n)} - w^{(n-i)}) + \lambda (R_w^{(n)} - R_w^{(n-i)}) \right]
+w^{(n+1)} = w^{(n)} + R_w^{(n)} - \sum_{i=1}^{m} c_i \left[ (w^{(n)} - w^{(n-i)}) + (R_w^{(n)} - R_w^{(n-i)}) \right]
 ```
 
 where the coefficients $`c_i`$ are determined by minimizing:
@@ -172,7 +174,7 @@ where the coefficients $`c_i`$ are determined by minimizing:
 **Key parameters:**
 - `max_hist`: Maximum history length (typically 10-20)
 - `start_error`: Error threshold to switch from simple mixing to Anderson mixing
-- `mix_min`, `mix_init`: Minimum and initial mixing parameters
+- `mix_min`, `mix_init`: Minimum and initial mixing parameter $`\lambda`$ of the simple-mixing phase (before `start_error` is reached); $`\lambda`$ is multiplied by 0.7 (not below `mix_min`) when the error grows and by 1.01 otherwise. The Anderson step above uses no mixing parameter.
 
 **Advantages:**
 - Much faster convergence (often 10x fewer iterations)
@@ -188,7 +190,7 @@ The self-consistency error is defined as:
 
 The constant 1 in the denominator prevents divergence when the field magnitudes are small.
 
-Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$).
+Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `box_is_altering=True`, the Euclidean norm of the stress components (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test.
 
 ---
 
@@ -202,7 +204,7 @@ The equilibrium unit cell minimizes the free energy. The stress residuals are:
 \mathbf{R}_{stress} = -\frac{\partial H}{\partial \boldsymbol{\theta}}
 ```
 
-where $`\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T`$ contains the unit cell parameters. Note the angle ordering: the API (`get_stress()`) returns the derivatives $`+\partial H / \partial \boldsymbol{\theta}`$ as the array $`[\partial H/\partial L_a, \partial H/\partial L_b, \partial H/\partial L_c, \partial H/\partial \gamma, \partial H/\partial \beta, \partial H/\partial \alpha]`$ (in 2D, $`\partial H/\partial \gamma`$ is stored at index 2). For a single polymer species, $`\partial H / \partial \boldsymbol{\theta}`$ is equivalent to $`-(1/Q) \, \partial Q / \partial \boldsymbol{\theta}`$.
+where $`\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T`$ contains the unit cell parameters. Note the angle ordering: the API (`get_stress()`) returns the derivatives $`+\partial H / \partial \boldsymbol{\theta}`$ as the array $`[\partial H/\partial L_a, \partial H/\partial L_b, \partial H/\partial L_c, \partial H/\partial \gamma, \partial H/\partial \beta, \partial H/\partial \alpha]`$ (in 2D, $`\partial H/\partial \gamma`$ is stored at index 2). In general $`\partial H / \partial \boldsymbol{\theta} = -\sum_p (\bar{\phi}_p / \alpha_p) \, (1/Q_p) \, \partial Q_p / \partial \boldsymbol{\theta}`$, which reduces to $`-(1/Q) \, \partial Q / \partial \boldsymbol{\theta}`$ for a single polymer species with $`\alpha = 1`$.
 
 ### 4.2 Box Update
 
@@ -334,6 +336,8 @@ for iteration in range(1000):
     # Compute residuals
     R_A = chi_n * phi_B - 0.5 * (w["A"] - w["B"])
     R_B = chi_n * phi_A + 0.5 * (w["A"] - w["B"])
+    R_A -= np.mean(R_A)   # the uniform part (chi_n/2) does not vanish at the saddle point
+    R_B -= np.mean(R_B)
 
     # Check convergence
     error = np.sqrt(np.mean(R_A**2) + np.mean(R_B**2))

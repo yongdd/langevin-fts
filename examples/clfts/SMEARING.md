@@ -96,26 +96,26 @@ params = {
 
 ## Universality Requirements
 
-For results to be **universal** (independent of spatial discretization and matching standard Gaussian chain statistics), the smearing parameters must satisfy certain constraints:
+For results to be **universal** (depending only on $`f`$, $`\chi N`$ and $`\bar{N}`$ once $`\chi`$ is calibrated, as for particle-based models), the smearing parameters must satisfy certain constraints (Matsen et al. 2026):
 
 | Smearing Type | Universality Condition | Physical Meaning |
 |---------------|----------------------|------------------|
 | Gaussian | $`a_{\text{int}} \lesssim 0.02 R_0`$ | Interaction range much smaller than chain size |
 | Sigmoidal | $`k_{\text{int}} \gtrsim 20/R_0`$ | Cutoff wavenumber much larger than chain inverse size |
 
-These conditions ensure that the smearing does not significantly alter the polymer chain statistics at length scales relevant to the physics of interest.
+These conditions keep $`\tilde{\Gamma}(k^*) \approx 1`$ at the peak $`k^*`$ of the structure function, so that the smearing does not alter the structure at the large length scales $`k \lesssim k^*`$; for Gaussian smearing, $`a_{\text{int}} \lesssim 0.02 R_0`$ is where the smeared and unsmeared $`S(k^*)`$ differ by less than 1%. The sigmoidal condition holds for $`\Delta k_{\text{int}} = 5/R_0`$.
 
 ## Role of Smearing
 
 Smearing serves two purposes depending on the simulation type:
 
-### UV Regularization (SCFT, L-FTS, CL-FTS)
+### UV Regularization (L-FTS, CL-FTS)
 
-In the continuum limit, the point-contact Flory-Huggins interaction leads to ultraviolet (UV) divergence. Smearing introduces a finite interaction range, making the theory well-defined and ensuring that results are independent of spatial discretization. This applies to all simulation methods: SCFT, L-FTS, and CL-FTS.
+In FTS, the point-contact Flory-Huggins interaction leads to an ultraviolet (UV) divergence: the factor $`z_\infty`$ of the calibration $`\chi \approx z_\infty \chi_b`$ diverges as the grid is refined. Smearing introduces a finite interaction range, which makes the theory well-defined, but for short ranges the results converge slowly with the grid: at fixed $`\chi_b`$, $`a_{\text{int}} = 0.02 R_0`$ needs $`m \gtrsim 200`$ grid points along a $`4.5 R_0`$ box, whereas at fixed $`z_\infty \chi_b N`$ already $`m = 32`$ suffices (Matsen et al. 2026). SCFT has no fluctuations and thus no UV divergence; there smearing only gives the interactions a finite range.
 
 ### CL-FTS Stabilization
 
-In CL-FTS, smearing additionally prevents numerical instabilities known as "hot spots" — localized regions where field values grow uncontrollably. Hot spots arise from high-frequency fluctuations that can destabilize the simulation. Smearing damps these high-frequency modes:
+In CL-FTS, smearing additionally helps suppress numerical instabilities known as "hot spots" — localized regions where field values grow uncontrollably. Hot spots form when the fields drift deep into the complex domain (Willis & Matsen 2024); damping the high-frequency fluctuations helps suppress their formation (Matsen et al. 2026), and smearing damps these modes:
 
 - **Gaussian smearing**: Exponential decay $`\exp(-a_{\text{int}}^2 k^2/2)`$ strongly suppresses high-$`k`$ modes
 - **Sigmoidal smearing**: Sharp cutoff at $`k \approx k_{\text{int}}`$ eliminates modes above the cutoff
@@ -188,7 +188,9 @@ When smearing is specified in the simulation parameters, the `SCFT`, `LFTS`, and
 
 1. Delaney, K. T. & Fredrickson, G. H. "Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions." *J. Phys. Chem. B* **120**, 7615-7634 (2016).
 
-2. Matsen, M. W., Willis, J. D. & Delaney, K. T. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+2. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+
+3. Willis, J. D. & Matsen, M. W. "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts." *J. Chem. Phys.* **161**, 244903 (2024).
 
 ## See Also
 

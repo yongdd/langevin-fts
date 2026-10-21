@@ -147,7 +147,7 @@ The formulas use the **deformation vector** $`\mathbf{v} = 2\pi g^{-1} \mathbf{m
 
 ### Stress Array Convention
 
-The stress is stored as a 6-component array (Voigt notation):
+The stress is stored as a 6-component array of lattice-parameter derivatives $`\partial H/\partial\theta_i`$:
 
 | Index | Component | Parameter |
 |-------|-----------|-----------|
@@ -172,7 +172,7 @@ The bond factor $`\Phi(k)`$ differs between chain models:
 
 ### Boundary Conditions
 
-> **Boundary conditions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields). For non-periodic boundaries the per-mode Parseval weights (2 for interior modes, 1 for the DCT $`m=0`$ / DST $`k=n`$ special modes, composed across dimensions) are folded into the spectral stress tables. Cross-terms vanish for non-periodic boundaries, so only orthogonal cells (fixed 90° angles) are meaningful there. Accuracy against the finite difference of $`-\ln Q`$: **discrete chains are exact** (the stress formula is the exact derivative of the discretized $`\ln Q`$); **continuous chains** carry the contour-quadrature error — reflecting converges like the periodic case (~$`4\times10^{-4}`$ relative at $`ds = 0.01`$), while absorbing degrades to $`O(ds)`$ (~$`5\times10^{-3}`$ at $`ds = 0.01`$) because of the wall boundary layers in the $`s`$-integrand.
+> **Boundary conditions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields). For non-periodic boundaries the per-mode Parseval weights (2 for interior modes, 1 for the DCT $`m=0`$ / DST $`k=n`$ special modes, composed across dimensions) are folded into the spectral stress tables. Cross-terms vanish for non-periodic boundaries, so only orthogonal cells (fixed 90° angles) are meaningful there. Accuracy against the finite difference of $`-\ln Q`$: **discrete chains are exact** (the stress formula is the exact derivative of the discretized $`\ln Q`$); **continuous chains** carry the contour-quadrature error, which is no larger with walls than with periodic boundaries. In the setup of `tests/TestStressNonPeriodic.py` (AB diblock with $`f_A = 0.36`$ and $`b_B/b_A = 1.1`$, smoothed random fields of standard deviation 5, RQM4, $`ds = 0.01`$) the relative mismatch is $`4\times10^{-4}`$ (periodic), $`2\times10^{-4}`$ (reflecting) and $`3\times10^{-7}`$ (absorbing) on a 1D grid of 48 points with $`L = 2.3`$, and at most $`6\times10^{-4}`$, $`2\times10^{-5}`$ and $`2\times10^{-6}`$ on a $`24\times20\times16`$ grid with $`L = (2.1, 1.7, 1.4)`$. Halving $`ds`$ to 0.005 lowers these values by a factor of 7 to 16, except the 1D absorbing one, which is already at the level of the finite-difference error.
 >
 > **⚠️ Remaining restrictions:** complex fields with non-periodic boundaries are rejected (the real-coefficient transform path drops the imaginary part), and the real-space CN-ADI2 method does not support stress computation.
 

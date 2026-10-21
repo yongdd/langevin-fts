@@ -63,6 +63,8 @@ K. T. Delaney and G. H. Fredrickson, "Recent Developments in Fully Fluctuating F
 
 J. D. Willis and M. W. Matsen, "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts", *J. Chem. Phys.* **2024**, 161, 244903
 
+M. W. Matsen, J. Ramírez, J. D. Willis, and P. D. Pina, "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations", *J. Chem. Phys.* **2026**, 164, 014905
+
 ## Field Update Algorithms
 
 ### L-FTS Field Updates

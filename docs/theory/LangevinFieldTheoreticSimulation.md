@@ -72,6 +72,8 @@ with noise statistics:
 - $`\langle \eta(\mathbf{r}, \tau) \rangle = 0`$
 - $`\langle \eta(\mathbf{r}, \tau) \eta(\mathbf{r}', \tau') \rangle = 2\lambda_i k_B T \, \delta(\mathbf{r} - \mathbf{r}') \delta(\tau - \tau')`$
 
+Here $`\lambda_i`$ is the relative step size (mobility) of field $`i`$, `dt_scaling` in `lfts.py`, not an eigenvalue: for the first $`M-1`$ auxiliary fields it is the absolute value of the field's eigenvalue in [PolymerFieldTheory.md](PolymerFieldTheory.md#23-effective-hamiltonian) divided by the largest absolute eigenvalue among them, and it is 1 for the last field $`\Omega_M`$. For AB systems $`\lambda_- = \lambda_+ = 1`$.
+
 ### 3.2 Discretized Equation (Per Chain Unit)
 
 Discretizing with cell volume $`\Delta V`$ and time step $`\delta\tau`$:
@@ -112,11 +114,13 @@ A more accurate second-order method that averages noise over two time steps:
 
 ### 4.1 Simple Mixing
 
-Update the pressure-like field using gradient descent:
+Update the pressure-like field using gradient descent; $`k`$ counts the saddle-point iterations within one Langevin step:
 
 ```math
-\Omega_+(\mathbf{r}, \tau + \delta\tau) = \Omega_+(\mathbf{r}, \tau) + \lambda_+ \left[\phi_A(\mathbf{r}) + \phi_B(\mathbf{r}) - 1\right] \delta\tau N
+\Omega_+^{(k+1)}(\mathbf{r}) = \Omega_+^{(k)}(\mathbf{r}) + \alpha \left[\phi_A(\mathbf{r}) + \phi_B(\mathbf{r}) - 1\right]
 ```
+
+where $`\alpha`$ is the mixing parameter of the compressor (`mix_init`, adapted as in SCFT simple mixing), not the time step $`\delta\tau N`$.
 
 ### 4.2 Anderson Mixing
 
