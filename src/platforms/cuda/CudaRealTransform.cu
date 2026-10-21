@@ -152,6 +152,13 @@ static double getNormFactor(CudaTransformType type, int N)
     }
 }
 
+// The 2D/3D DCT-1 takes the number of intervals N per axis (N+1 points), the
+// 1D DCT-1 the number of points; the other types take the same N in all dimensions.
+static double getNormFactorMultiDim(CudaTransformType type, int N)
+{
+    return type == CUDA_DCT_1 ? 2.0 * N : getNormFactor(type, N);
+}
+
 //==============================================================================
 // 1D DCT Kernels
 //==============================================================================
@@ -4138,7 +4145,8 @@ void CudaRealTransform2D::init()
     // Called once, from the constructor: a second call would leak the plans
     if (initialized_ || plan_x_created_ || plan_y_created_)
         throw_with_line_number("CudaRealTransform2D::init() called on an initialized transform.");
-    M_ = Nx_ * Ny_;
+    // The 2D DCT-1 takes intervals: (Nx+1)(Ny+1) points
+    M_ = (type_y_ == CUDA_DCT_1) ? (Nx_ + 1) * (Ny_ + 1) : Nx_ * Ny_;
 
     // Calculate FFT sizes
     int fftSize_y = getFFTSize(type_y_, Ny_);
@@ -4614,7 +4622,7 @@ void CudaRealTransform2D::get_types(CudaTransformType& type_x, CudaTransformType
 
 double CudaRealTransform2D::get_normalization() const
 {
-    return getNormFactor(type_x_, Nx_) * getNormFactor(type_y_, Ny_);
+    return getNormFactorMultiDim(type_x_, Nx_) * getNormFactorMultiDim(type_y_, Ny_);
 }
 
 //==============================================================================
@@ -5627,5 +5635,6 @@ void CudaRealTransform3D::get_types(CudaTransformType& type_x,
 
 double CudaRealTransform3D::get_normalization() const
 {
-    return getNormFactor(type_x_, Nx_) * getNormFactor(type_y_, Ny_) * getNormFactor(type_z_, Nz_);
+    return getNormFactorMultiDim(type_x_, Nx_) * getNormFactorMultiDim(type_y_, Ny_)
+         * getNormFactorMultiDim(type_z_, Nz_);
 }

@@ -289,7 +289,11 @@ bool test_dct1_2d(int Nx, int Ny)
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
 
-    bool passed = rel_err < 1e-10;
+    // A REDFT00 round trip multiplies by 2(n-1) per axis for n = N+1 points
+    bool norm_ok = dct.get_normalization() == 4.0 * Nx * Ny && dct.get_size() == M;
+    printf("  get_normalization() = %g (expected %g)\n", dct.get_normalization(), 4.0 * Nx * Ny);
+
+    bool passed = rel_err < 1e-10 && norm_ok;
     printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
 
     return passed;
@@ -531,7 +535,11 @@ bool test_dct1_3d(int Nx, int Ny, int Nz)
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
 
-    bool passed = rel_err < 1e-10;
+    // A REDFT00 round trip multiplies by 2(n-1) per axis for n = N+1 points
+    bool norm_ok = dct.get_normalization() == 8.0 * Nx * Ny * Nz && dct.get_size() == M;
+    printf("  get_normalization() = %g (expected %g)\n", dct.get_normalization(), 8.0 * Nx * Ny * Nz);
+
+    bool passed = rel_err < 1e-10 && norm_ok;
     printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
 
     return passed;

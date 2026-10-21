@@ -80,8 +80,8 @@ inline const char* getTransformName(CudaTransformType type) {
  * @class CudaRealTransform1D
  * @brief CUDA 1D Real Transform (DCT/DST Types 1-4).
  *
- * For DCT-1/DST-1: Input size is N+1/N-1, output size is N+1/N-1.
- * For DCT-2/3/4 and DST-2/3/4: Input size is N, output size is N.
+ * The constructor takes the number of points: N+1 for a DCT-1 over N intervals, N for
+ * DST-1 and the types 2-4. Input and output have that size.
  *
  * Transform lengths (verified against FFTW): DCT-2/3/4, DST-1/4 and the 2D/3D DCT-1
  * accept any N (the CrysFFT physical grid, half the logical grid, is odd whenever a
@@ -159,7 +159,7 @@ class CudaRealTransform2D
 {
 private:
     int Nx_, Ny_;                ///< Transform sizes
-    int M_;                      ///< Total size (Nx * Ny)
+    int M_;                      ///< Total size (Nx * Ny; (Nx+1)(Ny+1) for DCT-1)
     int M_padded_;               ///< Padded size for FFT
     CudaTransformType type_x_;   ///< Transform type for X dimension
     CudaTransformType type_y_;   ///< Transform type for Y dimension
