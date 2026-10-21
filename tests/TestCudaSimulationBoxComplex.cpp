@@ -88,11 +88,11 @@ int main()
         std::cout<< "multi inner product: "<< cb.multi_inner_product_device(2, d_gm,d_hm) << std::endl;
         std::cout<< "sum(w): " << sum_w << std::endl;
         
-        if( std::abs(cb.inner_product_device(d_g,d_h)-std::complex<double>{-5.468649581714552, -4.903729566482727}) > 1e-5)
+        if( !(std::abs(cb.inner_product_device(d_g,d_h)-std::complex<double>{-5.468649581714552, -4.903729566482727}) <= 1e-5))
             return -1;
-        if( std::abs(cb.multi_inner_product_device(2,d_gm,d_hm)-std::complex<double>{13.343735222259584, -13.14993884723823}) > 1e-5)
+        if( !(std::abs(cb.multi_inner_product_device(2,d_gm,d_hm)-std::complex<double>{13.343735222259584, -13.14993884723823}) <= 1e-5))
             return -1;
-        if( std::abs(sum_w) > 1e-7)
+        if( !(std::abs(sum_w) <= 1e-7))
             return -1;
         return 0;
     }

@@ -14,7 +14,9 @@
 echo "Slurm Job on `hostname`"
 echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo `date`
-export OMP_MAX_ACTIVE_LEVELS=0
+# 1, not 0: 0 disables OpenMP, which on CUDA also runs the propagator streams
+# one after another; OMP_NUM_THREADS propagators are computed concurrently
+export OMP_MAX_ACTIVE_LEVELS=1
 export OMP_NUM_THREADS=4
 # Load modules and run your programs here
 python -u Lamella.py $SLURM_JOB_ID

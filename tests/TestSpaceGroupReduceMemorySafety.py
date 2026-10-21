@@ -75,7 +75,8 @@ def main() -> None:
     calc.run(initial_fields=w_init)
 
     # 1) Partition function consistency
-    calc.prop_solver._propagator_computation.check_total_partition()
+    if not calc.prop_solver.check_total_partition():
+        raise AssertionError("check_total_partition() failed (forward/backward mismatch)")
 
     # 2) Material conservation
     phi_a = calc.prop_solver.get_concentration("A")

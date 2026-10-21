@@ -11,11 +11,13 @@ import os
 import time
 import numpy as np
 from scipy.ndimage import gaussian_filter
-from polymerfts import scft
 
-# Suppress OpenMP threading for consistent measurements
+# Suppress OpenMP threading for consistent measurements (CPU only); set before
+# polymerfts loads, which is when OpenMP reads them
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"
 os.environ["OMP_NUM_THREADS"] = "1"
+
+from polymerfts import scft
 
 # Major Simulation params
 f = 24/90       # A-fraction of major BCP chain, f
@@ -141,7 +143,12 @@ if __name__ == "__main__":
     overhead = ((mean_sg/mean_no_sg) - 1) * 100
     print(f"Overhead:            {overhead:+.1f}%")
     print()
+    # Sizes of the last run with the space group: a propagator holds n_grid points
+    nx = get_params()["nx"]
+    total_grid = sim.prop_solver.total_grid
+    n_basis = sim.prop_solver.n_grid
     print("Memory usage (propagators):")
-    print(f"  Full grid:      32 x 32 x 32 = 32768 points")
-    print(f"  Reduced basis:  489 points (Im-3m)")
-    print(f"  Memory savings: {(1 - 489/32768) * 100:.1f}%")
+    print(f"  Full grid:      {' x '.join(str(n) for n in nx)} = {total_grid} points")
+    print(f"  With Im-3m:     {n_basis} points ({sim.sg.physical_basis_name()} basis; "
+          f"{sim.sg.get_n_reduced_basis_full()} irreducible points)")
+    print(f"  Memory savings: {(1 - n_basis/total_grid) * 100:.1f}%")

@@ -37,6 +37,7 @@
  * - CUDA real-space vs CPU pseudo-spectral (to verify CUDA implementation)
  */
 
+#include <cstdlib>
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -61,6 +62,24 @@
 
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 /**
@@ -244,10 +263,10 @@ bool run_comparison_test(
 
         max_diff = 0.0;
         for (int i = 0; i < M; ++i)
-            max_diff = std::max(max_diff, std::abs(q_ps[i] - q_rs[i]));
+            { const double d = std::abs(q_ps[i] - q_rs[i]); if (std::isnan(d) || d > max_diff) max_diff = d; }  // a NaN stays
         rel_err = max_diff / (*std::max_element(q_ps.begin(), q_ps.end()));
 
-        if (rel_err > tolerance)
+        if (!(rel_err <= tolerance))
         {
             std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
             all_passed = false;
@@ -336,10 +355,10 @@ bool run_comparison_test(
 
         max_diff = 0.0;
         for (int i = 0; i < M; ++i)
-            max_diff = std::max(max_diff, std::abs(q_ps[i] - q_rs[i]));
+            { const double d = std::abs(q_ps[i] - q_rs[i]); if (std::isnan(d) || d > max_diff) max_diff = d; }  // a NaN stays
         rel_err = max_diff / (*std::max_element(q_ps.begin(), q_ps.end()));
 
-        if (rel_err > tolerance)
+        if (!(rel_err <= tolerance))
         {
             std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
             all_passed = false;
@@ -367,40 +386,43 @@ bool run_comparison_test(
     // ====================================================================
 #if defined(USE_CPU_FFTW) || defined(USE_CPU_MKL)
 #ifdef USE_CUDA
-    std::cout << "  [CUDA RS vs CPU " << (mixed_bc ? "RS" : "PS") << "] " << std::flush;
+    if (cuda_device_visible())
     {
-        CudaComputationBox<T>* cb_cuda_rs = new CudaComputationBox<T>(nx, lx, bc);
-        PropagatorComputation<T>* solver_cuda_rs = make_propagator_computation<T>("cuda", false, cb_cuda_rs, &molecules, &prop_opt, "cn-adi2");
-
-        // Run CUDA real-space solver
-        solver_cuda_rs->compute_propagators({{"A", w.data()}}, {});
-        q_rs = q_init;
-        for (int step = 0; step < n_steps; ++step)
+        std::cout << "  [CUDA RS vs CPU " << (mixed_bc ? "RS" : "PS") << "] " << std::flush;
         {
-            solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
-            std::swap(q_rs, q_out);
-        }
+            CudaComputationBox<T>* cb_cuda_rs = new CudaComputationBox<T>(nx, lx, bc);
+            PropagatorComputation<T>* solver_cuda_rs = make_propagator_computation<T>("cuda", false, cb_cuda_rs, &molecules, &prop_opt, "cn-adi2");
 
-        // Compare CUDA real-space result with CPU reference
-        max_diff = 0.0;
-        for (int i = 0; i < M; ++i)
-            max_diff = std::max(max_diff, std::abs(q_cpu_ref[i] - q_rs[i]));
-        rel_err = max_diff / (*std::max_element(q_cpu_ref.begin(), q_cpu_ref.end()));
+            // Run CUDA real-space solver
+            solver_cuda_rs->compute_propagators({{"A", w.data()}}, {});
+            q_rs = q_init;
+            for (int step = 0; step < n_steps; ++step)
+            {
+                solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
+                std::swap(q_rs, q_out);
+            }
 
-        // For mixed BCs comparing RS vs RS, use tighter tolerance
-        double cuda_tol = mixed_bc ? 1e-10 : tolerance;
-        if (rel_err > cuda_tol)
-        {
-            std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
-            all_passed = false;
-        }
-        else
-        {
-            std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
-        }
+            // Compare CUDA real-space result with CPU reference
+            max_diff = 0.0;
+            for (int i = 0; i < M; ++i)
+                { const double d = std::abs(q_cpu_ref[i] - q_rs[i]); if (std::isnan(d) || d > max_diff) max_diff = d; }  // a NaN stays
+            rel_err = max_diff / (*std::max_element(q_cpu_ref.begin(), q_cpu_ref.end()));
 
-        delete solver_cuda_rs;
-        delete cb_cuda_rs;
+            // For mixed BCs comparing RS vs RS, use tighter tolerance
+            double cuda_tol = mixed_bc ? 1e-10 : tolerance;
+            if (!(rel_err <= cuda_tol))
+            {
+                std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
+                all_passed = false;
+            }
+            else
+            {
+                std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
+            }
+
+            delete solver_cuda_rs;
+            delete cb_cuda_rs;
+        }
     }
 #endif
 #endif

@@ -45,7 +45,7 @@ def initial_fields():
 def main():
     if cpu_platform() is None:
         print("SKIP: no CPU platform in this build")
-        return
+        sys.exit(77)  # ctest SKIP_RETURN_CODE
     failed = []
 
     # A callback returning False stops the run

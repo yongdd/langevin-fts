@@ -19,7 +19,7 @@ static double max_abs_diff(const std::vector<double>& a, const std::vector<doubl
 {
     double err = 0.0;
     for (size_t i = 0; i < a.size(); ++i)
-        err = std::max(err, std::abs(a[i] - b[i]));
+        { const double d = std::abs(a[i] - b[i]); if (std::isnan(d) || d > err) err = d; }  // a NaN stays
     return err;
 }
 
@@ -43,7 +43,7 @@ static void check_roundtrip_1d(int N,
         v /= norm;
 
     double err = max_abs_diff(data, original);
-    if (err > 1e-10)
+    if (!(err <= 1e-10))
     {
         std::cerr << "1D round-trip failed: " << label
                   << " (N=" << N << ", err=" << err << ")\n";
@@ -74,7 +74,7 @@ static void check_roundtrip_2d(int Nx, int Ny,
         v /= norm;
 
     double err = max_abs_diff(data, original);
-    if (err > 1e-10)
+    if (!(err <= 1e-10))
     {
         std::cerr << "2D round-trip failed: " << label
                   << " (Nx=" << Nx << ", Ny=" << Ny << ", err=" << err << ")\n";
@@ -102,7 +102,7 @@ static void check_roundtrip_3d(int Nx, int Ny, int Nz,
         v /= norm;
 
     double err = max_abs_diff(data, original);
-    if (err > 1e-10)
+    if (!(err <= 1e-10))
     {
         std::cerr << "3D round-trip failed: " << label
                   << " (Nx=" << Nx << ", Ny=" << Ny << ", Nz=" << Nz

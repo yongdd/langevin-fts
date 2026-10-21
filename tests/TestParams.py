@@ -70,7 +70,7 @@ def expect_error(cls, params, what):
 def main():
     if cpu_platform() is None:
         print("SKIP: no CPU platform in this build")
-        return 0
+        return 77  # ctest SKIP_RETURN_CODE
     ok = True
 
     # ---- SCFT defaults

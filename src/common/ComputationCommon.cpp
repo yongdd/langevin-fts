@@ -422,10 +422,18 @@ void ComputationCommon<T>::get_block_concentration(int p, T* phi)
             if (key_left < key_right)
                 key_left.swap(key_right);
 
-            auto block_it = phi_block.find(std::make_tuple(p, key_left, key_right));
+            const auto block_key = std::make_tuple(p, key_left, key_right);
+            auto block_it = phi_block.find(block_key);
             if (block_it == phi_block.end())
                 throw_with_line_number("Block (" + std::to_string(p) + ", " + key_left + ", " + key_right + ") is not in phi_block.");
             backend->copy_to_host(&phi[b*N], block_it->second);
+
+            // Identical blocks (e.g. the equal arms of a star) share one entry, which
+            // holds all n_repeated of them; each block gets its share
+            const int n_repeated = this->propagator_computation_optimizer->get_computation_block(block_key).n_repeated;
+            if (n_repeated > 1)
+                for (int i = 0; i < N; i++)
+                    phi[b*N + i] /= static_cast<double>(n_repeated);
         }
     }
     catch (std::exception& exc)

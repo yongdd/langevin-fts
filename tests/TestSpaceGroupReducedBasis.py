@@ -134,7 +134,10 @@ def test_computation_box_reduced_basis():
     field_A = np.random.randn(n_reduced)
     field_B = np.random.randn(n_reduced)
     inner_prod = cb.inner_product(field_A, field_B)
-    print(f"  inner_product computed successfully: {inner_prod:.6f}")
+    # Reference: the same product on the full grid the reduced fields expand to
+    expected_inner_prod = np.sum(sg.from_reduced_basis(field_A) * sg.from_reduced_basis(field_B)) * volume / total_grid
+    assert abs(inner_prod - expected_inner_prod) < 1e-10, f"Inner product failed: {inner_prod} != {expected_inner_prod}"
+    print(f"  inner_product = {inner_prod:.6f} (expected: {expected_inner_prod:.6f})")
 
     # Clear space group
     cb.set_space_group(None)

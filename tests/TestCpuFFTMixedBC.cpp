@@ -311,7 +311,7 @@ int main()
             double expected = dft_real * 0.5;
             double actual = dct_result[k];
 
-            dct_dft_error = std::max(dct_dft_error, std::abs(actual - expected));
+            { const double d = std::abs(actual - expected); if (std::isnan(d) || d > dct_dft_error) dct_dft_error = d; }  // a NaN stays
         }
 
         std::cout << "  DCT-2 vs DFT max error: " << dct_dft_error << std::endl;
@@ -376,7 +376,7 @@ int main()
             double expected = dft_imag * 0.5;
             double actual = dst_result[k];
 
-            dst_dft_error = std::max(dst_dft_error, std::abs(actual - expected));
+            { const double d = std::abs(actual - expected); if (std::isnan(d) || d > dst_dft_error) dst_dft_error = d; }  // a NaN stays
         }
 
         std::cout << "  DST-2 vs DFT max error: " << dst_dft_error << std::endl;

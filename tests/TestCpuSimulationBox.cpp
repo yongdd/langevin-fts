@@ -44,11 +44,11 @@ int main()
         std::cout<< "multi inner product: "<< cb.multi_inner_product(2, gm,hm) << std::endl;
         std::cout<< "sum(w): " << sum_w << std::endl;
         
-        if( std::abs(cb.inner_product(g,h)-81.553611) > 1e-5)
+        if( !(std::abs(cb.inner_product(g,h)-81.553611) <= 1e-5))
             return -1;
-        if( std::abs(cb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
+        if( !(std::abs(cb.multi_inner_product(2,gm,hm)+14.391321) <= 1e-5))
             return -1;
-        if( std::abs(sum_w) > 1e-7)
+        if( !(std::abs(sum_w) <= 1e-7))
             return -1;
         return 0;
     }

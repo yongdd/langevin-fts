@@ -28,13 +28,18 @@ The rules it enforces are in CLAUDE.md (Math in Documentation).
 
 ### Benchmarks
 
-```bash
-# Run with SLURM for long benchmarks
-sbatch scripts/slurm_run.sh
+`benchmark_space_group_speed.py` times one phase (`--phase BCC|DG|Sigma|HCP`) on one
+platform (`--platform cpu-fftw|cuda`) with the space group on or off; all three
+options are required. It prints a JSON summary and also writes it to `--output`:
 
-# Or run directly
-python scripts/benchmark_space_group_speed.py
+```bash
+python scripts/benchmark_space_group_speed.py --phase BCC --platform cuda --space-group on --output bcc_cuda_on.json
+python scripts/benchmark_space_group_speed.py --phase BCC --platform cuda --space-group off --output bcc_cuda_off.json
 ```
+
+For long benchmarks submit one SLURM job per combination: replace the `python` line
+of the template `slurm_run.sh` with one of the commands above and run
+`sbatch scripts/slurm_run.sh`.
 
 ### Re-converge Test Fixtures
 
@@ -51,5 +56,13 @@ python scripts/reconverge_phase_fixtures.py --verify               # check: iter
 ### Generate Phase Fields
 
 ```bash
-python scripts/generate_phase_fields.py
+python scripts/generate_phase_fields.py        # all: BCC, FCC, SC, A15, Sigma, HCP, PL
+python scripts/generate_phase_fields.py BCC    # one phase
 ```
+
+The converged fields are written to `scripts/data/<PHASE>.mat` (the directory is
+created if missing). Nothing reads them there: the test fixtures are
+`tests/data/<PHASE>.mat`, and the examples in `examples/scft/phases/` build their own
+initial fields or load the `.mat` files next to them. To replace a test fixture, copy
+the file to `tests/data/` and re-converge it with `reconverge_phase_fixtures.py`
+(above), which also prints the expected free energies for the test.

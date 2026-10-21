@@ -31,6 +31,24 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 int main()
@@ -217,12 +235,15 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda");
-        solver_name_list.push_back("cuda, reduce_memory");
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-2], molecules, propagator_computation_optimizer));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-1], molecules, propagator_computation_optimizer));
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("cuda");
+            solver_name_list.push_back("cuda, reduce_memory");
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-2], molecules, propagator_computation_optimizer));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-1], molecules, propagator_computation_optimizer));
+        }
         #endif
 
         // For each platform

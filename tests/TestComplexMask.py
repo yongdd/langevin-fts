@@ -27,7 +27,7 @@ def main():
     platform = cpu_platform()
     if platform is None:
         print("SKIP: no CPU platform in this build")
-        return 0
+        return 77  # ctest SKIP_RETURN_CODE
     ok = True
     nx, lx = [8, 8, 8], [2.0, 2.0, 2.0]
     n = int(np.prod(nx))

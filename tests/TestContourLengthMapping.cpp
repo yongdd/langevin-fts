@@ -90,12 +90,12 @@ int main()
         std::cout << "Local ds for 0.3: " << local_ds_03 << std::endl;
         std::cout << "Local ds for 0.505: " << local_ds_0505 << std::endl;
 
-        if (std::abs(local_ds_03 - 0.01) > 1e-10)
+        if (!(std::abs(local_ds_03 - 0.01) <= 1e-10))
         {
             std::cout << "FAILED: local_ds(0.3) should be 0.01" << std::endl;
             return -1;
         }
-        if (std::abs(local_ds_0505 - 0.505 / 51.0) > 1e-10)
+        if (!(std::abs(local_ds_0505 - 0.505 / 51.0) <= 1e-10))
         {
             std::cout << "FAILED: local_ds(0.505) should be 0.505/51" << std::endl;
             return -1;
@@ -206,17 +206,17 @@ int main()
         std::cout << "Index 2 -> length: " << len2 << std::endl;
         std::cout << "Index 3 -> length: " << len3 << std::endl;
 
-        if (std::abs(len1 - 0.3) > 1e-10)
+        if (!(std::abs(len1 - 0.3) <= 1e-10))
         {
             std::cout << "FAILED: get_length_from_index(1) should return 0.3" << std::endl;
             return -1;
         }
-        if (std::abs(len2 - 0.505) > 1e-10)
+        if (!(std::abs(len2 - 0.505) <= 1e-10))
         {
             std::cout << "FAILED: get_length_from_index(2) should return 0.505" << std::endl;
             return -1;
         }
-        if (std::abs(len3 - 0.7) > 1e-10)
+        if (!(std::abs(len3 - 0.7) <= 1e-10))
         {
             std::cout << "FAILED: get_length_from_index(3) should return 0.7" << std::endl;
             return -1;

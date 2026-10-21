@@ -138,6 +138,7 @@ CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
 void CudaCrysFFTObliqueZ::release()
 {
     freeBoltzmann();
+    spare_tables_.clear();
     free_fft_xy();
     dct_forward_z_.reset();
     dct_backward_z_.reset();
@@ -214,6 +215,11 @@ void CudaCrysFFTObliqueZ::free_fft_xy()
 //------------------------------------------------------------------------------
 void CudaCrysFFTObliqueZ::freeBoltzmann()
 {
+    // Keep the device buffers for the tables the next steps rebuild (as CudaCrysFFT
+    // does): the computations synchronize every stream before a cell change, so no
+    // kernel still reads them
+    for (auto& kv : d_boltzmann_)
+        if (!kv.second.empty()) spare_tables_.push_back(std::move(kv.second));
     d_boltzmann_.clear();
     d_boltz_current_ = nullptr;
     ds_current_ = 0.0;
@@ -289,8 +295,20 @@ void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
         }
     }
 
-    CudaDeviceBuffer<double> d_boltz(M_complex_xy_);
-    CUDA_CHECK(cudaMemcpy(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice));
+    // Reuse a dropped table and upload on this object's stream: a cudaMalloc or a
+    // default-stream copy here would serialize every stream inside the propagator loop
+    CudaDeviceBuffer<double> d_boltz;
+    if (!spare_tables_.empty())
+    {
+        d_boltz = std::move(spare_tables_.back());
+        spare_tables_.pop_back();
+    }
+    else
+    {
+        d_boltz.allocate(M_complex_xy_);
+    }
+    CUDA_CHECK(cudaMemcpyAsync(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice, stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));   // h_boltz is about to go out of scope
     d_boltzmann_[ds] = std::move(d_boltz);
 }
 

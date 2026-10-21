@@ -331,7 +331,7 @@ int main()
         std::cout << "  Hexagonal: " << volume_per_cyl_hex << std::endl;
         std::cout << "  Rectangular: " << volume_per_cyl_rect << std::endl;
 
-        if (std::abs(volume_per_cyl_hex - volume_per_cyl_rect) > 1e-10)
+        if (!(std::abs(volume_per_cyl_hex - volume_per_cyl_rect) <= 1e-10))
         {
             std::cout << "ERROR: Volume per cylinder mismatch!" << std::endl;
             return -1;
@@ -380,7 +380,7 @@ int main()
             std::cout << "\nFree energy difference: " << std::scientific << energy_diff << std::endl;
 
             double tolerance_comparison = 1e-4;  // Slightly relaxed for coarse grid
-            if (energy_diff > tolerance_comparison)
+            if (!(energy_diff <= tolerance_comparison))
             {
                 std::cout << "ERROR: Free energies differ by more than " << tolerance_comparison << "!" << std::endl;
                 delete factory;

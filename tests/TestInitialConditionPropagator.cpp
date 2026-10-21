@@ -139,7 +139,7 @@ int main()
                             x_square *= static_cast<double>(N)/static_cast<double>(n-1);
                             std::cout << "n, <x^2>N/(n-1): " << n << ", " << x_square << std::endl;
                         }
-                        if ( std::abs(x_square-1.0) > 1e-2)
+                        if ( !(std::abs(x_square-1.0) <= 1e-2))
                         {
                             std::cout << "The error of x_square (" << x_square-1.0 << ") is not small." << std::endl;
                             return -1;

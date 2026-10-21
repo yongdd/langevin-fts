@@ -89,6 +89,16 @@ int main()
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+        // This test runs on cuda only, which is listed only when a device is visible:
+        // exit 77 (a ctest skip) without one
+        bool has_cuda = false;
+        for(const std::string& name : avail_platforms)
+            has_cuda = has_cuda || (name == "cuda");
+        if(!has_cuda)
+        {
+            std::cout << "SKIP: no visible CUDA device." << std::endl;
+            return 77;
+        }
         std::string chain_model = "Discrete";
         std::vector<bool> aggregate_propagator_computations = {false, true};
         for(std::string platform : avail_platforms)
@@ -145,7 +155,7 @@ int main()
         double sq_sum = std::inner_product(stress_list.begin(), stress_list.end(), stress_list.begin(), 0.0);
         double stddev = std::sqrt(std::abs(sq_sum / stress_list.size() - mean * mean));
         std::cout << "Std. of Stress: " << stddev << std::endl;
-        if (stddev > 1e-7)
+        if (!(stddev <= 1e-7))
             return -1;
 
         return 0;

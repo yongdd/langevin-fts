@@ -38,6 +38,7 @@
  * with partition functions that are reasonably close (within ~10-30% depending on grid).
  */
 
+#include <cstdlib>
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -62,6 +63,24 @@
 
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 /**
@@ -355,9 +374,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_physical_test<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 
@@ -380,9 +402,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_physical_test<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 
@@ -405,9 +430,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_physical_test<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_physical_test<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 
@@ -441,9 +469,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_comparison<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 
@@ -466,9 +497,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_comparison<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 
@@ -491,9 +525,12 @@ int main()
             #endif
 
             #ifdef USE_CUDA
-            if (!run_comparison<CudaComputationBox>(
-                    "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
-                all_passed = false;
+            if (cuda_device_visible())
+            {
+                if (!run_comparison<CudaComputationBox>(
+                        "CUDA", nx, lx, &molecules, &prop_opt, tolerance, "cuda"))
+                    all_passed = false;
+            }
             #endif
         }
 

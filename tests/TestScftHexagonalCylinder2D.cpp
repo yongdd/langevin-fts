@@ -138,7 +138,7 @@ int main()
             // V = a * b * sin(gamma) for 2D hexagonal
             double expected_volume = L * L * std::sin(120.0 * PI / 180.0);
             std::cout << "Expected volume (a*b*sin(gamma)): " << expected_volume << std::endl;
-            if (std::abs(cb->get_volume() - expected_volume) > 1e-10)
+            if (!(std::abs(cb->get_volume() - expected_volume) <= 1e-10))
             {
                 std::cout << "ERROR: Volume mismatch!" << std::endl;
                 return -1;
@@ -302,7 +302,7 @@ int main()
             // Check mass conservation
             double mass_error = std::abs((cb->integral(phi_a) + cb->integral(phi_b)) / cb->get_volume() - 1.0);
             std::cout << "Mass error: " << std::scientific << mass_error << std::endl;
-            if (mass_error > 1e-10)
+            if (!(mass_error <= 1e-10))
             {
                 std::cout << "ERROR: Mass not conserved!" << std::endl;
                 return -1;
@@ -312,7 +312,7 @@ int main()
             // Check that phi_a integrates to f
             double phi_a_avg = cb->integral(phi_a) / cb->get_volume();
             std::cout << "Average phi_A: " << phi_a_avg << " (target: " << f << ")" << std::endl;
-            if (std::abs(phi_a_avg - f) > 1e-6)
+            if (!(std::abs(phi_a_avg - f) <= 1e-6))
             {
                 std::cout << "ERROR: phi_A average mismatch!" << std::endl;
                 return -1;

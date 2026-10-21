@@ -63,6 +63,12 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
             throw_with_line_number("Real-space method only supports orthogonal unit cells. "
                                    "Use pseudo-spectral method (chain_model='continuous') for non-orthogonal systems.");
 
+        // The tridiagonal solvers need at least two points on every axis
+        for (int d = 0; d < cb->get_dim(); d++)
+            if (cb->get_nx(d) < 2)
+                throw_with_line_number("Real-space method needs at least 2 grid points on every axis, got nx["
+                                       + std::to_string(d) + "] = " + std::to_string(cb->get_nx(d)) + ".");
+
         // for(size_t i=0; i<cb->get_boundary_conditions().size(); i++)
         // {
         //     if (cb->get_boundary_condition(i) == BoundaryCondition::PERIODIC)

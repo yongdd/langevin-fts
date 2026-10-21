@@ -388,7 +388,7 @@ void MklFFT<T, DIM>::applyDCT2Forward(double* data, double* temp, int dim)
             {
                 fft_in[n / 2] = std::complex<double>(slice[n - 1], 0.0);
             }
-            else
+            else if (n > 1)  // odd n; a single point has only fft_in[0]
             {
                 int k = n / 2;
                 double x_2k = slice[2 * k];
@@ -563,7 +563,7 @@ void MklFFT<T, DIM>::applyDST2Forward(double* data, double* temp, int dim)
                 // Even n: last complex element
                 fft_in[n / 2] = std::complex<double>(-slice[n - 1], 0.0);
             }
-            else
+            else if (n > 1)  // odd n; a single point has only fft_in[0]
             {
                 // Odd n: last complex element
                 int k = n / 2;

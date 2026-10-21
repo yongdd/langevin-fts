@@ -117,7 +117,12 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_lx", py::overload_cast<int>(&ComputationBox<T>::get_lx, py::const_))
         .def("get_dx", py::overload_cast<>(&ComputationBox<T>::get_dx, py::const_))
         .def("get_dx", py::overload_cast<int>(&ComputationBox<T>::get_dx, py::const_))
-        .def("get_dv", &ComputationBox<T>::get_dv)
+        .def("get_dv", [](const ComputationBox<T>& obj, int i)
+        {
+            if (i < 0 || i >= obj.get_total_grid())
+                throw_with_line_number("Index (" + std::to_string(i) + ") must be in range [0, " + std::to_string(obj.get_total_grid() - 1) + "]");
+            return obj.get_dv(i);
+        })
         .def("get_total_grid", &ComputationBox<T>::get_total_grid)
         .def("get_volume", &ComputationBox<T>::get_volume)
         .def("get_angles", &ComputationBox<T>::get_angles)
@@ -248,7 +253,6 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         {
             try{
                 const int N = obj.get_cb()->get_n_basis();
-                const int M = obj.get_cb()->get_total_grid();
                 const bool use_reduced = (obj.get_space_group() != nullptr);
 
                 std::map<std::string, const T*> map_buf_w_input;
@@ -264,15 +268,16 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                     map_buf_w_input[it->first] = (const T*)buf_w_input.ptr;
                 }
 
-                // Handle q_init if provided (always full grid)
+                // Handle q_init if provided: in the same basis as w (reduced with a space group),
+                // which is the layout the computations copy
                 if (!q_init.is_none()) {
                     std::map<std::string, array_in<const T>> q_init_map = q_init.cast<std::map<std::string, array_in<const T>>>();
 
                     for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
                     {
                         py::buffer_info buf_q_init = it->second.request();
-                        if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+                        if (buf_q_init.size != N) {
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
                         }
                         map_buf_q_init[it->first] = (const T*)buf_q_init.ptr;
                     }
@@ -558,7 +563,8 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         .def("create_propagator_computation", &AbstractFactory<T>::create_propagator_computation,
             py::arg("cb"), py::arg("molecules"), py::arg("propagator_computation_optimizer"),
             py::arg("numerical_method"), py::arg("space_group") = nullptr,
-            py::keep_alive<0, 2>(), py::keep_alive<0, 3>(), py::keep_alive<0, 4>(), py::keep_alive<0, 6>())
+            py::keep_alive<0, 2>(), py::keep_alive<0, 3>(), py::keep_alive<0, 4>(), py::keep_alive<0, 6>(),
+            py::keep_alive<2, 6>())  // the constructor also sets the space group on the box
         .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
         .def("display_info", &AbstractFactory<T>::display_info);
 }
@@ -617,12 +623,55 @@ static py::array_t<double> sg_output_like(const py::buffer_info& in, int n_field
     return py::array_t<double>({static_cast<py::ssize_t>(n_fields), static_cast<py::ssize_t>(n_out)});
 }
 
+// Converts the Python block list [[monomer_type, contour_length, v, u], ...]
+static std::vector<BlockInput> to_block_inputs(const std::vector<std::vector<py::object>>& block_list)
+{
+    if (block_list.empty())
+        throw_with_line_number("A polymer needs at least one block.");
+    std::vector<BlockInput> block_inputs;
+    for (size_t b = 0; b < block_list.size(); b++)
+    {
+        const auto& py_block = block_list[b];
+        if (py_block.size() != 4)
+            throw_with_line_number("Block " + std::to_string(b) + " has " + std::to_string(py_block.size()) +
+                " entries; a block is [monomer_type, contour_length, v, u].");
+        BlockInput block;
+        block.monomer_type = py::cast<std::string>(py_block[0]);
+        block.contour_length = py::cast<double>(py_block[1]);
+        block.v = py::cast<int>(py_block[2]);
+        block.u = py::cast<int>(py_block[3]);
+        block_inputs.push_back(block);
+    }
+    return block_inputs;
+}
+
 PYBIND11_MODULE(_core, m)
 {
     // Grid-size limits of the 32-bit grid indices (GridLimits.h)
     m.attr("MAX_GRID_POINTS") = MAX_GRID_POINTS;
     m.attr("MAX_GRID_ARRAY") = MAX_GRID_ARRAY;
 
+
+    py::class_<Block>(m, "Block")
+        .def_readonly("monomer_type", &Block::monomer_type)
+        .def_readonly("n_segment", &Block::n_segment)
+        .def_readonly("contour_length", &Block::contour_length)
+        .def_readonly("v", &Block::v)
+        .def_readonly("u", &Block::u);
+
+    py::class_<ComputationEdge>(m, "ComputationEdge")
+        .def_readonly("max_n_segment", &ComputationEdge::max_n_segment)
+        .def_readonly("monomer_type", &ComputationEdge::monomer_type)
+        .def_readonly("deps", &ComputationEdge::deps)
+        .def_readonly("height", &ComputationEdge::height)
+        .def_readonly("junction_ends", &ComputationEdge::junction_ends);
+
+    py::class_<ComputationBlock>(m, "ComputationBlock")
+        .def_readonly("monomer_type", &ComputationBlock::monomer_type)
+        .def_readonly("n_segment_left", &ComputationBlock::n_segment_left)
+        .def_readonly("n_segment_right", &ComputationBlock::n_segment_right)
+        .def_readonly("n_repeated", &ComputationBlock::n_repeated)
+        .def_readonly("v_u", &ComputationBlock::v_u);
 
     py::class_<Polymer>(m, "Polymer")
         .def("get_alpha", &Polymer::get_alpha)
@@ -648,29 +697,11 @@ PYBIND11_MODULE(_core, m)
         .def("get_n_polymer_types", &Molecules::get_n_polymer_types)
         .def("add_polymer", [](Molecules& obj, double volume_fraction, std::vector<std::vector<py::object>> block_list)
         {
-            std::vector<BlockInput> block_inputs;
-            for (const auto& py_block : block_list) {
-                BlockInput block;
-                block.monomer_type = py::cast<std::string>(py_block[0]);
-                block.contour_length = py::cast<double>(py_block[1]);
-                block.v = py::cast<int>(py_block[2]);
-                block.u = py::cast<int>(py_block[3]);
-                block_inputs.push_back(block);
-            }
-            obj.add_polymer(volume_fraction, block_inputs, {});
+            obj.add_polymer(volume_fraction, to_block_inputs(block_list), {});
         })
         .def("add_polymer", [](Molecules& obj, double volume_fraction, std::vector<std::vector<py::object>> block_list, std::map<int, std::string> chain_end_to_q_init)
         {
-            std::vector<BlockInput> block_inputs;
-            for (const auto& py_block : block_list) {
-                BlockInput block;
-                block.monomer_type = py::cast<std::string>(py_block[0]);
-                block.contour_length = py::cast<double>(py_block[1]);
-                block.v = py::cast<int>(py_block[2]);
-                block.u = py::cast<int>(py_block[3]);
-                block_inputs.push_back(block);
-            }
-            obj.add_polymer(volume_fraction, block_inputs, chain_end_to_q_init);
+            obj.add_polymer(volume_fraction, to_block_inputs(block_list), chain_end_to_q_init);
         })
         .def("get_polymer", &Molecules::get_polymer)
         .def("get_n_solvent_types", &Molecules::get_n_solvent_types)
@@ -838,11 +869,13 @@ Example:
 
             if (type == "real")
             {
-                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory));
+                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory),
+                                py::return_value_policy::take_ownership);
             }
             else if (type == "complex")
             {
-                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory));
+                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory),
+                                py::return_value_policy::take_ownership);
             }
             else {
                 throw std::runtime_error("Invalid type parameter. Must be either 'real' or 'complex'");

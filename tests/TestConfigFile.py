@@ -52,7 +52,7 @@ complex: "(-8)**0.5*np.pi"
 def main():
     if cpu_platform() is None:
         print("SKIP: no CPU platform in this build")
-        return
+        sys.exit(77)  # ctest SKIP_RETURN_CODE
     failed = []
     cwd = os.getcwd()
     with tempfile.TemporaryDirectory() as d:

@@ -200,7 +200,7 @@ bool test_same_segment_pairs(
                   << ", Q2=" << r2.Q
                   << ", rel_diff=" << Q_rel_diff << std::endl;
 
-        if (Q_rel_diff > TOLERANCE)
+        if (!(Q_rel_diff <= TOLERANCE))
         {
             std::cout << "    FAILED: Q relative difference " << Q_rel_diff
                       << " > " << TOLERANCE << std::endl;
@@ -217,7 +217,7 @@ bool test_same_segment_pairs(
                 double s_max = std::max(std::abs(r1.stress[i]), std::abs(r2.stress[i]));
                 double s_rel_diff = s_diff / (s_max + 1e-15);
 
-                if (s_rel_diff > TOLERANCE && s_diff > 1e-12)
+                if (!(s_rel_diff <= TOLERANCE) && !(s_diff <= 1e-12))
                 {
                     std::cout << "    FAILED: stress[" << i << "] relative difference " << s_rel_diff
                               << " > " << TOLERANCE

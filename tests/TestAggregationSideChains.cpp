@@ -261,10 +261,11 @@ int main()
                             solver->get_total_concentration("B", phi_b);
 
                             // Check the total partition function
-                            #ifndef NDEBUG
-                            if (iter == 0)
-                                solver->check_total_partition();
-                            #endif
+                            if (iter == 0 && !solver->check_total_partition())
+                            {
+                                std::cout << "check_total_partition() failed." << std::endl;
+                                return -1;
+                            }
 
                             // Compute stress
                             solver->compute_stress();
@@ -355,7 +356,7 @@ int main()
             double sq_sum = std::inner_product(energy_total_list.begin(), energy_total_list.end(), energy_total_list.begin(), 0.0);
             double stddev = std::sqrt( std::abs(sq_sum / energy_total_list.size() - mean * mean ));
             std::cout << "Std. of energy_level: " << stddev << std::endl;
-            if (stddev > 1e-7)
+            if (!(stddev <= 1e-7))
                 return -1;
         }
         return 0;

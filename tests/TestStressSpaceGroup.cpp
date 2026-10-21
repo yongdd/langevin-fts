@@ -538,10 +538,15 @@ int main()
         // ================= Run all platform / chain-model combinations =================
         // Any CPU platform (cpu-mkl or cpu-fftw) MUST run for BOTH chain models:
         // the CPU CrysFFT stress path and the discrete+space-group path are the
-        // regressions this test protects. Exceptions on CPU are failures, not
-        // skips; only CUDA combinations may be skipped (e.g. discrete+space-group
-        // is not supported on CUDA).
+        // regressions this test protects. An exception on any listed platform
+        // is a failure. CUDA is listed only when a device is visible
+        // (PlatformSelector::avail_platforms checks cudaGetDeviceCount), so a
+        // CUDA build on a node without a GPU skips the CUDA part here.
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+        #ifdef USE_CUDA
+        if (std::find(avail_platforms.begin(), avail_platforms.end(), "cuda") == avail_platforms.end())
+            std::cout << "No visible CUDA device: the CUDA part was skipped." << std::endl;
+        #endif
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         bool ran_cpu_continuous = false;
         bool ran_cpu_discrete = false;
@@ -563,17 +568,10 @@ int main()
                     }
                     catch(std::exception& exc)
                     {
-                        if (is_cpu)
-                        {
-                            std::cout << "ERROR: CPU combination (" << platform << ", "
-                                      << chain_model << ", " << cs->name << ") threw:" << std::endl;
-                            std::cout << exc.what() << std::endl;
-                            return -1;
-                        }
-                        std::cout << "Note: skipping unsupported combination (" << platform
-                                  << ", " << chain_model << ", " << cs->name << "):" << std::endl;
+                        std::cout << "ERROR: combination (" << platform << ", "
+                                  << chain_model << ", " << cs->name << ") threw:" << std::endl;
                         std::cout << exc.what() << std::endl;
-                        continue;
+                        return -1;
                     }
                 }
                 if (is_cpu && chain_model == "Continuous")

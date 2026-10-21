@@ -21,7 +21,7 @@ static double max_abs_diff(const std::vector<double>& a, const std::vector<doubl
 {
     double err = 0.0;
     for (size_t i = 0; i < a.size(); ++i)
-        err = std::max(err, std::abs(a[i] - b[i]));
+        { const double d = std::abs(a[i] - b[i]); if (std::isnan(d) || d > err) err = d; }  // a NaN stays
     return err;
 }
 
@@ -61,7 +61,7 @@ static void check_1d(int N, MklTransformType type, double tol)
     mkl.execute(mkl_out.data());
 
     double err = max_abs_diff(fftw_out, mkl_out);
-    if (err > tol)
+    if (!(err <= tol))
     {
         std::cerr << "1D mismatch (" << getTransformName(type)
                   << ", N=" << N << "): max error " << err << "\n";
@@ -91,7 +91,7 @@ static void check_2d(int Nx, int Ny, MklTransformType type, double tol)
     mkl.execute(mkl_out.data());
 
     double err = max_abs_diff(fftw_out, mkl_out);
-    if (err > tol)
+    if (!(err <= tol))
     {
         std::cerr << "2D mismatch (" << getTransformName(type)
                   << ", Nx=" << Nx << ", Ny=" << Ny
@@ -123,7 +123,7 @@ static void check_3d(int Nx, int Ny, int Nz, MklTransformType type, double tol)
     mkl.execute(mkl_out.data());
 
     double err = max_abs_diff(fftw_out, mkl_out);
-    if (err > tol)
+    if (!(err <= tol))
     {
         std::cerr << "3D mismatch (" << getTransformName(type)
                   << ", Nx=" << Nx << ", Ny=" << Ny << ", Nz=" << Nz

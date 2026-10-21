@@ -206,7 +206,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
     double max_error = 0.0;
     for (int i = 0; i < N; ++i)
     {
-        max_error = std::max(max_error, std::abs(q_out[i] - expected_q_out[i]));
+        { const double d = std::abs(q_out[i] - expected_q_out[i]); if (std::isnan(d) || d > max_error) max_error = d; }  // a NaN stays
     }
     std::cout << "\nMax error vs notebook: " << std::scientific << max_error << std::fixed << std::endl;
 

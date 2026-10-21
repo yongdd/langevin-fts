@@ -194,12 +194,13 @@ static void fft_dct2(double* data, int N, MklFFTHandle& fft,
     thread_local std::vector<double> fft_out;
     thread_local std::vector<double> result;
 
+    // Each buffer grows on its own: N = 6 then N = 7 keeps complex_size at 4 but needs 7 doubles
     if (static_cast<int>(fft_in.size()) < complex_size)
-    {
         fft_in.resize(complex_size);
+    if (static_cast<int>(fft_out.size()) < N)
         fft_out.resize(N);
+    if (static_cast<int>(result.size()) < N)
         result.resize(N);
-    }
 
     // DCT-II preprocessing: rearrange into complex format
     fft_in[0] = std::complex<double>(data[0], 0.0);
@@ -315,12 +316,13 @@ static void fft_dst2(double* data, int N, MklFFTHandle& fft,
     thread_local std::vector<double> fft_out;
     thread_local std::vector<double> result;
 
+    // Each buffer grows on its own: N = 6 then N = 7 keeps complex_size at 4 but needs 7 doubles
     if (static_cast<int>(fft_in.size()) < complex_size)
-    {
         fft_in.resize(complex_size);
+    if (static_cast<int>(fft_out.size()) < N)
         fft_out.resize(N);
+    if (static_cast<int>(result.size()) < N)
         result.resize(N);
-    }
 
     // DST-II preprocessing: create complex for IFFT
     fft_in[0] = std::complex<double>(data[0], 0.0);

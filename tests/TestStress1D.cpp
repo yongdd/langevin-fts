@@ -82,6 +82,16 @@ int main()
 
         // Choose platform (cpu-fftw only for 1D)
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+        // This test runs on cpu-fftw only: exit 77 (a ctest skip) when the build
+        // has no FFTW backend
+        bool has_cpu_fftw = false;
+        for(const std::string& name : avail_platforms)
+            has_cpu_fftw = has_cpu_fftw || (name == "cpu-fftw");
+        if(!has_cpu_fftw)
+        {
+            std::cout << "SKIP: this test needs cpu-fftw, which this build does not have." << std::endl;
+            return 77;
+        }
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
         // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
         std::vector<std::string> numerical_methods_discrete = {"rqm4"};
@@ -287,7 +297,7 @@ int main()
                     double max_val = std::max(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
                     double rel_diff = diff / (max_val + 1e-10);
                     std::cout << "  Relative difference (stress, aggregation): " << rel_diff << std::endl;
-                    if (rel_diff > 1e-7) {
+                    if (!(rel_diff <= 1e-7)) {
                         std::cout << "ERROR: Stress values differ too much between aggregated and non-aggregated!" << std::endl;
                         return -1;
                     }

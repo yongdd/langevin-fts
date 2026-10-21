@@ -118,8 +118,12 @@ static double rel_diff(const std::vector<T>& a, const std::vector<T>& b, int n)
     double scale = 0.0, diff = 0.0;
     for (int i = 0; i < n; ++i)
     {
+        // std::max drops a NaN; return it so that no tolerance accepts it
+        const double d = std::abs(a[i] - b[i]);
+        if (!std::isfinite(d))
+            return d;
         scale = std::max(scale, std::abs(a[i]));
-        diff = std::max(diff, std::abs(a[i] - b[i]));
+        diff = std::max(diff, d);
     }
     return diff / std::max(scale, 1e-12);
 }
@@ -174,7 +178,7 @@ int main()
                     double rel_q = std::abs(partition - partition_reference) / std::abs(partition_reference);
                     std::cout << "    vs " << platforms[0] << ": stress rel diff " << rel_s
                               << ", Q rel diff " << rel_q << std::endl;
-                    if (rel_s > 1e-8 || rel_q > 1e-10)
+                    if (!(rel_s <= 1e-8) || !(rel_q <= 1e-10))
                     {
                         std::cout << "ERROR: platforms disagree" << std::endl;
                         ok = false;
@@ -186,7 +190,7 @@ int main()
             // RK2 and RQM4 differ by the O(ds^2) splitting error only
             double rel_m = rel_diff(stress_of_method["Continuous/rqm4"], stress_of_method["Continuous/rk2"], dim);
             std::cout << grid.name << ": RK2 vs RQM4 stress rel diff " << rel_m << std::endl;
-            if (rel_m > 5e-2)
+            if (!(rel_m <= 5e-2))
             {
                 std::cout << "ERROR: RK2 and RQM4 stresses disagree" << std::endl;
                 ok = false;

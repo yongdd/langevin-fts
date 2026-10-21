@@ -26,6 +26,11 @@ full-grid computation with the identical symmetrized field:
      (An unweighted mean over the reduced basis would be wrong because
      orbits have unequal sizes - phi is expanded to the full grid first.)
   4. Mask + space group, per the contract actually implemented (below).
+  5. A chain grafted at node 0 (q_init passed in the field basis):
+     SG-on vs SG-off on each platform with the tolerances of item 1.
+  6. The real-space method cn-adi2 (continuous chains, orthogonal cells):
+     SG-on vs SG-off on each platform and CPU-SG vs CUDA-SG, with the
+     tolerances of item 1 (no stress).
 
 Both space-group basis modes are covered:
   - "physical" basis (m3 -> pmmm auto-enable for orthogonal cells, z-mirror
@@ -208,7 +213,8 @@ def make_mask(nx, lx, sg_full):
 
 
 def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
-                          use_sg, reduce_memory=False, angles=None):
+                          use_sg, reduce_memory=False, angles=None,
+                          numerical_method="rqm4", with_stress=True):
     """Unmasked run through the public PropagatorSolver interface.
     Returns Q, expanded full-grid phi, check_total_partition, stress[0:3]."""
     solver = PropagatorSolver(
@@ -216,7 +222,7 @@ def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
         bond_lengths=dict(BOND_LENGTHS),
         bc=list(BC),
         chain_model=chain_model,
-        numerical_method="rqm4" if chain_model == "continuous" else None,
+        numerical_method=numerical_method if chain_model == "continuous" else None,
         platform=platform,
         reduce_memory=reduce_memory,
         angles=angles,
@@ -234,9 +240,40 @@ def run_propagator_solver(platform, chain_model, nx, lx, sg, w_full, w_reduced,
         if use_sg:
             p = solver.from_reduced_basis(p)
         phi[m] = np.asarray(p).flatten()
-    solver.compute_stress()
-    stress = np.asarray(solver.get_stress())[:3].astype(float)
+    stress = None
+    if with_stress:
+        solver.compute_stress()
+        stress = np.asarray(solver.get_stress())[:3].astype(float)
     return dict(Q=Q, chk=chk, phi=phi, stress=stress)
+
+
+def run_grafted(platform, chain_model, nx, lx, sg, w_full, w_reduced, q_full,
+                use_sg, angles=None):
+    """AB diblock grafted at node 0 with q_init; with a space group q_init is
+    passed in the reduced basis like the fields."""
+    solver = PropagatorSolver(
+        nx=list(nx), lx=list(lx), ds=DS,
+        bond_lengths=dict(BOND_LENGTHS), bc=list(BC),
+        chain_model=chain_model,
+        numerical_method="rqm4" if chain_model == "continuous" else None,
+        platform=platform, angles=angles,
+        space_group=sg if use_sg else None)
+    solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]],
+                       grafting_points={0: "G"})
+    w_in = w_reduced if use_sg else w_full
+    q_in = sg.to_reduced_basis(q_full.reshape(1, -1))[0] if use_sg else q_full
+    solver.compute_propagators({"A": w_in["A"].copy(), "B": w_in["B"].copy()},
+                               q_init={"G": np.ascontiguousarray(q_in)})
+    Q = solver.get_partition_function(0)
+    chk = solver.check_total_partition()
+    solver.compute_concentrations()
+    phi = {}
+    for m in ["A", "B"]:
+        p = np.asarray(solver.get_concentration(m)).flatten()
+        if use_sg:
+            p = sg.from_reduced_basis(p.reshape(1, -1))[0]
+        phi[m] = np.asarray(p).flatten()
+    return dict(Q=Q, chk=chk, phi=phi)
 
 
 def run_masked(platform, chain_model, nx, lx, sg, w_full, w_reduced, mask,
@@ -372,6 +409,43 @@ def main():
                         check(max_dphi < TOL_PHI_ABS,
                               f"{tag}: pointwise phi max abs diff "
                               f"{max_dphi:.3e} < {TOL_PHI_ABS}")
+
+                # ---- grafted chain: q_init in the field basis ----
+                # q_init built from the symmetric field, so it is invariant
+                # under the full group like the fields
+                q_full = np.exp(-0.1 * w_full["A"]).flatten()
+                for platform in platforms:
+                    tag = f"{case_name}/{mode}/{chain_model}/{platform}/grafted"
+                    control = run_grafted(platform, chain_model, nx, lx, sg,
+                                          w_full, w_reduced, q_full, use_sg=False, angles=angles)
+                    sg_run = run_grafted(platform, chain_model, nx, lx, sg,
+                                         w_full, w_reduced, q_full, use_sg=True, angles=angles)
+                    check(control["chk"], f"{tag}: SG-off check_total_partition()")
+                    check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
+                    compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,
+                                 with_stress=False)
+
+                # ---- real-space CN-ADI2 with SG (orthogonal cells only):
+                # ---- SG-on vs SG-off per platform, then CPU vs CUDA ----
+                if chain_model == "continuous" and angles is None:
+                    cnadi = {}
+                    for platform in platforms:
+                        tag = f"{case_name}/{mode}/cn-adi2/{platform}"
+                        control = run_propagator_solver(
+                            platform, chain_model, nx, lx, sg, w_full, w_reduced,
+                            use_sg=False, numerical_method="cn-adi2", with_stress=False)
+                        sg_run = run_propagator_solver(
+                            platform, chain_model, nx, lx, sg, w_full, w_reduced,
+                            use_sg=True, numerical_method="cn-adi2", with_stress=False)
+                        cnadi[platform] = sg_run
+                        check(control["chk"], f"{tag}: SG-off check_total_partition()")
+                        check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
+                        compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,
+                                     with_stress=False)
+                    if has_cuda:
+                        for cpu in cpu_platforms:
+                            tag = f"{case_name}/{mode}/cn-adi2/{cpu}-SG vs cuda-SG"
+                            compare_runs(tag, cnadi[cpu], cnadi["cuda"], with_stress=False)
 
                 # ---- mask + SG (supported for both chain models on all
                 # ---- platforms; factory API, see module docstring) ----

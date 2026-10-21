@@ -29,6 +29,7 @@ private:
     std::array<double, 6> recip_metric_;
 
     std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
+    std::vector<CudaDeviceBuffer<double>> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
     double* d_boltz_current_{nullptr};   ///< Table of ds_current_ in d_boltzmann_ (not owning)
     double ds_current_{0.0};
 

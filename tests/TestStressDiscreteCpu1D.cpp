@@ -88,6 +88,16 @@ int main()
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+        // This test runs on cpu-fftw only: exit 77 (a ctest skip) when the build
+        // has no FFTW backend
+        bool has_cpu_fftw = false;
+        for(const std::string& name : avail_platforms)
+            has_cpu_fftw = has_cpu_fftw || (name == "cpu-fftw");
+        if(!has_cpu_fftw)
+        {
+            std::cout << "SKIP: this test needs cpu-fftw, which this build does not have." << std::endl;
+            return 77;
+        }
         std::string chain_model = "Discrete";
         std::vector<bool> aggregate_propagator_computations = {false, true};
         std::vector<bool> reduce_memorys = {false, true};
@@ -149,7 +159,7 @@ int main()
         double sq_sum = std::inner_product(stress_list.begin(), stress_list.end(), stress_list.begin(), 0.0);
         double stddev = std::sqrt(std::abs(sq_sum / stress_list.size() - mean * mean));
         std::cout << "Std. of Stress: " << stddev << std::endl;
-        if (stddev > 1e-7)
+        if (!(stddev <= 1e-7))
             return -1;
 
         return 0;

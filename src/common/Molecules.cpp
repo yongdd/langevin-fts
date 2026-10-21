@@ -144,6 +144,9 @@ int Molecules::get_n_polymer_types() const
 }
 Polymer& Molecules::get_polymer(const int p)
 {
+    if (p < 0 || p >= static_cast<int>(polymer_types.size()))
+        throw_with_line_number("Polymer index (" + std::to_string(p) + ") must be in range [0, " +
+            std::to_string(static_cast<int>(polymer_types.size()) - 1) + "]");
     return polymer_types[p];
 }
 const std::map<std::string, double>& Molecules::get_bond_lengths() const

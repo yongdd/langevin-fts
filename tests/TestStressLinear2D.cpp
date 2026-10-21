@@ -379,10 +379,16 @@ int main()
                             double dGamma_rad = dGamma * M_PI / 180.0;
                             double dh_dgamma = (energy_total_1-energy_total_2)/dGamma_rad;
 
-                            // Compute conversion factor: dH/dgamma = -factor × stress[2]
-                            double factor_gamma = -dh_dgamma / stress[2];
-                            std::cout << "    dH/dgamma (numerical): " << dh_dgamma << ", Stress[2]: " << stress[2];
-                            std::cout << ", factor: " << factor_gamma << std::endl;
+                            // stress[2] = +dH/dgamma (gamma in radians, docs/theory/StressTensor.md)
+                            std::cout << "    dH/dgamma (numerical): " << dh_dgamma << ", Stress[2]: " << stress[2] << std::endl;
+                            double abs_err = std::abs(dh_dgamma-stress[2]);
+                            double rel_err = abs_err/(std::abs(stress[2])+1e-10);
+                            std::cout << "    Relative error: " << rel_err << std::endl;
+                            bool pass = (rel_err < 1e-3) || (abs_err < 1e-6 && std::abs(stress[2]) < 1e-6);
+                            if (!std::isfinite(rel_err) || !pass) {
+                                std::cout << "ERROR: dF/dgamma mismatch! rel_err=" << rel_err << std::endl;
+                                return -1;
+                            }
                         }
                     }
 
@@ -401,7 +407,7 @@ int main()
                     double max_val0 = std::max(std::abs(model_stress_list_0[0]), std::abs(model_stress_list_0[1]));
                     double rel_diff0 = diff0 / (max_val0 + 1e-10);
                     std::cout << "  Relative difference (stress[0], aggregation): " << rel_diff0 << std::endl;
-                    if (rel_diff0 > 1e-7) {
+                    if (!(rel_diff0 <= 1e-7)) {
                         std::cout << "ERROR: Stress[0] values differ too much between aggregated and non-aggregated!" << std::endl;
                         return -1;
                     }
@@ -411,7 +417,7 @@ int main()
                     double max_val1 = std::max(std::abs(model_stress_list_1[0]), std::abs(model_stress_list_1[1]));
                     double rel_diff1 = diff1 / (max_val1 + 1e-10);
                     std::cout << "  Relative difference (stress[1], aggregation): " << rel_diff1 << std::endl;
-                    if (rel_diff1 > 1e-7) {
+                    if (!(rel_diff1 <= 1e-7)) {
                         std::cout << "ERROR: Stress[1] values differ too much between aggregated and non-aggregated!" << std::endl;
                         return -1;
                     }

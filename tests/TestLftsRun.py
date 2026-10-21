@@ -62,7 +62,7 @@ def quiet(fn, *args, **kwargs):
 def main():
     if cpu_platform() is None:
         print("SKIP: no CPU platform in this build")
-        return 0
+        return 77  # ctest SKIP_RETURN_CODE
     ok = True
     root = tempfile.mkdtemp(prefix="polymerfts_lfts_")
     atexit.register(shutil.rmtree, root, ignore_errors=True)

@@ -9,6 +9,7 @@ This script runs a fixed number of SCFT iterations and reports timing.
 import argparse
 import json
 import os
+import sys
 import time
 from typing import Dict
 
@@ -16,8 +17,12 @@ import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 import scipy.io
 
-# Ensure consistent CPU threading
-os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "0")
+# Threading, read when polymerfts loads. CPU runs use one core
+# (OMP_MAX_ACTIVE_LEVELS=0 disables OpenMP); on CUDA 0 would also run the
+# propagator streams one after another, so GPU runs keep 1 and compute
+# OMP_NUM_THREADS propagators concurrently (CUDA streams, up to 4).
+_on_cuda = any("cuda" in arg for arg in sys.argv[1:])
+os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1" if _on_cuda else "0")
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 from polymerfts import scft
@@ -284,7 +289,9 @@ def main():
     print(json.dumps(result, indent=2))
 
     if args.output:
-        os.makedirs(os.path.dirname(args.output), exist_ok=True)
+        out_dir = os.path.dirname(args.output)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
 

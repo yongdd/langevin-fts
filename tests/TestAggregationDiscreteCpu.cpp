@@ -67,6 +67,16 @@ int main()
         // Choose platform
         std::string chain_model = "Discrete";
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+        // This test runs on cpu-fftw only: exit 77 (a ctest skip) when the build
+        // has no FFTW backend
+        bool has_cpu_fftw = false;
+        for(const std::string& name : avail_platforms)
+            has_cpu_fftw = has_cpu_fftw || (name == "cpu-fftw");
+        if(!has_cpu_fftw)
+        {
+            std::cout << "SKIP: this test needs cpu-fftw, which this build does not have." << std::endl;
+            return 77;
+        }
         std::vector<bool> aggregate_propagator_computations = {false, true};
         std::vector<bool> reduce_memorys = {false, true};
         std::vector<double> total_partition_list;
@@ -127,9 +137,9 @@ int main()
                 sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                 std::cout<< "Mass error, total partitions" << std::endl;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
+                std::cout<< "\t[";
                 sum_total_partition = 0.0;
-                for(int p=1; p<molecules->get_n_polymer_types(); p++)
+                for(int p=0; p<molecules->get_n_polymer_types(); p++)
                 {
                     sum_total_partition += solver->get_total_partition(p);
                     std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
@@ -149,7 +159,7 @@ int main()
             double sq_sum = std::inner_product(total_partition_list.begin(), total_partition_list.end(), total_partition_list.begin(), 0.0);
             double stddev = std::sqrt( std::abs(sq_sum / total_partition_list.size() - mean * mean ));
             std::cout << "Std. of sum_total_partition: " << stddev << std::endl;
-            if (stddev > 1e-7)
+            if (!(stddev <= 1e-7))
                 return -1;
         }
         return 0;

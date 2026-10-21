@@ -31,6 +31,24 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 int main()
@@ -249,18 +267,21 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list.push_back("pseudo, cuda");
-        solver_name_list.push_back("pseudo, cuda, aggregated");
-        solver_name_list.push_back("pseudo, cuda, reduce_memory");
-        solver_name_list.push_back("pseudo, cuda, reduce_memory, aggregated");
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-4], molecules, propagator_computation_optimizer_1, "rqm4"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-3], molecules, propagator_computation_optimizer_2, "rqm4"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-2], molecules, propagator_computation_optimizer_1, "rqm4"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-1], molecules, propagator_computation_optimizer_2, "rqm4"));
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("pseudo, cuda");
+            solver_name_list.push_back("pseudo, cuda, aggregated");
+            solver_name_list.push_back("pseudo, cuda, reduce_memory");
+            solver_name_list.push_back("pseudo, cuda, reduce_memory, aggregated");
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-4], molecules, propagator_computation_optimizer_1, "rqm4"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.end()[-3], molecules, propagator_computation_optimizer_2, "rqm4"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-2], molecules, propagator_computation_optimizer_1, "rqm4"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, cb_list.end()[-1], molecules, propagator_computation_optimizer_2, "rqm4"));
+        }
         #endif
 
         std::vector<std::vector<double>> stress_list {{},{},{}};
@@ -347,7 +368,7 @@ int main()
             double sq_sum = std::inner_product(stress_list[i].begin(), stress_list[i].end(), stress_list[i].begin(), 0.0);
             double stddev = std::sqrt(std::abs(sq_sum / stress_list[i].size() - mean * mean));
             std::cout << "Std. of Stress[" + std::to_string(i) + "]: " << stddev << std::endl;
-            if (stddev > 1e-7)
+            if (!(stddev <= 1e-7))
                 return -1;
         }
         return 0;

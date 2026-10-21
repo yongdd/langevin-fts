@@ -9,6 +9,7 @@
  * failure to the user rather than modifying the test to pass.
  ******************************************************************************/
 
+#include <cstdlib>
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -26,6 +27,24 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 int main()
@@ -106,11 +125,14 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        repeat += 2;
-        solver_name_list.push_back("cuda, absorbing");
-        solver_name_list.push_back("cuda, absorbing, reduce_memory");
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+        if (cuda_device_visible())
+        {
+            repeat += 2;
+            solver_name_list.push_back("cuda, absorbing");
+            solver_name_list.push_back("cuda, absorbing, reduce_memory");
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "cn-adi2"));
+        }
         #endif
 
         #ifdef USE_CPU_FFTW
@@ -128,10 +150,13 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda, reflecting");
-        solver_name_list.push_back("cuda, reflecting, reduce_memory");
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("cuda, reflecting");
+            solver_name_list.push_back("cuda, reflecting, reduce_memory");
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "cn-adi2"));
+        }
         #endif
 
         #ifdef USE_CPU_FFTW
@@ -149,10 +174,13 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda, periodic");
-        solver_name_list.push_back("cuda, periodic, reduce_memory");
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
-        solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("cuda, periodic");
+            solver_name_list.push_back("cuda, periodic, reduce_memory");
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+            solver_list.push_back(make_propagator_computation<double>("cuda", true, new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "cn-adi2"));
+        }
         #endif
 
         // For each platform

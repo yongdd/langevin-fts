@@ -374,7 +374,9 @@ class PropagatorSolver:
         q_init : dict, optional
             Custom initial conditions for grafting points.
             Keys are string labels matching those in grafting_points.
-            Values are numpy arrays of shape matching the grid.
+            Values are numpy arrays in the same basis as w_fields (n_grid
+            entries: the reduced basis when a space group is set; convert a
+            full-grid array with to_reduced_basis).
             Example: {"G": delta_function_array}
         """
         self._initialize_solver()

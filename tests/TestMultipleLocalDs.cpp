@@ -61,6 +61,24 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 int main()
@@ -172,9 +190,12 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda");
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.back(), molecules, propagator_computation_optimizer, "rqm4"));
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("cuda");
+            cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list.push_back(make_propagator_computation<double>("cuda", false, cb_list.back(), molecules, propagator_computation_optimizer, "rqm4"));
+        }
         #endif
 
         // For each platform
@@ -219,7 +240,7 @@ int main()
             }
             // With random fields, concentration may deviate from 1.0
             // Use 10% tolerance since we're mainly testing that computation works
-            if (std::abs(sum_phi - 1.0) > 0.1)
+            if (!(std::abs(sum_phi - 1.0) <= 0.1))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi << std::endl;
                 return -1;
@@ -346,9 +367,12 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list_star.push_back("cuda");
-        cb_list_star.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list_star.push_back(make_propagator_computation<double>("cuda", false, cb_list_star.back(), molecules_star, optimizer_star, "rqm4"));
+        if (cuda_device_visible())
+        {
+            solver_name_list_star.push_back("cuda");
+            cb_list_star.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list_star.push_back(make_propagator_computation<double>("cuda", false, cb_list_star.back(), molecules_star, optimizer_star, "rqm4"));
+        }
         #endif
 
         for(size_t n=0; n<solver_list_star.size(); n++)
@@ -389,7 +413,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (std::abs(sum_phi_star - 1.0) > 0.1)
+            if (!(std::abs(sum_phi_star - 1.0) <= 0.1))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_star << std::endl;
                 return -1;
@@ -529,9 +553,12 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list_homo.push_back("cuda");
-        cb_list_homo.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list_homo.push_back(make_propagator_computation<double>("cuda", false, cb_list_homo.back(), molecules_homo, optimizer_homo, "rqm4"));
+        if (cuda_device_visible())
+        {
+            solver_name_list_homo.push_back("cuda");
+            cb_list_homo.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list_homo.push_back(make_propagator_computation<double>("cuda", false, cb_list_homo.back(), molecules_homo, optimizer_homo, "rqm4"));
+        }
         #endif
 
         for(size_t n=0; n<solver_list_homo.size(); n++)
@@ -571,7 +598,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (std::abs(sum_phi_homo - 1.0) > 0.1)
+            if (!(std::abs(sum_phi_homo - 1.0) <= 0.1))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_homo << std::endl;
                 return -1;
@@ -744,18 +771,21 @@ int main()
         #endif
 
         #ifdef USE_CUDA
-        solver_name_list_brush.push_back("cuda");
-        solver_name_list_brush.push_back("cuda, aggregated");
-        solver_name_list_brush.push_back("cuda, reduce_memory");
-        solver_name_list_brush.push_back("cuda, reduce_memory, aggregated");
-        cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list_brush.push_back(make_propagator_computation<double>("cuda", false, cb_list_brush.end()[-4], molecules_brush, optimizer_brush, "rqm4"));
-        solver_list_brush.push_back(make_propagator_computation<double>("cuda", false, cb_list_brush.end()[-3], molecules_brush, optimizer_brush_agg, "rqm4"));
-        solver_list_brush.push_back(make_propagator_computation<double>("cuda", true, cb_list_brush.end()[-2], molecules_brush, optimizer_brush, "rqm4"));
-        solver_list_brush.push_back(make_propagator_computation<double>("cuda", true, cb_list_brush.end()[-1], molecules_brush, optimizer_brush_agg, "rqm4"));
+        if (cuda_device_visible())
+        {
+            solver_name_list_brush.push_back("cuda");
+            solver_name_list_brush.push_back("cuda, aggregated");
+            solver_name_list_brush.push_back("cuda, reduce_memory");
+            solver_name_list_brush.push_back("cuda, reduce_memory, aggregated");
+            cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_list_brush.push_back(make_propagator_computation<double>("cuda", false, cb_list_brush.end()[-4], molecules_brush, optimizer_brush, "rqm4"));
+            solver_list_brush.push_back(make_propagator_computation<double>("cuda", false, cb_list_brush.end()[-3], molecules_brush, optimizer_brush_agg, "rqm4"));
+            solver_list_brush.push_back(make_propagator_computation<double>("cuda", true, cb_list_brush.end()[-2], molecules_brush, optimizer_brush, "rqm4"));
+            solver_list_brush.push_back(make_propagator_computation<double>("cuda", true, cb_list_brush.end()[-1], molecules_brush, optimizer_brush_agg, "rqm4"));
+        }
         #endif
 
         // Store results for comparison
@@ -807,7 +837,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (std::abs(sum_phi_brush - 1.0) > 0.1)
+            if (!(std::abs(sum_phi_brush - 1.0) <= 0.1))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_brush << std::endl;
                 return -1;
@@ -835,7 +865,7 @@ int main()
                       << ", phi_b_diff=" << phi_b_diff
                       << ", sum_phi_diff=" << sum_phi_diff << std::endl;
 
-            if (Q_diff > 1e-12 || phi_a_diff > 1e-12 || phi_b_diff > 1e-12 || sum_phi_diff > 1e-12)
+            if (!(Q_diff <= 1e-12) || !(phi_a_diff <= 1e-12) || !(phi_b_diff <= 1e-12) || !(sum_phi_diff <= 1e-12))
             {
                 std::cout << "FAILED: Results differ too much between variants" << std::endl;
                 all_match = false;

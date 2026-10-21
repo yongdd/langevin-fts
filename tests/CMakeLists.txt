@@ -97,7 +97,9 @@ FILE(GLOB FILE_LIST "Test*.py")
 FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     ADD_TEST(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${FILE_NAME})
-    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_BINARY_DIR}/python")
+    # Exit code 77: skipped (e.g. the test needs a CPU platform this build lacks)
+    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                                                 SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 
@@ -128,6 +130,9 @@ FOREACH(FILE_NAME ${FILE_LIST})
     ELSE()
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
     ENDIF()
+    # Exit code 77: skipped (the platform the test needs is missing: cpu-fftw
+    # in an MKL-only build, or a visible GPU)
+    SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 

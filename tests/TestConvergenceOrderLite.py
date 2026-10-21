@@ -79,6 +79,6 @@ def test_convergence_order_lite_rqm4_and_rk2():
 if __name__ == "__main__":
     if _get_platform() is None:
         print("SKIP: no CPU platform in this build")
-        sys.exit(0)
+        sys.exit(77)  # ctest SKIP_RETURN_CODE
     test_convergence_order_lite_rqm4_and_rk2()
     print("Test passed, convergence orders")

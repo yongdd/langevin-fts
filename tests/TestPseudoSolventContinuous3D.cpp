@@ -31,6 +31,24 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+#include <cuda_runtime.h>
+// A CUDA build can run on a node without a visible GPU: the CPU part of this
+// test then runs alone and the CUDA part is reported as skipped.
+[[maybe_unused]] static bool cuda_device_visible()
+{
+    int n_devices = 0;
+    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
+    static bool reported = false;
+    if (!visible && !reported)
+    {
+        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
+        reported = true;
+#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
+        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
+#endif
+    }
+    return visible;
+}
 #endif
 
 typedef double T;
@@ -127,8 +145,11 @@ int main()
         solver_name_list.push_back("cpu-mkl continuous, reduce memory, Aggregation=false");
         #endif
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda continuous, Aggregation=false");
-        solver_name_list.push_back("cuda continuous, reduce memory, Aggregation=false");
+        if (cuda_device_visible())
+        {
+            solver_name_list.push_back("cuda continuous, Aggregation=false");
+            solver_name_list.push_back("cuda continuous, reduce memory, Aggregation=false");
+        }
         #endif
 
         #ifdef USE_CPU_FFTW
@@ -144,10 +165,13 @@ int main()
         solver_1_list.push_back(make_propagator_computation<T>("cpu-mkl", true, cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "rqm4"));
         #endif
         #ifdef USE_CUDA
-        cb_1_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_1_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_1_list.push_back(make_propagator_computation<T>("cuda", false, cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1, "rqm4"));
-        solver_1_list.push_back(make_propagator_computation<T>("cuda", true, cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "rqm4"));
+        if (cuda_device_visible())
+        {
+            cb_1_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_1_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_1_list.push_back(make_propagator_computation<T>("cuda", false, cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1, "rqm4"));
+            solver_1_list.push_back(make_propagator_computation<T>("cuda", true, cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "rqm4"));
+        }
         #endif
 
         #ifdef USE_CPU_FFTW
@@ -163,10 +187,13 @@ int main()
         solver_2_list.push_back(make_propagator_computation<T>("cpu-mkl", true, cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2, "rqm4"));
         #endif
         #ifdef USE_CUDA
-        cb_2_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_2_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_2_list.push_back(make_propagator_computation<T>("cuda", false, cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2, "rqm4"));
-        solver_2_list.push_back(make_propagator_computation<T>("cuda", true, cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2, "rqm4"));
+        if (cuda_device_visible())
+        {
+            cb_2_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            cb_2_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+            solver_2_list.push_back(make_propagator_computation<T>("cuda", false, cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2, "rqm4"));
+            solver_2_list.push_back(make_propagator_computation<T>("cuda", true, cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2, "rqm4"));
+        }
         #endif
 
         // For each platform    

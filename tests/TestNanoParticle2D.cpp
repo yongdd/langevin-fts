@@ -188,9 +188,9 @@ int main()
                         sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                         std::cout<< "Mass error, total partitions" << std::endl;
                         std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                        std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
+                        std::cout<< "\t[";
                         sum_total_partition = 0.0;
-                        for(int p=1; p<molecules->get_n_polymer_types(); p++)
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++)
                         {
                             sum_total_partition += solver->get_total_partition(p);
                             std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
@@ -212,7 +212,7 @@ int main()
             double sq_sum = std::inner_product(total_partition_list.begin(), total_partition_list.end(), total_partition_list.begin(), 0.0);
             double stddev = std::sqrt( std::abs(sq_sum / total_partition_list.size() - mean * mean ));
             std::cout << "Std. of sum_total_partition: " << stddev << std::endl;
-            if (stddev > 1e-7)
+            if (!(stddev <= 1e-7))
                 return -1;
         }
         return 0;
