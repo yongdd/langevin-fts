@@ -117,35 +117,6 @@ private:
     int min_of_two(int x, int y);
 
     /**
-     * @brief Advance propagator in 3D using ADI splitting.
-     *
-     * @param bc          Boundary conditions for each direction
-     * @param q_in        Input propagator
-     * @param q_out       Output propagator
-     * @param monomer_type Monomer type for coefficients
-     * @param ds_index    Index for ds value (0-based) from ContourLengthMapping
-     */
-    void advance_propagator_3d(
-        std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type, int ds_index);
-
-    /**
-     * @brief Advance propagator in 2D using ADI splitting.
-     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
-     */
-    void advance_propagator_2d(
-        std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type, int ds_index);
-
-    /**
-     * @brief Advance propagator in 1D (direct solve).
-     * @param ds_index Index for ds value (0-based) from ContourLengthMapping
-     */
-    void advance_propagator_1d(
-        std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type, int ds_index);
-
-    /**
      * @brief Single ADI step with specified coefficients.
      *
      * Core implementation of the ADI step. This method performs:

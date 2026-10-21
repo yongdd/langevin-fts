@@ -266,7 +266,9 @@ void CpuSolverCNADI::advance_propagator_step(
 {
     const int M = this->cb->get_total_grid();
     const int DIM = this->cb->get_dim();
-    double q_temp[M];
+    thread_local std::vector<double> q_temp_buffer;   // reused: no allocation per step, no VLA on the stack
+    q_temp_buffer.resize(M);
+    double* q_temp = q_temp_buffer.data();
 
     // Apply starting Boltzmann factor: exp(-w*h/2)
     for(int i=0; i<M; i++)
@@ -294,298 +296,10 @@ void CpuSolverCNADI::advance_propagator_step(
             q_out[i] *= q_mask[i];
     }
 }
-void CpuSolverCNADI::advance_propagator_3d(
-    std::vector<BoundaryCondition> bc,
-    double *q_in, double *q_out, std::string monomer_type, int ds_index)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-        double q_star[M];
-        double q_dstar[M];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
-        double temp3[nx[2]];
-
-        double *_xl = xl.at(ds_index).at(monomer_type).data();
-        double *_xd = xd.at(ds_index).at(monomer_type).data();
-        double *_xh = xh.at(ds_index).at(monomer_type).data();
-
-        double *_yl = yl.at(ds_index).at(monomer_type).data();
-        double *_yd = yd.at(ds_index).at(monomer_type).data();
-        double *_yh = yh.at(ds_index).at(monomer_type).data();
-
-        double *_zl = zl.at(ds_index).at(monomer_type).data();
-        double *_zd = zd.at(ds_index).at(monomer_type).data();
-        double *_zh = zh.at(ds_index).at(monomer_type).data();
-
-        int im, ip, jm, jp, km, kp;
-
-        // Calculate q_star
-        for(int j=0;j<nx[1];j++)
-        {
-            if (bc[2] == BoundaryCondition::PERIODIC)
-                jm = (nx[1]+j-1) % nx[1];
-            else
-                jm = max_of_two(0,j-1);
-            if (bc[3] == BoundaryCondition::PERIODIC)
-                jp = (j+1) % nx[1];
-            else
-                jp = min_of_two(nx[1]-1,j+1);
-
-            for(int k=0;k<nx[2];k++)
-            {
-                if (bc[4] == BoundaryCondition::PERIODIC)
-                    km = (nx[2]+k-1) % nx[2];
-                else
-                    km = max_of_two(0,k-1);
-                if (bc[5] == BoundaryCondition::PERIODIC)
-                    kp = (k+1) % nx[2];
-                else
-                    kp = min_of_two(nx[2]-1,k+1);
-
-                // B part of Ax=B matrix equation
-                for(int i=0;i<nx[0];i++)
-                {
-                    if (bc[0] == BoundaryCondition::PERIODIC)
-                        im = (nx[0]+i-1) % nx[0];
-                    else
-                        im = max_of_two(0,i-1);
-                    if (bc[1] == BoundaryCondition::PERIODIC)
-                        ip = (i+1) % nx[0];
-                    else
-                        ip = min_of_two(nx[0]-1,i+1);
-
-                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
-                    int im_j_k = im*nx[1]*nx[2] + j*nx[2] + k;
-                    int ip_j_k = ip*nx[1]*nx[2] + j*nx[2] + k;
-                    int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
-                    int i_jp_k = i*nx[1]*nx[2] + jp*nx[2] + k;
-                    int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
-                    int i_j_kp = i*nx[1]*nx[2] + j*nx[2] + kp;
-
-                    temp1[i] = 2.0*((3.0-0.5*_xd[i]-_yd[j]-_zd[k])*q_in[i_j_k]
-                            - _zl[k]*q_in[i_j_km] - _zh[k]*q_in[i_j_kp]
-                            - _yl[j]*q_in[i_jm_k] - _yh[j]*q_in[i_jp_k])
-                            - _xl[i]*q_in[im_j_k] - _xh[i]*q_in[ip_j_k];
-                }
-                int j_k = j*nx[2] + k;
-                if (bc[0] == BoundaryCondition::PERIODIC)
-                    tridiagonal_periodic(_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
-                else
-                    tridiagonal         (_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
-            }
-        }
-        // Calculate q_dstar
-        for(int i=0;i<nx[0];i++)
-        {
-            for(int k=0;k<nx[2];k++)
-            {
-                for(int j=0;j<nx[1];j++)
-                {
-                    if (bc[2] == BoundaryCondition::PERIODIC)
-                        jm = (nx[1]+j-1) % nx[1];
-                    else
-                        jm = max_of_two(0,j-1);
-                    if (bc[3] == BoundaryCondition::PERIODIC)
-                        jp = (j+1) % nx[1];
-                    else
-                        jp = min_of_two(nx[1]-1,j+1);
-
-                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
-                    int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
-                    int i_jp_k = i*nx[1]*nx[2] + jp*nx[2] + k;
-
-                    temp2[j] = q_star[i_j_k] + (_yd[j]-1.0)*q_in[i_j_k]
-                        + _yl[j]*q_in[i_jm_k] + _yh[j]*q_in[i_jp_k];
-                }
-                int i_k = i*nx[1]*nx[2] + k;
-                if (bc[2] == BoundaryCondition::PERIODIC)
-                    tridiagonal_periodic(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
-                else
-                    tridiagonal         (_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
-            }
-        }
-
-        // Calculate q^(n+1)
-        for(int i=0;i<nx[0];i++)
-        {
-            for(int j=0;j<nx[1];j++)
-            {
-                for(int k=0;k<nx[2];k++)
-                {
-                    if (bc[4] == BoundaryCondition::PERIODIC)
-                        km = (nx[2]+k-1) % nx[2];
-                    else
-                        km = max_of_two(0,k-1);
-                    if (bc[5] == BoundaryCondition::PERIODIC)
-                        kp = (k+1) % nx[2];
-                    else
-                        kp = min_of_two(nx[2]-1,k+1);
-
-                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
-                    int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
-                    int i_j_kp = i*nx[1]*nx[2] + j*nx[2] + kp;
-
-                    temp3[k] = q_dstar[i_j_k] + (_zd[k]-1.0)*q_in[i_j_k]
-                        + _zl[k]*q_in[i_j_km] + _zh[k]*q_in[i_j_kp];
-                }
-                int i_j = i*nx[1]*nx[2] + j*nx[2];
-                if (bc[4] == BoundaryCondition::PERIODIC)
-                    tridiagonal_periodic(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
-                else
-                    tridiagonal         (_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CpuSolverCNADI::advance_propagator_2d(
-    std::vector<BoundaryCondition> bc,
-    double *q_in, double *q_out, std::string monomer_type, int ds_index)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-        double q_star[M];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
-
-        double *_xl = xl.at(ds_index).at(monomer_type).data();
-        double *_xd = xd.at(ds_index).at(monomer_type).data();
-        double *_xh = xh.at(ds_index).at(monomer_type).data();
-
-        double *_yl = yl.at(ds_index).at(monomer_type).data();
-        double *_yd = yd.at(ds_index).at(monomer_type).data();
-        double *_yh = yh.at(ds_index).at(monomer_type).data();
-
-        int im, ip, jm, jp;
-
-        // Calculate q_star
-        for(int j=0;j<nx[1];j++)
-        {
-            if (bc[2] == BoundaryCondition::PERIODIC)
-                jm = (nx[1]+j-1) % nx[1];
-            else
-                jm = max_of_two(0,j-1);
-            if (bc[3] == BoundaryCondition::PERIODIC)
-                jp = (j+1) % nx[1];
-            else
-                jp = min_of_two(nx[1]-1,j+1);
-
-            // B part of Ax=B matrix equation
-            for(int i=0;i<nx[0];i++)
-            {
-                if (bc[0] == BoundaryCondition::PERIODIC)
-                    im = (nx[0]+i-1) % nx[0];
-                else
-                    im = max_of_two(0,i-1);
-                if (bc[1] == BoundaryCondition::PERIODIC)
-                    ip = (i+1) % nx[0];
-                else
-                    ip = min_of_two(nx[0]-1,i+1);
-
-                int i_j = i*nx[1] + j;
-                int i_jm = i*nx[1] + jm;
-                int i_jp = i*nx[1] + jp;
-                int im_j = im*nx[1] + j;
-                int ip_j = ip*nx[1] + j;
-
-                temp1[i] = 2.0*((2.0-0.5*_xd[i]-_yd[j])*q_in[i_j]
-                          - _yl[j]*q_in[i_jm] - _yh[j]*q_in[i_jp])
-                          - _xl[i]*q_in[im_j] - _xh[i]*q_in[ip_j];
-            }
-            if (bc[0] == BoundaryCondition::PERIODIC)
-                tridiagonal_periodic(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
-            else
-                tridiagonal         (_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
-        }
-        
-        // for(int i=0;i<M; i++)
-        //     q_out[i] = q_star[i];
-
-        // Calculate q_dstar
-        for(int i=0;i<nx[0];i++)
-        {
-            for(int j=0;j<nx[1];j++)
-            {
-                if (bc[2] == BoundaryCondition::PERIODIC)
-                    jm = (nx[1]+j-1) % nx[1];
-                else
-                    jm = max_of_two(0,j-1);
-                if (bc[3] == BoundaryCondition::PERIODIC)
-                    jp = (j+1) % nx[1];
-                else
-                    jp = min_of_two(nx[1]-1,j+1);
-
-                int i_j = i*nx[1] + j;
-                int i_jm = i*nx[1] + jm;
-                int i_jp = i*nx[1] + jp;
-
-                temp2[j] = q_star[i_j] + (_yd[j]-1.0)*q_in[i_j]
-                    + _yl[j]*q_in[i_jm] + _yh[j]*q_in[i_jp];
-            }
-            if (bc[2] == BoundaryCondition::PERIODIC)
-                tridiagonal_periodic(_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
-            else
-                tridiagonal         (_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CpuSolverCNADI::advance_propagator_1d(
-    std::vector<BoundaryCondition> bc,
-    double *q_in, double *q_out, std::string monomer_type, int ds_index)
-{
-    try
-    {
-        const std::vector<int> nx = this->cb->get_nx();
-        double q_star[nx[0]];
-
-        double *_xl = xl.at(ds_index).at(monomer_type).data();
-        double *_xd = xd.at(ds_index).at(monomer_type).data();
-        double *_xh = xh.at(ds_index).at(monomer_type).data();
-
-        int im, ip;
-
-        for(int i=0;i<nx[0];i++)
-        {
-            if (bc[0] == BoundaryCondition::PERIODIC)
-                im = (nx[0]+i-1) % nx[0];
-            else
-                im = max_of_two(0,i-1);
-            if (bc[1] == BoundaryCondition::PERIODIC)
-                ip = (i+1) % nx[0];
-            else
-                ip = min_of_two(nx[0]-1,i+1);
-
-            // B part of Ax=B matrix equation
-            q_star[i] = (2.0-_xd[i])*q_in[i] - _xl[i]*q_in[im] - _xh[i]*q_in[ip];
-        }
-        if (bc[0] == BoundaryCondition::PERIODIC)
-            tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
-        else
-            tridiagonal         (_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
-
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
 // ============================================================================
-// Step methods with explicit coefficient parameters
+// ADI steps: the 3D, 2D and 1D diffusion solves with the coefficients of one
+// (ds, monomer type) pair; advance_propagator() looks them up
 // ============================================================================
-
 void CpuSolverCNADI::advance_propagator_3d_step(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out,
@@ -597,11 +311,21 @@ void CpuSolverCNADI::advance_propagator_3d_step(
     {
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
-        double q_star[M];
-        double q_dstar[M];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
-        double temp3[nx[2]];
+        thread_local std::vector<double> q_star_buffer;   // reused: no allocation per step, no VLA on the stack
+        q_star_buffer.resize(M);
+        double* q_star = q_star_buffer.data();
+        thread_local std::vector<double> q_dstar_buffer;   // reused: no allocation per step, no VLA on the stack
+        q_dstar_buffer.resize(M);
+        double* q_dstar = q_dstar_buffer.data();
+        thread_local std::vector<double> temp1_buffer;   // reused: no allocation per step, no VLA on the stack
+        temp1_buffer.resize(nx[0]);
+        double* temp1 = temp1_buffer.data();
+        thread_local std::vector<double> temp2_buffer;   // reused: no allocation per step, no VLA on the stack
+        temp2_buffer.resize(nx[1]);
+        double* temp2 = temp2_buffer.data();
+        thread_local std::vector<double> temp3_buffer;   // reused: no allocation per step, no VLA on the stack
+        temp3_buffer.resize(nx[2]);
+        double* temp3 = temp3_buffer.data();
 
         int im, ip, jm, jp, km, kp;
 
@@ -738,9 +462,15 @@ void CpuSolverCNADI::advance_propagator_2d_step(
     {
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
-        double q_star[M];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
+        thread_local std::vector<double> q_star_buffer;   // reused: no allocation per step, no VLA on the stack
+        q_star_buffer.resize(M);
+        double* q_star = q_star_buffer.data();
+        thread_local std::vector<double> temp1_buffer;   // reused: no allocation per step, no VLA on the stack
+        temp1_buffer.resize(nx[0]);
+        double* temp1 = temp1_buffer.data();
+        thread_local std::vector<double> temp2_buffer;   // reused: no allocation per step, no VLA on the stack
+        temp2_buffer.resize(nx[1]);
+        double* temp2 = temp2_buffer.data();
 
         int im, ip, jm, jp;
 
@@ -825,7 +555,9 @@ void CpuSolverCNADI::advance_propagator_1d_step(
     try
     {
         const std::vector<int> nx = this->cb->get_nx();
-        double q_star[nx[0]];
+        thread_local std::vector<double> q_star_buffer;   // reused: no allocation per step, no VLA on the stack
+        q_star_buffer.resize(nx[0]);
+        double* q_star = q_star_buffer.data();
 
         int im, ip;
 
@@ -882,7 +614,11 @@ void CpuSolverCNADI::tridiagonal(
     // xd: b
     // xh: c
 
-    double c_star[M-1];
+    thread_local std::vector<double> c_star_buffer;   // reused: no allocation per step, no VLA on the stack
+
+    c_star_buffer.resize(M-1);
+
+    double* c_star = c_star_buffer.data();
     double temp;
 
     // Forward sweep
@@ -912,8 +648,14 @@ void CpuSolverCNADI::tridiagonal_periodic(
     // xh: c
     // gamma = 1.0
 
-    double c_star[M-1];
-    double q[M];
+    thread_local std::vector<double> c_star_buffer;   // reused: no allocation per step, no VLA on the stack
+
+    c_star_buffer.resize(M-1);
+
+    double* c_star = c_star_buffer.data();
+    thread_local std::vector<double> q_buffer;   // reused: no allocation per step, no VLA on the stack
+    q_buffer.resize(M);
+    double* q = q_buffer.data();
     double temp, value;
 
     // Forward sweep

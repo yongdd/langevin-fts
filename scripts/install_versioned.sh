@@ -26,7 +26,7 @@ WHEEL_DIR="${HOME}/wheels"
 VENV_DIR="${HOME}/venvs"
 USE_MKL=ON
 USE_FFTW=ON
-USE_CUDA=ON
+USE_CUDA=ON      # not AUTO: a wheel must not quietly come out without the GPU backend
 JOBS=4
 SKIP_BUILD=0
 EXTRA_PIP_ARGS=()
@@ -59,7 +59,7 @@ if [[ "${SKIP_BUILD}" -eq 0 && "${USE_CUDA}" != "OFF" ]]; then
     # scikit-build-core keeps its build directories (build/<wheel tag>, see
     # pyproject.toml). One configured with another nvcc keeps that compiler
     # cached, so start it afresh when the nvcc on PATH has changed.
-    NVCC="$(command -v nvcc || true)"
+    NVCC="${CUDACXX:-$(command -v nvcc || true)}"   # the nvcc CMake would pick
     for CACHE in "${ROOT}"/build/cp*-*/CMakeCache.txt; do
         [[ -f "${CACHE}" ]] || continue
         CACHED="$(sed -n 's/^CMAKE_CUDA_COMPILER:[A-Z]*=//p' "${CACHE}")"

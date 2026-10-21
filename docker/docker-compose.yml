@@ -1,5 +1,5 @@
 services:
-  # CPU-only service (FFTW backend)
+  # CPU-only service (MKL backend)
   polymerfts-cpu:
     build:
       context: ..

@@ -108,7 +108,10 @@ commits are omitted.
   partition functions); changing the box size of a masked box with a space group did the
   same, and the accessible volume was not updated when the box changed (2026-10-21).
   `set_space_group` now reduces the full-grid mask each time and commits only after every
-  step succeeded.
+  step succeeded. A computation created without a space group on a box that still held one
+  wrote past its buffers (the backend took the reduced size, the solver worked on the full
+  grid); a computation now sets the box's group, also to none, and refuses to run if a
+  later computation gave the box another one. A group built for another grid is rejected.
 
 ### Interface changes
 
@@ -116,15 +119,22 @@ commits are omitted.
   newer, because the device code is C++20 (nvcc 11.x has no `-std=c++20`; nvcc 12.0/12.1
   cannot compile `std::source_location`). It also needs CMake 3.25.2+ (which passes
   `-std=c++20` to nvcc), a host compiler with `std::source_location` (GCC 11+, Clang 15+)
-  and an NVIDIA driver for CUDA 12 (R525+). `POLYMERFTS_USE_CUDA` is now `AUTO` by default:
-  the GPU backend is built when that toolchain is found, otherwise the configure step warns
-  and builds without it; `ON` makes a missing piece an error, `OFF` skips the check. All
-  checks look at the nvcc that compiles the code. The cuFFT library is the one of that
-  toolkit, also when a conda environment on `CMAKE_PREFIX_PATH` carries CUDA libraries of
-  another version, and the default compute capabilities follow the toolkit (60-90 with
-  CUDA 12, 75-120 with CUDA 13). pip builds (`pyproject.toml`) and the conda recipe require
-  CMake 3.25.2+; the conda recipe builds the FFTW backend; the Docker images use
-  `nvidia/cuda:12.4.1` and build a CPU backend.
+  and an NVIDIA driver for the toolkit (R550+ for CUDA 12.4). `POLYMERFTS_USE_CUDA` is now
+  `AUTO`, `ON` or `OFF`, `AUTO` by default: the GPU backend is built when that toolchain is
+  found, otherwise the configure step warns, with the reason and the remedy, and builds
+  without it; `ON` makes a missing piece an error, `OFF` skips the check. A build directory
+  of an older version keeps the former BOOL switch, whose `ON` becomes `AUTO`. All checks
+  look at the nvcc that compiles the code (`CMAKE_CUDA_COMPILER`, `CUDACXX` or PATH); a
+  missing or too old one is not kept in the cache, and `-DCMAKE_CUDA_HOST_COMPILER` or
+  `CUDAHOSTCXX` selects its host compiler. The cuFFT library is the one of that toolkit,
+  also when a conda environment on `CMAKE_PREFIX_PATH` carries CUDA libraries of another
+  version, and the default compute capabilities follow the toolkit (60-90 with CUDA 12.2,
+  plus 100 and 120 from 12.8, 75-120 with CUDA 13). pip builds (`pyproject.toml`) and the
+  conda recipe require CMake 3.25.2+; the conda recipe now declares spglib and LAPACKE and
+  builds the MKL backend (FFTW would make the Apache-2.0 package GPL-bound), and the Docker
+  images (`nvidia/cuda:12.4.1`) build MKL as well. `POLYMERFTS_INSTALL_HEADERS` now also
+  installs the static libraries and exports `polymerfts::polymerfts_backends`, so a
+  downstream project can `find_package(polymerfts)`.
 - CUDA error checks follow the CUDA C++ Best Practices Guide (2026-10-21): every kernel launch
   is followed by a `cudaGetLastError()` check, and the cuFFT, CUB and runtime calls whose
   return codes were ignored (about 210) are checked. Before, about half the launches were
@@ -157,7 +167,11 @@ commits are omitted.
   streams and events are counted too (`count_*`/`release_*` helpers), so the tests check
   that every object releases them; a failed `cufftDestroy` no longer clears an unrelated
   error (cuFFT has its own runtime). The CUDA CrysFFT solver step no longer copies the
-  bond-length map, and the FFTW ObliqueZ step reads its profiling variable once.
+  bond-length map, and the FFTW ObliqueZ step reads its profiling variable once. The CPU
+  CN-ADI solver keeps its work arrays in reused per-thread buffers instead of grid-sized
+  variable-length arrays on the stack (a GCC extension; 2 MB each at 64^3, several per
+  step), and the duplicate copies of the CN-ADI step functions, unused on both
+  platforms, were removed (about 500 lines).
 - The Python layer is organised for researchers: each simulation class reads its options
   straight from the `params` dictionary, and the package has fewer files (`compressor.py`
   merged into `lfts.py`; `config.py` and `io.py` into `utils.py`; `result.py` into
@@ -312,7 +326,7 @@ commits are omitted.
   thread-local maps keyed by the object's address, so they are released when the object
   is destroyed (long sessions that create many solvers no longer accumulate stale
   tables in every worker thread).
-- Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
+- Build: C++20, CMake 3.18+ (3.25.2+ for the GPU backend), spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
   errors (on in CI); the LAPACKE header may be `mkl_lapacke.h` (conda-forge's MKL build of
   liblapacke ships no `lapacke.h`); `POLYMERFTS_CUDA_ARCHITECTURES` selects the compute capabilities;

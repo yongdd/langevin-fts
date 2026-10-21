@@ -4135,6 +4135,9 @@ static void create_axis_plan(
 
 void CudaRealTransform2D::init()
 {
+    // Called once, from the constructor: a second call would leak the plans
+    if (initialized_ || plan_x_created_ || plan_y_created_)
+        throw_with_line_number("CudaRealTransform2D::init() called on an initialized transform.");
     M_ = Nx_ * Ny_;
 
     // Calculate FFT sizes
@@ -4254,9 +4257,9 @@ void CudaRealTransform2D::set_stream(cudaStream_t stream)
     stream_ = stream;
     if (initialized_)
     {
-        if (plan_x_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
+        if (plan_x_created_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
             throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform2D (plan_x)");
-        if (plan_y_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
+        if (plan_y_created_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
             throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform2D (plan_y)");
     }
 }
@@ -4656,6 +4659,9 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
 
 void CudaRealTransform3D::init()
 {
+    // Called once, from the constructor: a second call would leak the plans
+    if (initialized_ || plan_x_created_ || plan_y_created_ || plan_z_created_)
+        throw_with_line_number("CudaRealTransform3D::init() called on an initialized transform.");
     // DCT-1: uses optimized 3D FFT approach with mirror extension
     if (type_x_ == CUDA_DCT_1 && type_y_ == CUDA_DCT_1 && type_z_ == CUDA_DCT_1) {
         M_ = (Nx_ + 1) * (Ny_ + 1) * (Nz_ + 1);
@@ -4818,11 +4824,11 @@ void CudaRealTransform3D::set_stream(cudaStream_t stream)
     stream_ = stream;
     if (initialized_)
     {
-        if (plan_x_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
+        if (plan_x_created_ && cufftSetStream(plan_x_, stream_) != CUFFT_SUCCESS)
             throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_x)");
-        if (plan_y_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
+        if (plan_y_created_ && cufftSetStream(plan_y_, stream_) != CUFFT_SUCCESS)
             throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_y)");
-        if (plan_z_ && cufftSetStream(plan_z_, stream_) != CUFFT_SUCCESS)
+        if (plan_z_created_ && cufftSetStream(plan_z_, stream_) != CUFFT_SUCCESS)
             throw std::runtime_error("Failed to set cuFFT stream for CudaRealTransform3D (plan_z)");
     }
 }

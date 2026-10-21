@@ -21,7 +21,30 @@ This document describes the class hierarchies, design patterns, and development 
 
 ## 1. Overview
 
-[Architecture.md](Architecture.md) shows all classes, their ownership and one iteration through them on one page.
+The layers, from the Python simulation classes down to the platform code:
+
+```
+Python (src/python)
+  SCFT / LFTS / CLFTS ───────────── SymmetricPolymerTheory (χN → auxiliary fields)
+        │
+        ▼
+  PropagatorSolver ──────────────── holds the C++ objects of one simulation
+        │   _core module (src/pybind11)
+════════╪══════════════════════════════════════════════════════════════════════
+C++     ▼
+  PlatformSelector ──► AbstractFactory<T> = MklFactory | FftwFactory | CudaFactory
+        │ creates
+        ├── ComputationBox<T>          CpuComputationBox | CudaComputationBox
+        ├── Molecules, PropagatorComputationOptimizer
+        ├── PropagatorComputation<T>   ComputationContinuous | ComputationDiscrete
+        │      │                       | ComputationReduceMemoryContinuous | ...Discrete
+        │      └── owns ComputationBackend<T> = CpuComputationBackend | CudaComputationBackend
+        │             └── owns the solver: CpuSolver<T> | CudaSolver<T>
+        │                    └── owns the transforms: FFT/DCT/DST, CrysFFT, Pseudo tables
+        └── AndersonMixing<T>          CpuAndersonMixing | CudaAndersonMixing[ReduceMemory]
+```
+
+The computation classes are written once (`src/common/Computation*.cpp`) and decide **what** is computed and in **which order**. Everything that touches grid data goes through `ComputationBackend`, so the CPU and CUDA code differ only below that line.
 
 The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU, GPU) through a unified interface. All major computational classes are templates parameterized on:
 
@@ -39,6 +62,24 @@ src/
 ├── python/           # Python interface modules
 └── pybind11/         # C++/Python bindings
 ```
+
+### One SCFT Iteration Through the Layers
+
+```
+SCFT.run (src/python/scft.py)
+├─ PropagatorSolver.compute_propagators(w)      → ComputationContinuous::compute_propagators
+│   ├─ set_fields: check w and q_init, keep w for solvents, backend.update_dw → solver Boltzmann factors
+│   ├─ for each scheduler group, its propagators concurrently (OpenMP thread i uses stream i):
+│   │     initial condition: set_unity | copy q_init | junction_product | junction_sum, then apply_mask
+│   │     advance_propagator n times → solver: e^{-w ds/2} F⁻¹[ e^{-b²k²ds/6} F[ e^{-w ds/2} q ] ] (+ RQM4 extrapolation)
+│   │   synchronize
+│   └─ Q = inner_product(q, q†) / V
+├─ compute_concentrations, per block: set_zero, add_segment_products (Simpson pairs), normalize_concentration; then solvents
+├─ compute_stress, per block: block_stress (segment pairs) → solver segment stress; sum the blocks; lattice derivatives
+└─ AndersonMixing.calculate_new_fields(w, w_out - w)
+```
+
+Reduce-memory mode runs the same steps one propagator at a time, keeping q only at checkpoints and recomputing the other segments when a sum needs them; the results are the same bit for bit.
 
 ---
 
@@ -76,6 +117,26 @@ AbstractFactory<T>                    [Abstract Base]
 `ComputationDiscrete`, `ComputationReduceMemoryContinuous`,
 `ComputationReduceMemoryDiscrete`), chosen from the chain model and `reduce_memory`. The
 backend creates the solver (`CpuSolver*` or `CudaSolver*`) from the numerical method.
+
+### Platform Implementations
+
+The classes each platform provides (the computation classes above them are shared):
+
+| Role | CPU | CUDA |
+|------|-----|------|
+| Backend | `CpuComputationBackend` | `CudaComputationBackend` |
+| Factory | `MklFactory`, `FftwFactory` | `CudaFactory` |
+| Computation box | `CpuComputationBox` | `CudaComputationBox` |
+| Solver interface | `CpuSolver<T>` | `CudaSolver<T>` |
+| Pseudo-spectral base | `CpuSolverPseudoBase<T>` | `CudaSolverPseudoBase<T>` |
+| Continuous, RQM4 | `CpuSolverPseudoRQM4` | `CudaSolverPseudoRQM4` |
+| Continuous, RK2 | `CpuSolverPseudoRK2` | `CudaSolverPseudoRK2` |
+| Discrete chains | `CpuSolverPseudoDiscrete` | `CudaSolverPseudoDiscrete` |
+| Real space, CN-ADI2 | `CpuSolverCNADI` | `CudaSolverCNADI` |
+| Transforms | `FftwFFT<T,DIM>`, `MklFFT<T,DIM>` (FFT, DCT, DST) | periodic: cuFFT plans in `CudaSolverPseudoBase`; DCT/DST: `CudaFFT<T,DIM>` over `CudaRealTransform` |
+| Fourier-space tables | `Pseudo<T>` | `CudaPseudo<T>` (device copy) |
+| CrysFFT (space groups) | `{Fftw,Mkl}CrysFFT{Pmmm,Recursive3m,ObliqueZ}` | `CudaCrysFFT` (Pmmm), `CudaCrysFFTRecursive3m`, `CudaCrysFFTObliqueZ` |
+| Field update | `CpuAndersonMixing` | `CudaAndersonMixing`, `CudaAndersonMixingReduceMemory` |
 
 ### Platform Selection
 
@@ -124,19 +185,29 @@ ComputationBox<T>                     [Base Class]
 │   ├── lx[3]           - box lengths
 │   ├── dx[3]           - grid spacing
 │   ├── bc[6]           - boundary conditions
-│   └── mask            - impenetrable regions (optional)
+│   ├── mask_full_      - impenetrable regions on the full grid (optional)
+│   └── mask            - the same, reduced, while a space group is set
 ├── Methods:
 │   ├── integral(g)              - ∫g(r)dr
 │   ├── inner_product(g, h)      - ∫g(r)h(r)dr
 │   ├── multi_inner_product()    - sum of inner products
 │   ├── zero_mean(g)             - remove spatial mean
 │   ├── set_lx(lx)               - update box lengths [virtual]
-│   └── set_lattice_parameters() - update with angles [virtual]
+│   ├── set_lattice_parameters() - update with angles [virtual]
+│   └── set_space_group(sg)      - reduced basis on/off [virtual]
         │
         ├── CpuComputationBox<T>      [CPU Memory]
         │
         └── CudaComputationBox<T>     [GPU Memory]
 ```
+
+**Space groups.** `set_space_group(sg)` switches the box to the reduced basis of `sg`
+(or back to the full grid for `nullptr`): `get_n_basis()`, the orbit counts and
+`get_mask()` follow it. It rejects a group built for another grid, reduces the
+full-grid mask afresh every time, and changes nothing if a step fails. A propagator
+computation sets the box's group (also to none) when it is created and refuses to run
+if the box got another group afterwards, so a box can be reused one computation at a
+time but not shared by computations with different groups.
 
 **Boundary Conditions:**
 
@@ -463,16 +534,32 @@ See [Installation.md](../getting-started/Installation.md#testing) for test comma
 
 ### Platform Implementation
 
-When adding new computational features, you must implement them for both platforms unless explicitly platform-specific:
-- `src/common/Computation*.cpp` - the order of the computation, written once (Section 3.2)
-- `src/platforms/cpu/` - CPU implementations (MKL, FFTW): `CpuComputationBackend` and the CPU solvers
-- `src/platforms/cuda/` - CUDA GPU implementations: `CudaComputationBackend` and the CUDA solvers
+When adding new computational features, you must implement them for both platforms unless explicitly platform-specific. Where each kind of change goes:
+
+| To change | Edit |
+|-----------|------|
+| Order of a computation, which segments enter a sum, normalization | `src/common/Computation*.cpp` (once, for both platforms) |
+| A new kind of grid operation | `src/common/ComputationBackend.h` and both backends |
+| A numerical method (advance step, segment stress) | the solvers in `src/platforms/cpu` and `src/platforms/cuda` |
+| Transforms (FFT, DCT, DST) and CrysFFT | the FFT and CrysFFT classes ([FFTImplementation.md](FFTImplementation.md)) |
+| Fourier-space tables | `src/common/Pseudo.cpp` (`CudaPseudo` uploads them) |
+| Which propagators are computed, aggregation | `PropagatorComputationOptimizer`, `PropagatorAggregator` |
+| Concurrent groups | `Scheduler` |
+| Which objects a platform creates | the factories |
+| Simulation loop and parameters | `src/python` |
 
 A change to how propagators, concentrations or stress are assembled belongs in
-the computation classes in `src/common/`; a new kind of grid operation is a new
-`ComputationBackend` operation implemented by both backends.
+the computation classes in `src/common/` (Section 3.2); a new kind of grid
+operation is a new `ComputationBackend` operation implemented by both backends.
 
 ### Memory Management
+
+Who owns whom:
+
+- `PropagatorSolver` (Python) holds the box, the molecules, the optimizer and the computation; the bindings keep the arguments of each object alive while it exists.
+- A computation owns its backend, the scheduler, the concentration fields and the propagator storage; the backend is deleted last.
+- A backend owns its solver, and on CUDA the streams, events and scratch buffers.
+- A solver owns its transforms, its `Pseudo` tables, its CrysFFT objects and its Boltzmann factors.
 
 Allocations are owned by objects that release them, so destructors and constructors
 that throw need no cleanup code:
@@ -497,7 +584,9 @@ with `new` and deliberately never deleted (it lives until the process exits). cu
 explicitly where their order matters (the solver before the streams it runs on); they are
 created through `count_cufft_plan(...)`, `count_cuda_stream(...)` and `count_cuda_event(...)`
 and destroyed with `release_cufft_plan()`, `release_cuda_stream()` and
-`release_cuda_event()`, which keep live counts (`cuda_handle_counters()`). Events used
+`release_cuda_event()`, which keep live counts (`cuda_handle_counters()`); every release
+helper, like `counted_cuda_release()`, takes the resource off the count even when the
+release call fails, and counts the failure in `cuda_release_failures()`. Events used
 only for profiling are `CudaEvent` objects. The CPU FFT classes keep their FFTW/MKL
 plans and descriptors and the `fftw_malloc`-aligned buffers of `FftwFFT`/`FftwCrysFFT*`
 in hand-written `release()` functions, which their destructors call.

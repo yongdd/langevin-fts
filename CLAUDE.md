@@ -67,14 +67,16 @@ For every computation, launch a separate SLURM job for each parameter value inst
 
 ### Software Dependencies
 
-| Dependency | Minimum Version | Notes |
-|------------|-----------------|-------|
+Versions that cover both the CPU and the GPU backend:
+
+| Dependency | Version | Notes |
+|------------|---------|-------|
 | spglib | - | Space group symmetry (required) |
 | LAPACKE | - | Anderson mixing SVD solver (required) |
-| CMake | 3.17+ | Build system (3.25.2+ for the GPU backend: C++20 for nvcc) |
-| C++ Compiler | C++20 support | GCC 10+, Clang 10+ (GPU backend: GCC 11+, Clang 15+ for `std::source_location`) |
+| CMake | 3.25.2+ | Build system; C++20 for nvcc needs 3.25.2 (a CPU-only build works with 3.18) |
+| C++ Compiler | GCC 11–13, Clang 15+ | C++20 with `std::source_location`; nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it |
 | Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
-| CUDA Toolkit | 12.2+ | For GPU support (device code is C++20) |
+| CUDA Toolkit | 12.4+ (12.2 minimum) | GPU backend (device code is C++20); driver R550+ for 12.4, R580+ for 13 |
 | MKL | - | CPU FFT backend (via conda) |
 | FFTW | 3.3+ | Alternative CPU backend (GPL, optional) |
 | pybind11 | 2.13+ | Python bindings |
@@ -113,8 +115,8 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MK
 ### Important Build Notes
 
 - Requires C++20 standard for host and device code (set in CMakeLists.txt)
-- CUDA Toolkit 12.2+ required for GPU support: nvcc 11.x has no `-std=c++20`, and nvcc 12.0/12.1 cannot evaluate `std::source_location::current()`. `POLYMERFTS_USE_CUDA` is `AUTO` by default: an older nvcc (the one CMake would compile with), CMake older than 3.25.2, or a C++ compiler or nvcc host compiler without `std::source_location` gives a warning and a build without the GPU backend; with `-DPOLYMERFTS_USE_CUDA=ON` it stops the configure step. The cuFFT library is taken from the toolkit of that nvcc, not from a conda environment's CUDA libraries
-- Compute capabilities: empty `POLYMERFTS_CUDA_ARCHITECTURES` (default) compiles 60-90 with CUDA 12 and 75-120 with CUDA 13+; pass `-DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"` to compile for other GPUs
+- CUDA Toolkit 12.2+ required for GPU support: nvcc 11.x has no `-std=c++20`, and nvcc 12.0/12.1 cannot evaluate `std::source_location::current()`. `POLYMERFTS_USE_CUDA` is `AUTO` by default (`ON`, `OFF` and `AUTO` accepted; a cache from an older version holds a BOOL whose `ON` is converted to `AUTO`): an nvcc older than 12.2 (the one CMake would compile with: `CMAKE_CUDA_COMPILER`, `CUDACXX` or PATH), CMake older than 3.25.2, an nvcc that cannot compile with its host compiler, or a C++ compiler or nvcc host compiler without `std::source_location` gives a warning and a build without the GPU backend; with `-DPOLYMERFTS_USE_CUDA=ON` it stops the configure step. A too-old or missing nvcc is not kept in the cache, so fixing PATH and re-running CMake is enough. `-DCMAKE_CUDA_HOST_COMPILER` and `CUDAHOSTCXX` select nvcc's host compiler. The cuFFT library is taken from the toolkit of that nvcc, not from a conda environment's CUDA libraries
+- Compute capabilities: empty `POLYMERFTS_CUDA_ARCHITECTURES` (default) compiles 60-90 with CUDA 12.2-12.7, adds 100 and 120 with CUDA 12.8+, and 75-120 with CUDA 13+; pass `-DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"` to compile for other GPUs
 - If encountering "Unsupported gpu architecture" errors, drop the unsupported capabilities from that list
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
 - `-DPOLYMERFTS_WERROR=ON` turns host C++ warnings into errors (CI builds with it); keep new C++ warning-free under GCC 13
@@ -245,7 +247,7 @@ The codebase uses the **abstract factory pattern** to support multiple computati
 - **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
 - **Computation and backend**: the propagator computations (`src/common/Computation*.cpp`) are written once; every grid operation goes through `ComputationBackend` (`CpuComputationBackend`, `CudaComputationBackend`), which owns the platform's solver
 
-When adding new computational features, you must implement them for both platforms unless explicitly platform-specific: the order of a computation goes into `src/common/Computation*.cpp` once, new grid operations into both backends, numerical methods into both solver families. `docs/internals/Architecture.md` shows the whole class structure on one page.
+When adding new computational features, you must implement them for both platforms unless explicitly platform-specific: the order of a computation goes into `src/common/Computation*.cpp` once, new grid operations into both backends, numerical methods into both solver families. `docs/internals/DeveloperGuide.md` shows the layers, the classes of each platform, one SCFT iteration and where each kind of change goes.
 
 ### Core Components
 
@@ -659,7 +661,7 @@ Results must match:
 
 - **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
 - **Examples**: `examples/scft/`, `examples/lfts/` and `examples/clfts/` contain runnable simulation scripts
-- **Architecture**: `docs/internals/Architecture.md` (classes, ownership and one iteration on one page)
+- **Architecture**: `docs/internals/DeveloperGuide.md` (layers, class hierarchies, ownership, one SCFT iteration, where to change what)
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 

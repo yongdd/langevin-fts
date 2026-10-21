@@ -140,9 +140,8 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         // Impenetrable region == 0.0
         if (mask != nullptr)
         {
-            this->mask.assign(mask, mask + total_grid);
-            validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
-            mask_full_ = this->mask;
+            mask_full_.assign(mask, mask + total_grid);
+            validation::validate_mask(mask_full_.data(), total_grid, MASK_TOLERANCE);
         }
         // else: mask remains empty (no mask)
 
@@ -154,9 +153,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             for(int d=0; d<DIM; d++)
                 dv[i] *= dx[d];
         }
-        if (!this->mask.empty())
+        if (!mask_full_.empty())
             for(int i=0; i<total_grid; i++)
-                dv[i] *= this->mask[i];
+                dv[i] *= mask_full_[i];
 
         // Volume of simulation box
         volume = 1.0;
@@ -323,9 +322,8 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         // Mask
         if (mask != nullptr)
         {
-            this->mask.assign(mask, mask + total_grid);
-            validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
-            mask_full_ = this->mask;
+            mask_full_.assign(mask, mask + total_grid);
+            validation::validate_mask(mask_full_.data(), total_grid, MASK_TOLERANCE);
         }
         // else: mask remains empty (no mask)
 
@@ -344,9 +342,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         double dv_base = volume / total_grid;  // Volume element
         for(int i=0; i<total_grid; i++)
             dv[i] = dv_base;
-        if (!this->mask.empty())
+        if (!mask_full_.empty())
             for(int i=0; i<total_grid; i++)
-                dv[i] *= this->mask[i];
+                dv[i] *= mask_full_[i];
 
         // Accessible volume
         accessible_volume = 0.0;
@@ -636,7 +634,9 @@ double ComputationBox<T>::get_accessible_volume() const
 template <typename T>
 const double* ComputationBox<T>::get_mask() const
 {
-    return mask.empty() ? nullptr : mask.data();
+    // In the basis of the fields: reduced while a space group is set
+    const std::vector<double>& active = (space_group_ != nullptr) ? mask : mask_full_;
+    return active.empty() ? nullptr : active.data();
 }
 template <typename T>
 const std::vector<BoundaryCondition> ComputationBox<T>::get_boundary_conditions() const
@@ -780,21 +780,35 @@ template <typename T>
 void ComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
     if (sg != nullptr)
+    {
+        // The group's maps index the grid it was built for
+        if (sg->get_nx() != nx)
+        {
+            auto join = [](const std::vector<int>& v) {
+                std::string text;
+                for (size_t d = 0; d < v.size(); ++d)
+                    text += (d ? "x" : "") + std::to_string(v[d]);
+                return text;
+            };
+            throw_with_line_number("The space group was built for a " + join(sg->get_nx())
+                + " grid, but the computation box has " + join(nx) + ".");
+        }
         sg->check_cell(lx, get_angles_degrees());
+    }
 
     // Build the new state first and commit it with moves only, so a failure
     // leaves the box as it was. The mask always starts from the full grid
     // (a box may be given another group, or none, later).
     std::vector<int> new_orbit_counts;
     int new_n_basis = total_grid;
-    std::vector<double> new_mask = mask_full_;
+    std::vector<double> new_mask;           // the reduced mask; empty without a group
     if (sg != nullptr)
     {
         new_orbit_counts = sg->get_orbit_counts();
         new_n_basis = sg->get_n_reduced_basis();
         if (!mask_full_.empty())
         {
-            new_mask.assign(new_n_basis, 0.0);
+            new_mask.resize(new_n_basis);
             sg->to_reduced_basis(mask_full_.data(), new_mask.data(), 1);
         }
     }

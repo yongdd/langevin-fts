@@ -27,8 +27,7 @@
 
 | Document | Description |
 |----------|-------------|
-| [Architecture.md](internals/Architecture.md) | Class structure, ownership and data flow on one page |
-| [DeveloperGuide.md](internals/DeveloperGuide.md) | Developer documentation |
+| [DeveloperGuide.md](internals/DeveloperGuide.md) | Layers, class hierarchies, ownership, one SCFT iteration, where to change what, development practice |
 | [FFTImplementation.md](internals/FFTImplementation.md) | FFT, DCT, DST, CrysFFT implementation |
 | [PropagatorSystem.md](internals/PropagatorSystem.md) | Propagator identification and scheduling |
 | [MemoryManagement.md](internals/MemoryManagement.md) | Memory optimization and checkpointing |

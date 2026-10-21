@@ -148,7 +148,9 @@ def test_masked_box_changes_space_group():
     """A masked box given a space group, then another, then none, computes the
     partition function of a box built fresh for each case: the mask is reduced
     from the full grid every time (it used to stay in the first group's basis,
-    so the later computations read past it)."""
+    so the later computations read past it). Also: a computation whose box got
+    another group refuses to run, a box-size change with a group set keeps the
+    full-grid volume elements, and a group built for another grid is rejected."""
     print("Test 5: masked ComputationBox, space group changed twice and cleared")
     print("-" * 50)
 
@@ -186,22 +188,62 @@ def test_masked_box_changes_space_group():
     sg_sc = _core.SpaceGroup(nx, "Pm-3m", 517)
     assert sg_bcc.get_n_reduced_basis() != sg_sc.get_n_reduced_basis()
 
-    # Reference: a fresh box for every case
+    # Reference: a fresh box for every case. The mask and the field have both
+    # symmetries, so all three cases describe the same system.
     q_bcc = partition(factory.create_computation_box(nx, lx, None, bc, mask), sg_bcc)
     q_sc = partition(factory.create_computation_box(nx, lx, None, bc, mask), sg_sc)
     q_none = partition(factory.create_computation_box(nx, lx, None, bc, mask), None)
     print(f"  fresh boxes: Q(Im-3m) = {q_bcc:.12e}, Q(Pm-3m) = {q_sc:.12e}, Q(none) = {q_none:.12e}")
+    for name, q in (("Im-3m", q_bcc), ("Pm-3m", q_sc)):
+        assert abs(q - q_none) <= 1e-12 * abs(q_none), f"Q({name}) {q} != Q without a group {q_none}"
 
-    # One box, given Im-3m, then Pm-3m, then no group
+    # One box, given Im-3m, then Pm-3m, then no group by a computation created
+    # without one (the computation sets the box's group, also to none)
     cb = factory.create_computation_box(nx, lx, None, bc, mask)
     q1 = partition(cb, sg_bcc)
     q2 = partition(cb, sg_sc)
-    cb.set_space_group(None)
     q3 = partition(cb, None)
     print(f"  one box:     Q(Im-3m) = {q1:.12e}, Q(Pm-3m) = {q2:.12e}, Q(none) = {q3:.12e}")
     for name, q, ref in (("Im-3m", q1, q_bcc), ("Pm-3m", q2, q_sc), ("none", q3, q_none)):
         assert abs(q - ref) <= 1e-10 * abs(ref), f"Q({name}) of the reused box {q} != fresh box {ref}"
     assert cb.get_n_basis() == int(np.prod(nx))
+
+    # A computation whose box got another group later must refuse to run
+    computation_bcc = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", sg_bcc)
+    factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", sg_sc)
+    try:
+        computation_bcc.compute_propagators({"A": sg_bcc.to_reduced_basis(w_full)})
+        raise AssertionError("a computation ran on a box whose space group had been changed")
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"  a computation on a regrouped box refuses to run: {str(e).splitlines()[0][:90]}")
+
+    # A box-size change while a group is set: the volume elements come from the
+    # full-grid mask, so the box then matches a fresh box of the new size
+    lx_new = [4.4, 4.4, 4.4]
+    cb.set_space_group(sg_bcc)
+    cb.set_lx(lx_new)
+    q_resized = partition(cb, sg_bcc)
+    q_resized_none = partition(cb, None)
+    integral_resized = cb.integral(np.ones(int(np.prod(nx))))
+    fresh = factory.create_computation_box(nx, lx_new, None, bc, mask)
+    q_fresh = partition(fresh, None)
+    integral_fresh = fresh.integral(np.ones(int(np.prod(nx))))
+    print(f"  resized box: Q(Im-3m) = {q_resized:.12e}, Q(none) = {q_resized_none:.12e}, fresh {q_fresh:.12e}")
+    assert abs(integral_resized - integral_fresh) <= 1e-12 * abs(integral_fresh), \
+        f"integral of 1 after set_lx {integral_resized} != fresh box {integral_fresh}"
+    for name, q in (("Im-3m", q_resized), ("none", q_resized_none)):
+        assert abs(q - q_fresh) <= 1e-10 * abs(q_fresh), f"Q({name}) after set_lx {q} != fresh box {q_fresh}"
+
+    # A group built for another grid is rejected
+    try:
+        cb.set_space_group(_core.SpaceGroup([8, 8, 8], "Pm-3m", 517))
+        raise AssertionError("a space group for an 8x8x8 grid was accepted on a 16x16x16 box")
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"  a space group for another grid is rejected: {str(e).splitlines()[0][:90]}")
 
     print("  PASSED\n")
 

@@ -36,32 +36,34 @@ modules that a newer version dropped. When upgrading across versions, remove the
 
 ## Dependencies
 
-### Required
-* **Anaconda**: https://www.anaconda.com/download
-* **Python 3.11+** (`environment.yml` installs 3.12)
-* **CMake 3.17+** (3.25.2+ for the GPU backend; `environment.yml` installs 3.31)
-* **C++ Compiler**: C++20 support (GCC 10+; GCC 11+ or Clang 15+ for the GPU backend, which uses `std::source_location`)
-* **spglib**: space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`)
-* **LAPACKE**: Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`; with MKL the header is `mkl_lapacke.h` from `mkl-include`)
-* **pybind11 2.13+**, **NumPy 2.0+**, **SciPy 1.14+**: Python bindings (all in `environment.yml`)
-* **At least one CPU FFT backend**: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`)
+Install these versions: they cover both the CPU and the GPU backend, so one setup
+builds either. `environment.yml` provides everything except the CUDA toolkit, the
+C++ compiler and the NVIDIA driver.
 
-### Optional
-* **CUDA Toolkit 12.2+**: GPU backend (https://developer.nvidia.com/cuda-toolkit). The device code is C++20, which nvcc 11.x cannot compile; nvcc 12.0/12.1 cannot compile `std::source_location`. The GPU backend also needs CMake 3.25.2+ (`environment.yml` installs 3.31), an NVIDIA driver for CUDA 12 (R525 or newer), and a host compiler the toolkit supports (nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it)
-* **FFTW3**: Alternative CPU backend — enable with `-DPOLYMERFTS_USE_FFTW=ON`
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| Anaconda | any | https://www.anaconda.com/download |
+| Python | 3.11+ | `environment.yml` installs 3.12, with NumPy 2.0+, SciPy 1.14+ and pybind11 2.13+ |
+| CMake | 3.25.2+ | `environment.yml` installs 3.31. 3.25.2 is what the GPU backend needs (C++20 for nvcc); a CPU-only build also works with 3.18 |
+| C++ compiler | GCC 11–13 or Clang 15+ | C++20 with `std::source_location`. nvcc compiles its host code with it: nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it |
+| CUDA Toolkit | 12.4+ (12.2 minimum) | GPU backend (https://developer.nvidia.com/cuda-toolkit); `nvcc` must be first on PATH (the conda environment has none). nvcc 11.x has no C++20 and nvcc 12.0/12.1 cannot compile `std::source_location` |
+| NVIDIA driver | one that supports the toolkit | R550+ for CUDA 12.4, R580+ for CUDA 13. An older CUDA 12 driver (R525+) runs the code only on GPUs whose architecture is in `POLYMERFTS_CUDA_ARCHITECTURES` |
+| spglib | 2.x | space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`) |
+| LAPACKE | any | Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`; with MKL the header is `mkl_lapacke.h` from `mkl-include`) |
+| MKL and/or FFTW3 | any | at least one CPU FFT backend: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`, in `environment.yml`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`, GPL license) |
 
 ## CMake Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `POLYMERFTS_USE_CUDA` | AUTO | NVIDIA CUDA GPU backend. `AUTO`: build it when a usable toolchain is found (CUDA 12.2+, CMake 3.25.2+, `std::source_location` in the compilers), otherwise warn and build without it; `ON`: require it (configure stops otherwise); `OFF`: never |
+| `POLYMERFTS_USE_CUDA` | AUTO | NVIDIA CUDA GPU backend. `AUTO`: build it when a usable toolchain is found (CUDA 12.2+, CMake 3.25.2+, `std::source_location` in the compilers), otherwise warn and build without it; `ON`: require it (configure stops otherwise); `OFF`: never. A build directory configured with an older version holds the former `ON`/`OFF` switch, whose `ON` is converted to `AUTO` |
 | `POLYMERFTS_USE_MKL` | OFF | Enable Intel MKL CPU backend |
 | `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
-| `POLYMERFTS_CUDA_ARCHITECTURES` | empty | CUDA compute capabilities to compile for; empty: `60;61;70;75;80;86;89;90` with CUDA 12, `75;80;86;89;90;100;120` with CUDA 13+ |
+| `POLYMERFTS_CUDA_ARCHITECTURES` | empty | CUDA compute capabilities to compile for; empty: `60;61;70;75;80;86;89;90` with CUDA 12.2–12.7, plus `100;120` with CUDA 12.8+, `75;80;86;89;90;100;120` with CUDA 13+ |
 | `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors (CI builds with it) |
-| `POLYMERFTS_INSTALL_HEADERS` | OFF | Install C++ headers and a CMake package config for downstream projects (experimental) |
+| `POLYMERFTS_INSTALL_HEADERS` | OFF | Install the C++ headers, the static libraries and a CMake package config, so a downstream project can `find_package(polymerfts)` and link `polymerfts::polymerfts_backends` (experimental) |
 
 ### CPU Backends
 
@@ -114,34 +116,48 @@ export OMP_STACKSIZE=1G   # Stack size for OpenMP
 
 ### CUDA Not Detected
 
-**Message**: `Building without the GPU backend: no working CUDA compiler (nvcc) was found`
-(a warning with the default `POLYMERFTS_USE_CUDA=AUTO`), and `cuda` is missing from
-`PlatformSelector.avail_platforms()`.
+**Message**: `Building without the GPU backend: no CUDA compiler (nvcc) was found on PATH,
+in CUDACXX or in CMAKE_CUDA_COMPILER` (a warning with the default
+`POLYMERFTS_USE_CUDA=AUTO`), and `cuda` is missing from `PlatformSelector.avail_platforms()`.
 
-**Solution**: put a CUDA 12.2+ `nvcc` on PATH (or pass `-DCMAKE_CUDA_COMPILER=...`) and
-configure a new build directory; the installed module records the library directories
-itself, so `LD_LIBRARY_PATH` is not needed at run time:
+**Solution**: put a CUDA 12.2+ `nvcc` on PATH (or set `CUDACXX`, or pass
+`-DCMAKE_CUDA_COMPILER=...`) and run CMake again in the same build directory; the
+installed module records the library directories itself, so `LD_LIBRARY_PATH` is not
+needed at run time:
 ```bash
 export PATH=/usr/local/cuda-12.4/bin:$PATH
 ```
 `cuda` is also missing at run time on a machine without a visible GPU (for example a CPU
 node of a cluster), even when the GPU backend was built.
 
+### nvcc Rejects the Host Compiler
+
+**Message**: `Building without the GPU backend: .../nvcc did not compile a test program,
+usually because its host compiler is not supported (nvcc 12.2 rejects GCC 13): set
+CUDAHOSTCXX or -DCMAKE_CUDA_HOST_COMPILER to a supported compiler`.
+
+**Solution**: use a newer toolkit (CUDA 12.4 accepts GCC 13), or give nvcc a compiler it
+supports; `CMakeFiles/CMakeConfigureLog.yaml` in the build directory has nvcc's output:
+```bash
+cmake .. -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12   # or: export CUDAHOSTCXX=/usr/bin/g++-12
+```
+
 ### CUDA Toolkit Too Old
 
-**Message**: `Building without the GPU backend: .../nvcc is CUDA 11.8; the GPU backend
-needs CUDA 12.2 or newer` (a warning with the default `POLYMERFTS_USE_CUDA=AUTO`; with
-`-DPOLYMERFTS_USE_CUDA=ON` the configure step stops with the same text). CMake older
-than 3.25.2 and a compiler without `std::source_location` (GCC 10, Clang 14) are
-reported the same way.
+**Message**: `Building without the GPU backend: .../nvcc is CUDA 11.8; the GPU backend needs
+CUDA 12.2 or newer (C++20 device code). Put a 12.2+ nvcc first on PATH (or in CUDACXX, or
+pass -DCMAKE_CUDA_COMPILER=...) and configure again` (a warning with the default
+`POLYMERFTS_USE_CUDA=AUTO`; with `-DPOLYMERFTS_USE_CUDA=ON` the configure step stops with
+`POLYMERFTS_USE_CUDA=ON, but .../nvcc is CUDA 11.8; ...`). CMake older than 3.25.2 and a
+compiler without `std::source_location` (GCC 10, Clang 14) are reported the same way, with
+their own reason.
 
-**Solution**: put a CUDA 12.2+ toolkit first on PATH before configuring a new build
-directory (an existing build directory keeps the compiler it was configured with, so
-configure a fresh one or delete its `CMakeCache.txt`):
+**Solution**: put a CUDA 12.2+ toolkit first on PATH and run CMake again (the too-old
+compiler is not kept in the cache):
 ```bash
 export PATH=/usr/local/cuda-12.4/bin:$PATH
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-         -DPOLYMERFTS_USE_CUDA=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc
+         -DPOLYMERFTS_USE_CUDA=ON
 ```
 A conda environment may also hold CUDA runtime libraries of another version (for
 example `cudatoolkit` installed for CuPy). The build links the cuFFT of the toolkit

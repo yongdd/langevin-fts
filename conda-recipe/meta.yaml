@@ -16,11 +16,12 @@ source:
 
 build:
   number: 0
-  skip: true  # [win]
+  skip: true  # [not linux64]
   skip: true  # [py<311]
-  # FFTW is the CPU backend of this package; the GPU backend is not built here
-  # (it needs a CUDA 12.2+ toolkit, which this recipe does not provide)
-  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation -Ccmake.define.POLYMERFTS_USE_FFTW=ON -Ccmake.define.POLYMERFTS_USE_CUDA=OFF
+  # MKL is the CPU backend of this package (FFTW is GPL, which the Apache-2.0
+  # license below could not cover); the GPU backend is not built here (it needs
+  # a CUDA 12.2+ toolkit, which this recipe does not provide)
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.MKL_ROOT=$PREFIX -Ccmake.define.POLYMERFTS_USE_CUDA=OFF
 
 requirements:
   build:
@@ -36,15 +37,19 @@ requirements:
     - pybind11 >=2.13
     - pybind11-abi
     - numpy
-    - fftw
+    - mkl-devel
+    - liblapacke
+    - spglib
   run:
     - python
     - {{ pin_compatible('numpy') }}
+    - mkl
+    - liblapacke
+    - spglib
     - scipy >=1.14
     - matplotlib-base >=3.10
     - networkx >=3.0
     - pyyaml >=6.0
-    - fftw
 
 test:
   imports:
@@ -68,7 +73,7 @@ about:
     - Multi-monomer systems with arbitrary interaction parameters
     - Both continuous and discrete Gaussian chain models
     - Pseudo-spectral and real-space solvers
-    - CPU (FFTW) and GPU (NVIDIA CUDA) backends
+    - CPU backend (Intel MKL) in this package; the GPU (NVIDIA CUDA) backend needs a source build
     - Python interface with NumPy integration
 
   license: Apache-2.0

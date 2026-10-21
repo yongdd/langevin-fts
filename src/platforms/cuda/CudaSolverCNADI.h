@@ -351,30 +351,6 @@ private:
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index);
 
-    /// 3D ADI step with explicit coefficient arrays.
-    void advance_propagator_3d_step(
-        std::vector<BoundaryCondition> bc,
-        const int STREAM,
-        double *d_q_in, double *d_q_out,
-        double *_d_xl, double *_d_xd, double *_d_xh,
-        double *_d_yl, double *_d_yd, double *_d_yh,
-        double *_d_zl, double *_d_zd, double *_d_zh);
-
-    /// 2D ADI step with explicit coefficient arrays.
-    void advance_propagator_2d_step(
-        std::vector<BoundaryCondition> bc,
-        const int STREAM,
-        double *d_q_in, double *d_q_out,
-        double *_d_xl, double *_d_xd, double *_d_xh,
-        double *_d_yl, double *_d_yd, double *_d_yh);
-
-    /// 1D step with explicit coefficient arrays.
-    void advance_propagator_1d_step(
-        std::vector<BoundaryCondition> bc,
-        const int STREAM,
-        double *d_q_in, double *d_q_out,
-        double *_d_xl, double *_d_xd, double *_d_xh);
-
 public:
     /**
      * @brief Construct GPU CN-ADI solver.

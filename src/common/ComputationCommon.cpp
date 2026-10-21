@@ -27,9 +27,10 @@ ComputationCommon<T>::ComputationCommon(
         if (propagator_computation_optimizer->get_computation_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
 
-        // Set the space group first so that get_n_basis() returns the reduced size
-        if (space_group != nullptr)
-            PropagatorComputation<T>::set_space_group(space_group);
+        // Give the box this computation's space group (or none) first, so that
+        // get_n_basis() returns the size the backend and the solver work with;
+        // a box reused from an earlier computation may hold another group
+        PropagatorComputation<T>::set_space_group(space_group);
 
         backend = create_backend();
         n_streams = backend->get_n_streams();
@@ -79,6 +80,12 @@ void ComputationCommon<T>::set_fields(
     const std::map<std::string, const T*>& w_input,
     const std::map<std::string, const T*>& q_init)
 {
+    // The arrays of this computation are sized for the box's space group at
+    // construction; a computation built later on the same box may have set another
+    if (this->cb->get_space_group() != this->space_group_)
+        throw_with_line_number("The space group of the computation box changed after this computation "
+            "was created (a later computation on the same box set its own); create a new computation, "
+            "or give each computation its own box.");
     for (const auto& [key, edge] : this->propagator_computation_optimizer->get_computation_propagators())
     {
         if (!w_input.contains(edge.monomer_type))

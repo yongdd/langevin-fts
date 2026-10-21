@@ -150,6 +150,9 @@ void CudaCrysFFTObliqueZ::release()
 //------------------------------------------------------------------------------
 void CudaCrysFFTObliqueZ::init_fft_xy()
 {
+    // Called once, from the constructor: a second call would leak the plans
+    if (plan_xy_initialized_)
+        throw_with_line_number("CudaCrysFFTObliqueZ::init_fft_xy() called with plans already created.");
     long long int n_ll[2] = {nx_logical_[0], nx_logical_[1]};
     long long int inembed_ll[2] = {n_ll[0], n_ll[1]};
     long long int onembed_ll[2] = {n_ll[0], n_ll[1] / 2 + 1};
@@ -320,6 +323,10 @@ void CudaCrysFFTObliqueZ::set_contour_step(double ds)
 
 void CudaCrysFFTObliqueZ::set_stream(cudaStream_t stream)
 {
+    // The transforms and plans already run on stream_ (set at construction or by
+    // the last call); diffusion() calls this every time
+    if (stream == stream_)
+        return;
     stream_ = stream;
     if (dct_forward_z_) dct_forward_z_->set_stream(stream_);
     if (dct_backward_z_) dct_backward_z_->set_stream(stream_);

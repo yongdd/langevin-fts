@@ -278,6 +278,9 @@ void CudaFFT<T, DIM>::release()
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::initPeriodicFFT()
 {
+    // Called once, from the constructor: a second call would leak the plans
+    if (plan_forward_created_ || plan_backward_created_)
+        throw_with_line_number("CudaFFT::initPeriodicFFT() called with plans already created.");
     int total_grid[DIM];
     for (int d = 0; d < DIM; ++d)
         total_grid[d] = nx_[d];

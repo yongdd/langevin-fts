@@ -28,13 +28,12 @@ WORKDIR /app
 COPY . .
 
 # Build the project
+# MKL CPU backend (FFTW would make the image GPL-bound)
 RUN mkdir -p build && cd build && \
-    export FFTWROOT=/opt/conda/envs/polymerfts && \
     cmake .. -DCMAKE_BUILD_TYPE=Release \
-             -DFFTW_ROOT=/opt/conda/envs/polymerfts \
              -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
              -DPOLYMERFTS_USE_CUDA=OFF \
-             -DPOLYMERFTS_USE_FFTW=ON \
+             -DPOLYMERFTS_USE_MKL=ON \
              -DPOLYMERFTS_BUILD_TESTS=OFF && \
     make -j$(nproc) && \
     make install

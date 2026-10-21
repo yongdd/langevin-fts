@@ -126,9 +126,9 @@ CudaSolverCNADI::CudaSolverCNADI(
                 d_temp[i].allocate(M);
             }
 
-            int offset_xy[nx[0]*nx[1]];
-            int offset_yz[nx[1]*nx[2]];
-            int offset_xz[nx[0]*nx[2]];
+            std::vector<int> offset_xy(nx[0]*nx[1]);
+            std::vector<int> offset_yz(nx[1]*nx[2]);
+            std::vector<int> offset_xz(nx[0]*nx[2]);
             int count;
 
             count = 0;
@@ -150,9 +150,9 @@ CudaSolverCNADI::CudaSolverCNADI(
             d_offset_yz.allocate(nx[1]*nx[2]);
             d_offset_xz.allocate(nx[0]*nx[2]);
 
-            CUDA_CHECK(cudaMemcpy(d_offset_xy, offset_xy, sizeof(int)*nx[0]*nx[1], cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_offset_yz, offset_yz, sizeof(int)*nx[1]*nx[2], cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_offset_xz, offset_xz, sizeof(int)*nx[0]*nx[2], cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_offset_xy, offset_xy.data(), sizeof(int)*nx[0]*nx[1], cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_offset_yz, offset_yz.data(), sizeof(int)*nx[1]*nx[2], cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_offset_xz, offset_xz.data(), sizeof(int)*nx[0]*nx[2], cudaMemcpyHostToDevice));
         }
         else if(DIM == 2)
         {
@@ -164,8 +164,8 @@ CudaSolverCNADI::CudaSolverCNADI(
                 d_temp[i].allocate(M);
             }
 
-            int offset_x[nx[0]];
-            int offset_y[nx[1]];
+            std::vector<int> offset_x(nx[0]);
+            std::vector<int> offset_y(nx[1]);
 
             for(int i=0;i<nx[0];i++)
                 offset_x[i] = i*nx[1];
@@ -176,8 +176,8 @@ CudaSolverCNADI::CudaSolverCNADI(
             d_offset_x.allocate(nx[0]);
             d_offset_y.allocate(nx[1]);
 
-            CUDA_CHECK(cudaMemcpy(d_offset_x, offset_x, sizeof(int)*nx[0], cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_offset_y, offset_y, sizeof(int)*nx[1], cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_offset_x, offset_x.data(), sizeof(int)*nx[0], cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_offset_y, offset_y.data(), sizeof(int)*nx[1], cudaMemcpyHostToDevice));
         }
         else if(DIM == 1)
         {
@@ -249,9 +249,9 @@ void CudaSolverCNADI::update_laplacian_operator()
         else if (DIM == 1)
             nx = {this->cb->get_nx(0), 1, 1};
 
-        double xl[nx[0]], xd[nx[0]], xh[nx[0]];
-        double yl[nx[1]], yd[nx[1]], yh[nx[1]];
-        double zl[nx[2]], zd[nx[2]], zh[nx[2]];
+        std::vector<double> xl(nx[0]), xd(nx[0]), xh(nx[0]);
+        std::vector<double> yl(nx[1]), yd(nx[1]), yh(nx[1]);
+        std::vector<double> zl(nx[2]), zd(nx[2]), zh(nx[2]);
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
@@ -271,22 +271,22 @@ void CudaSolverCNADI::update_laplacian_operator()
                 FiniteDifference::get_laplacian_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
-                    xl, xd, xh,
-                    yl, yd, yh,
-                    zl, zd, zh,
+                    xl.data(), xd.data(), xh.data(),
+                    yl.data(), yd.data(), yh.data(),
+                    zl.data(), zd.data(), zh.data(),
                     bond_length_sq, local_ds);
 
-                CUDA_CHECK(cudaMemcpy(d_xl.at(ds_idx).at(monomer_type), xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_xd.at(ds_idx).at(monomer_type), xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_xh.at(ds_idx).at(monomer_type), xh, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xl.at(ds_idx).at(monomer_type), xl.data(), sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xd.at(ds_idx).at(monomer_type), xd.data(), sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xh.at(ds_idx).at(monomer_type), xh.data(), sizeof(double)*nx[0], cudaMemcpyHostToDevice));
 
-                CUDA_CHECK(cudaMemcpy(d_yl.at(ds_idx).at(monomer_type), yl, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_yd.at(ds_idx).at(monomer_type), yd, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_yh.at(ds_idx).at(monomer_type), yh, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yl.at(ds_idx).at(monomer_type), yl.data(), sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yd.at(ds_idx).at(monomer_type), yd.data(), sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yh.at(ds_idx).at(monomer_type), yh.data(), sizeof(double)*nx[1], cudaMemcpyHostToDevice));
 
-                CUDA_CHECK(cudaMemcpy(d_zl.at(ds_idx).at(monomer_type), zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_zd.at(ds_idx).at(monomer_type), zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_zh.at(ds_idx).at(monomer_type), zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zl.at(ds_idx).at(monomer_type), zl.data(), sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zd.at(ds_idx).at(monomer_type), zd.data(), sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zh.at(ds_idx).at(monomer_type), zh.data(), sizeof(double)*nx[2], cudaMemcpyHostToDevice));
 
             }
         }
@@ -653,220 +653,6 @@ void CudaSolverCNADI::advance_propagator_1d(
         double *_d_xl = d_xl.at(ds_index).at(monomer_type);
         double *_d_xd = d_xd.at(ds_index).at(monomer_type);
         double *_d_xh = d_xh.at(ds_index).at(monomer_type);
-
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-
-        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[0], bc[1],
-            _d_xl, _d_xd, _d_xh,
-            d_q_star[STREAM], d_q_in, nx[0]);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[0] == BoundaryCondition::PERIODIC)
-            tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
-                d_offset, 1, 1, nx[0]);
-        else
-            tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
-        CUDA_CHECK_LAUNCH();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CudaSolverCNADI::advance_propagator_3d_step(
-    std::vector<BoundaryCondition> bc,
-    const int STREAM,
-    double *d_q_in, double *d_q_out,
-    double *_d_xl, double *_d_xd, double *_d_xh,
-    double *_d_yl, double *_d_yd, double *_d_yh,
-    double *_d_zl, double *_d_zd, double *_d_zh)
-{
-    try
-    {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-        size_t shmem_y = 3 * nx[1] * sizeof(double);
-        size_t shmem_z = 3 * nx[2] * sizeof(double);
-
-        // Calculate q_star
-        compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[0], bc[1], bc[2], bc[3], bc[4], bc[5],
-            _d_xl, _d_xd, _d_xh, nx[0],
-            _d_yl, _d_yd, _d_yh, nx[1],
-            _d_zl, _d_zd, _d_zh, nx[2],
-            d_temp[STREAM], d_q_in, M);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[0] == BoundaryCondition::PERIODIC)
-        {
-            tridiagonal_periodic<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
-                d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
-            CUDA_CHECK_LAUNCH();
-        }
-        else
-        {
-            tridiagonal<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
-                d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
-            CUDA_CHECK_LAUNCH();
-        }
-        CUDA_CHECK_LAUNCH();
-
-        // Calculate q_dstar
-        compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[2], bc[3],
-            _d_yl, _d_yd, _d_yh, nx[1], nx[2],
-            d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[2] == BoundaryCondition::PERIODIC)
-        {
-            tridiagonal_periodic<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
-                d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
-            CUDA_CHECK_LAUNCH();
-        }
-        else
-        {
-            tridiagonal<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
-                d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
-            CUDA_CHECK_LAUNCH();
-        }
-        CUDA_CHECK_LAUNCH();
-
-        // Calculate q^(n+1)
-        compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[4], bc[5],
-            _d_zl, _d_zd, _d_zh, nx[1], nx[2],
-            d_temp[STREAM], d_q_dstar[STREAM], d_q_in, M);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[4] == BoundaryCondition::PERIODIC)
-        {
-            tridiagonal_periodic<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_zl, _d_zd, _d_zh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
-                d_offset_xy, nx[0]*nx[1], 1, nx[2]);
-            CUDA_CHECK_LAUNCH();
-        }
-        else
-        {
-            tridiagonal<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, shmem_z, streams[STREAM][0]>>>(
-                _d_zl, _d_zd, _d_zh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_out,
-                d_offset_xy, nx[0]*nx[1], 1, nx[2]);
-            CUDA_CHECK_LAUNCH();
-        }
-        CUDA_CHECK_LAUNCH();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CudaSolverCNADI::advance_propagator_2d_step(
-    std::vector<BoundaryCondition> bc,
-    const int STREAM,
-    double *d_q_in, double *d_q_out,
-    double *_d_xl, double *_d_xd, double *_d_xh,
-    double *_d_yl, double *_d_yd, double *_d_yh)
-{
-    try
-    {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-        size_t shmem_y = 3 * nx[1] * sizeof(double);
-
-        // Calculate q_star
-        compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[0], bc[1], bc[2], bc[3],
-            _d_xl, _d_xd, _d_xh, nx[0],
-            _d_yl, _d_yd, _d_yh, nx[1],
-            d_temp[STREAM], d_q_in, M);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[0] == BoundaryCondition::PERIODIC)
-        {
-            tridiagonal_periodic<<<line_blocks(nx[1]), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
-                d_offset_y, nx[1], nx[1], nx[0]);
-            CUDA_CHECK_LAUNCH();
-        }
-        else
-        {
-            tridiagonal<<<line_blocks(nx[1]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
-                d_offset_y, nx[1], nx[1], nx[0]);
-            CUDA_CHECK_LAUNCH();
-        }
-        CUDA_CHECK_LAUNCH();
-
-        // Calculate q_dstar
-        compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            bc[2], bc[3],
-            _d_yl, _d_yd, _d_yh, nx[1],
-            d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
-        CUDA_CHECK_LAUNCH();
-
-        if (bc[2] == BoundaryCondition::PERIODIC)
-        {
-            tridiagonal_periodic<<<line_blocks(nx[0]), LINE_THREADS, 0, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
-                d_offset_x, nx[0], 1, nx[1]);
-            CUDA_CHECK_LAUNCH();
-        }
-        else
-        {
-            tridiagonal<<<line_blocks(nx[0]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_out,
-                d_offset_x, nx[0], 1, nx[1]);
-            CUDA_CHECK_LAUNCH();
-        }
-        CUDA_CHECK_LAUNCH();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CudaSolverCNADI::advance_propagator_1d_step(
-    std::vector<BoundaryCondition> bc,
-    const int STREAM,
-    double *d_q_in, double *d_q_out,
-    double *_d_xl, double *_d_xd, double *_d_xh)
-{
-    try
-    {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);

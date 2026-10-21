@@ -8,11 +8,13 @@
  *    allocation (its message names the caller and the size).
  * 2. Every kind of CUDA object (propagator computations of all solvers, the CrysFFT
  *    engines, non-periodic transforms, complex fields, the Anderson mixers), built
- *    with 4 streams, returns everything when destroyed. Checked exactly with the
- *    library's live counters: CudaBuffer and the backend's propagator and
- *    checkpoint arrays, cuFFT plans, streams and events (other processes and
- *    cuFFT's own retained memory do not affect them). No release may fail
- *    (cuda_release_failures(); a double free would count).
+ *    with 4 streams (reduce-memory computations use one), returns everything when
+ *    destroyed. Checked exactly with the library's live counters: CudaBuffer and
+ *    the backend's propagator and checkpoint arrays (count and bytes), cuFFT
+ *    plans, streams and events (other processes and cuFFT's own retained memory
+ *    do not affect them); a live computation is checked to hold its streams,
+ *    events and plans first. No release may fail (cuda_release_failures(); a
+ *    double free would count).
  * 3. Failure-injection sweep with 2 streams: the test hook
  *    cuda_buffer_fail_countdown() makes the N-th counted allocation throw; N runs
  *    over every allocation of each construction (and its first run), and after
@@ -20,10 +22,13 @@
  *    no allocation fails must succeed. Failures of cuFFT plan, stream and event
  *    creation are not injected; section 4 may reach them for real.
  * 4. A small construction that really runs out of device memory releases what it
- *    took (the counters, and device free memory end to end): a ballast holds the
- *    rest of the free memory for a moment, with several leftovers so the failure
- *    falls at different stages. When the device memory cannot be held, the test
- *    exits with code 77 (a ctest skip). It runs serially (tests/CMakeLists.txt).
+ *    took (the counters, and device memory end to end: this process's usage from
+ *    NVML, or the device's free memory where NVML cannot tell): a ballast holds
+ *    the rest of the free memory for a moment, with several leftovers so the
+ *    failure falls at different stages. The 64^3 computation used to size them
+ *    must release everything too, and may fail only for lack of memory. When the
+ *    device memory cannot be held, the test exits with code 77 (a ctest skip).
+ *    It runs serially (tests/CMakeLists.txt).
  */
 #include <algorithm>
 #include <complex>
@@ -37,6 +42,10 @@
 #include <utility>
 #include <vector>
 #include <cuda_runtime.h>
+#ifdef POLYMERFTS_TEST_HAS_NVML
+#include <nvml.h>
+#include <unistd.h>
+#endif
 #include "CudaCommon.h"
 #include "AbstractFactory.h"
 #include "AndersonMixing.h"
@@ -54,20 +63,63 @@ static long long live_device_bytes() { return CudaDeviceMemory::counters().live_
 /// plans, streams and events.
 struct Live
 {
-    long long device = 0, pinned = 0, plans = 0, streams = 0, events = 0;
+    long long device = 0, pinned = 0, device_bytes = 0, pinned_bytes = 0, plans = 0, streams = 0, events = 0;
     static Live now()
     {
         const CudaHandleCounters& h = cuda_handle_counters();
-        return {live_device(), live_pinned(), h.cufft_plans.load(), h.streams.load(), h.events.load()};
+        return {live_device(), live_pinned(), CudaDeviceMemory::counters().live_bytes.load(),
+                CudaPinnedMemory::counters().live_bytes.load(), h.cufft_plans.load(), h.streams.load(),
+                h.events.load()};
     }
     bool operator==(const Live&) const = default;
     std::string minus(const Live& before) const
     {
         return std::to_string(device - before.device) + " device and " + std::to_string(pinned - before.pinned)
-            + " pinned allocations, " + std::to_string(plans - before.plans) + " cuFFT plans, "
-            + std::to_string(streams - before.streams) + " streams, " + std::to_string(events - before.events) + " events";
+            + " pinned allocations (" + std::to_string(device_bytes - before.device_bytes) + " and "
+            + std::to_string(pinned_bytes - before.pinned_bytes) + " bytes), " + std::to_string(plans - before.plans)
+            + " cuFFT plans, " + std::to_string(streams - before.streams) + " streams, "
+            + std::to_string(events - before.events) + " events";
     }
 };
+
+/// Device memory used by this process according to NVML, which other processes
+/// on the GPU do not change; -1 when NVML cannot tell (e.g. no per-process
+/// accounting in a container).
+static long long process_device_bytes()
+{
+#ifndef POLYMERFTS_TEST_HAS_NVML
+    return -1;
+#else
+    static const bool nvml_ready = (nvmlInit_v2() == NVML_SUCCESS);
+    if (!nvml_ready)
+        return -1;
+    int device = 0;
+    char bus_id[32];
+    nvmlDevice_t handle;
+    if (cudaGetDevice(&device) != cudaSuccess || cudaDeviceGetPCIBusId(bus_id, sizeof(bus_id), device) != cudaSuccess
+        || nvmlDeviceGetHandleByPciBusId_v2(bus_id, &handle) != NVML_SUCCESS)
+    {
+        (void)cudaGetLastError();
+        return -1;
+    }
+    unsigned int count = 64;
+    std::vector<nvmlProcessInfo_t> processes(count);
+    if (nvmlDeviceGetComputeRunningProcesses(handle, &count, processes.data()) != NVML_SUCCESS)
+        return -1;
+    for (unsigned int i = 0; i < count; ++i)
+        if (processes[i].pid == static_cast<unsigned int>(getpid()))
+            return processes[i].usedGpuMemory == NVML_VALUE_NOT_AVAILABLE
+                ? -1 : static_cast<long long>(processes[i].usedGpuMemory);
+    return -1;
+#endif
+}
+
+/// The message of an exception on one line (cuFFT and nested messages span several)
+static std::string one_line(std::string text)
+{
+    std::replace(text.begin(), text.end(), '\n', ' ');
+    return text;
+}
 
 /// Sets OMP_NUM_THREADS (the backends create one stream per thread, at most 4)
 /// for a scope and restores the caller's value afterwards.
@@ -386,6 +438,24 @@ int main()
     const std::vector<Case> all = cases();
     {
         ScopedStreams streams("4");
+        // The counters see what a live computation holds: 4 streams with a kernel
+        // and a copy stream and two events each (reduce-memory computations use
+        // one stream), and its plans and buffers
+        {
+            const Live before = Live::now();
+            std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
+            std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box({16, 16, 16}, {1.9, 1.9, 1.9}, {}));
+            std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
+            molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
+            std::unique_ptr<PropagatorComputationOptimizer> optimizer(factory->create_propagator_computation_optimizer(molecules.get(), true));
+            std::unique_ptr<PropagatorComputation<double>> computation(
+                factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4"));
+            const Live alive = Live::now();
+            ok &= check(alive.streams - before.streams == 8 && alive.events - before.events == 8
+                        && alive.plans > before.plans && alive.device > before.device,
+                        "a live 4-stream computation holds 8 streams, 8 events, " + std::to_string(alive.plans - before.plans)
+                        + " cuFFT plans and " + std::to_string(alive.device - before.device) + " device allocations");
+        }
         for (const Case& c : all)
         {
             const Live before = Live::now();
@@ -402,7 +472,8 @@ int main()
 
     //--------------------------------------------------------------------------
     // 3. Failure-injection sweep (2 streams: the per-stream code runs for a
-    //    stream other than the first, with fewer allocations than 4 streams)
+    //    stream other than the first, with fewer allocations than 4 streams;
+    //    reduce-memory computations use one stream)
     //--------------------------------------------------------------------------
     printf("--- every allocation of every construction fails once (2 streams) ---\n");
     {
@@ -459,9 +530,10 @@ int main()
         // cuFFT's plan work areas (unless another process changed it meanwhile)
         size_t need = 0;
         bool measured = false;
+        const Live live_before_measurement = Live::now();
+        const size_t free_before = free_bytes();
         try
         {
-            const size_t free_before = free_bytes();
             const long long counted_before = live_device_bytes();
             std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
             std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box(spec.nx, spec.lx, {}));
@@ -481,12 +553,26 @@ int main()
         }
         catch (const std::exception& e)
         {
-            printf("  the 64^3 computation itself did not fit: %s\n", e.what());
+            // Only a lack of device memory makes the section impossible; any
+            // other failure of this ordinary computation is a test failure
+            const std::string message = one_line(e.what());
+            const bool memory = message.find("out of memory") != std::string::npos
+                             || message.find("cuFFT error code 2") != std::string::npos   // CUFFT_ALLOC_FAILED
+                             || free_before < (size_t(1) << 30);
+            printf("  the 64^3 computation failed: %s\n", message.c_str());
+            ok &= check(memory, "the 64^3 computation fails only for lack of device memory");
         }
         ok &= check(no_cuda_error("the measurement"), "the measurement leaves no release failure or pending error");
+        const Live live_after_measurement = Live::now();
+        if (!(live_after_measurement == live_before_measurement))
+            printf("  the measurement left %s\n", live_after_measurement.minus(live_before_measurement).c_str());
+        ok &= check(live_after_measurement == live_before_measurement, "the 64^3 computation releases everything");
 
-        // Free memory after the measurement (modules loaded, cuFFT's retained
-        // per-plan memory included), for the end-to-end check below
+        // Device memory after the measurement (modules loaded, cuFFT's retained
+        // per-plan memory included), for the end-to-end check below: this
+        // process's usage from NVML when it is available, else the device's
+        // free memory (which other processes also change)
+        const long long process_start = process_device_bytes();
         const size_t free_start = free_bytes();
         const Live live_start = Live::now();
 
@@ -523,6 +609,7 @@ int main()
                 if (threw)
                     ++ran_out;
                 // The innermost failure is at the end of the message (outer frames prepend theirs)
+                message = one_line(message);
                 if (message.size() > 240)
                     message = "..." + message.substr(message.size() - 240);
                 const Live after = Live::now();
@@ -536,13 +623,19 @@ int main()
         if (tried > 0)
         {
             ok &= check(ran_out > 0, "at least one construction ran out of device memory");
-            // End to end, for memory the counters do not see (cuFFT's own); a leaked
-            // 64^3 plan holds several MiB
+            // End to end, for memory the counters do not see (cuFFT's internal
+            // allocations; the plan counter catches a leaked plan). 8 MiB covers the
+            // 2 MiB allocation pages and cuFFT's retained per-plan memory.
+            const long long process_end = process_device_bytes();
             const size_t free_end = free_bytes();
-            const double drift_mib = (static_cast<double>(free_start) - static_cast<double>(free_end)) / 1048576.0;
-            ok &= check(Live::now() == live_start && free_end + (size_t(8) << 20) >= free_start,
-                        "the device memory returns to its level before these constructions ("
-                        + std::to_string(drift_mib) + " MiB less; 8 MiB allowed for the 2 MiB pages and cuFFT's retained memory)");
+            const bool per_process = (process_start >= 0 && process_end >= 0);
+            const double drift_mib = per_process
+                ? static_cast<double>(process_end - process_start) / 1048576.0
+                : (static_cast<double>(free_start) - static_cast<double>(free_end)) / 1048576.0;
+            ok &= check(Live::now() == live_start && drift_mib <= 8.0,
+                        std::string("the device memory ") + (per_process ? "of this process (NVML)" : "free on the device")
+                        + " returns to its level before these constructions (" + std::to_string(drift_mib)
+                        + " MiB more in use; 8 MiB allowed)");
         }
         else
         {

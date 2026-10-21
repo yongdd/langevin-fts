@@ -14,7 +14,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    cmake \
     git \
     wget \
     ca-certificates \
@@ -27,7 +26,7 @@ RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
 
 ENV PATH="/opt/conda/bin:$PATH"
 
-# Create conda environment with FFTW (for CPU fallback)
+# Create conda environment (CMake, MKL for the CPU backend, spglib, LAPACKE)
 COPY environment.yml /tmp/environment.yml
 RUN conda env create -f /tmp/environment.yml && \
     conda clean -afy
@@ -40,14 +39,12 @@ ENV CONDA_DEFAULT_ENV=polymerfts
 WORKDIR /app
 COPY . .
 
-# Build with CUDA and FFTW support
+# Build with CUDA and MKL (FFTW would make the image GPL-bound)
 RUN mkdir -p build && cd build && \
-    export FFTWROOT=/opt/conda/envs/polymerfts && \
     cmake .. -DCMAKE_BUILD_TYPE=Release \
-             -DFFTW_ROOT=/opt/conda/envs/polymerfts \
              -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
              -DPOLYMERFTS_USE_CUDA=ON \
-             -DPOLYMERFTS_USE_FFTW=ON \
+             -DPOLYMERFTS_USE_MKL=ON \
              -DPOLYMERFTS_CUDA_ARCHITECTURES="60;70;80;86;89;90" \
              -DPOLYMERFTS_BUILD_TESTS=OFF && \
     make -j$(nproc) && \
@@ -98,5 +95,5 @@ CMD ["python", "-c", "import polymerfts; print('PolymerFTS loaded successfully')
 # Labels for metadata
 LABEL maintainer="Daeseong Yong"
 LABEL version="0.10.0"
-LABEL description="PolymerFTS - Polymer Field Theory Simulation Library (CUDA + FFTW)"
+LABEL description="PolymerFTS - Polymer Field Theory Simulation Library (CUDA + MKL)"
 LABEL org.opencontainers.image.source="https://github.com/yongdd/langevin-fts"

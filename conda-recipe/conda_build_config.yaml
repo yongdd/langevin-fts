@@ -22,5 +22,5 @@ channel_sources:
 # target_platform:
 #   - linux-64
 
-# FFTW is the only CPU FFT backend
+# MKL is the CPU FFT backend of the package (see meta.yaml)
 # No additional FFT variants needed

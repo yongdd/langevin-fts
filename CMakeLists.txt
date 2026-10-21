@@ -1,4 +1,5 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
+# 3.18: FIND_PACKAGE(Python3 ... Development.Module); the GPU backend needs 3.25.2 (checked below)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
 
 # ============================================================================
 #  Project
@@ -24,7 +25,17 @@ OPTION(POLYMERFTS_USE_FFTW        "Enable FFTW3 backend (GPL license)"        OF
 OPTION(POLYMERFTS_USE_MKL         "Enable Intel MKL backend"                  OFF)
 # AUTO: build the GPU backend when a usable CUDA toolchain is found (see the
 # CUDA backend section), otherwise warn and build without it; ON: require it;
-# OFF: never. A cache that holds ON or OFF from earlier versions keeps it.
+# OFF: never. Earlier versions declared it as a BOOL option whose ON meant what
+# AUTO means now, so such a cache entry is converted (ON -> AUTO, OFF -> OFF).
+GET_PROPERTY(_cuda_option_type CACHE POLYMERFTS_USE_CUDA PROPERTY TYPE)
+IF(_cuda_option_type STREQUAL "BOOL")
+    IF(POLYMERFTS_USE_CUDA)
+        SET(_cuda_option_value AUTO)
+    ELSE()
+        SET(_cuda_option_value OFF)
+    ENDIF()
+    SET(POLYMERFTS_USE_CUDA ${_cuda_option_value} CACHE STRING "CUDA backend: AUTO, ON or OFF" FORCE)
+ENDIF()
 SET(POLYMERFTS_USE_CUDA AUTO CACHE STRING "CUDA backend: AUTO, ON or OFF")
 SET_PROPERTY(CACHE POLYMERFTS_USE_CUDA PROPERTY STRINGS AUTO ON OFF)
 OPTION(POLYMERFTS_BUILD_TESTS     "Build test executables"                    ON)
@@ -32,7 +43,7 @@ OPTION(POLYMERFTS_INSTALL_PYTHON  "Install Python module"                     ON
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
 OPTION(POLYMERFTS_WERROR          "Treat host C++ warnings as errors (CI)"    OFF)
 SET(POLYMERFTS_CUDA_ARCHITECTURES "" CACHE STRING
-    "CUDA compute capabilities to compile for (semicolon-separated; empty: 60-90 for CUDA 12, 75-120 for CUDA 13+)")
+    "CUDA compute capabilities to compile for (semicolon-separated; empty: a default for the toolkit, see the CUDA backend section)")
 
 # ============================================================================
 #  Compiler settings
@@ -276,7 +287,9 @@ ENDIF()
 # and the GPU backend is left out; with ON it stops the configure step.
 STRING(TOUPPER "${POLYMERFTS_USE_CUDA}" _cuda_request)
 IF(NOT _cuda_request STREQUAL "AUTO")
-    IF(POLYMERFTS_USE_CUDA)
+    IF(NOT _cuda_request MATCHES "^(ON|OFF|TRUE|FALSE|YES|NO|Y|N|1|0)$")
+        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_CUDA must be AUTO, ON or OFF, got '${POLYMERFTS_USE_CUDA}'")
+    ELSEIF(POLYMERFTS_USE_CUDA)
         SET(_cuda_request ON)
     ELSE()
         SET(_cuda_request OFF)
@@ -284,20 +297,53 @@ IF(NOT _cuda_request STREQUAL "AUTO")
 ENDIF()
 SET(POLYMERFTS_BUILD_CUDA FALSE)
 
-MACRO(polymerfts_cuda_unusable reason)
+# Report why the GPU backend cannot be built: an error with ON, a warning with
+# AUTO. The reason may be given in several string arguments; they are joined
+# one by one (${ARGV} would split them at the semicolons inside).
+FUNCTION(polymerfts_cuda_unusable)
+    SET(_reason "")
+    MATH(EXPR _last "${ARGC} - 1")
+    FOREACH(_i RANGE 0 ${_last})
+        STRING(APPEND _reason "${ARGV${_i}}")
+    ENDFOREACH()
     IF(_cuda_request STREQUAL "ON")
-        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_CUDA=ON, but ${reason}")
+        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_CUDA=ON, but ${_reason}")
     ELSE()
-        MESSAGE(WARNING "Building without the GPU backend: ${reason} "
+        MESSAGE(WARNING "Building without the GPU backend: ${_reason} "
             "(POLYMERFTS_USE_CUDA=AUTO; set it to ON to make this an error, or OFF to silence it)")
     ENDIF()
-ENDMACRO()
+ENDFUNCTION()
 
 IF(NOT _cuda_request STREQUAL "OFF")
+    # The nvcc CMake would use: CUDACXX, else the first on PATH (for the messages)
+    IF(DEFINED ENV{CUDACXX} AND NOT "$ENV{CUDACXX}" STREQUAL "")
+        SET(_nvcc_candidate "$ENV{CUDACXX}")
+    ELSE()
+        FIND_PROGRAM(_nvcc_candidate nvcc NO_CACHE)
+    ENDIF()
+    # CHECK_LANGUAGE caches a failed search as NOTFOUND and then never searches
+    # again; search again when an nvcc is around now
+    IF(DEFINED CACHE{CMAKE_CUDA_COMPILER} AND NOT CMAKE_CUDA_COMPILER AND _nvcc_candidate)
+        UNSET(CMAKE_CUDA_COMPILER CACHE)
+    ENDIF()
+    # CHECK_LANGUAGE runs nvcc in a sub-project that does not see a host compiler
+    # given as -DCMAKE_CUDA_HOST_COMPILER, and its (empty) result would then hide
+    # the cache entry from ENABLE_LANGUAGE: hand it over through CUDAHOSTCXX and
+    # drop the normal variable afterwards.
+    IF(CMAKE_CUDA_HOST_COMPILER AND "$ENV{CUDAHOSTCXX}" STREQUAL "")
+        SET(ENV{CUDAHOSTCXX} "${CMAKE_CUDA_HOST_COMPILER}")
+    ENDIF()
     INCLUDE(CheckLanguage)
     CHECK_LANGUAGE(CUDA)          # nvcc from CMAKE_CUDA_COMPILER, CUDACXX or PATH
-    IF(NOT CMAKE_CUDA_COMPILER)
-        polymerfts_cuda_unusable("no working CUDA compiler (nvcc) was found")
+    UNSET(CMAKE_CUDA_HOST_COMPILER)
+    IF(NOT CMAKE_CUDA_COMPILER AND _nvcc_candidate)
+        polymerfts_cuda_unusable("${_nvcc_candidate} did not compile a test program, usually "
+            "because its host compiler is not supported (nvcc 12.2 rejects GCC 13): set "
+            "CUDAHOSTCXX or -DCMAKE_CUDA_HOST_COMPILER to a supported compiler "
+            "(CMakeFiles/CMakeConfigureLog.yaml has the output)")
+    ELSEIF(NOT CMAKE_CUDA_COMPILER)
+        polymerfts_cuda_unusable("no CUDA compiler (nvcc) was found on PATH, in CUDACXX or in "
+            "CMAKE_CUDA_COMPILER")
     ELSEIF(CMAKE_VERSION VERSION_LESS 3.25.2)
         polymerfts_cuda_unusable("CMake ${CMAKE_VERSION} cannot compile C++20 CUDA code; the "
             "GPU backend needs CMake 3.25.2 or newer (environment.yml installs 3.31)")
@@ -306,11 +352,19 @@ IF(NOT _cuda_request STREQUAL "OFF")
             OUTPUT_VARIABLE _nvcc_output ERROR_QUIET)
         STRING(REGEX MATCH "release ([0-9]+[.][0-9]+)" _nvcc_release "${_nvcc_output}")
         SET(_nvcc_version "${CMAKE_MATCH_1}")
-        IF(_nvcc_version STREQUAL "" OR _nvcc_version VERSION_LESS 12.2)
-            polymerfts_cuda_unusable("${CMAKE_CUDA_COMPILER} is CUDA ${_nvcc_version}; the GPU "
-                "backend needs CUDA 12.2 or newer (C++20 device code). Configure a new build "
-                "directory (or delete CMakeCache.txt) with a 12.2+ nvcc first on PATH or given as "
-                "-DCMAKE_CUDA_COMPILER=...")
+        IF(_nvcc_version STREQUAL "")
+            SET(_nvcc_found "${CMAKE_CUDA_COMPILER}")
+            UNSET(CMAKE_CUDA_COMPILER CACHE)    # search again next time
+            polymerfts_cuda_unusable("the CUDA version of ${_nvcc_found} could not be read "
+                "(`nvcc --version` gave no release number)")
+        ELSEIF(_nvcc_version VERSION_LESS 12.2)
+            SET(_nvcc_found "${CMAKE_CUDA_COMPILER}")
+            # Not enabled yet, so the next configure may search again (e.g. after
+            # a newer toolkit was put first on PATH)
+            UNSET(CMAKE_CUDA_COMPILER CACHE)
+            polymerfts_cuda_unusable("${_nvcc_found} is CUDA ${_nvcc_version}; the GPU backend "
+                "needs CUDA 12.2 or newer (C++20 device code). Put a 12.2+ nvcc first on PATH "
+                "(or in CUDACXX, or pass -DCMAKE_CUDA_COMPILER=...) and configure again")
         ELSE()
             SET(POLYMERFTS_BUILD_CUDA TRUE)
         ENDIF()
@@ -340,6 +394,9 @@ IF(POLYMERFTS_BUILD_CUDA)
         polymerfts_cuda_unusable("the CUDA toolkit found (${CUDAToolkit_VERSION} at "
             "${CUDAToolkit_TARGET_DIR}) is not the one of ${CMAKE_CUDA_COMPILER} "
             "(${CMAKE_CUDA_COMPILER_VERSION}); delete CMakeCache.txt and configure again")
+        SET(POLYMERFTS_BUILD_CUDA FALSE)
+    ELSEIF(NOT TARGET CUDA::cufft)
+        polymerfts_cuda_unusable("the CUDA toolkit of ${CMAKE_CUDA_COMPILER} has no cuFFT library")
         SET(POLYMERFTS_BUILD_CUDA FALSE)
     ENDIF()
 ENDIF()
@@ -371,11 +428,14 @@ IF(POLYMERFTS_BUILD_CUDA)
     MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: ${CUDAToolkit_TARGET_DIR}")
 
     # Compute capabilities: the user's list, or a default the toolkit supports
-    # (CUDA 13 dropped sm_60, sm_61 and sm_70). A normal variable shadows the
-    # empty cache entry, so tests/CMakeLists.txt sees the same list.
+    # (CUDA 12.8 added sm_100 and sm_120, CUDA 13 dropped sm_60, sm_61 and sm_70).
+    # A normal variable shadows the empty cache entry, so tests/CMakeLists.txt
+    # sees the same list.
     IF(POLYMERFTS_CUDA_ARCHITECTURES STREQUAL "")
-        IF(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 13.0)
+        IF(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 12.8)
             SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+        ELSEIF(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 13.0)
+            SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90;100;120")
         ELSE()
             SET(POLYMERFTS_CUDA_ARCHITECTURES "75;80;86;89;90;100;120")
         ENDIF()
@@ -558,6 +618,34 @@ IF(POLYMERFTS_INSTALL_HEADERS)
             DESTINATION include/polymerfts
             COMPONENT development
             FILES_MATCHING PATTERN "*.h")
+
+    # The static libraries and polymerfts::polymerfts_backends, which ties them
+    # together, for find_package(polymerfts). OpenMP and the CUDA runtime reach
+    # this build through compile flags and the CUDA language; an installed
+    # consumer gets them as link dependencies instead.
+    SET(_polymerfts_export_targets factory common polymerfts_backends)
+    IF(POLYMERFTS_BUILD_CUDA)
+        LIST(APPEND _polymerfts_export_targets cuda)
+    ENDIF()
+    IF(BUILD_CPU_FFTW_LIB)
+        LIST(APPEND _polymerfts_export_targets cpu-fftw)
+    ENDIF()
+    IF(BUILD_CPU_MKL_LIB)
+        LIST(APPEND _polymerfts_export_targets cpu-mkl)
+    ENDIF()
+    TARGET_INCLUDE_DIRECTORIES(common INTERFACE
+        $<INSTALL_INTERFACE:include/polymerfts> $<INSTALL_INTERFACE:${SPGLIB_INCLUDE_DIRS}>)
+    TARGET_LINK_LIBRARIES(polymerfts_backends INTERFACE $<INSTALL_INTERFACE:OpenMP::OpenMP_CXX>)
+    IF(POLYMERFTS_BUILD_CUDA)
+        TARGET_LINK_LIBRARIES(polymerfts_backends INTERFACE $<INSTALL_INTERFACE:CUDA::cudart_static>)
+    ENDIF()
+    INSTALL(TARGETS ${_polymerfts_export_targets}
+            EXPORT polymerfts-targets
+            ARCHIVE DESTINATION lib COMPONENT development)
+    INSTALL(EXPORT polymerfts-targets
+            NAMESPACE polymerfts::
+            DESTINATION lib/cmake/polymerfts
+            COMPONENT development)
 
     # CMake package config
     INCLUDE(CMakePackageConfigHelpers)

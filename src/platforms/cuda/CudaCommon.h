@@ -223,13 +223,15 @@ public:
  * they surface at the first CUDA call made after the fault, at the latest at
  * the next synchronizing call, which names its own line; run with
  * CUDA_LAUNCH_BLOCKING=1 (or compute-sanitizer) to see them at their launch.
- * Release calls (cudaFree, cudaFreeHost, *Destroy) are not checked: they run
- * in destructors and release() paths, which must not throw, and go through
- * ignore_release_error() so a failed one is not reported by a later check.
+ * Release calls are not checked: they run in destructors and release() paths,
+ * which must not throw. cudaFree/cudaFreeHost go through ignore_release_error()
+ * so a failed one is not reported by a later check; plans, streams and events
+ * are created and destroyed through the counting helpers (count_cufft_plan(),
+ * release_cufft_plan(), ...).
  *
  * @example
  * @code
- * CUDA_CHECK(cudaStreamCreate(&stream));
+ * CUDA_CHECK(count_cuda_stream(cudaStreamCreate(&stream)));   // counted handle
  * CUDA_CHECK(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
  * ker_scale<<<blocks, threads, 0, stream>>>(d_x, 2.0, n);
  * CUDA_CHECK_LAUNCH();
@@ -277,7 +279,7 @@ inline void throw_on_cuda_error(cudaError_t code, const char *file, int line, co
  *
  * @example
  * @code
- * CUFFT_CHECK(cufftPlanMany(&plan, ...));
+ * CUFFT_CHECK(count_cufft_plan(cufftPlanMany(&plan, ...)));   // counted handle
  * CUFFT_CHECK(cufftExecD2Z(plan, in, out));
  * @endcode
  */
@@ -370,14 +372,15 @@ inline cufftResult count_cufft_plan(cufftResult code) noexcept
         cuda_handle_counters().cufft_plans.fetch_add(1, std::memory_order_relaxed);
     return code;
 }
-/// Destroy a plan counted by count_cufft_plan(), without throwing. A failure is
-/// only counted: cuFFT carries its own CUDA runtime (libcufft does not link
-/// libcudart), so it leaves nothing in this program's error slot.
+/// Destroy a plan counted by count_cufft_plan(), without throwing. Like every
+/// release helper, it takes the plan off the live count whether or not the
+/// destroy call succeeded (the object no longer holds it) and counts a failure
+/// in cuda_release_failures(). cuFFT carries its own CUDA runtime (libcufft does
+/// not link libcudart), so a failure leaves nothing in this program's error slot.
 inline void release_cufft_plan(cufftHandle plan) noexcept
 {
-    if (cufftDestroy(plan) == CUFFT_SUCCESS)
-        cuda_handle_counters().cufft_plans.fetch_sub(1, std::memory_order_relaxed);
-    else
+    cuda_handle_counters().cufft_plans.fetch_sub(1, std::memory_order_relaxed);
+    if (cufftDestroy(plan) != CUFFT_SUCCESS)
         cuda_release_failures().fetch_add(1, std::memory_order_relaxed);
 }
 /// Count a created stream (pass the result of cudaStreamCreate through this).
@@ -390,10 +393,8 @@ inline cudaError_t count_cuda_stream(cudaError_t code) noexcept
 /// Destroy a stream counted by count_cuda_stream(), without throwing.
 inline void release_cuda_stream(cudaStream_t stream) noexcept
 {
-    const cudaError_t code = cudaStreamDestroy(stream);
-    if (code == cudaSuccess)
-        cuda_handle_counters().streams.fetch_sub(1, std::memory_order_relaxed);
-    ignore_release_error(code);
+    cuda_handle_counters().streams.fetch_sub(1, std::memory_order_relaxed);
+    ignore_release_error(cudaStreamDestroy(stream));
 }
 /// Count a created event (pass the result of cudaEventCreate* through this).
 inline cudaError_t count_cuda_event(cudaError_t code) noexcept
@@ -405,10 +406,8 @@ inline cudaError_t count_cuda_event(cudaError_t code) noexcept
 /// Destroy an event counted by count_cuda_event(), without throwing.
 inline void release_cuda_event(cudaEvent_t event) noexcept
 {
-    const cudaError_t code = cudaEventDestroy(event);
-    if (code == cudaSuccess)
-        cuda_handle_counters().events.fetch_sub(1, std::memory_order_relaxed);
-    ignore_release_error(code);
+    cuda_handle_counters().events.fetch_sub(1, std::memory_order_relaxed);
+    ignore_release_error(cudaEventDestroy(event));
 }
 
 /**

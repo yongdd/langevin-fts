@@ -176,5 +176,11 @@ IF(POLYMERFTS_BUILD_CUDA)
     IF(TARGET TestCudaDeviceBuffer)
         # Exit code 77: the out-of-memory check could not hold the device memory
         SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        # NVML gives this process's device memory for the end-to-end check
+        # (other processes on the GPU then do not disturb it)
+        IF(TARGET CUDA::nvml)
+            TARGET_LINK_LIBRARIES(TestCudaDeviceBuffer PRIVATE CUDA::nvml)
+            TARGET_COMPILE_DEFINITIONS(TestCudaDeviceBuffer PRIVATE POLYMERFTS_TEST_HAS_NVML)
+        ENDIF()
     ENDIF()
 ENDIF()

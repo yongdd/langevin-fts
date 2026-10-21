@@ -10,6 +10,9 @@ include(CMakeFindDependencyMacro)
 # Required dependencies
 find_dependency(OpenMP REQUIRED)
 
+# Link with polymerfts::polymerfts_backends (the platform selector, the enabled
+# backends and the common core, in link order); headers: <PlatformSelector.h> etc.
+
 # Report what was found during the original build
 set(POLYMERFTS_VERSION "@PROJECT_VERSION@")
 set(POLYMERFTS_HAS_FFTW @BUILD_CPU_FFTW_LIB@)
