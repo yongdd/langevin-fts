@@ -17,6 +17,7 @@
 #include "MklCrysFFTObliqueZ.h"
 #endif
 #include "SpaceGroup.h"
+#include "TestNanSafe.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -265,8 +266,7 @@ static bool test_cpu_oblique_glide_engine(const char* label, int Nx, int Ny, int
                 const double v1 = q_phys_out[(ix * Ny + iy) * Nz2 + iz];
                 const double v2 = q_logical_out[full_idx];
                 const double rel = std::abs(v1 - v2) / (std::abs(v2) + 1e-15);
-                if (rel > max_rel)
-                    max_rel = rel;
+                max_rel = max_or_nan(max_rel, rel);  // a NaN stays
             }
         }
     }
@@ -407,8 +407,7 @@ static bool test_cuda_oblique_glide(int Nx, int Ny, int Nz, double ds)
                 const double v1 = h_crys_out[(ix * Ny + iy) * Nz2 + iz];
                 const double v2 = h_std_out[full_idx];
                 const double rel = std::abs(v1 - v2) / (std::abs(v2) + 1e-15);
-                if (rel > max_rel)
-                    max_rel = rel;
+                max_rel = max_or_nan(max_rel, rel);  // a NaN stays
             }
         }
     }

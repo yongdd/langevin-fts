@@ -30,6 +30,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 int main()
 {
@@ -294,7 +295,7 @@ int main()
                 // Check consistency between aggregated and non-aggregated
                 if (model_stress_list.size() >= 2) {
                     double diff = std::abs(model_stress_list[0] - model_stress_list[1]);
-                    double max_val = std::max(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
+                    double max_val = max_or_nan(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
                     double rel_diff = diff / (max_val + 1e-10);
                     std::cout << "  Relative difference (stress, aggregation): " << rel_diff << std::endl;
                     if (!(rel_diff <= 1e-7)) {

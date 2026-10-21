@@ -36,6 +36,7 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
+#include "TestNanSafe.h"
 #ifdef USE_CPU_FFTW
 #include "FftwFFT.h"
 #endif
@@ -81,7 +82,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - data_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -111,7 +112,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - data_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -142,7 +143,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - random_data[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  DCT Random Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -160,7 +161,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - random_data[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  DST Random Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -195,7 +196,7 @@ int main()
         for (int i = 0; i < M; ++i)
             diff_sq_2d[i] = std::pow(data2d_r[i] - data2d_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq_2d.begin(), diff_sq_2d.end()));
+        error = std::sqrt(max_or_nan(diff_sq_2d));
         std::cout << "  2D Mixed BC Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -234,7 +235,7 @@ int main()
         for (int i = 0; i < M3; ++i)
             diff_sq_3d[i] = std::pow(data3d_r[i] - data3d_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq_3d.begin(), diff_sq_3d.end()));
+        error = std::sqrt(max_or_nan(diff_sq_3d));
         std::cout << "  3D Mixed BC Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -426,7 +427,7 @@ int main()
         for (int i = 0; i < N_MKL; ++i)
             diff_sq_mkl[i] = std::pow(data_r_mkl[i] - data_init_mkl[i], 2);
 
-        error_mkl = std::sqrt(*std::max_element(diff_sq_mkl.begin(), diff_sq_mkl.end()));
+        error_mkl = std::sqrt(max_or_nan(diff_sq_mkl));
         std::cout << "  Round-trip Error: " << error_mkl << std::endl;
         if (!std::isfinite(error_mkl) || error_mkl > 1e-7)
         {
@@ -465,7 +466,7 @@ int main()
         for (int i = 0; i < N_MKL; ++i)
             diff_sq_mkl[i] = std::pow(data_r_mkl[i] - random_data_mkl[i], 2);
 
-        error_mkl = std::sqrt(*std::max_element(diff_sq_mkl.begin(), diff_sq_mkl.end()));
+        error_mkl = std::sqrt(max_or_nan(diff_sq_mkl));
         std::cout << "  DCT Random Round-trip Error: " << error_mkl << std::endl;
         if (!std::isfinite(error_mkl) || error_mkl > 1e-7)
         {

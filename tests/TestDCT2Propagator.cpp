@@ -59,6 +59,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 // Test parameters
 const int N = 12;
@@ -138,7 +139,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
     double init_error = 0.0;
     for (int i = 0; i < N; ++i)
     {
-        init_error = std::max(init_error, std::abs(q_init[i] - expected_q_init[i]));
+        init_error = max_or_nan(init_error, std::abs(q_init[i] - expected_q_init[i]));
     }
     std::cout << "  Init error vs notebook: " << std::scientific << init_error << std::fixed << std::endl;
 
@@ -201,7 +202,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
     double max_error = 0.0;
     for (int i = 0; i < N; ++i)
     {
-        max_error = std::max(max_error, std::abs(q_out[i] - expected_q_out[i]));
+        max_error = max_or_nan(max_error, std::abs(q_out[i] - expected_q_out[i]));
     }
     std::cout << "\nMax error vs notebook: " << std::scientific << max_error << std::fixed << std::endl;
 
@@ -209,7 +210,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
     double sym_error = 0.0;
     for (int i = 0; i < N/2; ++i)
     {
-        sym_error = std::max(sym_error, std::abs(q_out[i] - q_out[N-1-i]));
+        sym_error = max_or_nan(sym_error, std::abs(q_out[i] - q_out[N-1-i]));
     }
     std::cout << "Symmetry error: " << std::scientific << sym_error << std::fixed << std::endl;
 
@@ -228,7 +229,9 @@ int run_tests(const std::string& platform, bool reduce_memory)
     std::cout << "  Final mass:   " << final_mass << std::endl;
     std::cout << "  Relative error: " << std::scientific << mass_error << std::fixed << std::endl;
 
-    bool test1_passed = (mass_error < 1e-6) && (max_error < 1e-6);
+    // The initial condition and the q(x) = q(L-x) symmetry are exact up to round-off
+    bool test1_passed = (mass_error < 1e-6) && (max_error < 1e-6)
+                        && (init_error <= 1e-12) && (sym_error <= 1e-12);
     std::cout << "\nTest 1: " << (test1_passed ? "PASSED" : "FAILED") << std::endl;
 
     // Cleanup first test

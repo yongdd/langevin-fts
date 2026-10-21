@@ -22,6 +22,7 @@
 
 #include "CudaCommon.h"
 #include "CudaFFT.h"
+#include "TestNanSafe.h"
 
 int main()
 {
@@ -83,7 +84,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - data_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -119,7 +120,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - data_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -155,7 +156,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - random_data[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  DCT Random Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -178,7 +179,7 @@ int main()
         for (int i = 0; i < N; ++i)
             diff_sq[i] = std::pow(data_r[i] - random_data[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = std::sqrt(max_or_nan(diff_sq));
         std::cout << "  DST Random Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -227,7 +228,7 @@ int main()
         for (int i = 0; i < M; ++i)
             diff_sq_2d[i] = std::pow(data2d_r[i] - data2d_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq_2d.begin(), diff_sq_2d.end()));
+        error = std::sqrt(max_or_nan(diff_sq_2d));
         std::cout << "  2D Mixed BC Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {
@@ -282,7 +283,7 @@ int main()
         for (int i = 0; i < M3; ++i)
             diff_sq_3d[i] = std::pow(data3d_r[i] - data3d_init[i], 2);
 
-        error = std::sqrt(*std::max_element(diff_sq_3d.begin(), diff_sq_3d.end()));
+        error = std::sqrt(max_or_nan(diff_sq_3d));
         std::cout << "  3D Mixed BC Round-trip Error: " << error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
         {

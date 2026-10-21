@@ -30,6 +30,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 typedef std::complex<double> T;
 
@@ -147,7 +148,7 @@ int main()
                 // Check consistency within same chain model
                 if (model_stress_list.size() >= 2) {
                     double diff = std::abs(model_stress_list[0] - model_stress_list[1]);
-                    double max_val = std::max(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
+                    double max_val = max_or_nan(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
                     double rel_diff = diff / (max_val + 1e-10);
                     std::cout << "  Relative difference (aggregation): " << rel_diff << std::endl;
                     if (!(rel_diff <= 1e-7)) {

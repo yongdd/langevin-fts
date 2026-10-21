@@ -24,6 +24,7 @@
 #include "SpaceGroup.h"
 #include "CrysFFTSelector.h"
 #include "Recursive3mFoldParity.h"
+#include "TestNanSafe.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -216,8 +217,8 @@ bool test_cpu_engine(const char* label, int Nx, int Ny, int Nz, double ds)
                 double v2 = q_logical_out[(ix*Ny+iy)*Nz+iz];
                 // error relative to the field scale: a pointwise ratio is undefined
                 // where the reference vanishes (the cosine zeros of an N = 2 mod 4 grid)
-                max_abs = std::max(max_abs, std::abs(v1 - v2));
-                max_ref = std::max(max_ref, std::abs(v2));
+                max_abs = max_or_nan(max_abs, std::abs(v1 - v2));
+                max_ref = max_or_nan(max_ref, std::abs(v2));
             }
     const double max_rel = max_abs / max_ref;
 
@@ -311,8 +312,8 @@ bool test_cuda(int Nx, int Ny, int Nz, double ds)
                 double v2 = h_std_out[(ix*Ny+iy)*Nz+iz];
                 // error relative to the field scale: a pointwise ratio is undefined
                 // where the reference vanishes (the cosine zeros of an N = 2 mod 4 grid)
-                max_abs = std::max(max_abs, std::abs(v1 - v2));
-                max_ref = std::max(max_ref, std::abs(v2));
+                max_abs = max_or_nan(max_abs, std::abs(v1 - v2));
+                max_ref = max_or_nan(max_ref, std::abs(v2));
             }
     const double max_rel = max_abs / max_ref;
 
@@ -386,13 +387,13 @@ bool test_recursive3m(const char* symbol, int hall, int Nx, int Ny, int Nz,
             {
                 double v = q_logical_out[((size_t)(2 * ix) * Ny + 2 * iy) * Nz + 2 * iz];
                 ref[((size_t)ix * Ny2 + iy) * Nz2 + iz] = v;
-                scale = std::max(scale, std::abs(v));
+                scale = max_or_nan(scale, std::abs(v));
             }
 
     auto max_rel = [&](const std::vector<double>& got) {
         double e = 0.0;
         for (int i = 0; i < M_physical; ++i)
-            e = std::max(e, std::abs(got[i] - ref[i]));
+            e = max_or_nan(e, std::abs(got[i] - ref[i]));
         return e / scale;
     };
 
@@ -452,12 +453,12 @@ bool test_recursive3m(const char* symbol, int hall, int Nx, int Ny, int Nz,
                 {
                     double v = q_logical_mul[((size_t)(2 * ix) * Ny + 2 * iy) * Nz + 2 * iz];
                     refm[((size_t)ix * Ny2 + iy) * Nz2 + iz] = v;
-                    scale_m = std::max(scale_m, std::abs(v));
+                    scale_m = max_or_nan(scale_m, std::abs(v));
                 }
         auto max_rel_m = [&](const std::vector<double>& g) {
             double e = 0.0;
             for (int i = 0; i < M_physical; ++i)
-                e = std::max(e, std::abs(g[i] - refm[i]));
+                e = max_or_nan(e, std::abs(g[i] - refm[i]));
             return e / scale_m;
         };
 

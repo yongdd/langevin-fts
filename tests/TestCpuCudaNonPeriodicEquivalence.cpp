@@ -115,8 +115,8 @@ int main()
             for (size_t p = 1; p < platforms.size(); ++p)
             {
                 double Q = compute_Q(platforms[p], c.chain, c.nx, c.lx, c.bc, ds, w);
-                double rel = std::isfinite(Q) ? std::abs(Q - Qref) / std::abs(Qref) : 1e300;
-                if (rel > maxrel) { maxrel = rel; worst = platforms[p]; }
+                double rel = (std::isfinite(Q) && std::isfinite(Qref)) ? std::abs(Q - Qref) / std::abs(Qref) : 1e300;
+                if (!(rel <= maxrel)) { maxrel = rel; worst = platforms[p]; }  // a NaN rel stays
             }
             bool pass = maxrel < rtol;
             all_ok = all_ok && pass;

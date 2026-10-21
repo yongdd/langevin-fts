@@ -23,6 +23,7 @@
 #include "Polymer.h"
 #include "FFT.h"
 #include "TestComputationFactory.h"
+#include "TestNanSafe.h"
 #ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #endif
@@ -32,22 +33,17 @@
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include <cuda_runtime.h>
-// A CUDA build can run on a node without a visible GPU: the CPU part of this
-// test then runs alone and the CUDA part is reported as skipped.
+// A CUDA build tested on a node without a visible GPU fails, like the TestCuda*
+// tests: a skipped CUDA part would read as a passed CUDA test.
 [[maybe_unused]] static bool cuda_device_visible()
 {
     int n_devices = 0;
-    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
-    static bool reported = false;
-    if (!visible && !reported)
+    if (cudaGetDeviceCount(&n_devices) != cudaSuccess || n_devices == 0)
     {
-        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
-        reported = true;
-#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
-        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
-#endif
+        std::cout << "FAILED: this build has the CUDA backend, but no CUDA device is visible." << std::endl;
+        std::exit(1);
     }
-    return visible;
+    return true;
 }
 #endif
 
@@ -277,7 +273,7 @@ int main()
             solver->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
-            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            error = sqrt(max_or_nan(diff_sq));
             std::cout<< "Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
@@ -285,7 +281,7 @@ int main()
             solver->get_chain_propagator(q2_last, p, 1, 0, pc.get_block(1,0).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
-            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            error = sqrt(max_or_nan(diff_sq));
             std::cout<< "Complementary Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
@@ -301,14 +297,14 @@ int main()
 
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
-            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            error = sqrt(max_or_nan(diff_sq));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
-            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            error = sqrt(max_or_nan(diff_sq));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;

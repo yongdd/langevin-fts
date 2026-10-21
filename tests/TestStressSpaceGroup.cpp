@@ -50,6 +50,7 @@
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
 #include "SpaceGroup.h"
+#include "TestNanSafe.h"
 
 namespace
 {
@@ -340,7 +341,7 @@ void symmetrize_fields(CaseSpec& cs)
 
     double max_asym = 0.0;
     for(int i=0; i<2*M; i++)
-        max_asym = std::max(max_asym, std::abs(w_sym[i]-cs.w_full[i]));
+        max_asym = max_or_nan(max_asym, std::abs(w_sym[i]-cs.w_full[i]));
     std::cout << cs.name << ": max |w_sym - w_analytic| = " << max_asym << std::endl;
 
     cs.w_full = w_sym;

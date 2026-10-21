@@ -37,6 +37,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 typedef std::complex<double> T;
 
@@ -122,8 +123,8 @@ static double rel_diff(const std::vector<T>& a, const std::vector<T>& b, int n)
         const double d = std::abs(a[i] - b[i]);
         if (!std::isfinite(d))
             return d;
-        scale = std::max(scale, std::abs(a[i]));
-        diff = std::max(diff, d);
+        scale = max_or_nan(scale, std::abs(a[i]));
+        diff = max_or_nan(diff, d);
     }
     return diff / std::max(scale, 1e-12);
 }

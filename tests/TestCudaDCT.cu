@@ -14,6 +14,7 @@
 #include <fftw3.h>
 
 #include "../src/platforms/cuda/CudaRealTransform.h"
+#include "TestNanSafe.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -59,12 +60,11 @@ bool test_dct1_1d(int N)
     double max_err = 0;
     for (int i = 0; i < size; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
     // Relative error (scale by max value)
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -113,11 +113,10 @@ bool test_dct2_1d(int N)
     double max_err = 0;
     for (int i = 0; i < N; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -166,11 +165,10 @@ bool test_dct3_1d(int N)
     double max_err = 0;
     for (int i = 0; i < N; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -219,11 +217,10 @@ bool test_dct4_1d(int N)
     double max_err = 0;
     for (int i = 0; i < N; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -280,11 +277,10 @@ bool test_dct1_2d(int Nx, int Ny)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -343,11 +339,10 @@ bool test_dct2_2d(int Nx, int Ny)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -402,11 +397,10 @@ bool test_dct3_2d(int Nx, int Ny)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -461,11 +455,10 @@ bool test_dct4_2d(int Nx, int Ny)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -526,11 +519,10 @@ bool test_dct1_3d(int Nx, int Ny, int Nz)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -592,11 +584,10 @@ bool test_dct2_3d(int Nx, int Ny, int Nz)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -654,11 +645,10 @@ bool test_dct3_3d(int Nx, int Ny, int Nz)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -717,11 +707,10 @@ bool test_dct4_3d(int Nx, int Ny, int Nz)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -771,11 +760,10 @@ bool test_dct1_roundtrip(int N)
     double max_err = 0;
     for (int i = 0; i < size; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_input.begin(), h_input.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_input);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  FFTW round-trip: Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -822,11 +810,10 @@ bool test_dct23_inverse(int N)
     double max_err = 0;
     for (int i = 0; i < N; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_input.begin(), h_input.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_input);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  FFTW DCT-2 + DCT-3 round-trip: rel_err = %.6e\n", rel_err);
@@ -880,11 +867,10 @@ bool test_cuda_dct1_roundtrip(int N)
     double max_err = 0;
     for (int i = 0; i < size; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_input.begin(), h_input.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_input);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -946,11 +932,10 @@ bool test_cuda_dct1_3d_roundtrip(int Nx, int Ny, int Nz)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_input.begin(), h_input.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_input);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -1030,11 +1015,10 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
@@ -1138,11 +1122,10 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
     double max_err = 0;
     for (int i = 0; i < M; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
+        max_err = max_or_nan(max_err, err);
     }
 
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double max_val = max_abs_or_nan(h_fftw);
     double rel_err = max_err / std::abs(max_val);
 
     printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);

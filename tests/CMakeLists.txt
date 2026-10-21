@@ -130,8 +130,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
     ELSE()
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
     ENDIF()
-    # Exit code 77: skipped (the platform the test needs is missing: cpu-fftw
-    # in an MKL-only build, or a visible GPU)
+    # Exit code 77: skipped (a CPU platform the test needs is missing, e.g. cpu-fftw
+    # in an MKL-only build). A CUDA build run without a visible GPU fails instead.
     SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()

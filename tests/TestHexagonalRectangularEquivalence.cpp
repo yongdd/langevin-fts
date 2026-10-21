@@ -45,6 +45,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 /**
  * @brief Result structure for SCFT calculation
@@ -165,7 +166,7 @@ ScftResult run_scft_fixed_box(
                     double r = std::sqrt(std::max(0.0, r_sq));
 
                     double phi_cyl = 0.5 * (1.0 - std::tanh((r - cylinder_radius) / interface_width));
-                    max_phi = std::max(max_phi, phi_cyl);
+                    max_phi = max_or_nan(max_phi, phi_cyl);
                 }
                 phi_a[idx] = max_phi;
             }
@@ -407,8 +408,8 @@ int main()
             }
 
             // Check stress convergence
-            double max_stress_hex = std::max(std::abs(result_hex.stress[0]), std::abs(result_hex.stress[1]));
-            double max_stress_rect = std::max(std::abs(result_rect.stress[0]), std::abs(result_rect.stress[1]));
+            double max_stress_hex = max_or_nan(std::abs(result_hex.stress[0]), std::abs(result_hex.stress[1]));
+            double max_stress_rect = max_or_nan(std::abs(result_rect.stress[0]), std::abs(result_rect.stress[1]));
             std::cout << "\nStress at optimal box:" << std::endl;
             std::cout << "  Max |stress| (hex): " << std::scientific << max_stress_hex << std::endl;
             std::cout << "  Max |stress| (rect): " << max_stress_rect << std::endl;

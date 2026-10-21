@@ -29,6 +29,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 int main()
 {
@@ -404,7 +405,7 @@ int main()
                 if (model_stress_list_0.size() >= 2) {
                     // Check stress[0] consistency
                     double diff0 = std::abs(model_stress_list_0[0] - model_stress_list_0[1]);
-                    double max_val0 = std::max(std::abs(model_stress_list_0[0]), std::abs(model_stress_list_0[1]));
+                    double max_val0 = max_or_nan(std::abs(model_stress_list_0[0]), std::abs(model_stress_list_0[1]));
                     double rel_diff0 = diff0 / (max_val0 + 1e-10);
                     std::cout << "  Relative difference (stress[0], aggregation): " << rel_diff0 << std::endl;
                     if (!(rel_diff0 <= 1e-7)) {
@@ -414,7 +415,7 @@ int main()
 
                     // Check stress[1] consistency
                     double diff1 = std::abs(model_stress_list_1[0] - model_stress_list_1[1]);
-                    double max_val1 = std::max(std::abs(model_stress_list_1[0]), std::abs(model_stress_list_1[1]));
+                    double max_val1 = max_or_nan(std::abs(model_stress_list_1[0]), std::abs(model_stress_list_1[1]));
                     double rel_diff1 = diff1 / (max_val1 + 1e-10);
                     std::cout << "  Relative difference (stress[1], aggregation): " << rel_diff1 << std::endl;
                     if (!(rel_diff1 <= 1e-7)) {

@@ -89,15 +89,15 @@ int main()
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        // This test runs on cuda only, which is listed only when a device is visible:
-        // exit 77 (a ctest skip) without one
+        // This test runs on cuda only, which is listed only when a device is visible.
+        // Without one it fails, like the TestCuda* tests: a skip would read as a pass.
         bool has_cuda = false;
         for(const std::string& name : avail_platforms)
             has_cuda = has_cuda || (name == "cuda");
         if(!has_cuda)
         {
-            std::cout << "SKIP: no visible CUDA device." << std::endl;
-            return 77;
+            std::cout << "FAILED: no visible CUDA device." << std::endl;
+            return 1;
         }
         std::string chain_model = "Discrete";
         std::vector<bool> aggregate_propagator_computations = {false, true};

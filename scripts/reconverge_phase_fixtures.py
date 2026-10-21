@@ -27,7 +27,21 @@ import os
 import sys
 import time
 
-os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "0")
+
+def _platform_from_argv(argv):
+    """The --platform value before argparse runs (OpenMP reads the environment at import)."""
+    for i, arg in enumerate(argv):
+        if arg == "--platform" and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--platform="):
+            return arg.split("=", 1)[1]
+    return "cuda"  # the default of --platform in main()
+
+
+# CPU runs use one core (OMP_MAX_ACTIVE_LEVELS=0 disables OpenMP); on CUDA 0 would
+# also run the propagator streams one after another, so GPU runs keep 1 and compute
+# OMP_NUM_THREADS propagators concurrently (CUDA streams, up to 4).
+os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1" if _platform_from_argv(sys.argv[1:]) == "cuda" else "0")
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 # Import the library before the test module: the test module forces
@@ -75,7 +89,9 @@ def run_phase(name, platform, tolerance, max_iter, write):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    # allow_abbrev=False: --platform must be spelled out, as _platform_from_argv reads it
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 allow_abbrev=False)
     ap.add_argument("phases", nargs="*", help="phase names (default: all phases of the test)")
     ap.add_argument("--platform", default="cuda")
     ap.add_argument("--tolerance", type=float, default=1e-9, help="convergence tolerance for re-converging (default 1e-9)")

@@ -44,6 +44,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestNanSafe.h"
 
 // Test parameters
 const double F_A = 0.375;           // A-block fraction
@@ -214,7 +215,7 @@ bool test_same_segment_pairs(
             for (size_t i = 0; i < r1.stress.size() && i < r2.stress.size(); i++)
             {
                 double s_diff = std::abs(r1.stress[i] - r2.stress[i]);
-                double s_max = std::max(std::abs(r1.stress[i]), std::abs(r2.stress[i]));
+                double s_max = max_or_nan(std::abs(r1.stress[i]), std::abs(r2.stress[i]));
                 double s_rel_diff = s_diff / (s_max + 1e-15);
 
                 if (!(s_rel_diff <= TOLERANCE) && !(s_diff <= 1e-12))

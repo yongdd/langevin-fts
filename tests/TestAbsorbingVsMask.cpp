@@ -64,22 +64,17 @@
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include <cuda_runtime.h>
-// A CUDA build can run on a node without a visible GPU: the CPU part of this
-// test then runs alone and the CUDA part is reported as skipped.
+// A CUDA build tested on a node without a visible GPU fails, like the TestCuda*
+// tests: a skipped CUDA part would read as a passed CUDA test.
 [[maybe_unused]] static bool cuda_device_visible()
 {
     int n_devices = 0;
-    const bool visible = (cudaGetDeviceCount(&n_devices) == cudaSuccess && n_devices > 0);
-    static bool reported = false;
-    if (!visible && !reported)
+    if (cudaGetDeviceCount(&n_devices) != cudaSuccess || n_devices == 0)
     {
-        std::cout << "No visible CUDA device: the CUDA part of this test was skipped." << std::endl;
-        reported = true;
-#if !defined(USE_CPU_FFTW) && !defined(USE_CPU_MKL)
-        std::exit(77);  // a CUDA-only build: nothing of this test can run (ctest skip)
-#endif
+        std::cout << "FAILED: this build has the CUDA backend, but no CUDA device is visible." << std::endl;
+        std::exit(1);
     }
-    return visible;
+    return true;
 }
 #endif
 

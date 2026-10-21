@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <CudaCommon.h>
 #include "CudaSolverCNADI.h"
+#include "TestNanSafe.h"
 
 int main()
 {
@@ -74,7 +75,7 @@ int main()
             std::cout << i << ": " << x_answer[i] << ", " << x[i] << std::endl;
         for(int i=0; i<M; i++)
             diff_sq[i] = pow(x_answer[i] - x[i],2);
-        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        error = sqrt(max_or_nan(diff_sq));
 
         std::cout<< "Inverse error: "<< error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
@@ -89,7 +90,7 @@ int main()
             std::cout << i << ": " << x_periodic_answer[i] << ", " << x[i] << std::endl;
         for(int i=0; i<M; i++)
             diff_sq[i] = pow(x_periodic_answer[i] - x[i],2);
-        error = sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
+        error = sqrt(max_or_nan(diff_sq));
 
         std::cout<< "Inverse error: "<< error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)

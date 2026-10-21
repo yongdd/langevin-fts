@@ -18,6 +18,7 @@
 
 #include "Exception.h"
 #include "FFT.h"
+#include "TestNanSafe.h"
 #ifdef USE_CPU_FFTW
 #include "FftwFFT.h"
 #endif
@@ -130,7 +131,7 @@ int main()
                 diff_sq_cplx[i]  = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
                 diff_sq_cplx[i] += pow(std::abs(data_k[i].imag() - data_k_answer[i].imag()),2);
             }
-            error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
+            error = sqrt(max_or_nan(diff_sq_cplx));
             std::cout<< "FFT<std::complex<double>> Forward Error: " << error << std::endl;
             if(!std::isfinite(error) || error > 1e-7)
                 return -1;
@@ -141,7 +142,7 @@ int main()
                 diff_sq_cplx[i]  = pow(std::abs(data_r[i].real() - data_init[i].real()),2);
                 diff_sq_cplx[i] += pow(std::abs(data_r[i].imag() - data_init[i].imag()),2);
             }
-            error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
+            error = sqrt(max_or_nan(diff_sq_cplx));
             std::cout<< "FFT<std::complex<double>> Backward Error: " << error << std::endl;
             if(!std::isfinite(error) || error > 1e-7)
                 return -1;
