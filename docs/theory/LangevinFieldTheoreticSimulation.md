@@ -1,6 +1,6 @@
 # Langevin Field-Theoretic Simulation (L-FTS)
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes Langevin field-theoretic simulation (L-FTS), which includes compositional fluctuations beyond mean-field theory.
 
@@ -34,23 +34,29 @@ The key insight is the **partial saddle-point approximation (PSPA)**: real field
 
 The canonical partition function in field-theoretic representation:
 
-$$\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}])$$
+```math
+\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}])
+```
 
-In PSPA, we split auxiliary fields into real ($\Omega_i$) and imaginary ($\Omega_j$) components:
+In PSPA, we split auxiliary fields into real ($`\Omega_i`$) and imaginary ($`\Omega_j`$) components:
 
-$$\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}, \{\Omega_j^*\}])$$
+```math
+\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}, \{\Omega_j^*\}])
+```
 
-where $\{\Omega_j^*\}$ are saddle-point solutions for imaginary fields:
+where $`\{\Omega_j^*\}`$ are saddle-point solutions for imaginary fields:
 
-$$\left.\frac{\delta H[\{\Omega_i\}, \{\Omega_j\}]}{\delta \Omega_j}\right|_{\Omega_j = \Omega_j^*} = 0$$
+```math
+\left.\frac{\delta H[\{\Omega_i\}, \{\Omega_j\}]}{\delta \Omega_j}\right|_{\Omega_j = \Omega_j^*} = 0
+```
 
 ### 2.2 Example: AB Diblock Copolymer
 
 For AB-type systems:
-- **Real field**: $\Omega_-$ (exchange field, composition fluctuations)
-- **Imaginary field**: $\Omega_+$ (pressure-like field, incompressibility)
+- **Real field**: $`\Omega_-`$ (exchange field, composition fluctuations)
+- **Imaginary field**: $`\Omega_+`$ (pressure-like field, incompressibility)
 
-The exchange field $\Omega_-$ fluctuates according to Langevin dynamics, while $\Omega_+$ is kept at its saddle point to enforce incompressibility.
+The exchange field $`\Omega_-`$ fluctuates according to Langevin dynamics, while $`\Omega_+`$ is kept at its saddle point to enforce incompressibility.
 
 ---
 
@@ -60,34 +66,42 @@ The exchange field $\Omega_-$ fluctuates according to Langevin dynamics, while $
 
 The real fields evolve according to:
 
-$$\frac{\partial \Omega_i(\mathbf{r}, \tau)}{\partial \tau} = -\lambda_i \frac{\delta H}{\delta \Omega_i(\mathbf{r}, \tau)} + \eta(\mathbf{r}, \tau)$$
+```math
+\frac{\partial \Omega_i(\mathbf{r}, \tau)}{\partial \tau} = -\lambda_i \frac{\delta H}{\delta \Omega_i(\mathbf{r}, \tau)} + \eta(\mathbf{r}, \tau)
+```
 
 with noise statistics:
-- $\langle \eta(\mathbf{r}, \tau) \rangle = 0$
-- $\langle \eta(\mathbf{r}, \tau) \eta(\mathbf{r}', \tau') \rangle = 2\lambda_i k_B T \, \delta(\mathbf{r} - \mathbf{r}') \delta(\tau - \tau')$
+- $`\langle \eta(\mathbf{r}, \tau) \rangle = 0`$
+- $`\langle \eta(\mathbf{r}, \tau) \eta(\mathbf{r}', \tau') \rangle = 2\lambda_i k_B T \, \delta(\mathbf{r} - \mathbf{r}') \delta(\tau - \tau')`$
 
 ### 3.2 Discretized Equation (Per Chain Unit)
 
-Discretizing with cell volume $\Delta V$ and time step $\delta\tau$:
+Discretizing with cell volume $`\Delta V`$ and time step $`\delta\tau`$:
 
-$$\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \sigma_i \mathcal{N}(\mathbf{r}, \tau)$$
+```math
+\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \sigma_i \mathcal{N}(\mathbf{r}, \tau)
+```
 
 where:
-- $\mathcal{N}$: Gaussian noise with zero mean and unit variance
-- $\sigma_i^2 = \lambda_i \frac{2 \delta\tau N}{\Delta V / R_0^3 \cdot \sqrt{\bar{N}}}$
-- $\bar{N} = b^6 \rho_0^2 N$: invariant polymerization index
+- $`\mathcal{N}`$: Gaussian noise with zero mean and unit variance
+- $`\sigma_i^2 = \lambda_i \frac{2 \delta\tau N}{\Delta V / R_0^3 \cdot \sqrt{\bar{N}}}`$
+- $`\bar{N} = b^6 \rho_0^2 N`$: invariant polymerization index
 
 ### 3.3 Euler Method
 
-The simplest discretization (first-order in $\delta\tau$):
+The simplest discretization (first-order in $`\delta\tau`$):
 
-$$\Omega_-(\mathbf{r}, \tau + \delta\tau) = \Omega_-(\mathbf{r}, \tau) - \lambda_- \left[\Phi_-(\mathbf{r}) + \frac{2}{\chi N}\Omega_-(\mathbf{r})\right] \delta\tau N + \sigma \mathcal{N}(\mathbf{r}, \tau)$$
+```math
+\Omega_-(\mathbf{r}, \tau + \delta\tau) = \Omega_-(\mathbf{r}, \tau) - \lambda_- \left[\Phi_-(\mathbf{r}) + \frac{2}{\chi N}\Omega_-(\mathbf{r})\right] \delta\tau N + \sigma \mathcal{N}(\mathbf{r}, \tau)
+```
 
 ### 3.4 Leimkuhler-Matthews Method
 
 A more accurate second-order method that averages noise over two time steps:
 
-$$\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \frac{\sigma_i}{2}\left[\mathcal{N}(\mathbf{r}, \tau) + \mathcal{N}(\mathbf{r}, \tau + \delta\tau)\right]$$
+```math
+\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \frac{\sigma_i}{2}\left[\mathcal{N}(\mathbf{r}, \tau) + \mathcal{N}(\mathbf{r}, \tau + \delta\tau)\right]
+```
 
 **Advantages:**
 - Better sampling of the target distribution
@@ -102,7 +116,9 @@ $$\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda
 
 Update the pressure-like field using gradient descent:
 
-$$\Omega_+(\mathbf{r}, \tau + \delta\tau) = \Omega_+(\mathbf{r}, \tau) + \lambda_+ \left[\phi_A(\mathbf{r}) + \phi_B(\mathbf{r}) - 1\right] \delta\tau N$$
+```math
+\Omega_+(\mathbf{r}, \tau + \delta\tau) = \Omega_+(\mathbf{r}, \tau) + \lambda_+ \left[\phi_A(\mathbf{r}) + \phi_B(\mathbf{r}) - 1\right] \delta\tau N
+```
 
 ### 4.2 Anderson Mixing
 
@@ -112,9 +128,11 @@ Accelerates convergence using history of previous iterations (see [SelfConsisten
 
 Uses linear response theory to predict the saddle-point directly:
 
-$$\Omega_+^* \approx \Omega_+^{(0)} + \chi_{\Omega_+}^{-1} \cdot (\phi_+ - 1)$$
+```math
+\Omega_+^* \approx \Omega_+^{(0)} + \chi_{\Omega_+}^{-1} \cdot (\phi_+ - 1)
+```
 
-where $\chi_{\Omega_+}$ is the response function.
+where $`\chi_{\Omega_+}`$ is the response function.
 
 ### 4.4 Available Compressors
 
@@ -132,24 +150,26 @@ where $\chi_{\Omega_+}$ is the response function.
 
 The structure function is computed using response theory (chemical potential-density correlation):
 
-$$S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k}) \rangle$$
+```math
+S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k}) \rangle
+```
 
-where $\tilde{\mu}_i(\mathbf{k})$ is the Fourier transform of the chemical potential field and $\tilde{\phi}_j(\mathbf{k})$ is the Fourier transform of the concentration field.
+where $`\tilde{\mu}_i(\mathbf{k})`$ is the Fourier transform of the chemical potential field and $`\tilde{\phi}_j(\mathbf{k})`$ is the Fourier transform of the concentration field.
 
 ### 5.2 Computing Structure Functions
 
 In L-FTS, structure functions are computed by:
-1. Fourier transforming the chemical potential fields $\mu_i(\mathbf{r})$
-2. Fourier transforming the concentration fields $\phi_j(\mathbf{r})$
-3. Computing $\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k})$
+1. Fourier transforming the chemical potential fields $`\mu_i(\mathbf{r})`$
+2. Fourier transforming the concentration fields $`\phi_j(\mathbf{r})`$
+3. Computing $`\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k})`$
 4. Averaging over Langevin trajectory
-5. Multiplying by $V \sqrt{\bar{n}}$ normalization factor
+5. Multiplying by $`V \sqrt{\bar{n}}`$ normalization factor
 
 ### 5.3 Physical Interpretation
 
 - **Peak position**: Characteristic length scale of microphase separation
 - **Peak height**: Degree of ordering (diverges at spinodal)
-- **Low-$k$ behavior**: Long-wavelength fluctuations
+- **Low-$`k`$ behavior**: Long-wavelength fluctuations
 
 ---
 
@@ -219,8 +239,8 @@ simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 | Parameter | Description | Typical Value |
 |-----------|-------------|---------------|
-| `nbar` | Invariant polymerization index $\bar{N}$ | 100 - 10000 |
-| `dt` | Time step $\delta\tau N$ | 1.0 - 10.0 |
+| `nbar` | Invariant polymerization index $`\bar{N}`$ | 100 - 10000 |
+| `dt` | Time step $`\delta\tau N`$ | 1.0 - 10.0 |
 | `max_step` | Total Langevin steps | 10000 - 100000 |
 | `tolerance` | Incompressibility tolerance | 1e-4 |
 
@@ -228,16 +248,18 @@ simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 The noise amplitude depends on system parameters:
 
-$$\sigma = \sqrt{\frac{2 \cdot \delta\tau N}{\Delta V \cdot \sqrt{\bar{N}}}}$$
+```math
+\sigma = \sqrt{\frac{2 \cdot \delta\tau N}{\Delta V \cdot \sqrt{\bar{N}}}}
+```
 
-where $\Delta V = \Delta x \Delta y \Delta z$ is the cell volume.
+where $`\Delta V = \Delta x \Delta y \Delta z`$ is the cell volume.
 
 ### 6.4 Output Files
 
 | File | Description |
 |------|-------------|
 | `fields_NNNNNN.mat` | Potential fields and concentrations |
-| `structure_function_NNNNNN.mat` | Structure functions $S_{AA}$, $S_{AB}$, $S_{BB}$ |
+| `structure_function_NNNNNN.mat` | Structure functions $`S_{AA}`$, $`S_{AB}`$, $`S_{BB}`$ |
 
 ---
 

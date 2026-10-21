@@ -28,8 +28,8 @@
  * basis feasibility means Delta is surjective over ALL diagonal ops
  * (including centering-composed ones), and an exchange argument shows some
  * composition of the generators with pure centering translations then gives
- * a bijective psi.  CrysFFTSelector performs that search, making
- * selector acceptance exactly equivalent to basis feasibility.
+ * a bijective psi.  CrysFFTSelector performs that search, so on even grids
+ * with nz/2 >= 8 its acceptance is exactly basis feasibility.
  */
 
 #ifndef RECURSIVE_3M_FOLD_PARITY_H_

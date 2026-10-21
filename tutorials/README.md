@@ -98,32 +98,34 @@ All quantities in `polymerfts` are expressed in **dimensionless units** based on
 
 | Symbol | Name | Definition |
 |--------|------|------------|
-| $b$ | Reference segment length | Statistical segment length of reference monomer |
-| $N$ | Reference chain length | Number of statistical segments in reference chain |
-| $R_0 = b\sqrt{N}$ | Reference length scale | Unperturbed end-to-end distance |
+| $`b`$ | Reference segment length | Statistical segment length of reference monomer |
+| $`N`$ | Reference chain length | Number of statistical segments in reference chain |
+| $`R_0 = b\sqrt{N}`$ | Reference length scale | Unperturbed end-to-end distance |
 
-**Length**: Measured in units of $R_0$. A box with `lx = [4.0]` is 4 times the polymer size.
+**Length**: Measured in units of $`R_0`$. A box with `lx = [4.0]` is 4 times the polymer size.
 
-**Contour**: The chain backbone is parameterized by $s \in [0, 1]$, where $s=0$ is one end and $s=1$ is the other. The step size `ds = 0.01` corresponds to $N = 100$ segments.
+**Contour**: The chain backbone is parameterized by $`s \in [0, 1]`$, where $`s=0`$ is one end and $`s=1`$ is the other. The step size `ds = 0.01` corresponds to $`N = 100`$ segments.
 
 ### Key Physical Quantities
 
 | Symbol | Name | Physical Meaning |
 |--------|------|------------------|
-| $q(\mathbf{r}, s)$ | **Propagator** | Statistical weight of all chain conformations with segment $s$ at position $\mathbf{r}$ |
-| $Q$ | **Partition function** | Total statistical weight of all chain conformations (normalization) |
-| $\phi(\mathbf{r})$ | **Concentration** | Ensemble-averaged monomer density at $\mathbf{r}$ |
-| $w(\mathbf{r})$ | **Potential field** | Dimensionless free energy penalty for placing a monomer at $\mathbf{r}$ |
+| $`q(\mathbf{r}, s)`$ | **Propagator** | Statistical weight of all chain conformations with segment $`s`$ at position $`\mathbf{r}`$ |
+| $`Q`$ | **Partition function** | Total statistical weight of all chain conformations (normalization) |
+| $`\phi(\mathbf{r})`$ | **Concentration** | Ensemble-averaged monomer density at $`\mathbf{r}`$ |
+| $`w(\mathbf{r})`$ | **Potential field** | Dimensionless free energy penalty for placing a monomer at $`\mathbf{r}`$ |
 
 ### Boltzmann Weighting
 
 The potential field affects chain statistics through:
 
-$$\text{local weight} \propto e^{-w(\mathbf{r})}$$
+```math
+\text{local weight} \propto e^{-w(\mathbf{r})}
+```
 
-- $w > 0$: Repulsive (monomers avoid this region)
-- $w < 0$: Attractive (monomers prefer this region)
-- $w = 0$: No bias (reference state)
+- $`w > 0`$: Repulsive (monomers avoid this region)
+- $`w < 0`$: Attractive (monomers prefer this region)
+- $`w = 0`$: No bias (reference state)
 
 ## Requirements
 

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Note**: Mathematical equations use LaTeX syntax (`$...$` for inline, `$$...$$` for display). These render correctly on GitHub and in editors with LaTeX support.
+> **Note**: Mathematical equations use GitHub's protected math syntax, `` $`...`$ `` inline and `` ```math `` blocks for display (see [Math in Documentation](#math-in-documentation)).
 
 ## Table of Contents
 
@@ -453,37 +453,49 @@ This library supports two chain models with different mathematical formulations:
 
 Solves the **modified diffusion equation**:
 
-$$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)$$
+```math
+\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)
+```
 
-where $q(\mathbf{r}, s)$ is the chain propagator, $b$ is the statistical segment length, and $w(\mathbf{r})$ is the potential field.
+where $`q(\mathbf{r}, s)`$ is the chain propagator, $`b`$ is the statistical segment length, and $`w(\mathbf{r})`$ is the potential field.
 
 **Pseudo-spectral solution** (operator splitting):
 
-$$q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]$$
+```math
+q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]
+```
 
-The term $e^{-b^2 |\mathbf{k}|^2 \Delta s/6}$ is the **diffusion propagator** in Fourier space.
+The term $`e^{-b^2 |\mathbf{k}|^2 \Delta s/6}`$ is the **diffusion propagator** in Fourier space.
 
 ### Discrete Chain Model (Chapman-Kolmogorov Equation)
 
 Solves the **Chapman-Kolmogorov integral equation** (NOT the modified diffusion equation):
 
-$$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'$$
+```math
+q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'
+```
 
-where $g(\mathbf{r})$ is the **bond function** representing the probability distribution of bond vectors.
+where $`g(\mathbf{r})`$ is the **bond function** representing the probability distribution of bond vectors.
 
 **Bead-spring (Gaussian) bond function**:
 
-$$g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)$$
+```math
+g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)
+```
 
 **Fourier transform of bond function**:
 
-$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)$$
+```math
+\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)
+```
 
-With the convention $a^2 = b^2 \Delta s$ (where $\Delta s = 1/N$), this becomes:
+With the convention $`a^2 = b^2 \Delta s`$ (where $`\Delta s = 1/N`$), this becomes:
 
-$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)$$
+```math
+\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)
+```
 
-**Key distinction**: The formula $\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)$ appears in both models but has different physical meanings:
+**Key distinction**: The formula $`\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)`$ appears in both models but has different physical meanings:
 - **Continuous**: Diffusion propagator from solving the modified diffusion equation
 - **Discrete**: Bond function (Fourier transform of Gaussian bond distribution)
 
@@ -500,14 +512,14 @@ Pseudo-spectral methods use spectral transforms to solve the diffusion operator 
 - **Reflecting BC**: Discrete Cosine Transform (DCT-II)
 - **Absorbing BC**: Discrete Sine Transform (DST-II)
 
-All pseudo-spectral methods use **cell-centered grids** where grid points are at $x_i = (i + 0.5) \cdot dx$ for $i = 0, 1, ..., N-1$, with boundaries at cell faces (not grid points).
+All pseudo-spectral methods use **cell-centered grids** where grid points are at $`x_i = (i + 0.5) \cdot dx`$ for $`i = 0, 1, ..., N-1`$, with boundaries at cell faces (not grid points).
 
 #### RQM4 (4th-order Richardson Extrapolation)
 
 The default method combining operator splitting with Richardson extrapolation:
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
 2. Apply Strang splitting with half-steps
-3. Richardson extrapolation: $q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$ for 4th-order accuracy
+3. Richardson extrapolation: $`q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}`$ for 4th-order accuracy
 
 **Order of accuracy**: 4th-order in ds (convergence order ≈ 4.0)
 
@@ -517,21 +529,21 @@ The default method combining operator splitting with Richardson extrapolation:
 
 Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen-Kalosakas, not Runge-Kutta):
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
-2. Apply Strang splitting: $q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]$
+2. Apply Strang splitting: $`q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]`$
 
 **Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
 
 **Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
 
-**Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains (Park et al. 2019). Both use the same Boltzmann factor $e^{-b^2 k^2 \Delta s / 6}$ in Fourier space.
+**Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains (Park et al. 2019). Both use the same Boltzmann factor $`e^{-b^2 k^2 \Delta s / 6}`$ in Fourier space.
 
 **Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
 
 ### Real-Space Methods (Finite Difference)
 
 Real-space methods use **cell-centered grids** (same as pseudo-spectral methods) for consistent boundary condition handling:
-- **Reflecting BC**: Symmetric ghost cell ($q_{-1} = q_0$)
-- **Absorbing BC**: Antisymmetric ghost cell ($q_{-1} = -q_0$)
+- **Reflecting BC**: Symmetric ghost cell ($`q_{-1} = q_0`$)
+- **Absorbing BC**: Antisymmetric ghost cell ($`q_{-1} = -q_0`$)
 
 #### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
 
@@ -556,7 +568,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 ## Units and Conventions
 
-- Length unit: $b N^{1/2}$ where $b$ is reference statistical segment length, $N$ is reference polymerization index
+- Length unit: $`b N^{1/2}`$ where $`b`$ is reference statistical segment length, $`N`$ is reference polymerization index
 - Fields: Defined as "per reference chain" potential (multiply by `ds` to get "per segment" potential)
 - This follows notation in *Macromolecules* **2013**, 46, 8037
 
@@ -665,19 +677,37 @@ Results must match:
 - **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
 - **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
 
-### LaTeX Validation for Documentation
+### Math in Documentation
 
-GitHub uses KaTeX to render LaTeX in markdown files. Before pushing documentation changes, validate LaTeX syntax:
+GitHub renders math with MathJax only after its Markdown parser has gone over the text. Inside `$...$` and `$$...$$` a pair of `*` or `_` becomes emphasis, `[a](b)` becomes a link, and a backslash before punctuation is dropped (`\,` → `,`, `\{` → `{`, `\\` → `\`), so MathJax reports "Extra close brace or missing open brace" or shows a different formula. Write math only in the two forms whose content GitHub passes through unchanged:
+
+- Inline: `` $`a^{*} \, b`$ ``
+- Display: a fenced block with the info string `math`, at the top level or in a blockquote, never indented inside a list item (GitHub shows it as code when the list also contains inline math). End the list item before the block; a numbered list continues with `2.`.
+
+  ````markdown
+  ```math
+  a^{*} \, b
+  ```
+  ````
+
+- Inside math in a table row write `\vert` (and `\Vert`) instead of `|` (and `\|`): GitHub ends the cell at a `|` even inside the code span.
+- A literal dollar sign outside code is written `\$`.
+
+Check before pushing documentation changes (the CI lint job runs the same check):
 
 ```bash
-# Requires: npm install -g katex
+npm install -g katex   # optional: without it the TeX syntax is not checked
 python scripts/check_latex.py
 ```
 
-This script extracts all LaTeX blocks from `docs/*.md` and validates them with KaTeX CLI. Common issues that cause rendering failures:
-- `\left\{` → use `\left\lbrace` instead
-- `\right\}` → use `\right\rbrace` instead
-- Unmatched `\left` and `\right` delimiters
+It reads every tracked `*.md` outside `devel/` and reports math in the `$...$`/`$$...$$` form, stray `$`, math blocks inside lists, `|` in table math, and formulas KaTeX cannot parse. VS Code's built-in preview renders the `math` blocks but shows inline `` $`...`$ `` with quote marks around it; GitHub is the reference.
+
+### Document Notices
+
+Every LLM-written document in `docs/` (and `examples/*.md`) carries one of two notices as a blockquote on line 3. New documents get the warning; only the maintainer switches a document to the verified note.
+
+- Not yet verified: `> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.`
+- Verified by the author: `> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.`
 
 ## Key References
 

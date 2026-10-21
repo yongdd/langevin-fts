@@ -1,6 +1,6 @@
 # Parameter Reference
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document provides a complete reference for all simulation parameters.
 
@@ -25,7 +25,7 @@ This document provides a complete reference for all simulation parameters.
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `nx` | list[int] | Grid points per dimension | `[32, 32, 32]` |
-| `lx` | list[float] | Box lengths (in units of $b N_{ref}^{1/2}$) | `[4.0, 4.0, 4.0]` |
+| `lx` | list[float] | Box lengths (in units of $`b N_{ref}^{1/2}`$) | `[4.0, 4.0, 4.0]` |
 
 ### Boundary Conditions
 
@@ -61,15 +61,15 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `chain_model` | str | `"continuous"` or `"discrete"` | `"continuous"` |
-| `ds` | float | Contour step size (typically $1/N_{ref}$) | `0.01` |
+| `ds` | float | Contour step size (typically $`1/N_{ref}`$) | `0.01` |
 
 ### Monomer Properties
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `segment_lengths` | dict | Relative statistical segment lengths $b/b_{ref}$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $N_{ref}$; pairs that are omitted do not interact (χN = 0). SCFT needs an invertible χN matrix (its field residual uses χ⁻¹): a single monomer type, or a zero pair in a three-monomer system, is rejected; L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
-| `zeta_n` | float | (Optional) Compressibility parameter $\zeta N$ of the compressible model. Omitted: incompressible ($\sum_i \phi_i = 1$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
+| `segment_lengths` | dict | Relative statistical segment lengths $`b/b_{ref}`$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
+| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). SCFT needs an invertible χN matrix (its field residual uses χ⁻¹): a single monomer type, or a zero pair in a three-monomer system, is rejected; L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
+| `zeta_n` | float | (Optional) Compressibility parameter $`\zeta N`$ of the compressible model. Omitted: incompressible ($`\sum_i \phi_i = 1`$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition
 
@@ -214,7 +214,7 @@ All keys are **required** (omitting one raises `KeyError`). The values above are
 | `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
 | `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
 | `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
-| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $F = -\chi N (f - 1/2)^2$ instead of 0) | `False` |
+| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $`F = -\chi N (f - 1/2)^2`$ instead of 0) | `False` |
 
 Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
 
@@ -255,8 +255,8 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `dt` | float | Langevin time step $\Delta\tau \cdot N_{ref}$ | Required |
-| `nbar` | float | Invariant polymerization index $\bar{n}$ | Required |
+| `dt` | float | Langevin time step $`\Delta\tau \cdot N_{ref}`$ | Required |
+| `nbar` | float | Invariant polymerization index $`\bar{n}`$ | Required |
 | `max_step` | int | Maximum Langevin steps | Required |
 
 ### Saddle Point
@@ -307,13 +307,13 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `ell` | int | $\ell$-norm for order parameter | `4` |
+| `ell` | int | $`\ell`$-norm for order parameter | `4` |
 | `kc` | float | Cutoff wavenumber | `6.02` |
-| `delta_t` | float | Well-tempering factor $\Delta T/T$ | `5.0` |
-| `sigma_psi` | float | Gaussian width $\sigma_\Psi$ | `0.16` |
-| `psi_min` | float | Minimum $\Psi$ | `0.0` |
-| `psi_max` | float | Maximum $\Psi$ | `10.0` |
-| `dpsi` | float | Bin width $d\Psi$ | `1e-3` |
+| `delta_t` | float | Well-tempering factor $`\Delta T/T`$ | `5.0` |
+| `sigma_psi` | float | Gaussian width $`\sigma_\Psi`$ | `0.16` |
+| `psi_min` | float | Minimum $`\Psi`$ | `0.0` |
+| `psi_max` | float | Maximum $`\Psi`$ | `10.0` |
+| `dpsi` | float | Bin width $`d\Psi`$ | `1e-3` |
 | `update_freq` | int | Statistics update frequency | `1000` |
 | `recording_period` | int | Data recording frequency | `100000` |
 
@@ -335,7 +335,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value | `100.0` |
-| `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $i\,\alpha_{ds}\,\mathrm{Im}[W_-]$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Typical: 0.01–0.1 for $\bar{N} \ge 10^5$ | `0.0` |
+| `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $`i\,\alpha_{ds}\,\mathrm{Im}[W_-]`$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Typical: 0.01–0.1 for $`\bar{N} \ge 10^5`$ | `0.0` |
 | `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability | none |
 
 ---
@@ -350,7 +350,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | `aggregate_propagator_computation` | bool | Let the propagator optimizer merge equivalent propagators of branched/mixed systems (turn off only when per-block concentrations are needed from the C++ API) | `True` |
 
 When `True`:
-- Stores only checkpoints every ~$2\sqrt{N_{tot}}$ contour steps, i.e. ~$\sqrt{N_{tot}}/2$ checkpoints per propagator (where $N_{tot}$ is the total number of contour steps)
+- Stores only checkpoints every ~$`2\sqrt{N_{tot}}`$ contour steps, i.e. ~$`\sqrt{N_{tot}}/2`$ checkpoints per propagator (where $`N_{tot}`$ is the total number of contour steps)
 - Reduces memory by ~90%
 - Increases computation time by 2-4x
 
@@ -380,12 +380,12 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `smearing` | dict | (Optional, SCFT/L-FTS/CL-FTS) Finite-range interactions: the fields are convolved with a smearing function before the propagators and the concentrations before the forces, $w_\Gamma(k) = w(k)\,\Gamma(k)$ |
+| `smearing` | dict | (Optional, SCFT/L-FTS/CL-FTS) Finite-range interactions: the fields are convolved with a smearing function before the propagators and the concentrations before the forces, $`w_\Gamma(k) = w(k)\,\Gamma(k)`$ |
 
-| Type | Keys | $\Gamma(k)$ |
+| Type | Keys | $`\Gamma(k)`$ |
 |------|------|--------------|
-| `{"type": "gaussian", "a_int": a}` | smearing length $a$ in units of $R_0$ (universality needs $a \lesssim 0.02 R_0$) | $\exp(-a^2 k^2 / 2)$ |
-| `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $k_c \gtrsim 20 / R_0$, transition width $dk$ (default 5.0) | $C_0 [1 - \tanh((k - k_c)/dk)]$ |
+| `{"type": "gaussian", "a_int": a}` | smearing length $`a`$ in units of $`R_0`$ (universality needs $`a \lesssim 0.02 R_0`$) | $`\exp(-a^2 k^2 / 2)`$ |
+| `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $`k_c \gtrsim 20 / R_0`$, transition width $`dk`$ (default 5.0) | $`C_0 [1 - \tanh((k - k_c)/dk)]`$ |
 
 Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
 
@@ -512,9 +512,9 @@ params = {
 
 ## Units and Conventions
 
-The unit of length is $b N_{ref}^{1/2}$ for both chain models, where:
-- $b$ is a reference statistical segment length
-- $N_{ref}$ is a reference polymerization index
+The unit of length is $`b N_{ref}^{1/2}`$ for both chain models, where:
+- $`b`$ is a reference statistical segment length
+- $`N_{ref}`$ is a reference polymerization index
 
 Fields are defined as **per reference chain** potential. To obtain **per reference segment** potential, multiply each field by `ds`.
 

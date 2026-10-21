@@ -111,6 +111,16 @@ jobs:
       run: |
         flake8 src/python --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+
+    - name: Check the math in the Markdown files
+      run: |
+        npm install -g katex@0.19.0
+        python scripts/check_latex.py
+
   check-platform-consistency:
     name: Platform Consistency Check
     runs-on: ubuntu-latest

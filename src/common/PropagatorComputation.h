@@ -421,7 +421,7 @@ public:
      * Uses reduced basis fields directly. When a space group is set, the
      * solver handles expand/reduce internally around FFT operations.
      *
-     * If you are unsure how reduced basis works, see docs/SpaceGroup.md.
+     * If you are unsure how reduced basis works, see docs/theory/SpaceGroup.md.
      *
      * @param w_reduced Map from monomer type to reduced basis field
      *                  (size: n_basis per field)

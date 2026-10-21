@@ -1,6 +1,6 @@
 # Polymer Field Theory
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes the mathematical formulation of polymer field theory used in SCFT, L-FTS, and CL-FTS simulations. Three representations are covered: monomer potential fields, auxiliary fields (incompressible model), and auxiliary fields (compressible model).
 
@@ -16,71 +16,91 @@ This document describes the mathematical formulation of polymer field theory use
 
 ## 1. Monomer Potential Fields
 
-The monomer potential field formulation expresses the Helmholtz free energy directly in terms of monomer potential fields (e.g., $w_A(\mathbf{r})$, $w_B(\mathbf{r})$). This formulation is implemented in `scft.py`.
+The monomer potential field formulation expresses the Helmholtz free energy directly in terms of monomer potential fields (e.g., $`w_A(\mathbf{r})`$, $`w_B(\mathbf{r})`$). This formulation is implemented in `scft.py`.
 
 ### 1.1 Helmholtz Free Energy
 
 **Per monomer unit:**
 
-$$\beta F = -\sum_p n_p \log Q_p + \rho_0 \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]$$
+```math
+\beta F = -\sum_p n_p \log Q_p + \rho_0 \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]
+```
 
-**Per chain unit** (with rescaling $N w_i(\mathbf{r}) \rightarrow w_i(\mathbf{r})$):
+**Per chain unit** (with rescaling $`N w_i(\mathbf{r}) \rightarrow w_i(\mathbf{r})`$):
 
-$$\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} N \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]$$
+```math
+\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} N \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]
+```
 
 where:
-- $n_p$: number of $p$-chains
-- $Q_p$: single-chain partition function of $p$-chain
-- $\alpha_p = N_p / N$: relative chain length
-- $\bar{\phi}_p$: volume fraction of $p$-chains
-- $\chi_{ij}$: Flory-Huggins interaction parameter between monomers $i$ and $j$
+- $`n_p`$: number of $`p`$-chains
+- $`Q_p`$: single-chain partition function of $`p`$-chain
+- $`\alpha_p = N_p / N`$: relative chain length
+- $`\bar{\phi}_p`$: volume fraction of $`p`$-chains
+- $`\chi_{ij}`$: Flory-Huggins interaction parameter between monomers $`i`$ and $`j`$
 
 ### 1.2 Self-Consistent Conditions
 
 The self-consistent conditions for the potential fields are:
 
-$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})$$
+```math
+w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})
+```
 
-where $\xi(\mathbf{r})$ is a Lagrange multiplier enforcing incompressibility.
+where $`\xi(\mathbf{r})`$ is a Lagrange multiplier enforcing incompressibility.
 
 ### 1.3 SCFT Iteration (Incompressible)
 
-The field residuals $\mathbf{R}_w$ are defined as:
+The field residuals $`\mathbf{R}_w`$ are defined as:
 
-$$\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}$$
+```math
+\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}
+```
 
 where:
-- $X$ is the $\chi N$ matrix
-- $\boldsymbol{\phi}$ and $\mathbf{w}$ are vectors of concentrations and fields
-- $P$ is the projection matrix:
+- $`X`$ is the $`\chi N`$ matrix
+- $`\boldsymbol{\phi}`$ and $`\mathbf{w}`$ are vectors of concentrations and fields
+- $`P`$ is the projection matrix:
 
-$$P = I - \frac{\mathbf{e} \mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}$$
+```math
+P = I - \frac{\mathbf{e} \mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}
+```
 
-In addition to the $\mathbf{k} \neq 0$ residual update, the $\mathbf{k}=0$ mode (field mean) must be normalized correctly. The pressure field $W_+$ is shift-invariant (gauge degree of freedom), but the exchange field $W_-$ has a **physical mean** determined by the saddle-point condition. Simply setting $\langle w_i \rangle = 0$ violates the $\mathbf{k}=0$ self-consistency condition when $f \neq 0.5$.
+In addition to the $`\mathbf{k} \neq 0`$ residual update, the $`\mathbf{k}=0`$ mode (field mean) must be normalized correctly. The pressure field $`W_+`$ is shift-invariant (gauge degree of freedom), but the exchange field $`W_-`$ has a **physical mean** determined by the saddle-point condition. Simply setting $`\langle w_i \rangle = 0`$ violates the $`\mathbf{k}=0`$ self-consistency condition when $`f \neq 0.5`$.
 
-The saddle condition for the $\mathbf{k}=0$ mode is:
+The saddle condition for the $`\mathbf{k}=0`$ mode is:
 
-$$P \langle \mathbf{w} \rangle = P \left( X \langle \boldsymbol{\phi} \rangle \right)$$
+```math
+P \langle \mathbf{w} \rangle = P \left( X \langle \boldsymbol{\phi} \rangle \right)
+```
 
-where $\langle \cdot \rangle$ denotes the spatial mean. Since $\langle \phi_i \rangle = f_i$ exactly by chain normalization, the right-hand side is a constant. At each iteration, the $P$-projected mean of $\mathbf{w}$ is shifted to the target:
+where $`\langle \cdot \rangle`$ denotes the spatial mean. Since $`\langle \phi_i \rangle = f_i`$ exactly by chain normalization, the right-hand side is a constant. At each iteration, the $`P`$-projected mean of $`\mathbf{w}`$ is shifted to the target:
 
-$$\mathbf{w} \leftarrow \mathbf{w} + P \left( X \langle \boldsymbol{\phi} \rangle \right) - P \langle \mathbf{w} \rangle$$
+```math
+\mathbf{w} \leftarrow \mathbf{w} + P \left( X \langle \boldsymbol{\phi} \rangle \right) - P \langle \mathbf{w} \rangle
+```
 
-This pins $\langle W_- \rangle$ to the saddle value while leaving $\langle W_+ \rangle$ untouched (since $P$ annihilates the uniform $[1, 1, \ldots]$ direction). For AB diblocks, the saddle gives $\langle W_- \rangle = (1 - 2f) \chi N / 2$. Setting $\langle W_- \rangle = 0$ instead introduces a free energy error of $\chi N (f - 1/2)^2$, which vanishes for symmetric diblocks ($f = 0.5$). The $P$ and $X$ matrices are $M \times M$ for $M$ monomer types, so this applies to arbitrary multi-monomer systems.
+This pins $`\langle W_- \rangle`$ to the saddle value while leaving $`\langle W_+ \rangle`$ untouched (since $`P`$ annihilates the uniform $`[1, 1, \ldots]`$ direction). For AB diblocks, the saddle gives $`\langle W_- \rangle = (1 - 2f) \chi N / 2`$. Setting $`\langle W_- \rangle = 0`$ instead introduces a free energy error of $`\chi N (f - 1/2)^2`$, which vanishes for symmetric diblocks ($`f = 0.5`$). The $`P`$ and $`X`$ matrices are $`M \times M`$ for $`M`$ monomer types, so this applies to arbitrary multi-monomer systems.
 
-> **Implementation note:** In `scft.py`, this $\mathbf{k}=0$ pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). The default incompressible behavior is the mean-zero convention warned about above — $w_i \leftarrow w_i - \langle w_i \rangle$ at each iteration — which yields $F_{dis} = 0$ for the disordered phase, whereas the pinned convention matches the field-theoretic Hamiltonian used in L-FTS/CL-FTS ($F_{dis} = -\chi N (f - 1/2)^2$).
+> **Implementation note:** In `scft.py`, this $`\mathbf{k}=0`$ pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). The default incompressible behavior is the mean-zero convention warned about above — $`w_i \leftarrow w_i - \langle w_i \rangle`$ at each iteration — which yields $`F_{dis} = 0`$ for the disordered phase, whereas the pinned convention matches the field-theoretic Hamiltonian used in L-FTS/CL-FTS ($`F_{dis} = -\chi N (f - 1/2)^2`$).
 
 ### 1.4 Self-Consistent Conditions (Compressible)
 
-With finite compressibility $\zeta N$, the pressure field is known:
+With finite compressibility $`\zeta N`$, the pressure field is known:
 
-$$\xi(\mathbf{r}) = \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]$$
+```math
+\xi(\mathbf{r}) = \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]
+```
 
-$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})$$
+```math
+w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})
+```
 
-In SCFT iteration, the same projection residual $\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}$ is used for the fluctuation part, while the field means are pinned to the saddle-point values:
+In SCFT iteration, the same projection residual $`\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}`$ is used for the fluctuation part, while the field means are pinned to the saddle-point values:
 
-$$\langle w_i \rangle = \sum_j X_{ij} \langle \phi_j \rangle + \xi, \qquad \xi = \zeta N \left( \left\langle \sum_j \phi_j \right\rangle - 1 \right)$$
+```math
+\langle w_i \rangle = \sum_j X_{ij} \langle \phi_j \rangle + \xi, \qquad \xi = \zeta N \left( \left\langle \sum_j \phi_j \right\rangle - 1 \right)
+```
 
 See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on the compressible SCFT iteration.
 
@@ -88,17 +108,25 @@ See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on 
 
 For AB-type systems:
 
-$$\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \chi_{AB} N \phi_A(\mathbf{r}) \phi_B(\mathbf{r}) - w_A(\mathbf{r}) \phi_A - w_B(\mathbf{r}) \phi_B \right]$$
+```math
+\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \chi_{AB} N \phi_A(\mathbf{r}) \phi_B(\mathbf{r}) - w_A(\mathbf{r}) \phi_A - w_B(\mathbf{r}) \phi_B \right]
+```
 
 Self-consistent conditions:
 
-$$w_A(\mathbf{r}) = \chi_{AB} N \phi_B(\mathbf{r}) + \xi(\mathbf{r})$$
+```math
+w_A(\mathbf{r}) = \chi_{AB} N \phi_B(\mathbf{r}) + \xi(\mathbf{r})
+```
 
-$$w_B(\mathbf{r}) = \chi_{AB} N \phi_A(\mathbf{r}) + \xi(\mathbf{r})$$
+```math
+w_B(\mathbf{r}) = \chi_{AB} N \phi_A(\mathbf{r}) + \xi(\mathbf{r})
+```
 
 Field residuals:
 
-$$\mathbf{R}_w = \begin{pmatrix} 0 & \chi N \\ \chi N & 0 \end{pmatrix} \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} - \begin{pmatrix} 1/2 & -1/2 \\ -1/2 & 1/2 \end{pmatrix} \begin{pmatrix} w_A(\mathbf{r}) \\ w_B(\mathbf{r}) \end{pmatrix}$$
+```math
+\mathbf{R}_w = \begin{pmatrix} 0 & \chi N \\ \chi N & 0 \end{pmatrix} \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} - \begin{pmatrix} 1/2 & -1/2 \\ -1/2 & 1/2 \end{pmatrix} \begin{pmatrix} w_A(\mathbf{r}) \\ w_B(\mathbf{r}) \end{pmatrix}
+```
 
 ---
 
@@ -110,94 +138,124 @@ The incompressible model uses auxiliary fields to decouple the interaction terms
 
 The canonical partition function with incompressibility constraint:
 
-$$\mathcal{Z} \propto \int \{\mathcal{D}\mathbf{r}_i\} \exp(-U_{id} - U_{int}) \, \delta\left[\sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0\right]$$
+```math
+\mathcal{Z} \propto \int \{\mathcal{D}\mathbf{r}_i\} \exp(-U_{id} - U_{int}) \, \delta\left[\sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0\right]
+```
 
 where:
-- $U_{id}$: intramolecular potential energy
-- $U_{int}$: intermolecular interaction energy
+- $`U_{id}`$: intramolecular potential energy
+- $`U_{int}`$: intermolecular interaction energy
 
-$$U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r})$$
+```math
+U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r})
+```
 
 ### 2.2 Field-Theoretic Representation
 
 After Hubbard-Stratonovich transformation:
 
-$$\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}])$$
+```math
+\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}])
+```
 
 ### 2.3 Effective Hamiltonian
 
 **Per chain unit:**
 
-$$\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M-1} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M-1} \frac{\Omega_i S_i}{\lambda_i} - \Omega_M + \frac{1}{2M} \left( \mathbf{s}^T \mathbf{e} - \sum_{i=1}^{M-1} \frac{S_i^2}{\lambda_i} \right) \right]$$
+```math
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M-1} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M-1} \frac{\Omega_i S_i}{\lambda_i} - \Omega_M + \frac{1}{2M} \left( \mathbf{s}^T \mathbf{e} - \sum_{i=1}^{M-1} \frac{S_i^2}{\lambda_i} \right) \right]
+```
 
 where:
-- $C = \rho_0 R_0^3 / N$: dimensionless chain number density
-- $\bar{N} = C^2$: invariant polymerization index
-- $O$: orthogonal matrix of $PXP$ with $OO^T = M$
-- $\mathbf{s}^T = \mathbf{e}^T X / M$ and $\mathbf{S} = O^T \mathbf{s} / M$
-- $\lambda_i$: eigenvalues of $PXP$
+- $`C = \rho_0 R_0^3 / N`$: dimensionless chain number density
+- $`\bar{N} = C^2`$: invariant polymerization index
+- $`O`$: orthogonal matrix of $`PXP`$ with $`OO^T = M`$
+- $`\mathbf{s}^T = \mathbf{e}^T X / M`$ and $`\mathbf{S} = O^T \mathbf{s} / M`$
+- $`\lambda_i`$: eigenvalues of $`PXP`$
 
 ### 2.4 Field Transformations
 
-The relations between auxiliary fields $\{\Omega_i\}$ and monomer potential fields $\{W_i\}$:
+The relations between auxiliary fields $`\{\Omega_i\}`$ and monomer potential fields $`\{W_i\}`$:
 
-$$\begin{pmatrix} W_1(\mathbf{r}) \\ W_2(\mathbf{r}) \\ \vdots \\ W_M(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_1(\mathbf{r}) \\ \Omega_2(\mathbf{r}) \\ \vdots \\ \Omega_M(\mathbf{r}) \end{pmatrix}$$
+```math
+\begin{pmatrix} W_1(\mathbf{r}) \\ W_2(\mathbf{r}) \\ \vdots \\ W_M(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_1(\mathbf{r}) \\ \Omega_2(\mathbf{r}) \\ \vdots \\ \Omega_M(\mathbf{r}) \end{pmatrix}
+```
 
 ### 2.5 Example: AB Diblock (Incompressible)
 
 For AB-type systems, the auxiliary fields are:
-- $\Omega_-$: exchange field (composition fluctuations)
-- $\Omega_+$: pressure-like field (incompressibility)
+- $`\Omega_-`$: exchange field (composition fluctuations)
+- $`\Omega_+`$: pressure-like field (incompressibility)
 
 **Effective Hamiltonian:**
 
-$$\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{\Omega_-^2(\mathbf{r})}{\chi N} - \Omega_+(\mathbf{r}) + \frac{\chi N}{4} \right]$$
+```math
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{\Omega_-^2(\mathbf{r})}{\chi N} - \Omega_+(\mathbf{r}) + \frac{\chi N}{4} \right]
+```
 
 **Functional derivatives:**
 
-$$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_-(\mathbf{r})} = \Phi_-(\mathbf{r}) + \frac{2}{\chi N} \Omega_-(\mathbf{r})$$
+```math
+\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_-(\mathbf{r})} = \Phi_-(\mathbf{r}) + \frac{2}{\chi N} \Omega_-(\mathbf{r})
+```
 
-$$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\mathbf{r}) - 1$$
+```math
+\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\mathbf{r}) - 1
+```
 
 **Transformation matrix:**
 
-$$O = \begin{pmatrix} 1 & 1 \\ -1 & 1 \end{pmatrix}$$
+```math
+O = \begin{pmatrix} 1 & 1 \\ -1 & 1 \end{pmatrix}
+```
 
-$$\begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix} = O^T \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix}$$
+```math
+\begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix} = O^T \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix}
+```
 
-so that $\Phi_- = \phi_A - \phi_B$ and $\Phi_+ = \phi_A + \phi_B$, consistent with $\Phi_i = \sum_j O_{ji} \phi_j$ in Section 4.1 and with the incompressibility condition $\delta H / \delta \Omega_+ \propto \Phi_+ - 1$.
+so that $`\Phi_- = \phi_A - \phi_B`$ and $`\Phi_+ = \phi_A + \phi_B`$, consistent with $`\Phi_i = \sum_j O_{ji} \phi_j`$ in Section 4.1 and with the incompressibility condition $`\delta H / \delta \Omega_+ \propto \Phi_+ - 1`$.
 
 ---
 
 ## 3. Compressible Model
 
-The compressible model includes a finite compressibility parameter $\zeta$. This formulation is implemented in `polymer_field_theory.py` and may be used for complex Langevin FTS.
+The compressible model includes a finite compressibility parameter $`\zeta`$. This formulation is implemented in `polymer_field_theory.py` and may be used for complex Langevin FTS.
 
 ### 3.1 Interaction Energy
 
-$$U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \left\lbrace \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r}) + \zeta \left[ \sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0 \right]^2 \right\rbrace$$
+```math
+U_{int} = \frac{1}{2\rho_0} \int d\mathbf{r} \left\lbrace \sum_{i,j} \chi_{ij} \rho_i(\mathbf{r}) \rho_j(\mathbf{r}) + \zeta \left[ \sum_{i=1}^{M} \rho_i(\mathbf{r}) - \rho_0 \right]^2 \right\rbrace
+```
 
 ### 3.2 Effective Hamiltonian
 
 **Per chain unit:**
 
-$$\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M} \frac{\Omega_i S_i}{\lambda_i} + \frac{1}{2} \left( \zeta N - \sum_{i=1}^{M} \frac{S_i^2}{M\lambda_i} \right) \right]$$
+```math
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M} \frac{M \Omega_i^2}{2\lambda_i} + \sum_{i=1}^{M} \frac{\Omega_i S_i}{\lambda_i} + \frac{1}{2} \left( \zeta N - \sum_{i=1}^{M} \frac{S_i^2}{M\lambda_i} \right) \right]
+```
 
 where:
-- $O$: orthogonal matrix of $U = X + \zeta \mathbf{e}\mathbf{e}^T$ with $OO^T = M$
-- $\mathbf{S}^T = -\zeta \mathbf{e}^T O$
+- $`O`$: orthogonal matrix of $`U = X + \zeta \mathbf{e}\mathbf{e}^T`$ with $`OO^T = M`$
+- $`\mathbf{S}^T = -\zeta \mathbf{e}^T O`$
 
 ### 3.3 Example: AB Diblock (Compressible)
 
 **Effective Hamiltonian:**
 
-$$\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{\Omega_-^2(\mathbf{r})}{\chi N} - \frac{\Omega_+^2(\mathbf{r})}{\chi N + 2\zeta N} - \frac{2\zeta N}{\chi N + 2\zeta N} \Omega_+(\mathbf{r}) + \frac{\chi N \cdot \zeta N}{2(\chi N + 2\zeta N)} \right]$$
+```math
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{\Omega_-^2(\mathbf{r})}{\chi N} - \frac{\Omega_+^2(\mathbf{r})}{\chi N + 2\zeta N} - \frac{2\zeta N}{\chi N + 2\zeta N} \Omega_+(\mathbf{r}) + \frac{\chi N \cdot \zeta N}{2(\chi N + 2\zeta N)} \right]
+```
 
 **Functional derivatives:**
 
-$$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_-(\mathbf{r})} = \Phi_-(\mathbf{r}) + \frac{2}{\chi N} \Omega_-(\mathbf{r})$$
+```math
+\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_-(\mathbf{r})} = \Phi_-(\mathbf{r}) + \frac{2}{\chi N} \Omega_-(\mathbf{r})
+```
 
-$$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\mathbf{r}) - \frac{2}{\chi N + 2\zeta N} (\Omega_+(\mathbf{r}) + \zeta N)$$
+```math
+\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\mathbf{r}) - \frac{2}{\chi N + 2\zeta N} (\Omega_+(\mathbf{r}) + \zeta N)
+```
 
 ---
 
@@ -207,13 +265,17 @@ $$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_+(\mathbf{r})} = \Phi_+(\m
 
 The `polymerfts.SymmetricPolymerTheory` class computes the coefficients for the effective Hamiltonian:
 
-$$\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M} a_i \Omega_i^2(\mathbf{r}) + \sum_{i=1}^{M} b_i \Omega_i(\mathbf{r}) + U_{ref} \right]$$
+```math
+\frac{\beta H}{C V / R_0^3} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \sum_{i=1}^{M} a_i \Omega_i^2(\mathbf{r}) + \sum_{i=1}^{M} b_i \Omega_i(\mathbf{r}) + U_{ref} \right]
+```
 
 **Functional derivative:**
 
-$$\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_i(\mathbf{r})} = \Phi_i(\mathbf{r}) + 2 a_i \Omega_i(\mathbf{r}) + b_i$$
+```math
+\frac{\beta}{C/R_0^3} \frac{\delta H}{\delta \Omega_i(\mathbf{r})} = \Phi_i(\mathbf{r}) + 2 a_i \Omega_i(\mathbf{r}) + b_i
+```
 
-where $\Phi_i(\mathbf{r}) = \sum_j O_{ji} \phi_j(\mathbf{r})$.
+where $`\Phi_i(\mathbf{r}) = \sum_j O_{ji} \phi_j(\mathbf{r})`$.
 
 ### 4.2 Usage Example
 
@@ -260,10 +322,10 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 
 | Attribute | Description |
 |-----------|-------------|
-| `matrix_o` | Orthogonal matrix $O$ (eigenvectors) |
-| `matrix_a` | Mapping matrix $A = O$ |
-| `matrix_a_inv` | Inverse mapping $A^{-1} = O^T / M$ |
-| `eigenvalues` | Eigenvalues $\lambda_i$ of $PXP$ or $U$ |
+| `matrix_o` | Orthogonal matrix $`O`$ (eigenvectors) |
+| `matrix_a` | Mapping matrix $`A = O`$ |
+| `matrix_a_inv` | Inverse mapping $`A^{-1} = O^T / M`$ |
+| `eigenvalues` | Eigenvalues $`\lambda_i`$ of $`PXP`$ or $`U`$ |
 | `aux_fields_real_idx` | Indices of real auxiliary fields |
 | `aux_fields_imag_idx` | Indices of imaginary auxiliary fields |
 

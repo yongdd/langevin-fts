@@ -27,6 +27,6 @@ Read the notebooks in the following order:
 
 ## Key Concepts
 
-- **Propagator** $q(\mathbf{r}, s)$: Statistical weight of chain conformations ending at position $\mathbf{r}$
-- **Partition function** $Q$: Total statistical weight (normalization factor)
-- **Concentration** $\phi(\mathbf{r})$: Ensemble-averaged monomer density
+- **Propagator** $`q(\mathbf{r}, s)`$: Statistical weight of chain conformations ending at position $`\mathbf{r}`$
+- **Partition function** $`Q`$: Total statistical weight (normalization factor)
+- **Concentration** $`\phi(\mathbf{r})`$: Ensemble-averaged monomer density

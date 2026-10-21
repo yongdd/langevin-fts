@@ -44,45 +44,51 @@ avoid gather/scatter mapping during diffusion steps. See
 
 ### Symmetry Operations
 
-A space group is a set of symmetry operations that leave the crystal structure invariant. Each symmetry operation is a pair $(\mathbf{R}, \mathbf{t})$ where:
-- $\mathbf{R}$: 3×3 rotation/reflection matrix (orthogonal, $\mathbf{R}^T \mathbf{R} = \mathbf{I}$)
-- $\mathbf{t}$: translation vector in fractional coordinates
+A space group is a set of symmetry operations that leave the crystal structure invariant. Each symmetry operation is a pair $`(\mathbf{R}, \mathbf{t})`$ where:
+- $`\mathbf{R}`$: 3×3 rotation/reflection matrix (orthogonal, $`\mathbf{R}^T \mathbf{R} = \mathbf{I}`$)
+- $`\mathbf{t}`$: translation vector in fractional coordinates
 
-Applied to a point $\mathbf{p}$ in fractional coordinates:
+Applied to a point $`\mathbf{p}`$ in fractional coordinates:
 
-$$\mathbf{p}' = \mathbf{R} \cdot \mathbf{p} + \mathbf{t}$$
+```math
+\mathbf{p}' = \mathbf{R} \cdot \mathbf{p} + \mathbf{t}
+```
 
-where each component is wrapped to the range $[0, 1)$ using periodic boundary conditions.
+where each component is wrapped to the range $`[0, 1)`$ using periodic boundary conditions.
 
 **Example: Im-3m (BCC) symmetry operations**
 
 The BCC space group has 96 symmetry operations (48 point group operations × 2 for body centering). Some examples:
 
-| Operation | $\mathbf{R}$ | $\mathbf{t}$ | Description |
+| Operation | $`\mathbf{R}`$ | $`\mathbf{t}`$ | Description |
 |-----------|--------------|--------------|-------------|
-| Identity | $\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}$ | $(0, 0, 0)$ | No change |
-| Inversion | $\begin{pmatrix} -1 & 0 & 0 \\ 0 & -1 & 0 \\ 0 & 0 & -1 \end{pmatrix}$ | $(0, 0, 0)$ | Point reflection |
-| Body-center | $\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}$ | $(\frac{1}{2}, \frac{1}{2}, \frac{1}{2})$ | Translation to body center |
-| 4-fold rotation | $\begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}$ | $(0, 0, 0)$ | 90° rotation about z-axis |
+| Identity | $`\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}`$ | $`(0, 0, 0)`$ | No change |
+| Inversion | $`\begin{pmatrix} -1 & 0 & 0 \\ 0 & -1 & 0 \\ 0 & 0 & -1 \end{pmatrix}`$ | $`(0, 0, 0)`$ | Point reflection |
+| Body-center | $`\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}`$ | $`(\frac{1}{2}, \frac{1}{2}, \frac{1}{2})`$ | Translation to body center |
+| 4-fold rotation | $`\begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}`$ | $`(0, 0, 0)`$ | 90° rotation about z-axis |
 
 ### Orbit of a Point
 
-The **orbit** of a grid point $\mathbf{p}$ is the set of all symmetrically equivalent points:
+The **orbit** of a grid point $`\mathbf{p}`$ is the set of all symmetrically equivalent points:
 
-$$\text{Orbit}(\mathbf{p}) = \{ \mathbf{R}_i \cdot \mathbf{p} + \mathbf{t}_i \mid i = 1, \ldots, n_{\text{ops}} \}$$
+```math
+\text{Orbit}(\mathbf{p}) = \{ \mathbf{R}_i \cdot \mathbf{p} + \mathbf{t}_i \mid i = 1, \ldots, n_{\text{ops}} \}
+```
 
-(each component wrapped to $[0, 1)$ via periodic boundary conditions)
+(each component wrapped to $`[0, 1)`$ via periodic boundary conditions)
 
 **Cell-centered grid convention**: For cubic, tetragonal, orthorhombic,
 monoclinic, and triclinic settings the implementation uses a cell-centered
-grid, so grid point $(i, j, k)$ on an $N_x \times N_y \times N_z$ mesh
+grid, so grid point $`(i, j, k)`$ on an $`N_x \times N_y \times N_z`$ mesh
 corresponds to the fractional coordinate
 
-$$\mathbf{p}_{\text{frac}} = \left( \frac{i + 0.5}{N_x}, \frac{j + 0.5}{N_y}, \frac{k + 0.5}{N_z} \right)$$
+```math
+\mathbf{p}_{\text{frac}} = \left( \frac{i + 0.5}{N_x}, \frac{j + 0.5}{N_y}, \frac{k + 0.5}{N_z} \right)
+```
 
 Hexagonal-axes settings of hexagonal/trigonal groups instead use a **hybrid
 convention** — node-centered in-plane coordinates
-$\left(\frac{i}{N_x}, \frac{j}{N_y}\right)$ with cell-centered $z$ —
+$`\left(\frac{i}{N_x}, \frac{j}{N_y}\right)`$ with cell-centered $`z`$ —
 because in-plane hexagonal
 rotations are exact on the grid only in node-centered coordinates (see
 [How Hexagonal/Trigonal Groups Are
@@ -90,13 +96,13 @@ Handled](#how-hexagonaltrigonal-groups-are-handled)).
 
 **Example: Orbit calculation for BCC on 4×4×4 grid**
 
-Consider the point $\mathbf{p} = (1, 0, 0)$ in grid indices, which is $\mathbf{p}_{\text{frac}} = (0.375, 0.125, 0.125)$ in cell-centered fractional coordinates.
+Consider the point $`\mathbf{p} = (1, 0, 0)`$ in grid indices, which is $`\mathbf{p}_{\text{frac}} = (0.375, 0.125, 0.125)`$ in cell-centered fractional coordinates.
 
 Applying some symmetry operations:
-- Identity: $(0.375, 0.125, 0.125)$ → grid point $(1, 0, 0)$
-- Body-center translation: $(0.375 + 0.5, 0.125 + 0.5, 0.125 + 0.5) = (0.875, 0.625, 0.625)$ → grid point $(3, 2, 2)$
-- 4-fold rotation about z: $(-0.125, 0.375, 0.125)$ → wrapped to $(0.875, 0.375, 0.125)$ → grid point $(3, 1, 0)$
-- Inversion: $(-0.375, -0.125, -0.125)$ → wrapped to $(0.625, 0.875, 0.875)$ → grid point $(2, 3, 3)$
+- Identity: $`(0.375, 0.125, 0.125)`$ → grid point $`(1, 0, 0)`$
+- Body-center translation: $`(0.375 + 0.5, 0.125 + 0.5, 0.125 + 0.5) = (0.875, 0.625, 0.625)`$ → grid point $`(3, 2, 2)`$
+- 4-fold rotation about z: $`(-0.125, 0.375, 0.125)`$ → wrapped to $`(0.875, 0.375, 0.125)`$ → grid point $`(3, 1, 0)`$
+- Inversion: $`(-0.375, -0.125, -0.125)`$ → wrapped to $`(0.625, 0.875, 0.875)`$ → grid point $`(2, 3, 3)`$
 
 All these points belong to the same orbit and share one irreducible mesh index.
 
@@ -106,10 +112,10 @@ The irreducible mesh is the minimal set of grid points from which the full field
 
 **Algorithm:**
 1. Mark all grid points as unvisited
-2. For the first unvisited point $\mathbf{p}$:
-   - Add $\mathbf{p}$ to irreducible mesh with index $k$
-   - Compute $\text{Orbit}(\mathbf{p})$
-   - Mark all orbit points with index $k$
+2. For the first unvisited point $`\mathbf{p}`$:
+   - Add $`\mathbf{p}`$ to irreducible mesh with index $`k`$
+   - Compute $`\text{Orbit}(\mathbf{p})`$
+   - Mark all orbit points with index $`k`$
 3. Repeat until all points are visited
 
 **Example: Gyroid (Ia-3d) on 64×64×64 grid**
@@ -128,23 +134,29 @@ The reduction factor approaches the number of symmetry operations when most orbi
 
 Extract field values at irreducible mesh points:
 
-$$w_{\text{reduced}}[k] = w_{\text{full}}[\mathbf{p}_k]$$
+```math
+w_{\text{reduced}}[k] = w_{\text{full}}[\mathbf{p}_k]
+```
 
-where $\mathbf{p}_k$ is the $k$-th irreducible mesh point.
+where $`\mathbf{p}_k`$ is the $`k`$-th irreducible mesh point.
 
 #### From Reduced Basis
 
 Reconstruct full field by copying values to all orbit members:
 
-$$w_{\text{full}}[\mathbf{p}] = w_{\text{reduced}}[\text{index}(\mathbf{p})]$$
+```math
+w_{\text{full}}[\mathbf{p}] = w_{\text{reduced}}[\text{index}(\mathbf{p})]
+```
 
-where $\text{index}(\mathbf{p})$ maps grid point $\mathbf{p}$ to its irreducible mesh index.
+where $`\text{index}(\mathbf{p})`$ maps grid point $`\mathbf{p}`$ to its irreducible mesh index.
 
 #### Symmetrization
 
 Average field values over each orbit to enforce perfect symmetry:
 
-$$w_{\text{sym}}[\mathbf{p}] = \frac{1}{|\text{Orbit}(\mathbf{p})|} \sum_{\mathbf{q} \in \text{Orbit}(\mathbf{p})} w[\mathbf{q}]$$
+```math
+w_{\text{sym}}[\mathbf{p}] = \frac{1}{|\text{Orbit}(\mathbf{p})|} \sum_{\mathbf{q} \in \text{Orbit}(\mathbf{p})} w[\mathbf{q}]
+```
 
 This is useful for initializing SCFT iterations from non-symmetric initial guesses.
 
@@ -214,13 +226,13 @@ mapping during diffusion. This selection is automatic:
   translations, the translation-parity fold permutation is valid (each
   generator translation must be an integral number of grid cells with a
   bijective parity map — e.g. for Fddd's quarter-cell d-glides at most one
-  of $n_x/4$, $n_y/4$, $n_z/4$ may be odd), and $n_z/2 \ge 8$; otherwise the
+  of $`n_x/4`$, $`n_y/4`$, $`n_z/4`$ may be odd), and $`n_z/2 \ge 8`$; otherwise the
   solver falls back to the Pmmm physical basis (1/8 grid, requires mirror
   planes along x, y, z).
 - **Non-orthogonal cells with an orthogonal z-axis** (α = β = 90°, γ
   arbitrary — e.g. hexagonal or monoclinic-γ cells): the z-mirror (ObliqueZ)
   physical basis (1/2 grid) is used when the space group has a z-mirror
-  operation and $n_z$ is even.
+  operation and $`n_z`$ is even.
 - If no physical basis applies, the irreducible basis is used.
 
 ## Crystal Systems and Grid Constraints
@@ -306,23 +318,24 @@ sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
 ### How Hexagonal/Trigonal Groups Are Handled
 
 Hexagonal-axes settings are treated differently from the other crystal
-systems in two places. Both changes address the same underlying issue: the
-discretization must respect the point group *exactly*, not just to rounding
-accuracy. Historically the naive treatment produced X-shaped artifacts in
-the perforation layers of PL/HCP phases and a $\sim 10^{-3}$ free-energy
-bias; with the two mechanisms below, space-group on/off results agree to
-machine precision (e.g., PL on 48×48×72:
-$\max|\Delta\phi| \approx 5 \times 10^{-15}$).
+systems in two places, both for the same reason: the discretization must
+respect the point group *exactly*, not just to rounding accuracy. Without
+them the perforation layers of PL/HCP phases show X-shaped artifacts and the
+free energy is biased by $`\sim 10^{-3}`$; with them, space-group on/off
+results agree to machine precision (e.g., PL on 48×48×72:
+$`\max|\Delta\phi| \approx 5 \times 10^{-15}`$).
 
 #### 1. Hybrid orbit convention (real space)
 
 In-plane hexagonal rotations contain matrix rows whose entries sum to zero,
 e.g. the 6-fold rotation
 
-$$\mathbf{R}_{6} = \begin{pmatrix} 1 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}$$
+```math
+\mathbf{R}_{6} = \begin{pmatrix} 1 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}
+```
 
-Applied to a cell-centered coordinate, the row $[1, -1, 0]$ gives
-$\frac{(i+0.5) - (j+0.5)}{N} = \frac{i-j}{N}$ — the $0.5$ offset is
+Applied to a cell-centered coordinate, the row $`[1, -1, 0]`$ gives
+$`\frac{(i+0.5) - (j+0.5)}{N} = \frac{i-j}{N}`$ — the $`0.5`$ offset is
 annihilated, so a cell **center** is mapped onto a cell **boundary**, which
 is not a grid point. No rounding rule can fix this: the cell-centered grid
 is simply not invariant under the in-plane hexagonal rotations, and forcing
@@ -331,15 +344,17 @@ grid point (99.5% of points for P6_3/mmc on 24×24×16).
 
 The fix is a **hybrid convention** used only for hexagonal-axes settings:
 
-$$\mathbf{p}_{\text{frac}} = \left( \frac{i}{N_x}, \frac{j}{N_y}, \frac{k + 0.5}{N_z} \right)$$
+```math
+\mathbf{p}_{\text{frac}} = \left( \frac{i}{N_x}, \frac{j}{N_y}, \frac{k + 0.5}{N_z} \right)
+```
 
-i.e. node-centered in-plane, cell-centered along $z$. This works because
+i.e. node-centered in-plane, cell-centered along $`z`$. This works because
 every symmetry operation of every hexagonal-axes Hall setting is
-block-diagonal: a $2 \times 2$ in-plane block acting on $(x, y)$ and $\pm 1$
-acting on $z$. The in-plane block sees node-centered coordinates (invariant
-under the hexagonal rotations), while $\pm z$ (with its screw/glide
+block-diagonal: a $`2 \times 2`$ in-plane block acting on $`(x, y)`$ and $`\pm 1`$
+acting on $`z`$. The in-plane block sees node-centered coordinates (invariant
+under the hexagonal rotations), while $`\pm z`$ (with its screw/glide
 translations, which are integral in grid cells) remains exact on the
-cell-centered $z$ axis. Every orbit map is then evaluated with **exact
+cell-centered $`z`$ axis. Every orbit map is then evaluated with **exact
 integer modular arithmetic** — no floating-point rounding is involved at
 all. Cubic, tetragonal, orthorhombic, monoclinic, and triclinic settings
 keep the pure cell-centered convention, which is exact for them.
@@ -348,36 +363,38 @@ keep the pure cell-centered convention, which is exact for them.
 
 Exact real-space orbits are not sufficient: the discretized diffusion
 operator itself must commute with the point group. The pseudo-spectral
-Boltzmann factor $\exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ is tabulated per
-discrete frequency $\mathbf{m}$, but on the discrete grid $\mathbf{m}$ is
-only defined modulo $N$ (aliasing). On an **oblique** cell the squared
+Boltzmann factor $`\exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)`$ is tabulated per
+discrete frequency $`\mathbf{m}`$, but on the discrete grid $`\mathbf{m}`$ is
+only defined modulo $`N`$ (aliasing). On an **oblique** cell the squared
 magnitude
 
-$$|\mathbf{k}|^2 = \mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}, \qquad \mathbf{G}^{*} = (2\pi)^2 \, \mathbf{g}^{-1}$$
+```math
+|\mathbf{k}|^2 = \mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}, \qquad \mathbf{G}^{*} = (2\pi)^2 \, \mathbf{g}^{-1}
+```
 
 depends on which alias representative is chosen, because the reciprocal
-metric $\mathbf{G}^{*}$ has off-diagonal terms. The conventional
-principal-zone representative $m_d \in [-N_d/2, N_d/2)$ is **not invariant**
+metric $`\mathbf{G}^{*}`$ has off-diagonal terms. The conventional
+principal-zone representative $`m_d \in [-N_d/2, N_d/2)`$ is **not invariant**
 under hexagonal rotations: a rotation can carry a principal-zone frequency
-outside the zone, and re-aliasing it back changes $|\mathbf{k}|^2$. The
+outside the zone, and re-aliasing it back changes $`|\mathbf{k}|^2`$. The
 tabulated operator then breaks the point-group symmetry, so even a
 perfectly symmetrized field loses its symmetry after one propagator step.
 
-The fix is to choose, within each alias class $\{\mathbf{m} + N \mathbf{n}\}$,
+The fix is to choose, within each alias class $`\{\mathbf{m} + N \mathbf{n}\}`$,
 the representative that **minimizes the metric form**
-$\mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}$ (the first-Brillouin-zone
+$`\mathbf{m}^{\top} \mathbf{G}^{*} \mathbf{m}`$ (the first-Brillouin-zone
 representative). This choice is group-invariant by construction — rotations
 permute alias classes and preserve the minimal value — so the discretized
 diffusion and stress operators recover exact point-group symmetry. The
 minimal-form search runs only when the cell is actually oblique, detected by
 a *relative* tolerance on the off-diagonal metric elements
-($|G^{*}_{ij}| > 10^{-12} \cdot \max_d G^{*}_{dd}$); orthogonal cells use the
+($`|G^{*}_{ij}| > 10^{-12} \cdot \max_d G^{*}_{dd}`$); orthogonal cells use the
 principal-zone representative unchanged (both conventions coincide there).
 The same representative is used in the k-space Boltzmann tables, the stress
 tables, and the CrysFFT ObliqueZ generators.
 
 **Initial-guess note**: analytic initial fields for hexagonal phases should
-be built with the hybrid convention (in-plane $i/N$, cell-centered $z$) to
+be built with the hybrid convention (in-plane $`i/N`$, cell-centered $`z`$) to
 be exactly symmetric; fields built with other conventions are projected
 onto the symmetric basis, which is harmless for the converged answer.
 
@@ -389,21 +406,21 @@ This example demonstrates the irreducible mesh calculation for Im-3m (BCC) on a 
 
 - Grid: 4×4×4 = 64 points
 - Space group: Im-3m (Hall 529), 96 symmetry operations
-- Fractional coordinate of grid point $(i, j, k)$ (cell-centered): $\left( \frac{i+0.5}{4}, \frac{j+0.5}{4}, \frac{k+0.5}{4} \right)$
+- Fractional coordinate of grid point $`(i, j, k)`$ (cell-centered): $`\left( \frac{i+0.5}{4}, \frac{j+0.5}{4}, \frac{k+0.5}{4} \right)`$
 
 ### Orbit Calculation
 
 Because the grid is cell-centered, no grid point sits exactly on a
-high-symmetry position such as the corner $(0,0,0)$ or the body center, so
+high-symmetry position such as the corner $`(0,0,0)`$ or the body center, so
 orbits are larger than on a node-centered grid.
 
-**Point $(0, 0, 0)$** - Body diagonal
-- Fractional: $(0.125, 0.125, 0.125)$
-- All three coordinates equal: 8 sign combinations $(\pm 0.125, \pm 0.125, \pm 0.125)$, doubled by body centering
+**Point $`(0, 0, 0)`$** - Body diagonal
+- Fractional: $`(0.125, 0.125, 0.125)`$
+- All three coordinates equal: 8 sign combinations $`(\pm 0.125, \pm 0.125, \pm 0.125)`$, doubled by body centering
 - Orbit size: 16
 
-**Point $(0, 0, 1)$** - General position on a mirror plane
-- Fractional: $(0.125, 0.125, 0.375)$
+**Point $`(0, 0, 1)`$** - General position on a mirror plane
+- Fractional: $`(0.125, 0.125, 0.375)`$
 - Two coordinates equal: 3 placements of the distinct coordinate × 8 sign combinations, doubled by body centering
 - Orbit size: 48
 
@@ -411,13 +428,13 @@ orbits are larger than on a node-centered grid.
 
 | Index | Representative | Orbit Size | Description |
 |-------|---------------|------------|-------------|
-| 0 | $(0,0,0)$ | 16 | Body diagonal $(0.125, 0.125, 0.125)$ |
-| 1 | $(0,0,1)$ | 48 | $(0.125, 0.125, 0.375)$ |
+| 0 | $`(0,0,0)`$ | 16 | Body diagonal $`(0.125, 0.125, 0.125)`$ |
+| 1 | $`(0,0,1)`$ | 48 | $`(0.125, 0.125, 0.375)`$ |
 
 **Verification:**
-- Total points: $16 + 48 = 64$ ✓
+- Total points: $`16 + 48 = 64`$ ✓
 - Irreducible mesh size: 2 points
-- Reduction factor: $64 / 2 = 32 \times$
+- Reduction factor: $`64 / 2 = 32 \times`$
 
 Note: The reduction factor (32x) is less than the number of symmetry operations (96) because points on the body diagonal have smaller orbits. On larger grids, most points sit in general positions and the reduction factor approaches 96 (e.g. ≈96x for Ia-3d on a 64³ grid).
 
@@ -451,7 +468,7 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
   precision. See [How Hexagonal/Trigonal Groups Are
   Handled](#how-hexagonaltrigonal-groups-are-handled).
 - **Rhombohedral-axes R settings** contain axis-permuting operations that are
-  exact on cell-centered grids only when $n_x = n_y = n_z$; incompatible
+  exact on cell-centered grids only when $`n_x = n_y = n_z`$; incompatible
   grids are rejected with an explicit error instead of being silently
   projected onto wrong orbits.
 
@@ -462,59 +479,3 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 - `src/python/scft.py`: Integration with SCFT simulations
 - International Tables for Crystallography, Vol. A (2016)
 - spglib documentation: https://spglib.github.io/spglib/
-
-## Recursive 3m fold parity (ψ) and m3-basis feasibility
-
-The following note was moved verbatim from the CrysFFT mode selector (`src/common/CrysFFTSelector.h`). It documents why the fold-parity test used to enable the recursive 3m CrysFFT is equivalent to the feasibility of the m3 physical basis, and lists the grids on which the implementation was verified.
-
-```text
-Recursive3m grid condition: even grid, nz/2 >= 8, and a valid
-translation-parity permutation (compute_m3_fold_permutation). The fold
-pairs twiddle r_p with the octant-transformed Boltzmann array S_{psi(p)}
-where psi depends on the parities of the m3 generator translations in
-grid units (tau = t*N); psi must be a bijection.
-
-psi-bijectivity vs m3-basis feasibility (PROVEN equivalence with the
-representative search below): the parity shift Delta(O) in {0,1}^3 of a
-diagonal op O (Delta_d = (tau_d + [sign_d = -1]) mod 2) is a group
-homomorphism into GF(2)^3, and psi(a) = Delta(O_a) for the product O_a
-of the chosen generator representatives.
-(=>) psi bijective means the 8 products already realize every parity
-class, so every grid point maps to an even-index point and the
-basis construction succeeds.
-(<=) Basis feasibility means Delta over ALL diagonal ops is surjective,
-i.e. Delta(H) + Delta(C) = GF(2)^3 where H is generated by the
-minimal-norm mirror representatives and C are the pure
-(centering) translations. A Steinitz-exchange argument shows one
-can then always compose each generator with some c in C so that
-the composed psi is bijective; the search below tries all such
-compositions (|C|^3 <= 64), so rejection here implies the basis
-is genuinely infeasible. The gap can only open at all when some
-centering translation has odd grid parity (an axis with N = 2 mod
-4), since otherwise Delta(C) = {0} and the minimal representatives
-alone decide.
-Historically the code hard-coded psi = identity, which silently
-miscomputed grids with odd tau (e.g. Fddd 84x48x16/24/32, wrong Q at
-~0.6 relative); an interim guard restricted unequal grids to
-all-quarters-even. With the psi pairing implemented in
-CrysFFTRecursive3mBase/CudaCrysFFTRecursive3m, verified 2026-08:
-- Unit level (one diffusion vs full-grid FFT reference, <= 1e-14 rel),
-MKL and FFTW: Fddd 84x48x16, 84x48x24, 84x48x32 (previously broken),
-84x56x16, 84x56x32 (odd qx); 64x52x16, 72x52x16 (odd qy); 64x48x84,
-72x56x84, 64x48x20, 64x48x12 (odd qz); 64x48x16, 88x48x24, 64x56x32,
-32x24x16, 32x24x8 (all even); Fddd 16/24/40/48^3; Im-3m 16/20/22/
-40/44^3. CUDA: 84x48x16, 64x52x16, 64x48x84, 64x48x12, Im-3m 40^3,
-including the k^2-multiplier (stress) caches.
-- SCFT space-group ON-vs-OFF partition comparisons (<= 7e-14 rel):
-the trio on cpu-mkl AND cpu-fftw; 64x48x16, 84x56x16, 64x52x16,
-64x48x84 on cpu-mkl; Fddd 84x48x16, 64x48x84 and Im-3m 40^3 on cuda.
-- Grids whose psi is singular for every representative choice (verified
-Fddd 44^3, 84^3, 84x48x84 — two or more odd quarters; Fddd's F
-centering has even parity on commensurate grids, so no composition
-can rescue them) are rejected here and fall back to the standard FFT
-path (still correct, per the same ON-vs-OFF probes), matching
-SpaceGroup m3-basis feasibility exactly.
-nz/2 >= 8 is kept as the established performance/selection bound;
-smaller nz still works via the standard path (the former buffer-overrun
-reason is gone: the padded k-loop is now clamped to the row stride).
-```

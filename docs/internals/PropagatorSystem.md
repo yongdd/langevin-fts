@@ -152,33 +152,41 @@ Aggregated key: [(D4)B1,(E4)B1]B+0
 
 ## 3. Initial Conditions
 
-The dependency part **D** of the propagator code determines the initial condition $q(\mathbf{r}, 0)$.
+The dependency part **D** of the propagator code determines the initial condition $`q(\mathbf{r}, 0)`$.
 
 ### Free End (Empty D)
 
 For a propagator starting from a free chain end (e.g., `A+0`):
 
-$$q(\mathbf{r}, 0) = 1$$
+```math
+q(\mathbf{r}, 0) = 1
+```
 
 ### Junction Point (D with Parentheses)
 
 For a propagator at a junction (e.g., `(A3B2)C+0`):
 
-$$q(\mathbf{r}, 0) = \prod_{i} \left[ q_i(\mathbf{r}, N_i) \right]^{n_i}$$
+```math
+q(\mathbf{r}, 0) = \prod_{i} \left[ q_i(\mathbf{r}, N_i) \right]^{n_i}
+```
 
-where $n_i$ is the repetition count (from `:n` notation, default 1).
+where $`n_i`$ is the repetition count (from `:n` notation, default 1).
 
 ### Aggregated Computation (D with Square Brackets)
 
 For aggregated propagators (e.g., `[(A3)B0,(C3)D0]E+0`):
 
-$$q(\mathbf{r}, 0) = \sum_{i} n_i \cdot q_i(\mathbf{r}, N_i)$$
+```math
+q(\mathbf{r}, 0) = \sum_{i} n_i \cdot q_i(\mathbf{r}, N_i)
+```
 
 ### Custom Initial Condition (D with Curly Braces)
 
 For user-specified initial conditions (e.g., `{wall}A+0`):
 
-$$q(\mathbf{r}, 0) = q_{\text{init}}[\text{name}](\mathbf{r})$$
+```math
+q(\mathbf{r}, 0) = q_{\text{init}}[\text{name}](\mathbf{r})
+```
 
 ---
 

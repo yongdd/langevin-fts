@@ -1,6 +1,6 @@
 # Documentation
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 ## Getting Started
 

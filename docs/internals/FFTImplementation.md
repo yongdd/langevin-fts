@@ -40,10 +40,10 @@ The library provides spectral transforms for solving the modified diffusion equa
 
 | Type | FFTW Name | Formula | Grid Points |
 |------|-----------|---------|-------------|
-| DCT-1 | REDFT00 | $X_k = x_0 + (-1)^k x_{N} + 2\sum_{n=1}^{N-1} x_n \cos\left(\frac{\pi k n}{N}\right)$ | N+1 |
-| DCT-2 | REDFT10 | $X_k = 2\sum_{n=0}^{N-1} x_n \cos\left(\frac{\pi k (2n+1)}{2N}\right)$ | N |
-| DCT-3 | REDFT01 | $X_k = x_0 + 2\sum_{n=1}^{N-1} x_n \cos\left(\frac{\pi n (2k+1)}{2N}\right)$ | N |
-| DCT-4 | REDFT11 | $X_k = 2\sum_{n=0}^{N-1} x_n \cos\left(\frac{\pi (2n+1)(2k+1)}{4N}\right)$ | N |
+| DCT-1 | REDFT00 | $`X_k = x_0 + (-1)^k x_{N} + 2\sum_{n=1}^{N-1} x_n \cos\left(\frac{\pi k n}{N}\right)`$ | N+1 |
+| DCT-2 | REDFT10 | $`X_k = 2\sum_{n=0}^{N-1} x_n \cos\left(\frac{\pi k (2n+1)}{2N}\right)`$ | N |
+| DCT-3 | REDFT01 | $`X_k = x_0 + 2\sum_{n=1}^{N-1} x_n \cos\left(\frac{\pi n (2k+1)}{2N}\right)`$ | N |
+| DCT-4 | REDFT11 | $`X_k = 2\sum_{n=0}^{N-1} x_n \cos\left(\frac{\pi (2n+1)(2k+1)}{4N}\right)`$ | N |
 
 ### 2.2 Boundary Conditions and Symmetry
 
@@ -78,10 +78,10 @@ The CUDA implementation uses the Fast Cosine Transform (FCT) method [1], which u
 
 | Type | FFTW Name | Formula | Grid Points |
 |------|-----------|---------|-------------|
-| DST-1 | RODFT00 | $Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (n+1)(k+1)}{N+1}\right)$ | N |
-| DST-2 | RODFT10 | $Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (2n+1)(k+1)}{2N}\right)$ | N |
-| DST-3 | RODFT01 | $Y_k = (-1)^k x_{N-1} + 2\sum_{n=0}^{N-2} x_n \sin\left(\frac{\pi (n+1)(2k+1)}{2N}\right)$ | N |
-| DST-4 | RODFT11 | $Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (2n+1)(2k+1)}{4N}\right)$ | N |
+| DST-1 | RODFT00 | $`Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (n+1)(k+1)}{N+1}\right)`$ | N |
+| DST-2 | RODFT10 | $`Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (2n+1)(k+1)}{2N}\right)`$ | N |
+| DST-3 | RODFT01 | $`Y_k = (-1)^k x_{N-1} + 2\sum_{n=0}^{N-2} x_n \sin\left(\frac{\pi (n+1)(2k+1)}{2N}\right)`$ | N |
+| DST-4 | RODFT11 | $`Y_k = 2\sum_{n=0}^{N-1} x_n \sin\left(\frac{\pi (2n+1)(2k+1)}{4N}\right)`$ | N |
 
 ### 3.2 Boundary Conditions and Symmetry
 
@@ -241,6 +241,12 @@ CrysFFT is enabled automatically when:
 The 3m fold pairs each twiddle factor with the Boltzmann sub-array selected by
 the translation-parity permutation; glide translations by an odd number of
 grid cells permute this pairing away from the identity.
+If the shortest generator translations give a permutation that is not a
+bijection, the selector retries with each generator composed with a centering
+translation, so on even grids with `Nz/2 >= 8` the parity test accepts exactly
+the grids on which the m3 physical basis exists (the argument is in the comment
+of `src/common/CrysFFTSelector.h`). A rejected grid continues with steps 2-4;
+Fddd, which has no pure mirror, ends on the standard FFT.
 
 ### 6.4 Physical Basis Choices
 

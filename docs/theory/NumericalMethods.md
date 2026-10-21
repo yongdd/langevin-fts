@@ -56,17 +56,19 @@ calculation = SCFT(params=params)
 
 ## 2. Modified Diffusion Equation
 
-In polymer field theory, the chain propagator $q(\mathbf{r}, s)$ satisfies the modified diffusion equation:
+In polymer field theory, the chain propagator $`q(\mathbf{r}, s)`$ satisfies the modified diffusion equation:
 
-$$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)$$
+```math
+\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)
+```
 
 where:
-- $q(\mathbf{r}, s)$ is the chain propagator at position $\mathbf{r}$ and contour variable $s$
-- $b$ is the statistical segment length
-- $w(\mathbf{r})$ is the potential field
-- $s \in [0, 1]$ parameterizes position along the chain contour
+- $`q(\mathbf{r}, s)`$ is the chain propagator at position $`\mathbf{r}`$ and contour variable $`s`$
+- $`b`$ is the statistical segment length
+- $`w(\mathbf{r})`$ is the potential field
+- $`s \in [0, 1]`$ parameterizes position along the chain contour
 
-The initial condition is typically $q(\mathbf{r}, 0) = 1$ for a free chain end.
+The initial condition is typically $`q(\mathbf{r}, 0) = 1`$ for a free chain end.
 
 ### Boundary Conditions
 
@@ -74,11 +76,11 @@ Both pseudo-spectral and real-space methods support the following boundary condi
 
 | Boundary Condition | Description | Mathematical Form | Transform |
 |-------------------|-------------|-------------------|-----------|
-| **Periodic** | Cyclic boundary | $q(0) = q(L)$ | FFT |
-| **Reflecting** | Neumann (zero flux) | $\partial q / \partial n = 0$ | DCT |
-| **Absorbing** | Dirichlet (zero value) | $q = 0$ at boundary | DST |
+| **Periodic** | Cyclic boundary | $`q(0) = q(L)`$ | FFT |
+| **Reflecting** | Neumann (zero flux) | $`\partial q / \partial n = 0`$ | DCT |
+| **Absorbing** | Dirichlet (zero value) | $`q = 0`$ at boundary | DST |
 
-> **Note**: Pseudo-spectral methods (RQM4, RK2) cannot mix **periodic** with **non-periodic** boundary conditions in different directions (e.g., a thin film periodic in $x, y$ and reflecting in $z$); such configurations raise an error on all platforms and require the real-space method `cn-adi2`, which is available for continuous chains only. Non-periodic conditions may be mixed with each other (e.g., reflecting in $x$ and absorbing in $y$), and uniform all-periodic, all-reflecting, or all-absorbing configurations are fully supported.
+> **Note**: Pseudo-spectral methods (RQM4, RK2) cannot mix **periodic** with **non-periodic** boundary conditions in different directions (e.g., a thin film periodic in $`x, y`$ and reflecting in $`z`$); such configurations raise an error on all platforms and require the real-space method `cn-adi2`, which is available for continuous chains only. Non-periodic conditions may be mixed with each other (e.g., reflecting in $`x`$ and absorbing in $`y`$), and uniform all-periodic, all-reflecting, or all-absorbing configurations are fully supported.
 
 ---
 
@@ -89,35 +91,41 @@ Pseudo-spectral methods use spectral transforms to solve the diffusion operator 
 - **Reflecting BC**: Discrete Cosine Transform (DCT-II/III)
 - **Absorbing BC**: Discrete Sine Transform (DST-II/III)
 
-All pseudo-spectral methods use **cell-centered grids** where grid points are at $x_i = (i + 0.5) \cdot dx$ for $i = 0, 1, ..., N-1$, with boundaries at cell faces (not grid points).
+All pseudo-spectral methods use **cell-centered grids** where grid points are at $`x_i = (i + 0.5) \cdot dx`$ for $`i = 0, 1, ..., N-1`$, with boundaries at cell faces (not grid points).
 
 ### 3.1 Lattice Vectors and Metric Tensors
 
 #### Real-Space Lattice Vectors
 
-For a general crystal system, the simulation box is defined by three lattice vectors $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$ with lengths $L_a$, $L_b$, $L_c$ and angles:
-- $\alpha$: angle between $\mathbf{b}$ and $\mathbf{c}$
-- $\beta$: angle between $\mathbf{a}$ and $\mathbf{c}$
-- $\gamma$: angle between $\mathbf{a}$ and $\mathbf{b}$
+For a general crystal system, the simulation box is defined by three lattice vectors $`\mathbf{a}`$, $`\mathbf{b}`$, $`\mathbf{c}`$ with lengths $`L_a`$, $`L_b`$, $`L_c`$ and angles:
+- $`\alpha`$: angle between $`\mathbf{b}`$ and $`\mathbf{c}`$
+- $`\beta`$: angle between $`\mathbf{a}`$ and $`\mathbf{c}`$
+- $`\gamma`$: angle between $`\mathbf{a}`$ and $`\mathbf{b}`$
 
 Using the standard crystallographic convention:
-- $\mathbf{a}$ along the x-axis
-- $\mathbf{b}$ in the xy-plane
-- $\mathbf{c}$ in general position
+- $`\mathbf{a}`$ along the x-axis
+- $`\mathbf{b}`$ in the xy-plane
+- $`\mathbf{c}`$ in general position
 
-The metric tensor $G_{ij}$ relates the dot product of lattice vectors:
+The metric tensor $`G_{ij}`$ relates the dot product of lattice vectors:
 
-$$G = \begin{pmatrix} L_a^2 & L_a L_b \cos\gamma & L_a L_c \cos\beta \\ L_a L_b \cos\gamma & L_b^2 & L_b L_c \cos\alpha \\ L_a L_c \cos\beta & L_b L_c \cos\alpha & L_c^2 \end{pmatrix}$$
+```math
+G = \begin{pmatrix} L_a^2 & L_a L_b \cos\gamma & L_a L_c \cos\beta \\ L_a L_b \cos\gamma & L_b^2 & L_b L_c \cos\alpha \\ L_a L_c \cos\beta & L_b L_c \cos\alpha & L_c^2 \end{pmatrix}
+```
 
 #### Reciprocal Lattice
 
-The reciprocal metric tensor $g^{-1} = (2\pi)^2 G^{-1}$ gives the squared wavevector magnitude:
+The reciprocal metric tensor $`g^{-1} = (2\pi)^2 G^{-1}`$ gives the squared wavevector magnitude:
 
-$$|\mathbf{k}|^2 = g_{11}^* n_1^2 + g_{22}^* n_2^2 + g_{33}^* n_3^2 + 2g_{12}^* n_1 n_2 + 2g_{13}^* n_1 n_3 + 2g_{23}^* n_2 n_3$$
+```math
+|\mathbf{k}|^2 = g_{11}^* n_1^2 + g_{22}^* n_2^2 + g_{33}^* n_3^2 + 2g_{12}^* n_1 n_2 + 2g_{13}^* n_1 n_3 + 2g_{23}^* n_2 n_3
+```
 
-For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), the cross-terms vanish:
+For **orthogonal systems** ($`\alpha = \beta = \gamma = 90°`$), the cross-terms vanish:
 
-$$|\mathbf{k}|^2 = \left(\frac{2\pi n_1}{L_a}\right)^2 + \left(\frac{2\pi n_2}{L_b}\right)^2 + \left(\frac{2\pi n_3}{L_c}\right)^2$$
+```math
+|\mathbf{k}|^2 = \left(\frac{2\pi n_1}{L_a}\right)^2 + \left(\frac{2\pi n_2}{L_b}\right)^2 + \left(\frac{2\pi n_3}{L_c}\right)^2
+```
 
 ### 3.2 RK2 (Rasmussen-Kalosakas)
 
@@ -125,28 +133,39 @@ The **Rasmussen-Kalosakas (RK) algorithm** [2] uses symmetric operator splitting
 
 > **Note**: RK here refers to Rasmussen-Kalosakas, not Runge-Kutta.
 
-For the modified diffusion equation with Hamiltonian operator $\hat{H} = -\frac{b^2}{6}\nabla^2 + w(\mathbf{r})$, the RK algorithm approximates the propagator step using symmetric Strang splitting:
+For the modified diffusion equation with Hamiltonian operator $`\hat{H} = -\frac{b^2}{6}\nabla^2 + w(\mathbf{r})`$, the RK algorithm approximates the propagator step using symmetric Strang splitting:
 
-$$e^{-\hat{H}\Delta s} \approx e^{-\frac{1}{2}w\Delta s} \cdot e^{\frac{b^2}{6}\nabla^2 \Delta s} \cdot e^{-\frac{1}{2}w\Delta s}$$
+```math
+e^{-\hat{H}\Delta s} \approx e^{-\frac{1}{2}w\Delta s} \cdot e^{\frac{b^2}{6}\nabla^2 \Delta s} \cdot e^{-\frac{1}{2}w\Delta s}
+```
 
 **Algorithm:**
 
 1. **Potential half-step** (real space):
-   $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
+
+```math
+q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n
+```
 
 2. **Diffusion step** (Fourier space):
-   $$\hat{q}^{**} = \exp\left(-\frac{b^2 k^2 \Delta s}{6}\right) \hat{q}^*$$
+
+```math
+\hat{q}^{**} = \exp\left(-\frac{b^2 k^2 \Delta s}{6}\right) \hat{q}^*
+```
 
 3. **Potential half-step** (real space):
-   $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
+
+```math
+q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}
+```
 
 **Properties:**
-- **2nd-order accuracy** in $\Delta s$ (convergence order ≈ 2.0)
+- **2nd-order accuracy** in $`\Delta s`$ (convergence order ≈ 2.0)
 - Time-reversible (due to symmetric splitting)
 - 2 FFTs per step
 - Fastest method (2.6x faster than RQM4 per iteration)
 
-> **Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains described in Park et al. (2019) [5]. Both use the same Boltzmann factor $e^{-b^2 k^2 \Delta s / 6}$ in Fourier space.
+> **Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains described in Park et al. (2019) [5]. Both use the same Boltzmann factor $`e^{-b^2 k^2 \Delta s / 6}`$ in Fourier space.
 
 ### 3.3 RQM4 (Richardson Extrapolation)
 
@@ -154,19 +173,28 @@ $$e^{-\hat{H}\Delta s} \approx e^{-\frac{1}{2}w\Delta s} \cdot e^{\frac{b^2}{6}\
 
 **Algorithm:**
 
-For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:
+For one full step from $`s_n`$ to $`s_{n+1} = s_n + \Delta s`$:
 
-1. **Full step**: Apply RK once with step size $\Delta s$:
-   $$q_{full} = q_{RK}(s_{n+1}; \Delta s)$$
+1. **Full step**: Apply RK once with step size $`\Delta s`$:
 
-2. **Half steps**: Apply RK twice with step size $\Delta s/2$:
-   $$q_{half} = q_{RK}(s_{n+1}; \Delta s/2)$$
+```math
+q_{full} = q_{RK}(s_{n+1}; \Delta s)
+```
+
+2. **Half steps**: Apply RK twice with step size $`\Delta s/2`$:
+
+```math
+q_{half} = q_{RK}(s_{n+1}; \Delta s/2)
+```
 
 3. **Richardson extrapolation**:
-   $$q^{n+1} = \frac{4 q_{half} - q_{full}}{3}$$
+
+```math
+q^{n+1} = \frac{4 q_{half} - q_{full}}{3}
+```
 
 **Properties:**
-- **4th-order accuracy** in $\Delta s$ (convergence order ≈ 4.0)
+- **4th-order accuracy** in $`\Delta s`$ (convergence order ≈ 4.0)
 - 6 FFTs per step (3 RK applications)
 - Default method for highest accuracy
 
@@ -175,23 +203,29 @@ For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:
 For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation.
 
 **Units and Conventions:**
-- **Unit length**: $R_0 = bN^{1/2}$, where $b$ is the statistical segment length and $N$ is the polymerization index
-- **Contour step size**: $\Delta s = 1/N$
+- **Unit length**: $`R_0 = bN^{1/2}`$, where $`b`$ is the statistical segment length and $`N`$ is the polymerization index
+- **Contour step size**: $`\Delta s = 1/N`$
 - A polymer chain has **N segments** (monomers) connected by **N-1 bonds**
 
-The propagator evolution from segment $i$ to segment $i+1$ follows:
+The propagator evolution from segment $`i`$ to segment $`i+1`$ follows:
 
 1. **Bond convolution** (Fourier space):
-   $$\hat{q}^*(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}_i(\mathbf{k})$$
+
+```math
+\hat{q}^*(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}_i(\mathbf{k})
+```
 
 2. **Full-segment Boltzmann weight** (real space):
-   $$q_{i+1}(\mathbf{r}) = \exp(-w(\mathbf{r}) \Delta s) \cdot q^*(\mathbf{r})$$
 
-where $\hat{g}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$ is the Fourier transform of the Gaussian bond function.
+```math
+q_{i+1}(\mathbf{r}) = \exp(-w(\mathbf{r}) \Delta s) \cdot q^*(\mathbf{r})
+```
+
+where $`\hat{g}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)`$ is the Fourier transform of the Gaussian bond function.
 
 ### 3.5 Boltzmann Weight Calculation
 
-For each wavevector index $(n_1, n_2, n_3)$:
+For each wavevector index $`(n_1, n_2, n_3)`$:
 
 ```
 k_sq = g_inv_11 * n1^2 + g_inv_22 * n2^2 + g_inv_33 * n3^2
@@ -212,35 +246,39 @@ Real-space methods use finite difference discretization instead of spectral tran
 
 Grid points are located at cell centers:
 
-$$x_i = \left(i + \frac{1}{2}\right) \Delta x, \quad i = 0, 1, \ldots, N-1$$
+```math
+x_i = \left(i + \frac{1}{2}\right) \Delta x, \quad i = 0, 1, \ldots, N-1
+```
 
 **Boundary condition implementation using ghost cells:**
 
 | BC Type | Ghost Cell Value | Effect on Laplacian |
 |---------|------------------|---------------------|
-| **Periodic** | $q_{-1} = q_{N-1}$ | Cyclic tridiagonal system |
-| **Reflecting** | $q_{-1} = q_0$ (symmetric) | Diagonal += off-diagonal |
-| **Absorbing** | $q_{-1} = -q_0$ (antisymmetric) | Diagonal -= off-diagonal |
+| **Periodic** | $`q_{-1} = q_{N-1}`$ | Cyclic tridiagonal system |
+| **Reflecting** | $`q_{-1} = q_0`$ (symmetric) | Diagonal += off-diagonal |
+| **Absorbing** | $`q_{-1} = -q_0`$ (antisymmetric) | Diagonal -= off-diagonal |
 
 ### 4.2 CN-ADI2 (Crank-Nicolson ADI)
 
 The Crank-Nicolson method is a semi-implicit scheme that is unconditionally stable:
 
-$$(I - \frac{\Delta s}{2} L) q^{n+1} = (I + \frac{\Delta s}{2} L) q^n$$
+```math
+(I - \frac{\Delta s}{2} L) q^{n+1} = (I + \frac{\Delta s}{2} L) q^n
+```
 
-where $L$ is the discrete Laplacian operator combined with the potential term.
+where $`L`$ is the discrete Laplacian operator combined with the potential term.
 
 **ADI Splitting (3D):**
 
 For 3D problems, the operator is split into three sequential 1D solves:
 
-1. **X-direction sweep**: Solve tridiagonal system for $q^*$
-2. **Y-direction sweep**: Solve tridiagonal system for $q^{**}$
-3. **Z-direction sweep**: Solve tridiagonal system for $q^{n+1}$
+1. **X-direction sweep**: Solve tridiagonal system for $`q^*`$
+2. **Y-direction sweep**: Solve tridiagonal system for $`q^{**}`$
+3. **Z-direction sweep**: Solve tridiagonal system for $`q^{n+1}`$
 
 Each direction requires solving a tridiagonal (or cyclic tridiagonal for periodic BC) system using:
-- **Thomas algorithm**: For non-periodic boundaries ($O(N)$)
-- **Sherman-Morrison formula**: For periodic boundaries ($O(N)$ with constant overhead)
+- **Thomas algorithm**: For non-periodic boundaries ($`O(N)`$)
+- **Sherman-Morrison formula**: For periodic boundaries ($`O(N)`$ with constant overhead)
 
 **Properties:**
 - **2nd-order accuracy** in both space and time
@@ -254,17 +292,17 @@ Real-space methods have some limitations compared to pseudo-spectral methods:
 1. **Stress computation**: Not yet implemented
 2. **Discrete chains**: Only continuous chain model supported
 3. **Non-orthogonal cells**: Only orthogonal unit cells supported
-4. **Spatial accuracy**: $O(\Delta x^2)$ vs spectral (exponential) accuracy
+4. **Spatial accuracy**: $`O(\Delta x^2)`$ vs spectral (exponential) accuracy
 
 ---
 
 ## 5. Material Conservation
 
-Material conservation requires that forward and backward partition functions are equal ($Q_{forward} = Q_{backward}$). This is ensured when the evolution operator $U$ satisfies the Hermiticity condition $(VU)^\dagger = VU$ where $V$ is the volume matrix.
+Material conservation requires that forward and backward partition functions are equal ($`Q_{forward} = Q_{backward}`$). This is ensured when the evolution operator $`U`$ satisfies the Hermiticity condition $`(VU)^\dagger = VU`$ where $`V`$ is the volume matrix.
 
 | Method | Conservation | Mechanism |
 |--------|--------------|-----------|
-| **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: $e^{-w \cdot ds/2} \cdot e^{L \cdot ds} \cdot e^{-w \cdot ds/2}$ |
+| **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: $`e^{-w \cdot ds/2} \cdot e^{L \cdot ds} \cdot e^{-w \cdot ds/2}`$ |
 | **RK2** | Exact (~10⁻¹⁶) | Same symmetric splitting as RQM4 |
 | **CN-ADI2** | Exact (~10⁻¹⁵) | Symmetric Crank-Nicolson time stepping |
 
@@ -305,7 +343,7 @@ The benchmarks below reproduce Fig. 1 from Song et al., *Chinese J. Polym. Sci.*
 
 ### Error vs Contour Steps
 
-**Pseudo-spectral methods** ($F_{\rm ref}$ = -0.476974113087715):
+**Pseudo-spectral methods** ($`F_{\rm ref}`$ = -0.476974113087715):
 
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
 |--------|-------|-------|--------|--------|--------|---------|
@@ -313,7 +351,7 @@ The benchmarks below reproduce Fig. 1 from Song et al., *Chinese J. Polym. Sci.*
 | **RK2** | 1.1774e-03 | 2.7540e-04 | 6.7411e-05 | 1.6756e-05 | 4.1827e-06 | 1.7127e-06 |
 | **ETDRK4** | 3.8617e-05 | 2.5971e-06 | 1.6835e-07 | 1.0615e-08 | 5.6297e-10 | (ref) |
 
-**Real-space methods** ($F_{\rm ref}$ = -0.479351354862727):
+**Real-space methods** ($`F_{\rm ref}`$ = -0.479351354862727):
 
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
 |--------|-------|-------|--------|--------|--------|---------|
@@ -376,7 +414,7 @@ Both methods achieve **4th-order convergence** with comparable accuracy. The imp
 The CN-ADI methods converge to a free energy (F = -0.47935) that differs from pseudo-spectral methods (F = -0.47697) by approximately 0.5%. This arises from different spatial discretization approaches:
 
 - **Pseudo-spectral**: Use spectral (Fourier) representation, achieving exponential convergence for smooth periodic fields
-- **Real-space**: Use finite-difference approximations, introducing $O(\Delta x^2)$ spatial error
+- **Real-space**: Use finite-difference approximations, introducing $`O(\Delta x^2)`$ spatial error
 
 For the 32³ grid used in these benchmarks, the finite-difference spatial error dominates the contour discretization error.
 
@@ -424,46 +462,54 @@ Different crystal systems impose constraints on the lattice parameters:
 
 ### 8.1 Orthorhombic/Tetragonal/Cubic
 
-$$\alpha = \beta = \gamma = 90°$$
+```math
+\alpha = \beta = \gamma = 90°
+```
 
-Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero at equilibrium.
+Cross-terms in $`|\mathbf{k}|^2`$ vanish. Off-diagonal stress components are zero at equilibrium.
 
 **Constraints:**
-- Orthorhombic: $L_a \neq L_b \neq L_c$ (3 independent lengths)
-- Tetragonal: $L_a = L_b \neq L_c$ (2 independent lengths)
-- Cubic: $L_a = L_b = L_c$ (1 independent length)
+- Orthorhombic: $`L_a \neq L_b \neq L_c`$ (3 independent lengths)
+- Tetragonal: $`L_a = L_b \neq L_c`$ (2 independent lengths)
+- Cubic: $`L_a = L_b = L_c`$ (1 independent length)
 
 ### 8.2 Hexagonal/Trigonal
 
-$$\alpha = \beta = 90°, \quad \gamma = 120°$$
+```math
+\alpha = \beta = 90°, \quad \gamma = 120°
+```
 
-Cross-term $g_{12}^*$ is non-zero.
+Cross-term $`g_{12}^*`$ is non-zero.
 
 **Constraints:**
-- $L_a = L_b \neq L_c$ (2 independent lengths)
-- $\gamma$ fixed at 120°
+- $`L_a = L_b \neq L_c`$ (2 independent lengths)
+- $`\gamma`$ fixed at 120°
 
 ### 8.3 Monoclinic
 
-$$\alpha = \gamma = 90°, \quad \beta \neq 90°$$
+```math
+\alpha = \gamma = 90°, \quad \beta \neq 90°
+```
 
-Cross-term $g_{13}^*$ is non-zero.
+Cross-term $`g_{13}^*`$ is non-zero.
 
 **Constraints:**
-- $L_a$, $L_b$, $L_c$ all independent (3 lengths)
-- $\beta$ is a free parameter (1 angle)
-- The angle derivative $\partial H/\partial\beta$ (stress array index 4) drives $\beta$ optimization
+- $`L_a`$, $`L_b`$, $`L_c`$ all independent (3 lengths)
+- $`\beta`$ is a free parameter (1 angle)
+- The angle derivative $`\partial H/\partial\beta`$ (stress array index 4) drives $`\beta`$ optimization
 
-> **Note on the stress convention**: `get_stress()` returns lattice-parameter derivatives directly, ordered as $[\partial H/\partial L_1, \partial H/\partial L_2, \partial H/\partial L_3, \partial H/\partial\gamma, \partial H/\partial\beta, \partial H/\partial\alpha]$ in 3D (in 2D, $\partial H/\partial\gamma$ is stored at index 2). Box relaxation steps each optimized parameter along the negative of its derivative. The "off-diagonal stress components" discussed in this section are these angle derivatives, not Cartesian stress-tensor components.
+> **Note on the stress convention**: `get_stress()` returns lattice-parameter derivatives directly, ordered as $`[\partial H/\partial L_1, \partial H/\partial L_2, \partial H/\partial L_3, \partial H/\partial\gamma, \partial H/\partial\beta, \partial H/\partial\alpha]`$ in 3D (in 2D, $`\partial H/\partial\gamma`$ is stored at index 2). Box relaxation steps each optimized parameter along the negative of its derivative. The "off-diagonal stress components" discussed in this section are these angle derivatives, not Cartesian stress-tensor components.
 
 ### 8.4 Triclinic
 
-$$\alpha, \beta, \gamma \text{ arbitrary}$$
+```math
+\alpha, \beta, \gamma \text{ arbitrary}
+```
 
 All cross-terms may be non-zero.
 
 **Constraints:**
-- All 6 parameters ($L_a$, $L_b$, $L_c$, $\alpha$, $\beta$, $\gamma$) are independent
+- All 6 parameters ($`L_a`$, $`L_b`$, $`L_c`$, $`\alpha`$, $`\beta`$, $`\gamma`$) are independent
 - All off-diagonal stress components may be non-zero
 
 ---

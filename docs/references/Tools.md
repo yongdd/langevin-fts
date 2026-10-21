@@ -1,6 +1,6 @@
 # Tools Reference
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes the utility scripts in the `tools/` directory for visualization, data conversion, and post-processing of simulation results.
 
@@ -93,9 +93,11 @@ jupyter notebook /path/to/tools/plot_wtmd_chib_AB.ipynb
 
 The `plot_wtmd_chib_AB.ipynb` notebook computes free energy at different χN values using histogram reweighting:
 
-$$F(\Psi; \chi N + \delta\chi N) = F(\Psi; \chi N) + \frac{\partial F}{\partial \chi N} \cdot \frac{\delta\chi N}{z_\infty}$$
+```math
+F(\Psi; \chi N + \delta\chi N) = F(\Psi; \chi N) + \frac{\partial F}{\partial \chi N} \cdot \frac{\delta\chi N}{z_\infty}
+```
 
-where $z_\infty$ is the renormalization factor from the discrete chain model.
+where $`z_\infty`$ is the renormalization factor from the discrete chain model.
 
 **Parameters in reweighting notebook:**
 - `chin`: Simulation χN value
@@ -207,19 +209,23 @@ Compute the renormalized Flory-Huggins parameter for ultraviolet (UV) divergence
 
 The effective interaction parameter is:
 
-$$\chi N_{\text{eff}} = z_\infty \times \chi N$$
+```math
+\chi N_{\text{eff}} = z_\infty \times \chi N
+```
 
-where $z_\infty$ is the renormalization factor computed by these scripts.
+where $`z_\infty`$ is the renormalization factor computed by these scripts.
 
 ### 3.1 Discrete Chain Model (`renormalization_discrete.m`)
 
 **Recommended** for L-FTS simulations using the discrete chain model.
 
-**Method:** Computes $z_\infty$ using discrete chain bond functions:
+**Method:** Computes $`z_\infty`$ using discrete chain bond functions:
 
-$$z_\infty = 1 - \frac{1 + 2\sum_{i=1}^{N_{\text{bond}}} P_i + P_{\text{cont}}}{\sqrt{\bar{N}} \cdot N \cdot \Delta V}$$
+```math
+z_\infty = 1 - \frac{1 + 2\sum_{i=1}^{N_{\text{bond}}} P_i + P_{\text{cont}}}{\sqrt{\bar{N}} \cdot N \cdot \Delta V}
+```
 
-where $P_i$ are discrete bond contributions and $P_{\text{cont}}$ is a continuous chain correction for the tail.
+where $`P_i`$ are discrete bond contributions and $`P_{\text{cont}}`$ is a continuous chain correction for the tail.
 
 **Usage:**
 ```matlab
@@ -233,7 +239,7 @@ z_inf: 0.XXXXXXX
 ```
 
 **Requirements:**
-- Conformationally symmetric chains only ($\epsilon = b_A/b_B = 1$)
+- Conformationally symmetric chains only ($`\epsilon = b_A/b_B = 1`$)
 - Reads `nbar`, `ds`, `lx`, `nx` from fields file
 
 **References:**
@@ -246,7 +252,9 @@ For continuous chain model (legacy, less commonly used).
 
 **Method:** Uses RPA structure function integral:
 
-$$z_\infty = 1 - \frac{1}{\sqrt{\bar{N}}} \frac{1}{8\pi^3 f(1-f)} \int_{-\pi/\Delta x}^{\pi/\Delta x} S_{\text{RPA}}(k) \, d^3k$$
+```math
+z_\infty = 1 - \frac{1}{\sqrt{\bar{N}}} \frac{1}{8\pi^3 f(1-f)} \int_{-\pi/\Delta x}^{\pi/\Delta x} S_{\text{RPA}}(k) \, d^3k
+```
 
 **Usage:**
 ```matlab
@@ -256,7 +264,7 @@ matlab -nodisplay -r "run('/path/to/tools/renormalization_rpa.m'); exit"
 
 **Requirements:**
 - Continuous chain model only
-- Conformationally symmetric chains only ($\epsilon = 1$)
+- Conformationally symmetric chains only ($`\epsilon = 1`$)
 
 **Reference:**
 - B. Vorselaars, P. Stasiak, and M. W. Matsen, "Field-Theoretic Simulation of Block Copolymers at Experimentally Relevant Molecular Weights," *Macromolecules* **2015**, 48, 9071
@@ -267,9 +275,11 @@ matlab -nodisplay -r "run('/path/to/tools/renormalization_rpa.m'); exit"
 
 ### 4.1 Monomer to Auxiliary Fields (`convert_into_auxiliary_fields.m`)
 
-Convert monomer potential fields $(w_A, w_B, \ldots)$ to auxiliary potential fields $(w_{\text{aux}})$ using the inverse transformation matrix from eigenvalue decomposition.
+Convert monomer potential fields $`(w_A, w_B, \ldots)`$ to auxiliary potential fields $`(w_{\text{aux}})`$ using the inverse transformation matrix from eigenvalue decomposition.
 
-$$\mathbf{w}_{\text{aux}} = \mathbf{A}^{-1} \mathbf{w}_{\text{monomer}}$$
+```math
+\mathbf{w}_{\text{aux}} = \mathbf{A}^{-1} \mathbf{w}_{\text{monomer}}
+```
 
 **Usage:**
 ```matlab
@@ -297,15 +307,15 @@ Simulation output files (`fields_XXXXXX.mat`) contain:
 | Variable | Type | Description |
 |----------|------|-------------|
 | `nx` | int array | Grid dimensions [nx, ny, nz] |
-| `lx` | float array | Box dimensions in units of $b\sqrt{N}$ |
+| `lx` | float array | Box dimensions in units of $`b\sqrt{N}`$ |
 | `ds` | float | Contour step interval (= 1/N) |
-| `nbar` | float | Invariant polymerization index $\bar{N}$ |
+| `nbar` | float | Invariant polymerization index $`\bar{N}`$ |
 | `chain_model` | string | `"discrete"` or `"continuous"` |
 | `monomer_types` | string | List of monomer type names (e.g., `"AB"`) |
 | `w_A`, `w_B`, ... | float array | Monomer potential fields (flattened) |
 | `phi_A`, `phi_B`, ... | float array | Monomer density fields (flattened) |
-| `matrix_a` | float matrix | Transformation matrix $\mathbf{A}$ |
-| `matrix_a_inverse` | float matrix | Inverse transformation matrix $\mathbf{A}^{-1}$ |
+| `matrix_a` | float matrix | Transformation matrix $`\mathbf{A}`$ |
+| `matrix_a_inverse` | float matrix | Inverse transformation matrix $`\mathbf{A}^{-1}`$ |
 
 L-FTS and CL-FTS checkpoints additionally hold `initial_params`, `langevin_step`, `dt`, `eigenvalues`, `aux_fields_real`/`aux_fields_imag`, the noise array `normal_noise_prev` and the random-generator state (`random_generator`, `random_state_state`, `random_state_inc`), which `continue_run()` restores. CL-FTS stores complex fields as `w_A_real`/`w_A_imag` and `phi_A_real`/`phi_A_imag`.
 
@@ -338,8 +348,8 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | Variable | Description |
 |----------|-------------|
 | `nx`, `lx` | Grid and box dimensions |
-| `structure_function_A_A` | $\langle \phi_A(k) \phi_A(-k) \rangle$ |
-| `structure_function_A_B` | $\langle \phi_A(k) \phi_B(-k) \rangle$ |
-| `structure_function_B_B` | $\langle \phi_B(k) \phi_B(-k) \rangle$ |
+| `structure_function_A_A` | $`\langle \phi_A(k) \phi_A(-k) \rangle`$ |
+| `structure_function_A_B` | $`\langle \phi_A(k) \phi_B(-k) \rangle`$ |
+| `structure_function_B_B` | $`\langle \phi_B(k) \phi_B(-k) \rangle`$ |
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).

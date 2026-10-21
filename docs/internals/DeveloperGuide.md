@@ -292,7 +292,7 @@ time on one stream.
 
 | Model | Propagator Equation | Solver Method |
 |-------|---------------------|---------------|
-| Continuous | $\partial q/\partial s = (b^2/6)\nabla^2 q - wq$ | RQM4, RK2, or CN-ADI2 |
+| Continuous | $`\partial q/\partial s = (b^2/6)\nabla^2 q - wq`$ | RQM4, RK2, or CN-ADI2 |
 | Discrete | Recursive integral (Chapman-Kolmogorov) | Pseudo-spectral (bond convolution) |
 
 ### 3.3 Solver Hierarchy

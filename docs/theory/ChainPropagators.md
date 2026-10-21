@@ -1,6 +1,6 @@
 # Chain Propagators and Polymer Statistics
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes how to compute chain propagators, partition functions, and concentrations for polymers in external potential fields.
 
@@ -25,18 +25,20 @@ Chain propagators describe the statistical weight of polymer conformations in ex
 
 | Quantity | Symbol | Description |
 |----------|--------|-------------|
-| Propagator | $q(\mathbf{r}, s)$ | Statistical weight of chain conformations ending at position $\mathbf{r}$ after contour length $s$ |
-| Partition function | $Q$ | Total statistical weight (normalization factor) |
-| Concentration | $\phi(\mathbf{r})$ | Ensemble-averaged monomer density |
+| Propagator | $`q(\mathbf{r}, s)`$ | Statistical weight of chain conformations ending at position $`\mathbf{r}`$ after contour length $`s`$ |
+| Partition function | $`Q`$ | Total statistical weight (normalization factor) |
+| Concentration | $`\phi(\mathbf{r})`$ | Ensemble-averaged monomer density |
 
 **Physical interpretation of potential fields:**
 
-The monomer potential field $w_\alpha(\mathbf{r})$ determines local Boltzmann weighting:
+The monomer potential field $`w_\alpha(\mathbf{r})`$ determines local Boltzmann weighting:
 
-$$\text{local weight} \propto e^{-w_\alpha(\mathbf{r})}$$
+```math
+\text{local weight} \propto e^{-w_\alpha(\mathbf{r})}
+```
 
-- $w < 0$: **Attractive** — monomers are favored here
-- $w > 0$: **Repulsive** — monomers avoid this region
+- $`w < 0`$: **Attractive** — monomers are favored here
+- $`w > 0`$: **Repulsive** — monomers avoid this region
 
 ---
 
@@ -46,30 +48,38 @@ $$\text{local weight} \propto e^{-w_\alpha(\mathbf{r})}$$
 
 For continuous Gaussian chains, the propagator satisfies the modified diffusion equation:
 
-$$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)$$
+```math
+\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)
+```
 
 where:
-- $b$: statistical segment length
-- $w(\mathbf{r})$: potential field
-- $s$: contour variable (0 to 1 for full chain)
+- $`b`$: statistical segment length
+- $`w(\mathbf{r})`$: potential field
+- $`s`$: contour variable (0 to 1 for full chain)
 
 ### 2.2 Discrete Chain Model
 
 For discrete chains (bead-spring model), the propagator satisfies the Chapman-Kolmogorov equation:
 
-$$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'$$
+```math
+q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'
+```
 
-where $g(\mathbf{r})$ is the bond function (Gaussian distribution for bead-spring model).
+where $`g(\mathbf{r})`$ is the bond function (Gaussian distribution for bead-spring model).
 
 ### 2.3 Initial Conditions
 
 **Free chain end:**
-$$q(\mathbf{r}, 0) = 1$$
+```math
+q(\mathbf{r}, 0) = 1
+```
 
 **Junction point (branched polymers):**
-$$q^{v \rightarrow u}(\mathbf{r}, 0) = \prod_{k \neq u} q^{k \rightarrow v}(\mathbf{r}, f_k)$$
+```math
+q^{v \rightarrow u}(\mathbf{r}, 0) = \prod_{k \neq u} q^{k \rightarrow v}(\mathbf{r}, f_k)
+```
 
-where the product is over all blocks connected to node $v$ except the one leading to $u$.
+where the product is over all blocks connected to node $`v`$ except the one leading to $`u`$.
 
 ---
 
@@ -80,33 +90,39 @@ where the product is over all blocks connected to node $v$ except the one leadin
 For an AB diblock with graph structure `0--A--1--B--2`:
 
 **Forward propagators:**
-- $q^{0 \rightarrow 1}(\mathbf{r}, s)$: Through A block, $s \in [0, f_A]$
-- $q^{1 \rightarrow 2}(\mathbf{r}, s)$: Through B block, $s \in [0, f_B]$
+- $`q^{0 \rightarrow 1}(\mathbf{r}, s)`$: Through A block, $`s \in [0, f_A]`$
+- $`q^{1 \rightarrow 2}(\mathbf{r}, s)`$: Through B block, $`s \in [0, f_B]`$
 
 **Backward propagators:**
-- $q^{2 \rightarrow 1}(\mathbf{r}, s)$: Through B block (reverse), $s \in [0, f_B]$
-- $q^{1 \rightarrow 0}(\mathbf{r}, s)$: Through A block (reverse), $s \in [0, f_A]$
+- $`q^{2 \rightarrow 1}(\mathbf{r}, s)`$: Through B block (reverse), $`s \in [0, f_B]`$
+- $`q^{1 \rightarrow 0}(\mathbf{r}, s)`$: Through A block (reverse), $`s \in [0, f_A]`$
 
 ### 3.2 Partition Function
 
-$$Q = \frac{1}{V} \int d\mathbf{r} \, q^{0 \rightarrow 1}(\mathbf{r}, s) \cdot q^{1 \rightarrow 0}(\mathbf{r}, f_A - s)$$
+```math
+Q = \frac{1}{V} \int d\mathbf{r} \, q^{0 \rightarrow 1}(\mathbf{r}, s) \cdot q^{1 \rightarrow 0}(\mathbf{r}, f_A - s)
+```
 
-The partition function can be computed at any point along the chain (result is independent of $s$).
+The partition function can be computed at any point along the chain (result is independent of $`s`$).
 
 **Interpretation:**
-- $Q > 1$: Potential field favors certain conformations
-- $Q < 1$: Potential field restricts conformations
-- $Q = 1$: No external field ($w = 0$)
+- $`Q > 1`$: Potential field favors certain conformations
+- $`Q < 1`$: Potential field restricts conformations
+- $`Q = 1`$: No external field ($`w = 0`$)
 
 ### 3.3 Concentrations
 
 The ensemble-averaged concentration is computed by combining forward and backward propagators:
 
-$$\phi_A(\mathbf{r}) = \frac{1}{Q} \int_0^{f_A} ds \, q^{0 \rightarrow 1}(\mathbf{r}, s) \cdot q^{1 \rightarrow 0}(\mathbf{r}, f_A - s)$$
+```math
+\phi_A(\mathbf{r}) = \frac{1}{Q} \int_0^{f_A} ds \, q^{0 \rightarrow 1}(\mathbf{r}, s) \cdot q^{1 \rightarrow 0}(\mathbf{r}, f_A - s)
+```
 
-$$\phi_B(\mathbf{r}) = \frac{1}{Q} \int_0^{f_B} ds \, q^{1 \rightarrow 2}(\mathbf{r}, s) \cdot q^{2 \rightarrow 1}(\mathbf{r}, f_B - s)$$
+```math
+\phi_B(\mathbf{r}) = \frac{1}{Q} \int_0^{f_B} ds \, q^{1 \rightarrow 2}(\mathbf{r}, s) \cdot q^{2 \rightarrow 1}(\mathbf{r}, f_B - s)
+```
 
-**Normalization:** $\frac{1}{V} \int \phi_\alpha(\mathbf{r}) \, d\mathbf{r} = f_\alpha$ (block fraction)
+**Normalization:** $`\frac{1}{V} \int \phi_\alpha(\mathbf{r}) \, d\mathbf{r} = f_\alpha`$ (block fraction)
 
 ---
 
@@ -142,7 +158,9 @@ blocks = [
 
 **Concentrations:**
 
-$$\phi_A(\mathbf{r}) = \frac{1}{Q} \sum_{(v,u) \in \{(0,1),(0,2),(0,3)\}} \int_0^{f_A} ds \, q^{v \rightarrow u}(\mathbf{r}, s) \cdot q^{u \rightarrow v}(\mathbf{r}, f_A - s)$$
+```math
+\phi_A(\mathbf{r}) = \frac{1}{Q} \sum_{(v,u) \in \{(0,1),(0,2),(0,3)\}} \int_0^{f_A} ds \, q^{v \rightarrow u}(\mathbf{r}, s) \cdot q^{u \rightarrow v}(\mathbf{r}, f_A - s)
+```
 
 ### 4.3 Comb Polymer
 
@@ -162,17 +180,19 @@ The library automatically handles propagator dependencies using dynamic programm
 
 ### 5.1 Multiple Species
 
-For a mixture of polymer species $p = 0, 1, 2, \ldots$:
+For a mixture of polymer species $`p = 0, 1, 2, \ldots`$:
 
-**Partition functions:** Each species has its own partition function $Q_p$.
+**Partition functions:** Each species has its own partition function $`Q_p`$.
 
 **Concentrations:** Total concentration is the weighted sum over all species:
 
-$$\phi_\alpha(\mathbf{r}) = \sum_p \frac{\bar{\phi}_p}{\alpha_p Q_p} \int ds \, q_p^{v \rightarrow u}(\mathbf{r}, s) \cdot q_p^{u \rightarrow v}(\mathbf{r}, f - s)$$
+```math
+\phi_\alpha(\mathbf{r}) = \sum_p \frac{\bar{\phi}_p}{\alpha_p Q_p} \int ds \, q_p^{v \rightarrow u}(\mathbf{r}, s) \cdot q_p^{u \rightarrow v}(\mathbf{r}, f - s)
+```
 
 where:
-- $\bar{\phi}_p$: volume fraction of species $p$
-- $\alpha_p = N_p / N_{ref}$: relative chain length
+- $`\bar{\phi}_p`$: volume fraction of species $`p`$
+- $`\alpha_p = N_p / N_{ref}`$: relative chain length
 
 ### 5.2 Example: Diblock + Homopolymer Mixture
 
@@ -272,9 +292,9 @@ q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
 |--------|-------------|
 | `add_polymer(volume_fraction, blocks)` | Add polymer species |
 | `compute_propagators(fields)` | Compute all propagators |
-| `get_partition_function(polymer)` | Get $Q$ for polymer species |
+| `get_partition_function(polymer)` | Get $`Q`$ for polymer species |
 | `compute_concentrations()` | Compute all concentrations |
-| `get_concentration(monomer_type)` | Get $\phi_\alpha(\mathbf{r})$ |
+| `get_concentration(monomer_type)` | Get $`\phi_\alpha(\mathbf{r})`$ |
 | `get_propagator(polymer, v, u, step)` | Get propagator at step |
 
 ---

@@ -6,7 +6,7 @@ This document describes the smearing functions implemented in the PolymerFTS lib
 
 ## Overview
 
-In standard field-theoretic formulations, the Flory-Huggins interaction is treated as a point contact interaction, leading to an ultraviolet (UV) divergence that makes the theory ill-defined in the continuum limit. **Smearing** introduces finite-range interactions by convolving fields with a smearing function $\Gamma(\mathbf{r})$, which regularizes the UV behavior and enables meaningful results independent of the spatial discretization.
+In standard field-theoretic formulations, the Flory-Huggins interaction is treated as a point contact interaction, leading to an ultraviolet (UV) divergence that makes the theory ill-defined in the continuum limit. **Smearing** introduces finite-range interactions by convolving fields with a smearing function $`\Gamma(\mathbf{r})`$, which regularizes the UV behavior and enables meaningful results independent of the spatial discretization.
 
 ## Theory
 
@@ -14,21 +14,27 @@ In standard field-theoretic formulations, the Flory-Huggins interaction is treat
 
 The smeared concentration field is defined as a convolution:
 
-$$\phi_\Gamma(\mathbf{r}) = \int \phi(\mathbf{r}')\Gamma(\mathbf{r} - \mathbf{r}')d\mathbf{r}'$$
+```math
+\phi_\Gamma(\mathbf{r}) = \int \phi(\mathbf{r}')\Gamma(\mathbf{r} - \mathbf{r}')d\mathbf{r}'
+```
 
 In Fourier space, this convolution becomes a simple multiplication:
 
-$$\tilde{\phi}_\Gamma(\mathbf{k}) = \tilde{\phi}(\mathbf{k}) \cdot \tilde{\Gamma}(\mathbf{k})$$
+```math
+\tilde{\phi}_\Gamma(\mathbf{k}) = \tilde{\phi}(\mathbf{k}) \cdot \tilde{\Gamma}(\mathbf{k})
+```
 
-where $\tilde{\Gamma}(\mathbf{k})$ is the Fourier transform of the smearing function, normalized such that $\tilde{\Gamma}(0) = 1$.
+where $`\tilde{\Gamma}(\mathbf{k})`$ is the Fourier transform of the smearing function, normalized such that $`\tilde{\Gamma}(0) = 1`$.
 
 ### Finite-Range Interaction
 
 The smearing function defines an effective finite-range interaction potential:
 
-$$u_{\text{int}}(\mathbf{r}) = \int \Gamma(|\mathbf{r} - \mathbf{r}'|)\Gamma(\mathbf{r}')d\mathbf{r}'$$
+```math
+u_{\text{int}}(\mathbf{r}) = \int \Gamma(|\mathbf{r} - \mathbf{r}'|)\Gamma(\mathbf{r}')d\mathbf{r}'
+```
 
-In Fourier space: $\tilde{u}_{\text{int}}(\mathbf{k}) = |\tilde{\Gamma}(\mathbf{k})|^2$
+In Fourier space: $`\tilde{u}_{\text{int}}(\mathbf{k}) = |\tilde{\Gamma}(\mathbf{k})|^2`$
 
 ## Supported Smearing Types
 
@@ -36,14 +42,18 @@ In Fourier space: $\tilde{u}_{\text{int}}(\mathbf{k}) = |\tilde{\Gamma}(\mathbf{
 
 The Gaussian smearing function in real space:
 
-$$\Gamma(\mathbf{r}) = \frac{1}{(2\pi a_{\text{int}}^2)^{3/2}} \exp\left(-\frac{r^2}{2a_{\text{int}}^2}\right)$$
+```math
+\Gamma(\mathbf{r}) = \frac{1}{(2\pi a_{\text{int}}^2)^{3/2}} \exp\left(-\frac{r^2}{2a_{\text{int}}^2}\right)
+```
 
 In Fourier space:
 
-$$\tilde{\Gamma}(\mathbf{k}) = \exp\left(-\frac{a_{\text{int}}^2 k^2}{2}\right)$$
+```math
+\tilde{\Gamma}(\mathbf{k}) = \exp\left(-\frac{a_{\text{int}}^2 k^2}{2}\right)
+```
 
 **Parameter:**
-- `a_int`: Smearing length scale in units of $R_0 = b\sqrt{N}$ (reference end-to-end distance)
+- `a_int`: Smearing length scale in units of $`R_0 = b\sqrt{N}`$ (reference end-to-end distance)
 
 **Configuration:**
 ```python
@@ -60,14 +70,18 @@ params = {
 
 The sigmoidal smearing function is defined directly in Fourier space:
 
-$$\tilde{\Gamma}(\mathbf{k}) = C_0 \left[1 - \tanh\left(\frac{k - k_{\text{int}}}{\Delta k_{\text{int}}}\right)\right]$$
+```math
+\tilde{\Gamma}(\mathbf{k}) = C_0 \left[1 - \tanh\left(\frac{k - k_{\text{int}}}{\Delta k_{\text{int}}}\right)\right]
+```
 
-where $C_0$ is a normalization constant ensuring $\tilde{\Gamma}(0) = 1$:
+where $`C_0`$ is a normalization constant ensuring $`\tilde{\Gamma}(0) = 1`$:
 
-$$C_0 = \frac{1}{1 - \tanh(-k_{\text{int}}/\Delta k_{\text{int}})}$$
+```math
+C_0 = \frac{1}{1 - \tanh(-k_{\text{int}}/\Delta k_{\text{int}})}
+```
 
 **Parameters:**
-- `k_int`: Cutoff wavenumber in units of $1/R_0$
+- `k_int`: Cutoff wavenumber in units of $`1/R_0`$
 - `dk_int`: Transition width (optional, default: 5.0)
 
 **Configuration:**
@@ -88,8 +102,8 @@ For results to be **universal** (independent of spatial discretization and match
 
 | Smearing Type | Universality Condition | Physical Meaning |
 |---------------|----------------------|------------------|
-| Gaussian | $a_{\text{int}} \lesssim 0.02 R_0$ | Interaction range much smaller than chain size |
-| Sigmoidal | $k_{\text{int}} \gtrsim 20/R_0$ | Cutoff wavenumber much larger than chain inverse size |
+| Gaussian | $`a_{\text{int}} \lesssim 0.02 R_0`$ | Interaction range much smaller than chain size |
+| Sigmoidal | $`k_{\text{int}} \gtrsim 20/R_0`$ | Cutoff wavenumber much larger than chain inverse size |
 
 These conditions ensure that the smearing does not significantly alter the polymer chain statistics at length scales relevant to the physics of interest.
 
@@ -105,8 +119,8 @@ In the continuum limit, the point-contact Flory-Huggins interaction leads to ult
 
 In CL-FTS, smearing additionally prevents numerical instabilities known as "hot spots" — localized regions where field values grow uncontrollably. Hot spots arise from high-frequency fluctuations that can destabilize the simulation. Smearing damps these high-frequency modes:
 
-- **Gaussian smearing**: Exponential decay $\exp(-a_{\text{int}}^2 k^2/2)$ strongly suppresses high-$k$ modes
-- **Sigmoidal smearing**: Sharp cutoff at $k \approx k_{\text{int}}$ eliminates modes above the cutoff
+- **Gaussian smearing**: Exponential decay $`\exp(-a_{\text{int}}^2 k^2/2)`$ strongly suppresses high-$`k`$ modes
+- **Sigmoidal smearing**: Sharp cutoff at $`k \approx k_{\text{int}}`$ eliminates modes above the cutoff
 
 ### Combined with Dynamical Stabilization
 
@@ -149,8 +163,8 @@ fields_smeared = smear.apply_to_dict({"A": w_A, "B": w_B})
 
 When smearing is specified in the simulation parameters, the `SCFT`, `LFTS`, and `CLFTS` classes automatically:
 1. Initialize the smearing object
-2. Apply smearing to potential fields before propagator computation: $w_i^{\text{smeared}} = \Gamma * w_i$
-3. Apply smearing to concentration fields before force/residual computation: $\phi_i^{\text{smeared}} = \Gamma * \phi_i$
+2. Apply smearing to potential fields before propagator computation: $`w_i^{\text{smeared}} = \Gamma * w_i`$
+3. Apply smearing to concentration fields before force/residual computation: $`\phi_i^{\text{smeared}} = \Gamma * \phi_i`$
 
 ## Choosing Smearing Parameters
 

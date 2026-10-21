@@ -23,7 +23,7 @@ Read the notebooks in the following order:
 
 ## Key Concepts
 
-- **Monomer potential fields** $w_A$, $w_B$: Direct representation of chemical potentials
-- **Auxiliary fields** $\Omega_-$, $\Omega_+$: Exchange and pressure-like fields
+- **Monomer potential fields** $`w_A`$, $`w_B`$: Direct representation of chemical potentials
+- **Auxiliary fields** $`\Omega_-`$, $`\Omega_+`$: Exchange and pressure-like fields
 - **χN parameter**: Flory-Huggins interaction strength × chain length
 - **ζN parameter**: Compressibility parameter × chain length

@@ -1,6 +1,6 @@
 # Well-Tempered Metadynamics (WTMD)
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 Well-tempered metadynamics (WTMD) is an enhanced sampling technique that overcomes energy barriers between competing phases by adding a history-dependent bias potential. This enables efficient location of phase transitions such as the order-disorder transition (ODT) in block copolymer melts.
 
@@ -29,14 +29,14 @@ Well-tempered metadynamics (WTMD) is an enhanced sampling technique that overcom
 
 In standard L-FTS, the system can become trapped in metastable states, making it difficult to accurately locate phase transitions. WTMD addresses this by:
 
-1. Adding a bias potential $U(\Psi)$ that depends on an order parameter $\Psi$
+1. Adding a bias potential $`U(\Psi)`$ that depends on an order parameter $`\Psi`$
 2. Periodically depositing Gaussian "hills" to discourage revisiting explored regions
 3. Gradually reducing hill heights to achieve convergence to the free energy surface
 
 **Key advantages:**
 - Overcomes energy barriers between phases (e.g., lamellar ↔ disordered)
-- Provides direct estimate of free energy $F(\Psi)$
-- Locates ODT with high precision (e.g., $\Delta\chi N \sim 0.01$)
+- Provides direct estimate of free energy $`F(\Psi)`$
+- Locates ODT with high precision (e.g., $`\Delta\chi N \sim 0.01`$)
 
 ---
 
@@ -46,19 +46,25 @@ In standard L-FTS, the system can become trapped in metastable states, making it
 
 The WTMD simulation uses a modified Hamiltonian:
 
-$$H = H_f + U(\Psi)$$
+```math
+H = H_f + U(\Psi)
+```
 
-where $H_f$ is the field-theoretic Hamiltonian and $U(\Psi)$ is the bias potential.
+where $`H_f`$ is the field-theoretic Hamiltonian and $`U(\Psi)`$ is the bias potential.
 
 ### 2.2 Modified Langevin Dynamics
 
 The bias contributes an additional force term to the Langevin equation:
 
-$$W_-(\mathbf{r}, \tau + \delta\tau) = W_-(\mathbf{r}, \tau) - \frac{\beta}{\rho_0} \frac{\delta H_f}{\delta W_-(\mathbf{r})} \delta\tau - \frac{dU}{dW_-(\mathbf{r})} \delta\tau + \mathcal{N}(0, \sigma_\tau)$$
+```math
+W_-(\mathbf{r}, \tau + \delta\tau) = W_-(\mathbf{r}, \tau) - \frac{\beta}{\rho_0} \frac{\delta H_f}{\delta W_-(\mathbf{r})} \delta\tau - \frac{dU}{dW_-(\mathbf{r})} \delta\tau + \mathcal{N}(0, \sigma_\tau)
+```
 
 The bias force is computed using the chain rule:
 
-$$\frac{dU}{dW_-(\mathbf{r})} = U'(\Psi) \frac{d\Psi}{dW_-(\mathbf{r})}$$
+```math
+\frac{dU}{dW_-(\mathbf{r})} = U'(\Psi) \frac{d\Psi}{dW_-(\mathbf{r})}
+```
 
 ---
 
@@ -66,14 +72,16 @@ $$\frac{dU}{dW_-(\mathbf{r})} = U'(\Psi) \frac{d\Psi}{dW_-(\mathbf{r})}$$
 
 ### 3.1 Definition (Continuum)
 
-The order parameter is defined in the continuum as a weighted $\ell$-norm of the Fourier transform of the exchange field:
+The order parameter is defined in the continuum as a weighted $`\ell`$-norm of the Fourier transform of the exchange field:
 
-$$\Psi = \frac{N}{V} \left( \frac{V}{(2\pi)^3} \int f(k) |W_-(k)|^\ell \, dk \right)^{1/\ell}$$
+```math
+\Psi = \frac{N}{V} \left( \frac{V}{(2\pi)^3} \int f(k) |W_-(k)|^\ell \, dk \right)^{1/\ell}
+```
 
 where:
-- $W_-(k) = \mathcal{F}[W_-(\mathbf{r})]$ is the Fourier transform of the exchange field
-- $\ell = 4$ is the recommended exponent (empirically determined)
-- $f(k)$ is a low-pass filter function
+- $`W_-(k) = \mathcal{F}[W_-(\mathbf{r})]`$ is the Fourier transform of the exchange field
+- $`\ell = 4`$ is the recommended exponent (empirically determined)
+- $`f(k)`$ is a low-pass filter function
 
 This continuum definition is the fundamental formula from which the discrete implementation is derived.
 
@@ -81,13 +89,17 @@ This continuum definition is the fundamental formula from which the discrete imp
 
 The discrete formula is derived from the continuum definition (Section 3.1) by applying the discretization rules in Section 3.4:
 
-$$\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
+```math
+\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
+```
 
-where $\tilde{W}_k = \text{DFT}[W_-]$, $M = n_x n_y n_z$ is the total number of grid points, and $w_t$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
+where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
 
-> **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) uses $1/M^2$ normalization:
-> $$\Psi_{\text{paper}} = \frac{1}{M^2} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
-> Our implementation uses $1/M$ normalization instead, which makes $\Psi$ an intensive quantity—consistent regardless of the number of natural periods in the simulation box.
+> **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) uses $`1/M^2`$ normalization:
+> ```math
+> \Psi_{\text{paper}} = \frac{1}{M^2} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
+> ```
+> Our implementation uses $`1/M`$ normalization instead, which makes $`\Psi`$ an intensive quantity—consistent regardless of the number of natural periods in the simulation box.
 
 **Multi-monomer systems:** For systems with more than two monomer types, the "exchange field" is the auxiliary field with the **most negative eigenvalue** (i.e., largest magnitude among negative eigenvalues). This is determined automatically from the eigenvalue decomposition of the interaction matrix (same as [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts)).
 
@@ -95,9 +107,11 @@ where $\tilde{W}_k = \text{DFT}[W_-]$, $M = n_x n_y n_z$ is the total number of 
 
 The filter suppresses high-wavevector noise using a smooth sigmoid:
 
-$$f(k) = \frac{1}{1 + \exp(12(k/k_c - 1))}$$
+```math
+f(k) = \frac{1}{1 + \exp(12(k/k_c - 1))}
+```
 
-The cutoff $k_c$ is typically set to 1.4 times the peak position of the disordered-state structure function $S(k)$.
+The cutoff $`k_c`$ is typically set to 1.4 times the peak position of the disordered-state structure function $`S(k)`$.
 
 ### 3.4 Discretization Rules
 
@@ -105,18 +119,20 @@ The cutoff $k_c$ is typically set to 1.4 times the peak position of the disorder
 
 | Continuum | Discrete |
 |-----------|----------|
-| $\frac{V}{(2\pi)^3} \int d\mathbf{k}$ | $\sum_k$ |
-| $W_-(\mathbf{k})$ | $\frac{V}{M} \tilde{W}_k$ where $\tilde{W}_k = \text{DFT}[W_-]$ |
-| $\mathcal{F}^{-1}[\cdot]$ | $\frac{M}{V} \text{IDFT}[\cdot]$ |
+| $`\frac{V}{(2\pi)^3} \int d\mathbf{k}`$ | $`\sum_k`$ |
+| $`W_-(\mathbf{k})`$ | $`\frac{V}{M} \tilde{W}_k`$ where $`\tilde{W}_k = \text{DFT}[W_-]`$ |
+| $`\mathcal{F}^{-1}[\cdot]`$ | $`\frac{M}{V} \text{IDFT}[\cdot]`$ |
 
-**Field convention:** $w_{\text{code}} = N \cdot w_{\text{paper}}$ (per reference chain vs per segment)
+**Field convention:** $`w_{\text{code}} = N \cdot w_{\text{paper}}`$ (per reference chain vs per segment)
 
 ### 3.5 Implementation
 
 The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts) exactly.
 
 **Order parameter:**
-$$\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}$$
+```math
+\Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
+```
 
 ```python
 self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
@@ -125,7 +141,9 @@ psi = np.power(psi, 1.0 / self.l) / self.M
 ```
 
 **Bias field:**
-$$\text{bias} = V \cdot U'(\Psi) \cdot \frac{M^{2-\ell}}{V} \Psi^{1-\ell} \cdot \text{irfftn}\left[ f_k |\tilde{W}_k|^{\ell-2} \tilde{W}_k \right]$$
+```math
+\text{bias} = V \cdot U'(\Psi) \cdot \frac{M^{2-\ell}}{V} \Psi^{1-\ell} \cdot \text{irfftn}\left[ f_k |\tilde{W}_k|^{\ell-2} \tilde{W}_k \right]
+```
 
 ```python
 up_hat = np.interp(psi, self.psi_range, self.up)
@@ -144,9 +162,11 @@ langevin[self.langevin_idx] += bias
 The implementation uses a histogram-based approach with FFT convolution for efficient updates. Order parameters are collected during simulation and processed at `update_freq` intervals.
 
 **Normalization constant:**
-$$CV = \sqrt{\bar{N}} \cdot V$$
+```math
+CV = \sqrt{\bar{N}} \cdot V
+```
 
-where $\bar{N}$ is the invariant polymerization index (`nbar`) and $V$ is the box volume.
+where $`\bar{N}`$ is the invariant polymerization index (`nbar`) and $`V`$ is the box volume.
 
 **Gaussian kernels (precomputed in Fourier space):**
 ```python
@@ -177,7 +197,7 @@ up += dup
 
 ### 4.3 Well-Tempering
 
-The exponential prefactor $\exp(-CV \cdot U(\Psi)/\Delta T)$ causes hill heights to decrease in frequently visited regions. This ensures:
+The exponential prefactor $`\exp(-CV \cdot U(\Psi)/\Delta T)`$ causes hill heights to decrease in frequently visited regions. This ensures:
 
 1. Early stages: Large hills for rapid exploration
 2. Late stages: Small hills for convergence to free energy
@@ -190,13 +210,17 @@ The exponential prefactor $\exp(-CV \cdot U(\Psi)/\Delta T)$ causes hill heights
 
 Once the system reaches a well-tempered state, the free energy is:
 
-$$F(\Psi; \chi) = -\frac{T + \Delta T}{\Delta T} U(\Psi) + \text{constant}$$
+```math
+F(\Psi; \chi) = -\frac{T + \Delta T}{\Delta T} U(\Psi) + \text{constant}
+```
 
 ### 5.2 Histogram and Phase Transition
 
-The probability distribution of $\Psi$ is:
+The probability distribution of $`\Psi`$ is:
 
-$$P(\Psi) \propto \exp(-\beta F(\Psi; \chi))$$
+```math
+P(\Psi) \propto \exp(-\beta F(\Psi; \chi))
+```
 
 This histogram typically shows:
 - **Two peaks**: One for each phase (ordered/disordered)
@@ -204,13 +228,17 @@ This histogram typically shows:
 
 ### 5.3 Linear Extrapolation
 
-If the simulation is run close to the transition, $\chi$ can be adjusted using:
+If the simulation is run close to the transition, $`\chi`$ can be adjusted using:
 
-$$F(\Psi; \chi_b + \Delta\chi_b) = F(\Psi; \chi_b) + \frac{\partial F}{\partial \chi_b} \Delta\chi_b$$
+```math
+F(\Psi; \chi_b + \Delta\chi_b) = F(\Psi; \chi_b) + \frac{\partial F}{\partial \chi_b} \Delta\chi_b
+```
 
 The partial derivative is computed during simulation:
 
-$$\frac{\partial F}{\partial \chi_b} = \left\langle \frac{\partial H}{\partial \chi_b} \right\rangle_\Psi = \frac{\rho_0 V}{4\beta} - \frac{\rho_0}{\beta \chi_b^2} \left\langle \int W_-^2(\mathbf{r}) d\mathbf{r} \right\rangle_\Psi$$
+```math
+\frac{\partial F}{\partial \chi_b} = \left\langle \frac{\partial H}{\partial \chi_b} \right\rangle_\Psi = \frac{\rho_0 V}{4\beta} - \frac{\rho_0}{\beta \chi_b^2} \left\langle \int W_-^2(\mathbf{r}) d\mathbf{r} \right\rangle_\Psi
+```
 
 ---
 
@@ -245,12 +273,12 @@ wtmd = WTMD(
 
 | Method | Description |
 |--------|-------------|
-| `compute_order_parameter(step, w_aux)` | Calculate order parameter $\Psi$ from auxiliary fields |
+| `compute_order_parameter(step, w_aux)` | Calculate order parameter $`\Psi`$ from auxiliary fields |
 | `add_bias_to_langevin(psi, langevin)` | Add bias force to Langevin dynamics |
-| `store_order_parameter(psi, dH)` | Store $\Psi$ and $dH/d\chi$ for statistics |
-| `update_statistics()` | Update $U(\Psi)$ and $U'(\Psi)$ via FFT convolution |
+| `store_order_parameter(psi, dH)` | Store $`\Psi`$ and $`dH/d\chi`$ for statistics |
+| `update_statistics()` | Update $`U(\Psi)`$ and $`U'(\Psi)`$ via FFT convolution |
 | `write_data(filename)` | Save statistics to .mat file |
-| `get_free_energy()` | Return $(\Psi, F(\Psi))$ arrays |
+| `get_free_energy()` | Return $`(\Psi, F(\Psi))`$ arrays |
 
 ### 6.3 Integration with LFTS
 
@@ -315,15 +343,15 @@ if langevin_step % wtmd.recording_period == 0:
 
 | Config Key | Internal Name | Default | Description |
 |------------|---------------|---------|-------------|
-| `ell` | `l` | 4 | Norm exponent $\ell$. Use 4 for L/C phases, 2 for S/G phases |
-| `kc` | `kc` | 6.02 | Wavenumber cutoff $k_c$. Set to ~1.4× peak of $S(k)$ |
+| `ell` | `l` | 4 | Norm exponent $`\ell`$. Use 4 for L/C phases, 2 for S/G phases |
+| `kc` | `kc` | 6.02 | Wavenumber cutoff $`k_c`$. Set to ~1.4× peak of $`S(k)`$ |
 
 ### 7.2 Bias Potential Parameters
 
 | Config Key | Internal Name | Default | Description |
 |------------|---------------|---------|-------------|
-| `sigma_psi` | `sigma_psi` | 0.16 | Gaussian width $\sigma_\Psi$. Larger = smoother $U(\Psi)$ |
-| `delta_t` | `dT` | 5.0 | Well-tempering factor $\Delta T/T$. Similar to barrier height |
+| `sigma_psi` | `sigma_psi` | 0.16 | Gaussian width $`\sigma_\Psi`$. Larger = smoother $`U(\Psi)`$ |
+| `delta_t` | `dT` | 5.0 | Well-tempering factor $`\Delta T/T`$. Similar to barrier height |
 | `update_freq` | `update_freq` | 1000 | Langevin steps between statistics updates |
 | `recording_period` | `recording_period` | 100000 | Langevin steps between data file outputs |
 
@@ -331,18 +359,18 @@ if langevin_step % wtmd.recording_period == 0:
 
 | Config Key | Internal Name | Default | Description |
 |------------|---------------|---------|-------------|
-| `psi_min` | `psi_min` | 0.0 | Minimum $\Psi$ for bias histogram |
-| `psi_max` | `psi_max` | 10.0 | Maximum $\Psi$ for bias histogram |
-| `dpsi` | `dpsi` | 1e-3 | Bin width $d\Psi$ (number of bins = `(psi_max - psi_min) / dpsi`) |
+| `psi_min` | `psi_min` | 0.0 | Minimum $`\Psi`$ for bias histogram |
+| `psi_max` | `psi_max` | 10.0 | Maximum $`\Psi`$ for bias histogram |
+| `dpsi` | `dpsi` | 1e-3 | Bin width $`d\Psi`$ (number of bins = `(psi_max - psi_min) / dpsi`) |
 
 ### 7.4 Parameter Selection Guidelines
 
 From Beardsley & Matsen (2022):
 
-1. **Initial runs**: Scan across ODT to bracket transition and estimate $\Psi$ values
-2. **$\sigma_\Psi$**: Should allow migration of ~$\sigma_\Psi$ between hill depositions
-3. **$\Delta T$**: Start with underestimate; increase if needed (keeping previous $U(\Psi)$)
-4. **Convergence**: $U(\Psi)$ shape stabilizes after ~$10^6$ Langevin steps
+1. **Initial runs**: Scan across ODT to bracket transition and estimate $`\Psi`$ values
+2. **$`\sigma_\Psi`$**: Should allow migration of ~$`\sigma_\Psi`$ between hill depositions
+3. **$`\Delta T`$**: Start with underestimate; increase if needed (keeping previous $`U(\Psi)`$)
+4. **Convergence**: $`U(\Psi)`$ shape stabilizes after ~$`10^6`$ Langevin steps
 
 ---
 
@@ -367,8 +395,8 @@ P = np.exp(-F)  # Unnormalized probability
 ### 8.2 Typical Workflow
 
 1. **Initial scan**: Run standard L-FTS across ODT to bracket transition
-2. **Parameter tuning**: Determine $\Psi$ values for each phase, set $\sigma_\Psi$
-3. **WTMD run**: Run $5 \times 10^6$ Langevin steps near ODT
+2. **Parameter tuning**: Determine $`\Psi`$ values for each phase, set $`\sigma_\Psi`$
+3. **WTMD run**: Run $`5 \times 10^6`$ Langevin steps near ODT
 4. **Extrapolation**: Use linear extrapolation if needed to refine ODT
 
 ### 8.3 Checkpoint and Resume
@@ -386,10 +414,10 @@ simulation.continue_run("fields_100000.mat")
 ## 9. Validation Example: Lamella at the ODT
 
 Four WTMD runs of an AB diblock lamella (f = 4/9, discrete N = 90, 40³ grid,
-$\bar{N} = 10^4$, $\chi N = 17.149$, ~2M Langevin steps each), differing only
+$`\bar{N} = 10^4`$, $`\chi N = 17.149`$, ~2M Langevin steps each), differing only
 in `update_freq` (100/200/500/1000). Converting the bias with
-$F(\Psi) = -1.2\,U(\Psi)$ reveals a double well — a disordered basin at
-$\Psi \approx 1.62$ and the lamellar basin at $\Psi \approx 3.26$ — separated
+$`F(\Psi) = -1.2\,U(\Psi)`$ reveals a double well — a disordered basin at
+$`\Psi \approx 1.62`$ and the lamellar basin at $`\Psi \approx 3.26`$ — separated
 by a 3.3–4.0 kT barrier:
 
 ![WTMD free energy across update frequencies](../figures/wtmd_lamella_free_energy.png)
@@ -400,13 +428,13 @@ Key results:
   `update_freq` deposits equal-sized hills more often (the per-update
   histogram is density-normalized), so the bias accumulates faster, but
   well-tempering throttles the growth and every run converges to the same
-  $F(\Psi)$.
-- The basin free-energy difference is $\Delta F = +0.5 \pm 0.6$ kT — zero
+  $`F(\Psi)`$.
+- The basin free-energy difference is $`\Delta F = +0.5 \pm 0.6`$ kT — zero
   within run-to-run scatter — so the simulation sits essentially **at the
   ODT**. Extrapolating with the stored
-  $\langle \partial H/\partial \chi \rangle_\Psi = I_1/I_0$ gives
-  $\chi N_{\mathrm{ODT}} \approx 17.14 \pm 0.02$.
-- The bias-derived $F$ and the histogram-derived $F = -6 \ln I_0$ agree to
+  $`\langle \partial H/\partial \chi \rangle_\Psi = I_1/I_0`$ gives
+  $`\chi N_{\mathrm{ODT}} \approx 17.14 \pm 0.02`$.
+- The bias-derived $`F`$ and the histogram-derived $`F = -6 \ln I_0`$ agree to
   ≲0.05 kT over the well-sampled region.
 
 The inner double-well region converges to ~±0.5 kT after ~1.5M steps; only
@@ -421,12 +449,12 @@ barrier values:
 
 ### 9.1 Order Parameter Sensitivity
 
-WTMD works well when $\Psi$ clearly distinguishes competing phases:
+WTMD works well when $`\Psi`$ clearly distinguishes competing phases:
 
 | Transition | Effectiveness | Notes |
 |------------|---------------|-------|
 | **Lamellar ↔ Disorder** | Excellent | Clear morphology change |
-| **Cylindrical ↔ Disorder** | Good | Some overlap in $\Psi$ |
+| **Cylindrical ↔ Disorder** | Good | Some overlap in $`\Psi`$ |
 | **Spherical ↔ Disorder** | Poor | Similar morphologies |
 | **Gyroid ↔ Disorder** | Poor | Similar networks + competing phases |
 
@@ -442,7 +470,7 @@ A single order parameter may not distinguish all these phases.
 
 ### 9.3 Potential Solutions
 
-1. **Alternative order parameters**: Machine learning could help design better $\Psi$
+1. **Alternative order parameters**: Machine learning could help design better $`\Psi`$
 2. **Multiple order parameters**: Extend WTMD to 2D or higher
 3. **Sensitivity to Bragg peaks**: Order parameters based on structure function peaks
 

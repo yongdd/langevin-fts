@@ -6,7 +6,7 @@ This directory contains development and utility scripts that are not part of the
 
 | Script | Description |
 |--------|-------------|
-| `check_latex.py` | Validate LaTeX syntax in documentation using KaTeX |
+| `check_latex.py` | Check the math in the Markdown files: GitHub-safe syntax (`` $`...`$ ``, `` ```math ``) and, with the KaTeX CLI, the TeX itself |
 | `benchmark_crysfft_triplet.py` | Benchmark CrysFFT triplet algorithm performance |
 | `benchmark_reduced_basis.py` | Benchmark reduced basis space group operations |
 | `benchmark_space_group_speed.py` | Benchmark space group symmetry performance |
@@ -17,12 +17,14 @@ This directory contains development and utility scripts that are not part of the
 
 ## Usage
 
-### LaTeX Validation
+### Math Check
 
 ```bash
-# Requires: npm install -g katex
+npm install -g katex   # optional: without it the TeX syntax is not checked
 python scripts/check_latex.py
 ```
+
+The rules it enforces are in CLAUDE.md (Math in Documentation).
 
 ### Benchmarks
 

@@ -23,6 +23,6 @@ Read the notebooks in the following order:
 ## Key Concepts
 
 - **Langevin dynamics**: Stochastic evolution of fields with random noise
-- **Invariant polymerization index** $\bar{N}$: Controls fluctuation strength ($\bar{N} \to \infty$ recovers SCFT)
-- **Structure function** $S(k)$: Fourier-space correlation function for analyzing phase behavior
+- **Invariant polymerization index** $`\bar{N}`$: Controls fluctuation strength ($`\bar{N} \to \infty`$ recovers SCFT)
+- **Structure function** $`S(k)`$: Fourier-space correlation function for analyzing phase behavior
 - **Partial saddle-point**: Real fields fluctuate while imaginary fields are at saddle point

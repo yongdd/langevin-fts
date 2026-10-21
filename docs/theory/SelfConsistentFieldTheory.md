@@ -1,6 +1,6 @@
 # Self-Consistent Field Theory (SCFT)
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes the self-consistent field theory (SCFT) implementation for finding saddle-point solutions in polymer field theory.
 
@@ -31,85 +31,109 @@ SCFT provides mean-field predictions for polymer phase behavior, morphology, and
 
 ### 2.1 Self-Consistency Conditions
 
-For a system with monomer types $i = A, B, C, \ldots$, the self-consistent potential fields satisfy:
+For a system with monomer types $`i = A, B, C, \ldots`$, the self-consistent potential fields satisfy:
 
-$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})$$
+```math
+w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})
+```
 
 where:
-- $w_i(\mathbf{r})$: potential field for monomer type $i$
-- $\chi_{ij}$: Flory-Huggins interaction parameter
-- $\phi_j(\mathbf{r})$: concentration of monomer type $j$
-- $\xi(\mathbf{r})$: Lagrange multiplier enforcing incompressibility
+- $`w_i(\mathbf{r})`$: potential field for monomer type $`i`$
+- $`\chi_{ij}`$: Flory-Huggins interaction parameter
+- $`\phi_j(\mathbf{r})`$: concentration of monomer type $`j`$
+- $`\xi(\mathbf{r})`$: Lagrange multiplier enforcing incompressibility
 
 ### 2.2 Field Residuals
 
 The field residuals measure the deviation from self-consistency:
 
-$$\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}$$
+```math
+\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}
+```
 
 where:
-- $X$: the $\chi N$ matrix
-- $P = I - \frac{\mathbf{e}\mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}$: projection matrix
+- $`X`$: the $`\chi N`$ matrix
+- $`P = I - \frac{\mathbf{e}\mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}`$: projection matrix
 
 ### 2.3 Example: AB Diblock Copolymer
 
 For AB-type systems:
 
-$$\mathbf{R}_w = \begin{pmatrix} 0 & \chi N \\ \chi N & 0 \end{pmatrix} \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} - \begin{pmatrix} 1/2 & -1/2 \\ -1/2 & 1/2 \end{pmatrix} \begin{pmatrix} w_A(\mathbf{r}) \\ w_B(\mathbf{r}) \end{pmatrix}$$
+```math
+\mathbf{R}_w = \begin{pmatrix} 0 & \chi N \\ \chi N & 0 \end{pmatrix} \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} - \begin{pmatrix} 1/2 & -1/2 \\ -1/2 & 1/2 \end{pmatrix} \begin{pmatrix} w_A(\mathbf{r}) \\ w_B(\mathbf{r}) \end{pmatrix}
+```
 
 Explicitly:
 
-$$R_{w_A} = \chi N \phi_B(\mathbf{r}) - \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))$$
+```math
+R_{w_A} = \chi N \phi_B(\mathbf{r}) - \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))
+```
 
-$$R_{w_B} = \chi N \phi_A(\mathbf{r}) + \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))$$
+```math
+R_{w_B} = \chi N \phi_A(\mathbf{r}) + \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))
+```
 
-### 2.4 Compressible Model ($\zeta N \neq 0$)
+### 2.4 Compressible Model ($`\zeta N \neq 0`$)
 
-When a finite compressibility parameter $\zeta N$ is introduced, the incompressibility constraint is replaced by a penalty:
+When a finite compressibility parameter $`\zeta N`$ is introduced, the incompressibility constraint is replaced by a penalty:
 
-$$U_{comp} = \frac{\zeta N}{2V} \int d\mathbf{r} \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]^2$$
+```math
+U_{comp} = \frac{\zeta N}{2V} \int d\mathbf{r} \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]^2
+```
 
 The pressure field becomes a known function of the concentrations rather than an unknown Lagrange multiplier:
 
-$$\xi(\mathbf{r}) = \zeta N \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]$$
+```math
+\xi(\mathbf{r}) = \zeta N \left[ \sum_i \phi_i(\mathbf{r}) - 1 \right]
+```
 
 The self-consistency conditions become:
 
-$$w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]$$
+```math
+w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \zeta N \left[ \sum_j \phi_j(\mathbf{r}) - 1 \right]
+```
 
 #### Field Residuals (Compressible)
 
-A direct residual formulation using $R_w = (X + \zeta N \, \mathbf{e}\mathbf{e}^T) \boldsymbol{\phi} - \zeta N \, \mathbf{e} - \mathbf{w}$ is mathematically correct but numerically stiff. The effective interaction matrix $X + \zeta N \, \mathbf{e}\mathbf{e}^T$ has eigenvalue $\chi N + 2\zeta N$ (e.g., 213.27 for $\chi N = 13.27$, $\zeta N = 100$), requiring very small mixing rates for convergence.
+A direct residual formulation using $`R_w = (X + \zeta N \, \mathbf{e}\mathbf{e}^T) \boldsymbol{\phi} - \zeta N \, \mathbf{e} - \mathbf{w}`$ is mathematically correct but numerically stiff. The effective interaction matrix $`X + \zeta N \, \mathbf{e}\mathbf{e}^T`$ has eigenvalue $`\chi N + 2\zeta N`$ (e.g., 213.27 for $`\chi N = 13.27`$, $`\zeta N = 100`$), requiring very small mixing rates for convergence.
 
 Instead, the iteration separates the field into fluctuations and mean:
 
 1. **Fluctuation residual** (same as incompressible):
 
-$$\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}, \qquad R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle$$
+```math
+\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}, \qquad R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle
+```
 
-The projection matrix $P$ eliminates the stiff pressure mode from the residual, leaving only composition modes with eigenvalue $\sim \chi N$.
+The projection matrix $`P`$ eliminates the stiff pressure mode from the residual, leaving only composition modes with eigenvalue $`\sim \chi N`$.
 
 2. **Mean pinning** (after each field update):
 
-$$\langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi$$
+```math
+\langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi
+```
 
-where $\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)$.
+where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$.
 
-> **Implementation note:** In `scft.py`, this per-iteration mean pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). With the default setting, the residual means are subtracted each iteration but the field means themselves are not pinned: in the compressible case they retain their initial values, and in the incompressible case they are simply zeroed ($\langle w_i \rangle = 0$ convention).
+> **Implementation note:** In `scft.py`, this per-iteration mean pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). With the default setting, the residual means are subtracted each iteration but the field means themselves are not pinned: in the compressible case they retain their initial values, and in the incompressible case they are simply zeroed ($`\langle w_i \rangle = 0`$ convention).
 
 This approach converges at the same rate as the incompressible case because:
-- The fluctuation part sees only the $\chi N$ eigenvalue (via $P$)
+- The fluctuation part sees only the $`\chi N`$ eigenvalue (via $`P`$)
 - The mean is set directly from the known pressure field, requiring no iteration
 
 #### Example: AB Diblock (Compressible)
 
-At convergence with $\phi_A = \phi_B \approx 0.5$ and $\xi \approx 0$:
+At convergence with $`\phi_A = \phi_B \approx 0.5`$ and $`\xi \approx 0`$:
 
-$$\langle w_A \rangle = \langle w_B \rangle = \frac{\chi N}{2} = 6.635$$
+```math
+\langle w_A \rangle = \langle w_B \rangle = \frac{\chi N}{2} = 6.635
+```
 
-$$\langle W_+ \rangle = \frac{\langle w_A \rangle + \langle w_B \rangle}{2} = \frac{\chi N}{2} \approx 6.64$$
+```math
+\langle W_+ \rangle = \frac{\langle w_A \rangle + \langle w_B \rangle}{2} = \frac{\chi N}{2} \approx 6.64
+```
 
-using the implemented normalization $\boldsymbol{\Omega} = O^T \mathbf{w} / M$ with $M = 2$ (see [PolymerFieldTheory.md](PolymerFieldTheory.md)).
+using the implemented normalization $`\boldsymbol{\Omega} = O^T \mathbf{w} / M`$ with $`M = 2`$ (see [PolymerFieldTheory.md](PolymerFieldTheory.md)).
 
 ---
 
@@ -119,9 +143,11 @@ using the implemented normalization $\boldsymbol{\Omega} = O^T \mathbf{w} / M$ w
 
 The simplest approach updates fields using the residuals:
 
-$$w_i(\mathbf{r}, \tau+1) = w_i(\mathbf{r}, \tau) + \lambda (R_w)_i$$
+```math
+w_i(\mathbf{r}, \tau+1) = w_i(\mathbf{r}, \tau) + \lambda (R_w)_i
+```
 
-where $\lambda$ is the mixing parameter and $\tau$ is the iteration number.
+where $`\lambda`$ is the mixing parameter and $`\tau`$ is the iteration number.
 
 **Advantages:**
 - Simple to implement
@@ -129,17 +155,21 @@ where $\lambda$ is the mixing parameter and $\tau$ is the iteration number.
 
 **Disadvantages:**
 - Slow convergence near the saddle point
-- Requires small $\lambda$ for stability
+- Requires small $`\lambda`$ for stability
 
 ### 3.2 Anderson Mixing
 
 Anderson mixing accelerates convergence by using history of previous iterations:
 
-$$w^{(n+1)} = w^{(n)} + \lambda R_w^{(n)} - \sum_{i=1}^{m} c_i \left[ (w^{(n)} - w^{(n-i)}) + \lambda (R_w^{(n)} - R_w^{(n-i)}) \right]$$
+```math
+w^{(n+1)} = w^{(n)} + \lambda R_w^{(n)} - \sum_{i=1}^{m} c_i \left[ (w^{(n)} - w^{(n-i)}) + \lambda (R_w^{(n)} - R_w^{(n-i)}) \right]
+```
 
-where the coefficients $c_i$ are determined by minimizing:
+where the coefficients $`c_i`$ are determined by minimizing:
 
-$$\min_{c_i} \left\| R_w^{(n)} - \sum_{i=1}^{m} c_i (R_w^{(n)} - R_w^{(n-i)}) \right\|^2$$
+```math
+\min_{c_i} \left\| R_w^{(n)} - \sum_{i=1}^{m} c_i (R_w^{(n)} - R_w^{(n-i)}) \right\|^2
+```
 
 **Key parameters:**
 - `max_hist`: Maximum history length (typically 10-20)
@@ -154,11 +184,13 @@ $$\min_{c_i} \left\| R_w^{(n)} - \sum_{i=1}^{m} c_i (R_w^{(n)} - R_w^{(n-i)}) \r
 
 The self-consistency error is defined as:
 
-$$\epsilon = \sqrt{\frac{\sum_i \int |\mathbf{R}_{w_i}|^2 d\mathbf{r}}{1 + \sum_i \int |w_i|^2 d\mathbf{r}}}$$
+```math
+\epsilon = \sqrt{\frac{\sum_i \int |\mathbf{R}_{w_i}|^2 d\mathbf{r}}{1 + \sum_i \int |w_i|^2 d\mathbf{r}}}
+```
 
 The constant 1 in the denominator prevents divergence when the field magnitudes are small.
 
-Iteration terminates when $\epsilon < \text{tolerance}$ (typically $10^{-7}$ to $10^{-9}$).
+Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$).
 
 ---
 
@@ -168,19 +200,25 @@ Iteration terminates when $\epsilon < \text{tolerance}$ (typically $10^{-7}$ to 
 
 The equilibrium unit cell minimizes the free energy. The stress residuals are:
 
-$$\mathbf{R}_{stress} = -\frac{\partial H}{\partial \boldsymbol{\theta}}$$
+```math
+\mathbf{R}_{stress} = -\frac{\partial H}{\partial \boldsymbol{\theta}}
+```
 
-where $\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T$ contains the unit cell parameters. Note the angle ordering: the API (`get_stress()`) returns the derivatives $+\partial H / \partial \boldsymbol{\theta}$ as the array $[\partial H/\partial L_a, \partial H/\partial L_b, \partial H/\partial L_c, \partial H/\partial \gamma, \partial H/\partial \beta, \partial H/\partial \alpha]$ (in 2D, $\partial H/\partial \gamma$ is stored at index 2). For a single polymer species, $\partial H / \partial \boldsymbol{\theta}$ is equivalent to $-(1/Q) \, \partial Q / \partial \boldsymbol{\theta}$.
+where $`\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T`$ contains the unit cell parameters. Note the angle ordering: the API (`get_stress()`) returns the derivatives $`+\partial H / \partial \boldsymbol{\theta}`$ as the array $`[\partial H/\partial L_a, \partial H/\partial L_b, \partial H/\partial L_c, \partial H/\partial \gamma, \partial H/\partial \beta, \partial H/\partial \alpha]`$ (in 2D, $`\partial H/\partial \gamma`$ is stored at index 2). For a single polymer species, $`\partial H / \partial \boldsymbol{\theta}`$ is equivalent to $`-(1/Q) \, \partial Q / \partial \boldsymbol{\theta}`$.
 
 ### 4.2 Box Update
 
 During SCFT iteration with `box_is_altering=True`:
 
-$$L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}$$
+```math
+L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}
+```
 
-$$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \frac{\partial H}{\partial \alpha}$$
+```math
+\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \frac{\partial H}{\partial \alpha}
+```
 
-where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing); the plain gradient-descent update above corresponds to the simple-mixing limit.
+where $`\eta`$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing); the plain gradient-descent update above corresponds to the simple-mixing limit.
 
 **Implementation details:**
 - Box size changes are limited to 10% per iteration

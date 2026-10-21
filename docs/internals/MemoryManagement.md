@@ -1,6 +1,6 @@
 # Memory Usage and Performance Guide
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Note:** This document was generated with assistance from a large language model (LLM). The author has reviewed and verified its content.
 
 This document describes the memory management strategies and performance characteristics of the polymer field theory simulation library for both CUDA (GPU) and CPU platforms.
 
@@ -26,14 +26,14 @@ params = {
 ## Memory Scaling
 
 Memory usage depends on:
-- $M$: Total grid points (e.g., $64^3 = 262,144$)
-- $N$: Total segments across all propagators
-- $C$: Number of checkpoints (checkpoints are stored every $\lceil 2\sqrt{N} \rceil$ steps, giving approximately $\sqrt{N}/2$ checkpoints for each propagator)
+- $`M`$: Total grid points (e.g., $`64^3 = 262,144`$)
+- $`N`$: Total segments across all propagators
+- $`C`$: Number of checkpoints (checkpoints are stored every $`\lceil 2\sqrt{N} \rceil`$ steps, giving approximately $`\sqrt{N}/2`$ checkpoints for each propagator)
 
 | Mode | Memory Complexity | Computation Complexity |
 |------|-------------------|------------------------|
-| Standard | $O(N \times M)$ | $O(N \times M)$ |
-| Memory-Saving | $O(C \times M) \approx O(\sqrt{N} \times M)$ | $O(N \times \sqrt{N} \times M)$ |
+| Standard | $`O(N \times M)`$ | $`O(N \times M)`$ |
+| Memory-Saving | $`O(C \times M) \approx O(\sqrt{N} \times M)`$ | $`O(N \times \sqrt{N} \times M)`$ |
 
 ## CUDA (GPU) Platform
 
@@ -73,7 +73,7 @@ Pinned Host Memory (Checkpoints):
 └── half_checkpoint[(key, n)]    # Junction half-bond states (discrete chains)
 ```
 
-**Memory usage**: GPU memory grows as $\sqrt{N}$; the checkpoints are stored in host RAM.
+**Memory usage**: GPU memory grows as $`\sqrt{N}`$; the checkpoints are stored in host RAM.
 A segment recomputed from a checkpoint is identical to the one the propagator
 computation produced, and both modes sum the same segment pairs in the same order, so
 the memory-saving mode gives the same results as the standard mode (bit for bit on every
@@ -113,30 +113,30 @@ System RAM (Reduced):
 - **Polymer**: AB Diblock Copolymer (f = 0.5, χN = 12)
 - **Chain model**: Discrete
 - **N = 500** contour steps (ds = 1/500)
-- **Checkpoint interval**: $\lceil 2\sqrt{500} \rceil = 45$
+- **Checkpoint interval**: $`\lceil 2\sqrt{500} \rceil = 45`$
 - **Hardware**: NVIDIA A10 GPU (23 GB), CPU (4 threads)
 
 ### CUDA (GPU) Results
 
 | Mode | Grid | GPU Memory | Host Memory | Time/iter | Total (5 iter) |
 |------|------|------------|-------------|-----------|----------------|
-| **Standard** | $64^3$ | 2.0 GB | 181 MB | **0.146 s** | 3.4 s |
-| **Standard** | $80^3$ | 3.9 GB | 58 MB | **0.359 s** | 6.2 s |
-| **Standard** | $96^3$ | 6.8 GB | 151 MB | **0.645 s** | 10.6 s |
-| **Reduce** | $96^3$ | 0.5 GB | 918 MB | **2.44 s** | 15.1 s |
-| **Reduce** | $128^3$ | 1.3 GB | 2.2 GB | **5.40 s** | 34.5 s |
-| **Reduce** | $160^3$ | 2.5 GB | 4.2 GB | **12.0 s** | 71.4 s |
-| **Reduce** | $200^3$ | 4.9 GB | 8.3 GB | **25.5 s** | 145.8 s |
+| **Standard** | $`64^3`$ | 2.0 GB | 181 MB | **0.146 s** | 3.4 s |
+| **Standard** | $`80^3`$ | 3.9 GB | 58 MB | **0.359 s** | 6.2 s |
+| **Standard** | $`96^3`$ | 6.8 GB | 151 MB | **0.645 s** | 10.6 s |
+| **Reduce** | $`96^3`$ | 0.5 GB | 918 MB | **2.44 s** | 15.1 s |
+| **Reduce** | $`128^3`$ | 1.3 GB | 2.2 GB | **5.40 s** | 34.5 s |
+| **Reduce** | $`160^3`$ | 2.5 GB | 4.2 GB | **12.0 s** | 71.4 s |
+| **Reduce** | $`200^3`$ | 4.9 GB | 8.3 GB | **25.5 s** | 145.8 s |
 
 **Key observations**:
 - GPU memory reduced by **~92%** with memory-saving mode
 - Checkpoints stored in pinned host RAM for async transfers
 - Computation **3.8x slower** due to recomputation from checkpoints
-- Standard mode for $200^3$ would require ~60 GB GPU memory (infeasible)
+- Standard mode for $`200^3`$ would require ~60 GB GPU memory (infeasible)
 
 These numbers predate the 2026-10 unification of the CPU and CUDA code, which keeps the
-$2\sqrt{N}$ recomputation buffers on the GPU instead of round-tripping every recomputed
-segment through pinned host memory. Same configuration at $96^3$, same A10, propagators
+$`2\sqrt{N}`$ recomputation buffers on the GPU instead of round-tripping every recomputed
+segment through pinned host memory. Same configuration at $`96^3`$, same A10, propagators
 plus concentrations per iteration:
 
 | Version | GPU memory | Host memory (peak RSS) | Time/iter |
@@ -150,14 +150,14 @@ The stress computation of the same system went from 2.09 s to 1.21 s.
 
 | Mode | Grid | CPU Memory | Time/iter | Total (5 iter) |
 |------|------|------------|-----------|----------------|
-| **Standard** | $64^3$ | 2.1 GB | **1.66 s** | 8.8 s |
-| **Standard** | $80^3$ | 4.2 GB | **4.02 s** | 20.5 s |
-| **Standard** | $96^3$ | 7.3 GB | **7.26 s** | 36.8 s |
-| **Standard** | $112^3$ | 11.5 GB | **11.8 s** | 59.9 s |
-| **Reduce** | $96^3$ | 0.5 GB | **27.3 s** | 82.5 s |
-| **Reduce** | $128^3$ | 1.3 GB | **65.8 s** | 198.7 s |
-| **Reduce** | $160^3$ | 2.5 GB | **147.7 s** | 444.5 s |
-| **Reduce** | $200^3$ | 4.9 GB | **378.3 s** | 1137 s |
+| **Standard** | $`64^3`$ | 2.1 GB | **1.66 s** | 8.8 s |
+| **Standard** | $`80^3`$ | 4.2 GB | **4.02 s** | 20.5 s |
+| **Standard** | $`96^3`$ | 7.3 GB | **7.26 s** | 36.8 s |
+| **Standard** | $`112^3`$ | 11.5 GB | **11.8 s** | 59.9 s |
+| **Reduce** | $`96^3`$ | 0.5 GB | **27.3 s** | 82.5 s |
+| **Reduce** | $`128^3`$ | 1.3 GB | **65.8 s** | 198.7 s |
+| **Reduce** | $`160^3`$ | 2.5 GB | **147.7 s** | 444.5 s |
+| **Reduce** | $`200^3`$ | 4.9 GB | **378.3 s** | 1137 s |
 
 **Key observations**:
 - Memory reduced by **~93%** with memory-saving mode
@@ -168,16 +168,16 @@ The stress computation of the same system went from 2.09 s to 1.21 s.
 
 | Grid | CUDA Std | CUDA Red | CPU Std | CPU Red | CUDA Speedup |
 |------|----------|----------|---------|---------|--------------|
-| $64^3$ | 0.15 s | - | 1.66 s | - | **11.4x** |
-| $80^3$ | 0.36 s | - | 4.02 s | - | **11.2x** |
-| $96^3$ | 0.65 s | 2.44 s | 7.26 s | 27.3 s | **11.2x** |
-| $128^3$ | - | 5.40 s | - | 65.8 s | **12.2x** |
-| $160^3$ | - | 12.0 s | - | 147.7 s | **12.3x** |
-| $200^3$ | - | 25.5 s | - | 378.3 s | **14.8x** |
+| $`64^3`$ | 0.15 s | - | 1.66 s | - | **11.4x** |
+| $`80^3`$ | 0.36 s | - | 4.02 s | - | **11.2x** |
+| $`96^3`$ | 0.65 s | 2.44 s | 7.26 s | 27.3 s | **11.2x** |
+| $`128^3`$ | - | 5.40 s | - | 65.8 s | **12.2x** |
+| $`160^3`$ | - | 12.0 s | - | 147.7 s | **12.3x** |
+| $`200^3`$ | - | 25.5 s | - | 378.3 s | **14.8x** |
 
 ### Memory Savings Analysis
 
-At $96^3$ grid (common grid sizes for comparison):
+At $`96^3`$ grid (common grid sizes for comparison):
 
 | Platform | Standard | Reduce Memory | Savings | Time Overhead |
 |----------|----------|---------------|---------|---------------|
@@ -190,30 +190,38 @@ At $96^3$ grid (common grid sizes for comparison):
 
 For a discrete chain system:
 
-$$\text{Memory (bytes)} \approx N_{\text{propagators}} \times (N+1) \times M_{\text{grid}} \times 8$$
+```math
+\text{Memory (bytes)} \approx N_{\text{propagators}} \times (N+1) \times M_{\text{grid}} \times 8
+```
 
-**Example**: AB diblock (2 propagators), N=500, $64^3$ grid
+**Example**: AB diblock (2 propagators), N=500, $`64^3`$ grid
 
-$$\text{Memory} \approx 2 \times 501 \times 262144 \times 8 \approx 2.0 \text{ GB}$$
+```math
+\text{Memory} \approx 2 \times 501 \times 262144 \times 8 \approx 2.0 \text{ GB}
+```
 
 ### Estimating Memory-Saving Mode
 
-$$\text{Memory} \approx (N_{\text{checkpoints}} + 2\sqrt{N}) \times M_{\text{grid}} \times 8$$
+```math
+\text{Memory} \approx (N_{\text{checkpoints}} + 2\sqrt{N}) \times M_{\text{grid}} \times 8
+```
 
-where $N_{\text{checkpoints}} \approx N / (2\sqrt{N}) = \sqrt{N}/2$ per propagator.
+where $`N_{\text{checkpoints}} \approx N / (2\sqrt{N}) = \sqrt{N}/2`$ per propagator.
 
 ### Theoretical Memory Requirements (N=500)
 
 | Grid | Standard (Diblock) | Reduce Memory | Savings |
 |------|-------------------|---------------|---------|
-| $64^3$ | 2.0 GB | 0.14 GB | 93% |
-| $96^3$ | 6.8 GB | 0.55 GB | 92% |
-| $128^3$ | 16.1 GB | 1.3 GB | 92% |
-| $160^3$ | 31.4 GB | 2.5 GB | 92% |
-| $200^3$ | **61.5 GB** | **4.9 GB** | **92%** |
+| $`64^3`$ | 2.0 GB | 0.14 GB | 93% |
+| $`96^3`$ | 6.8 GB | 0.55 GB | 92% |
+| $`128^3`$ | 16.1 GB | 1.3 GB | 92% |
+| $`160^3`$ | 31.4 GB | 2.5 GB | 92% |
+| $`200^3`$ | **61.5 GB** | **4.9 GB** | **92%** |
 
-**Key insight**: For N=500, memory savings are consistently ~92% because the memory-saving mode stores only $\approx \sqrt{N}/2$ checkpoints per propagator plus a recomputation workspace of $\approx 2\sqrt{N}$ arrays, instead of all $N$ propagator arrays:
-$$\text{Savings} \approx 1 - \frac{\sqrt{N}/2 + 2\sqrt{N}}{N} = 1 - \frac{2.5}{\sqrt{N}} \approx 1 - \frac{2.5}{22.4} \approx 89\%$$
+**Key insight**: For N=500, memory savings are consistently ~92% because the memory-saving mode stores only $`\approx \sqrt{N}/2`$ checkpoints per propagator plus a recomputation workspace of $`\approx 2\sqrt{N}`$ arrays, instead of all $`N`$ propagator arrays:
+```math
+\text{Savings} \approx 1 - \frac{\sqrt{N}/2 + 2\sqrt{N}}{N} = 1 - \frac{2.5}{\sqrt{N}} \approx 1 - \frac{2.5}{22.4} \approx 89\%
+```
 
 The measured savings (~92%) are slightly higher than this estimate because the workspace is shared across propagators rather than allocated per propagator.
 
@@ -232,13 +240,13 @@ The measured savings (~92%) are slightly higher than this estimate because the w
 ### Use Standard Mode (`reduce_memory=False`) when:
 - Memory is not a constraint
 - Maximum performance is required
-- Running small to medium grids ($\leq 96^3$ for N=500)
+- Running small to medium grids ($`\leq 96^3`$ for N=500)
 - Short polymer chains (N < 200)
 
 ### Use Memory-Saving Mode (`reduce_memory=True`) when:
 - **CUDA**: GPU memory is limited but host RAM is available
 - **CPU**: System RAM is constrained
-- Large grids ($> 96^3$)
+- Large grids ($`> 96^3`$)
 - Long polymer chains (N > 200)
 - Complex architectures with many blocks
 - Running multiple simulations concurrently
@@ -249,43 +257,45 @@ The measured savings (~92%) are slightly higher than this estimate because the w
 
 | N | Max Grid (Standard, 24GB GPU) | Recommended Mode |
 |---|-------------------------------|------------------|
-| 100 | ~$160^3$ | Standard |
-| 200 | ~$128^3$ | Standard or Reduce |
-| 500 | ~$96^3$ | **Reduce Memory** |
-| 1000 | ~$64^3$ | **Reduce Memory** |
+| 100 | ~$`160^3`$ | Standard |
+| 200 | ~$`128^3`$ | Standard or Reduce |
+| 500 | ~$`96^3`$ | **Reduce Memory** |
+| 1000 | ~$`64^3`$ | **Reduce Memory** |
 
 ## Technical Implementation Details
 
 ### Checkpointing Algorithm
 
-The checkpointing algorithm stores propagators only at strategic positions and recomputes intermediate values on-the-fly. Here $N$ is the total number of segments of all blocks, as in [Memory Scaling](#memory-scaling); for a single linear chain it is the number of segments of the chain:
+The checkpointing algorithm stores propagators only at strategic positions and recomputes intermediate values on-the-fly. Here $`N`$ is the total number of segments of all blocks, as in [Memory Scaling](#memory-scaling); for a single linear chain it is the number of segments of the chain:
 
 1. **During propagator computation**:
-   - Compute propagator step by step: $q(\mathbf{r}, s+\Delta s) = \Gamma[q(\mathbf{r}, s)]$
-   - Store at checkpoint positions: the first segment of every propagator (0 for continuous, 1 for discrete chains), the segments other propagators start from, the start of every scheduled job, the segments of the partition functions, and every $\lceil 2\sqrt{N}\rceil$ steps; discrete chains also keep the half-bond states at junctions
+   - Compute propagator step by step: $`q(\mathbf{r}, s+\Delta s) = \Gamma[q(\mathbf{r}, s)]`$
+   - Store at checkpoint positions: the first segment of every propagator (0 for continuous, 1 for discrete chains), the segments other propagators start from, the start of every scheduled job, the segments of the partition functions, and every $`\lceil 2\sqrt{N}\rceil`$ steps; discrete chains also keep the half-bond states at junctions
    - Discard intermediate values
 
 2. **During concentration calculation** (block-based algorithm):
-   - Divide the computation into blocks of size $k = \lceil 2\sqrt{N}\rceil$
+   - Divide the computation into blocks of size $`k = \lceil 2\sqrt{N}\rceil`$
    - For each block:
      - Load the left propagator from the nearest checkpoint
      - Recompute forward to required positions within the block
      - Advance the right propagator step by step
-     - Accumulate concentration contributions: $\phi(\mathbf{r}) \propto q(\mathbf{r}, s) \cdot q^\dagger(\mathbf{r}, N-s)$
+     - Accumulate concentration contributions: $`\phi(\mathbf{r}) \propto q(\mathbf{r}, s) \cdot q^\dagger(\mathbf{r}, N-s)`$
    - This reduces redundant recomputation by processing contiguous ranges
 
 ### Block-Based Computation
 
-The concentration of a block with $N_B$ segments requires products of forward and backward propagators:
-$$\phi(\mathbf{r}) = \sum_{n=0}^{N_B} c_n \cdot q(\mathbf{r}, n) \cdot q^\dagger(\mathbf{r}, N_B-n)$$
+The concentration of a block with $`N_B`$ segments requires products of forward and backward propagators:
+```math
+\phi(\mathbf{r}) = \sum_{n=0}^{N_B} c_n \cdot q(\mathbf{r}, n) \cdot q^\dagger(\mathbf{r}, N_B-n)
+```
 
-Instead of recomputing all $q$ values at once, the block-based algorithm:
-1. Divides $n$ into blocks of size $2\sqrt{N}$
-2. For each block, loads the nearest checkpoint for $q$
+Instead of recomputing all $`q`$ values at once, the block-based algorithm:
+1. Divides $`n`$ into blocks of size $`2\sqrt{N}`$
+2. For each block, loads the nearest checkpoint for $`q`$
 3. Recomputes only the positions needed for that block
-4. Advances $q^\dagger$ continuously using ping-pong buffers
+4. Advances $`q^\dagger`$ continuously using ping-pong buffers
 
-This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing redundant computation.
+This reduces the workspace from $`O(N)`$ to $`O(\sqrt{N})`$ arrays while minimizing redundant computation.
 
 ### Implementation
 
@@ -295,9 +305,9 @@ decides where the arrays live.
 - **Checkpoints** are `CheckpointArray`s: pinned host memory (`cudaMallocHost`) on CUDA, system
   RAM on the CPU. On CUDA they are copied asynchronously on stream 0, the only stream in this
   mode; on the CPU they are plain copies.
-- **Recomputation workspace**: up to $\lceil 2\sqrt{N}\rceil$ segments of one propagator
+- **Recomputation workspace**: up to $`\lceil 2\sqrt{N}\rceil`$ segments of one propagator
   (`q_recal`, no more than the longest block needs) plus four ping-pong fields, in GPU memory on
-  CUDA. The workspace therefore grows as $\sqrt{N}$.
+  CUDA. The workspace therefore grows as $`\sqrt{N}`$.
 - **One stream**: propagators are computed one at a time, which keeps the workspace to a single
   set of buffers.
 - **Same arithmetic as the standard mode**: the recomputed segments equal the stored ones, and
