@@ -142,6 +142,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         {
             this->mask.assign(mask, mask + total_grid);
             validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
+            mask_full_ = this->mask;
         }
         // else: mask remains empty (no mask)
 
@@ -324,6 +325,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         {
             this->mask.assign(mask, mask + total_grid);
             validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
+            mask_full_ = this->mask;
         }
         // else: mask remains empty (no mask)
 
@@ -700,13 +702,17 @@ void ComputationBox<T>::set_lx(std::vector<double> new_lx)
     compute_reciprocal_lattice();
     compute_recip_metric();
 
-    // Weight factor for integral (using volume from lattice vectors)
+    // Weight factor for integral (using volume from lattice vectors). The full
+    // grid mask: `mask` is in the reduced basis while a space group is set.
     double dv_base = volume / total_grid;
     for(int i=0; i<total_grid; i++)
         dv[i] = dv_base;
-    if (!this->mask.empty())
+    if (!mask_full_.empty())
         for(int i=0; i<total_grid; i++)
-            dv[i] *= this->mask[i];
+            dv[i] *= mask_full_[i];
+    accessible_volume = 0.0;
+    for(int i=0; i<total_grid; i++)
+        accessible_volume += dv[i];
 }
 
 template <typename T>
@@ -756,13 +762,17 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     compute_reciprocal_lattice();
     compute_recip_metric();
 
-    // Weight factor for integral (using volume from lattice vectors)
+    // Weight factor for integral (using volume from lattice vectors). The full
+    // grid mask: `mask` is in the reduced basis while a space group is set.
     double dv_base = volume / total_grid;
     for(int i=0; i<total_grid; i++)
         dv[i] = dv_base;
-    if (!this->mask.empty())
+    if (!mask_full_.empty())
         for(int i=0; i<total_grid; i++)
-            dv[i] *= this->mask[i];
+            dv[i] *= mask_full_[i];
+    accessible_volume = 0.0;
+    for(int i=0; i<total_grid; i++)
+        accessible_volume += dv[i];
 }
 // ==================== Space Group Methods ====================
 
@@ -771,32 +781,32 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
     if (sg != nullptr)
         sg->check_cell(lx, get_angles_degrees());
-    space_group_ = sg;
 
+    // Build the new state first and commit it with moves only, so a failure
+    // leaves the box as it was. The mask always starts from the full grid
+    // (a box may be given another group, or none, later).
+    std::vector<int> new_orbit_counts;
+    int new_n_basis = total_grid;
+    std::vector<double> new_mask = mask_full_;
     if (sg != nullptr)
     {
-        // Cache orbit counts and reduced-basis size for fast access
-        orbit_counts_ = sg->get_orbit_counts();
-        n_basis_ = sg->get_n_reduced_basis();
-
-        // Convert mask to reduced basis (once: a second call with the same group
-        // finds it reduced already)
-        if (!mask.empty() && static_cast<int>(mask.size()) == total_grid)
+        new_orbit_counts = sg->get_orbit_counts();
+        new_n_basis = sg->get_n_reduced_basis();
+        if (!mask_full_.empty())
         {
-            std::vector<double> mask_reduced(n_basis_);
-            sg->to_reduced_basis(mask.data(), mask_reduced.data(), 1);
-            mask = std::move(mask_reduced);
+            new_mask.assign(new_n_basis, 0.0);
+            sg->to_reduced_basis(mask_full_.data(), new_mask.data(), 1);
         }
+    }
 
-        // The sizes and maps above are snapshots: freeze the physical basis
+    space_group_ = sg;
+    orbit_counts_ = std::move(new_orbit_counts);
+    n_basis_ = new_n_basis;
+    mask = std::move(new_mask);
+
+    // The sizes and maps above are snapshots: freeze the physical basis
+    if (sg != nullptr)
         sg->mark_in_use();
-    }
-    else
-    {
-        // Clear cached values
-        orbit_counts_.clear();
-        n_basis_ = total_grid;
-    }
 }
 
 template <typename T>

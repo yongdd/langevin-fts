@@ -93,30 +93,25 @@ CudaSolverCNADI::CudaSolverCNADI(
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Map slots are owning buffers: a failed allocation leaves the slot empty
-        auto alloc_slot = [](CudaDeviceBuffer<double>& slot, size_t count)
-        {
-            slot.allocate(count);
-        };
-
         // Create exp_dw and tridiagonal coefficients for each ds_index
         for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
-                alloc_slot(d_exp_dw[ds_idx][monomer_type], M);
+                d_exp_dw[ds_idx][monomer_type].allocate(M);
 
-                alloc_slot(d_xl[ds_idx][monomer_type], nx[0]);
-                alloc_slot(d_xd[ds_idx][monomer_type], nx[0]);
-                alloc_slot(d_xh[ds_idx][monomer_type], nx[0]);
+                d_xl[ds_idx][monomer_type].allocate(nx[0]);
+                d_xd[ds_idx][monomer_type].allocate(nx[0]);
+                d_xh[ds_idx][monomer_type].allocate(nx[0]);
 
-                alloc_slot(d_yl[ds_idx][monomer_type], nx[1]);
-                alloc_slot(d_yd[ds_idx][monomer_type], nx[1]);
-                alloc_slot(d_yh[ds_idx][monomer_type], nx[1]);
+                d_yl[ds_idx][monomer_type].allocate(nx[1]);
+                d_yd[ds_idx][monomer_type].allocate(nx[1]);
+                d_yh[ds_idx][monomer_type].allocate(nx[1]);
 
-                alloc_slot(d_zl[ds_idx][monomer_type], nx[2]);
-                alloc_slot(d_zd[ds_idx][monomer_type], nx[2]);
-                alloc_slot(d_zh[ds_idx][monomer_type], nx[2]);
+                d_zl[ds_idx][monomer_type].allocate(nx[2]);
+                d_zd[ds_idx][monomer_type].allocate(nx[2]);
+                d_zh[ds_idx][monomer_type].allocate(nx[2]);
             }
         }
 

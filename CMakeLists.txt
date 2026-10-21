@@ -22,13 +22,17 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # ============================================================================
 OPTION(POLYMERFTS_USE_FFTW        "Enable FFTW3 backend (GPL license)"        OFF)
 OPTION(POLYMERFTS_USE_MKL         "Enable Intel MKL backend"                  OFF)
-OPTION(POLYMERFTS_USE_CUDA        "Enable CUDA backend"                       ON)
+# AUTO: build the GPU backend when a usable CUDA toolchain is found (see the
+# CUDA backend section), otherwise warn and build without it; ON: require it;
+# OFF: never. A cache that holds ON or OFF from earlier versions keeps it.
+SET(POLYMERFTS_USE_CUDA AUTO CACHE STRING "CUDA backend: AUTO, ON or OFF")
+SET_PROPERTY(CACHE POLYMERFTS_USE_CUDA PROPERTY STRINGS AUTO ON OFF)
 OPTION(POLYMERFTS_BUILD_TESTS     "Build test executables"                    ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON  "Install Python module"                     ON)
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
 OPTION(POLYMERFTS_WERROR          "Treat host C++ warnings as errors (CI)"    OFF)
-SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90" CACHE STRING
-    "CUDA compute capabilities to compile for (semicolon-separated)")
+SET(POLYMERFTS_CUDA_ARCHITECTURES "" CACHE STRING
+    "CUDA compute capabilities to compile for (semicolon-separated; empty: 60-90 for CUDA 12, 75-120 for CUDA 13+)")
 
 # ============================================================================
 #  Compiler settings
@@ -50,7 +54,10 @@ ENDIF()
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # The installed _core.so records the directories of the libraries it was linked
-# against (conda lib, CUDA lib), so importing it does not need LD_LIBRARY_PATH.
+# against (e.g. the CUDA lib), so importing it does not need LD_LIBRARY_PATH.
+# Directories the compiler searches by itself (e.g. through LIBRARY_PATH) are not
+# recorded; the conda environment's lib is then found through the Python
+# interpreter's own RPATH ($ORIGIN/../lib).
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Warnings for host code in every build type; Debug adds -Wextra and gprof
@@ -260,47 +267,120 @@ ENDIF()
 # ============================================================================
 #  CUDA backend
 # ============================================================================
-IF(POLYMERFTS_USE_CUDA)
-    FIND_PACKAGE(CUDAToolkit QUIET)
-    IF(NOT CUDAToolkit_FOUND)
-        # CUDA defaults to ON, so a missing toolkit is only a warning: CPU-only
-        # machines should still configure. Use -DPOLYMERFTS_USE_CUDA=OFF to silence it.
-        MESSAGE(WARNING "POLYMERFTS_USE_CUDA=ON but no CUDA toolkit was found; "
-            "building without the GPU backend.")
+# The CUDA code is C++20. Building it needs nvcc 12.2+ (11.x has no -std=c++20;
+# 12.0/12.1 cannot evaluate std::source_location::current(), which CudaBuffer
+# uses to name the caller of a failed allocation), CMake 3.25.2+ (which passes
+# -std=c++20 to nvcc) and std::source_location in both the C++ compiler and
+# nvcc's host compiler (GCC 11+, Clang 15+). Every check looks at the nvcc that
+# compiles the code. With POLYMERFTS_USE_CUDA=AUTO a missing piece is a warning
+# and the GPU backend is left out; with ON it stops the configure step.
+STRING(TOUPPER "${POLYMERFTS_USE_CUDA}" _cuda_request)
+IF(NOT _cuda_request STREQUAL "AUTO")
+    IF(POLYMERFTS_USE_CUDA)
+        SET(_cuda_request ON)
+    ELSE()
+        SET(_cuda_request OFF)
+    ENDIF()
+ENDIF()
+SET(POLYMERFTS_BUILD_CUDA FALSE)
+
+MACRO(polymerfts_cuda_unusable reason)
+    IF(_cuda_request STREQUAL "ON")
+        MESSAGE(FATAL_ERROR "POLYMERFTS_USE_CUDA=ON, but ${reason}")
+    ELSE()
+        MESSAGE(WARNING "Building without the GPU backend: ${reason} "
+            "(POLYMERFTS_USE_CUDA=AUTO; set it to ON to make this an error, or OFF to silence it)")
+    ENDIF()
+ENDMACRO()
+
+IF(NOT _cuda_request STREQUAL "OFF")
+    INCLUDE(CheckLanguage)
+    CHECK_LANGUAGE(CUDA)          # nvcc from CMAKE_CUDA_COMPILER, CUDACXX or PATH
+    IF(NOT CMAKE_CUDA_COMPILER)
+        polymerfts_cuda_unusable("no working CUDA compiler (nvcc) was found")
+    ELSEIF(CMAKE_VERSION VERSION_LESS 3.25.2)
+        polymerfts_cuda_unusable("CMake ${CMAKE_VERSION} cannot compile C++20 CUDA code; the "
+            "GPU backend needs CMake 3.25.2 or newer (environment.yml installs 3.31)")
+    ELSE()
+        EXECUTE_PROCESS(COMMAND "${CMAKE_CUDA_COMPILER}" --version
+            OUTPUT_VARIABLE _nvcc_output ERROR_QUIET)
+        STRING(REGEX MATCH "release ([0-9]+[.][0-9]+)" _nvcc_release "${_nvcc_output}")
+        SET(_nvcc_version "${CMAKE_MATCH_1}")
+        IF(_nvcc_version STREQUAL "" OR _nvcc_version VERSION_LESS 12.2)
+            polymerfts_cuda_unusable("${CMAKE_CUDA_COMPILER} is CUDA ${_nvcc_version}; the GPU "
+                "backend needs CUDA 12.2 or newer (C++20 device code). Configure a new build "
+                "directory (or delete CMakeCache.txt) with a 12.2+ nvcc first on PATH or given as "
+                "-DCMAKE_CUDA_COMPILER=...")
+        ELSE()
+            SET(POLYMERFTS_BUILD_CUDA TRUE)
+        ENDIF()
     ENDIF()
 ENDIF()
 
-IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
-    # The .cu files are C++20: nvcc 11.x has no -std=c++20, and nvcc 12.0/12.1
-    # cannot evaluate std::source_location::current() (used by CudaBuffer to name
-    # the caller of a failed allocation).
-    IF(CUDAToolkit_VERSION VERSION_LESS 12.2)
-        MESSAGE(FATAL_ERROR "CUDA toolkit ${CUDAToolkit_VERSION} found at ${CUDAToolkit_TARGET_DIR}; "
-            "the GPU backend needs CUDA 12.2 or newer (C++20 device code). Configure a new build "
-            "directory (or delete CMakeCache.txt) with a newer toolkit's nvcc first on PATH or "
-            "given as -DCMAKE_CUDA_COMPILER=..., or configure with -DPOLYMERFTS_USE_CUDA=OFF.")
+IF(POLYMERFTS_BUILD_CUDA)
+    ENABLE_LANGUAGE(CUDA)
+
+    # The toolkit of that nvcc. A toolkit found by an earlier configure (cached)
+    # would otherwise win over the compiler.
+    GET_FILENAME_COMPONENT(_nvcc_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+    GET_FILENAME_COMPONENT(_nvcc_bin "${_nvcc_bin}" REALPATH)
+    IF(DEFINED CACHE{CUDAToolkit_BIN_DIR})
+        GET_FILENAME_COMPONENT(_cached_bin "${CUDAToolkit_BIN_DIR}" REALPATH)
+        IF(NOT _cached_bin STREQUAL _nvcc_bin)
+            UNSET(CUDAToolkit_BIN_DIR CACHE)
+            UNSET(CUDAToolkit_NVCC_EXECUTABLE CACHE)
+        ENDIF()
     ENDIF()
-    # CMake passes -std=c++20 to nvcc from 3.25.2 on
-    IF(CMAKE_VERSION VERSION_LESS 3.25.2)
-        MESSAGE(FATAL_ERROR "CMake ${CMAKE_VERSION}: the GPU backend needs CMake 3.25.2 or newer "
-            "(C++20 device code; environment.yml installs 3.31), or configure with "
-            "-DPOLYMERFTS_USE_CUDA=OFF.")
+    FIND_PACKAGE(CUDAToolkit QUIET)
+    STRING(REGEX MATCH "^[0-9]+[.][0-9]+" _compiler_release "${CMAKE_CUDA_COMPILER_VERSION}")
+    IF(NOT CUDAToolkit_FOUND)
+        polymerfts_cuda_unusable("the CUDA toolkit of ${CMAKE_CUDA_COMPILER} was not found")
+        SET(POLYMERFTS_BUILD_CUDA FALSE)
+    ELSEIF(NOT "${CUDAToolkit_VERSION_MAJOR}.${CUDAToolkit_VERSION_MINOR}" STREQUAL _compiler_release)
+        polymerfts_cuda_unusable("the CUDA toolkit found (${CUDAToolkit_VERSION} at "
+            "${CUDAToolkit_TARGET_DIR}) is not the one of ${CMAKE_CUDA_COMPILER} "
+            "(${CMAKE_CUDA_COMPILER_VERSION}); delete CMakeCache.txt and configure again")
+        SET(POLYMERFTS_BUILD_CUDA FALSE)
     ENDIF()
-    # CudaCommon.h, which host C++ sources include as well, uses std::source_location
-    # (libstdc++ of GCC 11+, Clang 15+)
-    INCLUDE(CheckCXXSourceCompiles)
-    CHECK_CXX_SOURCE_COMPILES("
-        #include <source_location>
+ENDIF()
+
+IF(POLYMERFTS_BUILD_CUDA)
+    # std::source_location in the host C++ compiler (CudaCommon.h is also
+    # included by host sources) and in nvcc with its host compiler
+    INCLUDE(CheckSourceCompiles)
+    SET(_source_location_test "#include <source_location>
         int line(std::source_location where = std::source_location::current())
         { return static_cast<int>(where.line()); }
-        int main() { return line() > 0 ? 0 : 1; }" POLYMERFTS_HAVE_SOURCE_LOCATION)
-    IF(NOT POLYMERFTS_HAVE_SOURCE_LOCATION)
-        MESSAGE(FATAL_ERROR "The C++ compiler (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) "
-            "has no std::source_location, which the GPU backend uses: use GCC 11+ or Clang 15+, "
-            "or configure with -DPOLYMERFTS_USE_CUDA=OFF.")
+        int main() { return line() > 0 ? 0 : 1; }")
+    CHECK_SOURCE_COMPILES(CXX "${_source_location_test}" POLYMERFTS_CXX_HAS_SOURCE_LOCATION)
+    CHECK_SOURCE_COMPILES(CUDA "${_source_location_test}" POLYMERFTS_CUDA_HAS_SOURCE_LOCATION)
+    IF(NOT POLYMERFTS_CXX_HAS_SOURCE_LOCATION OR NOT POLYMERFTS_CUDA_HAS_SOURCE_LOCATION)
+        # Not kept as a cached failure, so a fixed toolchain is checked again
+        UNSET(POLYMERFTS_CXX_HAS_SOURCE_LOCATION CACHE)
+        UNSET(POLYMERFTS_CUDA_HAS_SOURCE_LOCATION CACHE)
+        polymerfts_cuda_unusable("std::source_location does not compile with the C++ compiler "
+            "(${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) or with nvcc "
+            "${CMAKE_CUDA_COMPILER_VERSION} and its host compiler (${CMAKE_CUDA_HOST_COMPILER_ID} "
+            "${CMAKE_CUDA_HOST_COMPILER_VERSION}); use GCC 11+ or Clang 15+ (for nvcc through "
+            "CUDAHOSTCXX or -DCMAKE_CUDA_HOST_COMPILER)")
+        SET(POLYMERFTS_BUILD_CUDA FALSE)
     ENDIF()
-    ENABLE_LANGUAGE(CUDA)
+ENDIF()
+
+IF(POLYMERFTS_BUILD_CUDA)
     MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: ${CUDAToolkit_TARGET_DIR}")
+
+    # Compute capabilities: the user's list, or a default the toolkit supports
+    # (CUDA 13 dropped sm_60, sm_61 and sm_70). A normal variable shadows the
+    # empty cache entry, so tests/CMakeLists.txt sees the same list.
+    IF(POLYMERFTS_CUDA_ARCHITECTURES STREQUAL "")
+        IF(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 13.0)
+            SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
+        ELSE()
+            SET(POLYMERFTS_CUDA_ARCHITECTURES "75;80;86;89;90;100;120")
+        ENDIF()
+    ENDIF()
+    MESSAGE(STATUS "CUDA architectures: ${POLYMERFTS_CUDA_ARCHITECTURES}")
 
     # A developer's shell often exports the toolkit directories in
     # CPLUS_INCLUDE_PATH and LIBRARY_PATH (e.g. `module load cuda`). CMake then
@@ -325,17 +405,26 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         ENDIF()
     ENDFOREACH()
 
-    # Link the cuFFT of the toolkit whose nvcc and cufft.h build the code.
-    # FindCUDAToolkit looks for the libraries on CMAKE_PREFIX_PATH first, so a
-    # conda environment that carries another CUDA's runtime libraries (e.g.
-    # cudatoolkit for CuPy) would otherwise supply a cuFFT of another version.
-    FOREACH(_dir "${CUDAToolkit_TARGET_DIR}/lib64" "${CUDAToolkit_TARGET_DIR}/lib")
-        SET(_toolkit_cufft "${_dir}/${CMAKE_SHARED_LIBRARY_PREFIX}cufft${CMAKE_SHARED_LIBRARY_SUFFIX}")
-        IF(EXISTS "${_toolkit_cufft}")
-            SET_TARGET_PROPERTIES(CUDA::cufft PROPERTIES IMPORTED_LOCATION "${_toolkit_cufft}")
-            BREAK()
+    # Link the cuFFT of this toolkit. FindCUDAToolkit looks for the libraries on
+    # CMAKE_PREFIX_PATH first, so a conda environment that carries another CUDA's
+    # runtime libraries (e.g. cudatoolkit for CuPy) would otherwise supply a
+    # cuFFT of another version. The toolkit's library directories are the ones
+    # nvcc links from (without the driver stubs).
+    SET(_toolkit_lib_dirs "")
+    FOREACH(_dir ${CMAKE_CUDA_HOST_IMPLICIT_LINK_DIRECTORIES}
+                 "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64" "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib")
+        IF(NOT _dir MATCHES "/stubs/?$")
+            LIST(APPEND _toolkit_lib_dirs "${_dir}")
         ENDIF()
     ENDFOREACH()
+    FIND_LIBRARY(_toolkit_cufft NAMES cufft PATHS ${_toolkit_lib_dirs} NO_DEFAULT_PATH NO_CACHE)
+    IF(_toolkit_cufft)
+        SET_TARGET_PROPERTIES(CUDA::cufft PROPERTIES IMPORTED_LOCATION "${_toolkit_cufft}")
+    ELSE()
+        GET_TARGET_PROPERTY(_found_cufft CUDA::cufft IMPORTED_LOCATION)
+        MESSAGE(WARNING "No cuFFT in the library directories of ${CMAKE_CUDA_COMPILER} "
+            "(${_toolkit_lib_dirs}); linking ${_found_cufft}, which may belong to another CUDA version.")
+    ENDIF()
     GET_TARGET_PROPERTY(_cufft_location CUDA::cufft IMPORTED_LOCATION)
     MESSAGE(STATUS "cuFFT: ${_cufft_location}")
 
@@ -369,9 +458,10 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
 ENDIF()
 
-IF(NOT BUILD_CPU_FFTW_LIB AND NOT BUILD_CPU_MKL_LIB AND NOT CUDAToolkit_FOUND)
+IF(NOT BUILD_CPU_FFTW_LIB AND NOT BUILD_CPU_MKL_LIB AND NOT POLYMERFTS_BUILD_CUDA)
     MESSAGE(FATAL_ERROR "No computational backend enabled: turn on at least one of "
-        "POLYMERFTS_USE_MKL, POLYMERFTS_USE_FFTW, or POLYMERFTS_USE_CUDA (with a CUDA toolkit).")
+        "POLYMERFTS_USE_MKL, POLYMERFTS_USE_FFTW, or POLYMERFTS_USE_CUDA (with a usable CUDA "
+        "12.2+ toolchain). For a pip build pass them as -C cmake.define.POLYMERFTS_USE_FFTW=ON.")
 ENDIF()
 
 # Platform selector: depends on every enabled backend, hence a separate target
@@ -383,7 +473,7 @@ ADD_LIBRARY(factory
 # benchmarks): selector, enabled backends, common core. Order matters for
 # static libraries.
 SET(POLYMERFTS_BACKEND_LIBS factory)
-IF(CUDAToolkit_FOUND)
+IF(POLYMERFTS_BUILD_CUDA)
     LIST(APPEND POLYMERFTS_BACKEND_LIBS cuda CUDA::cufft)
 ENDIF()
 IF(BUILD_CPU_FFTW_LIB)

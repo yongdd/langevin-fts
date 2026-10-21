@@ -229,7 +229,7 @@ public:
  *
  * @example
  * @code
- * CUDA_CHECK(cudaMalloc(&ptr, size));
+ * CUDA_CHECK(cudaStreamCreate(&stream));
  * CUDA_CHECK(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
  * ker_scale<<<blocks, threads, 0, stream>>>(d_x, 2.0, n);
  * CUDA_CHECK_LAUNCH();
@@ -316,19 +316,23 @@ inline std::atomic<long long>& cuda_release_failures()
 }
 
 /**
- * @brief Take the result of a release call (cudaFree, cudaFreeHost,
- *        cudaStreamDestroy, cudaEventDestroy, cufftDestroy) without throwing.
+ * @brief Take the result of a release call (cudaFree, cudaFreeHost) without
+ *        throwing; streams, events and cuFFT plans go through the counting
+ *        release_cuda_stream(), release_cuda_event() and release_cufft_plan().
  *
  * Releases run in destructors and release() paths, which must not throw, and a
- * failed release cannot be retried. The failed call still left its error in the
- * per-thread slot, where the next CUDA_CHECK_LAUNCH() would report it against an
- * unrelated launch; this clears the slot and counts the failure in
- * cuda_release_failures(). A sticky error of a broken context stays and is
- * reported by the next checked call, as it must.
+ * failed release cannot be retried. A failed runtime call (cudaFree, ...) still
+ * left its error in the per-thread slot, where the next CUDA_CHECK_LAUNCH()
+ * would report it against an unrelated launch; this clears the slot and counts
+ * the failure in cuda_release_failures(). A sticky error of a broken context
+ * stays and is reported by the next checked call, as it must. (cuFFT plans
+ * are destroyed by release_cufft_plan(): cuFFT has its own runtime and error
+ * state.)
  *
  * @code
- * ignore_release_error(cudaStreamDestroy(stream));
- * ignore_release_error(cufftDestroy(plan));
+ * ignore_release_error(cudaFree(ptr));
+ * release_cuda_stream(stream);       // counted handles have their own release
+ * release_cufft_plan(plan);
  * @endcode
  */
 inline void ignore_release_error(cudaError_t code) noexcept
@@ -339,14 +343,72 @@ inline void ignore_release_error(cudaError_t code) noexcept
         cuda_release_failures().fetch_add(1, std::memory_order_relaxed);
     }
 }
-/// cuFFT overload: cufftDestroy frees through the runtime, which may leave an error in the slot.
-inline void ignore_release_error(cufftResult code) noexcept
+/// Live cuFFT plans, CUDA streams and CUDA events created by the library. Like
+/// the allocation counters below they are exact, so the tests can check that
+/// destroyed objects released all of them (device free memory shows a leaked
+/// plan's work area only roughly).
+struct CudaHandleCounters
 {
-    if (code != CUFFT_SUCCESS)
-    {
-        (void)cudaGetLastError();
+    std::atomic<long long> cufft_plans{0};
+    std::atomic<long long> streams{0};
+    std::atomic<long long> events{0};
+};
+inline CudaHandleCounters& cuda_handle_counters()
+{
+    static CudaHandleCounters counters;
+    return counters;
+}
+
+/// Pass the result of a call that creates a cuFFT plan handle (cufftCreate,
+/// cufftPlan1d/2d/3d, cufftPlanMany) through this; a successful one is counted.
+/// @code
+/// CUFFT_CHECK(count_cufft_plan(cufftPlanMany(&plan, ...)));
+/// @endcode
+inline cufftResult count_cufft_plan(cufftResult code) noexcept
+{
+    if (code == CUFFT_SUCCESS)
+        cuda_handle_counters().cufft_plans.fetch_add(1, std::memory_order_relaxed);
+    return code;
+}
+/// Destroy a plan counted by count_cufft_plan(), without throwing. A failure is
+/// only counted: cuFFT carries its own CUDA runtime (libcufft does not link
+/// libcudart), so it leaves nothing in this program's error slot.
+inline void release_cufft_plan(cufftHandle plan) noexcept
+{
+    if (cufftDestroy(plan) == CUFFT_SUCCESS)
+        cuda_handle_counters().cufft_plans.fetch_sub(1, std::memory_order_relaxed);
+    else
         cuda_release_failures().fetch_add(1, std::memory_order_relaxed);
-    }
+}
+/// Count a created stream (pass the result of cudaStreamCreate through this).
+inline cudaError_t count_cuda_stream(cudaError_t code) noexcept
+{
+    if (code == cudaSuccess)
+        cuda_handle_counters().streams.fetch_add(1, std::memory_order_relaxed);
+    return code;
+}
+/// Destroy a stream counted by count_cuda_stream(), without throwing.
+inline void release_cuda_stream(cudaStream_t stream) noexcept
+{
+    const cudaError_t code = cudaStreamDestroy(stream);
+    if (code == cudaSuccess)
+        cuda_handle_counters().streams.fetch_sub(1, std::memory_order_relaxed);
+    ignore_release_error(code);
+}
+/// Count a created event (pass the result of cudaEventCreate* through this).
+inline cudaError_t count_cuda_event(cudaError_t code) noexcept
+{
+    if (code == cudaSuccess)
+        cuda_handle_counters().events.fetch_add(1, std::memory_order_relaxed);
+    return code;
+}
+/// Destroy an event counted by count_cuda_event(), without throwing.
+inline void release_cuda_event(cudaEvent_t event) noexcept
+{
+    const cudaError_t code = cudaEventDestroy(event);
+    if (code == cudaSuccess)
+        cuda_handle_counters().events.fetch_sub(1, std::memory_order_relaxed);
+    ignore_release_error(code);
 }
 
 /**
@@ -363,8 +425,8 @@ inline void ignore_release_error(cufftResult code) noexcept
 class CudaEvent
 {
 public:
-    CudaEvent() { CUDA_CHECK(cudaEventCreate(&event_)); }
-    ~CudaEvent() { ignore_release_error(cudaEventDestroy(event_)); }
+    CudaEvent() { CUDA_CHECK(count_cuda_event(cudaEventCreate(&event_))); }
+    ~CudaEvent() { release_cuda_event(event_); }
     CudaEvent(const CudaEvent&) = delete;
     CudaEvent& operator=(const CudaEvent&) = delete;
     operator cudaEvent_t() const noexcept { return event_; }   ///< lends the handle
@@ -610,6 +672,8 @@ struct CudaPinnedMemory
 template <typename Memory>
 void* counted_cuda_allocate(size_t bytes, const std::source_location& where = std::source_location::current())
 {
+    if (bytes == 0)            // nothing to allocate, count or fail
+        return nullptr;
     std::atomic<long long>& countdown = cuda_buffer_fail_countdown();
     if (countdown.load(std::memory_order_relaxed) >= 0 && countdown.fetch_sub(1) == 0)
         report_cuda_allocation_error(cudaErrorMemoryAllocation, bytes, Memory::kind, where, /*injected=*/true);
@@ -617,8 +681,6 @@ void* counted_cuda_allocate(size_t bytes, const std::source_location& where = st
     const cudaError_t code = Memory::allocate(&p, bytes);
     if (code != cudaSuccess)
         report_cuda_allocation_error(code, bytes, Memory::kind, where);
-    if (p == nullptr)          // zero bytes: nothing to count (or to release)
-        return nullptr;
     Memory::counters().live_count.fetch_add(1, std::memory_order_relaxed);
     Memory::counters().live_bytes.fetch_add(static_cast<long long>(bytes), std::memory_order_relaxed);
     return p;

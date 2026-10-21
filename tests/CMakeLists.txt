@@ -105,7 +105,7 @@ ENDFOREACH()
 FILE(GLOB FILE_LIST "Test*.cpp")
 FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
-    IF ((${TEST_NAME} MATCHES "Cuda") AND NOT CUDAToolkit_FOUND)
+    IF ((${TEST_NAME} MATCHES "Cuda") AND NOT POLYMERFTS_BUILD_CUDA)
         CONTINUE()
     # "Cpu" tests are backend-agnostic (sources select FFTW/MKL via #ifdef),
     # so they only need SOME CPU backend, not FFTW specifically.
@@ -136,7 +136,7 @@ FILE(GLOB BENCHMARK_LIST "Benchmark*.cpp")
 FOREACH(FILE_NAME ${BENCHMARK_LIST})
     GET_FILENAME_COMPONENT(BENCH_NAME ${FILE_NAME} NAME_WE)
     # Skip platform-specific benchmarks if platform is not available
-    IF((${BENCH_NAME} MATCHES "Cuda") AND NOT CUDAToolkit_FOUND)
+    IF((${BENCH_NAME} MATCHES "Cuda") AND NOT POLYMERFTS_BUILD_CUDA)
         CONTINUE()
     ELSEIF((${BENCH_NAME} MATCHES "Mkl") AND NOT BUILD_CPU_MKL_LIB)
         CONTINUE()
@@ -148,7 +148,7 @@ FOREACH(FILE_NAME ${BENCHMARK_LIST})
     TARGET_LINK_LIBRARIES(${BENCH_NAME} PRIVATE polymerfts_backends)
 ENDFOREACH()
 
-IF(CUDAToolkit_FOUND)
+IF(POLYMERFTS_BUILD_CUDA)
     # Generate files named "Test*.cu"
     FILE(GLOB FILE_LIST "Test*.cu")
     FOREACH(FILE_NAME ${FILE_LIST})
@@ -174,6 +174,7 @@ IF(CUDAToolkit_FOUND)
     # Its out-of-memory check holds most of the free device memory for a moment
     # (a ballast buffer); keep it away from the other tests under ctest -j
     IF(TARGET TestCudaDeviceBuffer)
-        SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE)
+        # Exit code 77: the out-of-memory check could not hold the device memory
+        SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
     ENDIF()
 ENDIF()

@@ -494,8 +494,11 @@ whose results the caller (the Python bindings or a C++ test) deletes; the backen
 the allocators of the propagator handles and the reduce-memory checkpoints, which the
 computation classes free in one place; and the `CudaCommon` singleton, which is created
 with `new` and deliberately never deleted (it lives until the process exits). cuFFT plans, CUDA streams and events are not memory and are destroyed
-explicitly where their order matters (the solver before the streams it runs on); events
-used only for profiling are `CudaEvent` objects. The CPU FFT classes keep their FFTW/MKL
+explicitly where their order matters (the solver before the streams it runs on); they are
+created through `count_cufft_plan(...)`, `count_cuda_stream(...)` and `count_cuda_event(...)`
+and destroyed with `release_cufft_plan()`, `release_cuda_stream()` and
+`release_cuda_event()`, which keep live counts (`cuda_handle_counters()`). Events used
+only for profiling are `CudaEvent` objects. The CPU FFT classes keep their FFTW/MKL
 plans and descriptors and the `fftw_malloc`-aligned buffers of `FftwFFT`/`FftwCrysFFT*`
 in hand-written `release()` functions, which their destructors call.
 
@@ -503,18 +506,23 @@ Every owned CUDA allocation (the buffers and the backends' propagator and checkp
 arrays) goes through `counted_cuda_allocate()`/`counted_cuda_release()`, which keep exact
 counts of the live device and pinned allocations (`CudaDeviceMemory::counters()`,
 `CudaPinnedMemory::counters()`); `cuda_buffer_fail_countdown()` is a test hook that makes
-the N-th following counted allocation throw. Release calls (`cudaFree`, `cudaFreeHost`,
-`*Destroy`) go through `ignore_release_error()`, which does not throw, clears the error a
-failed release leaves in the per-thread slot and counts it in `cuda_release_failures()`.
-`tests/TestCudaDeviceBuffer.cu` uses all three: every kind of CUDA object (all solvers,
-the CrysFFT engines, non-periodic transforms, complex fields, the Anderson mixers) must
-return the counters to their start when destroyed without a failed release, and a sweep
-fails each counted allocation of each construction in turn and requires the same after
-every failure (failures of cuFFT plan, stream and event creation are not injected). The
-test also lets a small construction run out of device memory for real, by holding the
-rest of the free memory in a ballast buffer for a moment, so it runs serially. Freeing a
-buffer by hand does not compile (`cudaFree`, `cudaFreeHost` and `cudaFreeAsync` have deleted
-overloads for buffers; GCC and Clang also reject `delete buffer` as ambiguous).
+the N-th following counted allocation throw. `cudaFree` and `cudaFreeHost` go through
+`ignore_release_error()`, which does not throw, clears the error a failed release leaves in
+the per-thread slot and counts it in `cuda_release_failures()` (the plan, stream and event
+release helpers count their failures there too; cuFFT has its own runtime and leaves
+nothing in the slot). `tests/TestCudaDeviceBuffer.cu` uses all of them: every kind of CUDA
+object (all solvers, the CrysFFT engines, non-periodic transforms, complex fields, the
+Anderson mixers), built with 4 streams, must return every counter (allocations, plans,
+streams, events) to its start when destroyed without a failed release, and a sweep with 2
+streams fails each counted allocation of each construction in turn and requires the same
+after every failure (failures of cuFFT plan, stream and event creation are not injected).
+The test also lets a small construction run out of device memory for real, by holding the
+rest of the free memory in a ballast buffer for a moment, so it runs serially; when the
+memory cannot be held it reports a ctest skip. Freeing a buffer by hand does not compile
+(`cudaFree`, `cudaFreeHost` and `cudaFreeAsync` have deleted overloads for buffers). GCC
+and Clang also reject `delete buffer` as ambiguous; the standard does not require that
+(only conversions to object pointer types count for `delete`), so a stricter compiler
+may accept it.
 
 ### Propagator Computation Optimizer
 
@@ -545,8 +553,9 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
   cuFFT) and follow every kernel launch with `CUDA_CHECK_LAUNCH();`. The check
   reads a host-side value and does not synchronize; `cudaGetLastError()` clears the slot, so an
   error is reported at the launch that caused it. Release calls run in destructors and
-  `release()` paths and do not throw: wrap them in `ignore_release_error(...)`, so a failed
-  one is not reported later by an unrelated check.
+  `release()` paths and do not throw: wrap `cudaFree`/`cudaFreeHost` in
+  `ignore_release_error(...)`, so a failed one is not reported later by an unrelated check,
+  and destroy plans, streams and events with the counting `release_*` helpers.
 
 ### Python
 

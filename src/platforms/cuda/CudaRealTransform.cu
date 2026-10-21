@@ -3790,39 +3790,39 @@ CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
 
         // Create FFT plan
         if (z2z) {
-            if (cufftPlan1d(&plan_, fftSize, CUFFT_Z2Z, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, fftSize, CUFFT_Z2Z, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT Z2Z plan");
             }
         } else if (type_ == CUDA_DCT_1) {
             // DCT-1 uses Z2D (complex to real) FFT of size N-1 (where N_ = N+1 points)
-            if (cufftPlan1d(&plan_, N_ - 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_ - 1, CUFFT_Z2D, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT Z2D plan for DCT-1");
             }
         } else if (type_ == CUDA_DCT_2) {
-            if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT Z2D plan");
             }
         } else if (type_ == CUDA_DCT_3) {
-            if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT D2Z plan");
             }
         } else if (type_ == CUDA_DST_1) {
             // DST-1: Z2D FFT of size N+1 (FST algorithm)
-            if (cufftPlan1d(&plan_, N_ + 1, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_ + 1, CUFFT_Z2D, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-1");
             }
         } else if (type_ == CUDA_DST_2) {
             // DST-2: Z2D FFT of size N (FST algorithm)
-            if (cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_, CUFFT_Z2D, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT Z2D plan for DST-2");
             }
         } else if (type_ == CUDA_DST_3) {
             // DST-3: D2Z FFT of size N (FST algorithm)
-            if (cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, N_, CUFFT_D2Z, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT D2Z plan for DST-3");
             }
         } else {
-            if (cufftPlan1d(&plan_, fftSize, CUFFT_D2Z, 1) != CUFFT_SUCCESS) {
+            if (count_cufft_plan(cufftPlan1d(&plan_, fftSize, CUFFT_D2Z, 1)) != CUFFT_SUCCESS) {
                 throw std::runtime_error("Failed to create cuFFT D2Z plan");
             }
         }
@@ -3861,7 +3861,7 @@ void CudaRealTransform1D::release()
     dct3_cos_.release();
     dct4_sin_.release();
     dct4_cos_.release();
-    if (plan_created_) ignore_release_error(cufftDestroy(plan_));
+    if (plan_created_) release_cufft_plan(plan_);
     plan_created_ = false;
     initialized_ = false;
 }
@@ -4090,29 +4090,29 @@ static void create_axis_plan(
     };
 
     if (usesZ2Z(type)) {
-        if (cufftPlan1d(&plan, fft_size, CUFFT_Z2Z, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlan1d(&plan, fft_size, CUFFT_Z2Z, batch)) != CUFFT_SUCCESS)
             fail("Z2Z", "");
     } else if (type == CUDA_DCT_2) {
         int n[1] = {N};
         int inembed[1] = {N / 2 + 1};
         int onembed[1] = {N};
-        if (cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
-                          onembed, 1, N, CUFFT_Z2D, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
+                          onembed, 1, N, CUFFT_Z2D, batch)) != CUFFT_SUCCESS)
             fail("Z2D", "");
     } else if (type == CUDA_DCT_3) {
         int n[1] = {N};
         int inembed[1] = {N};
         int onembed[1] = {N / 2 + 1};
-        if (cufftPlanMany(&plan, 1, n, inembed, dct3_istride, dct3_idist,
-                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlanMany(&plan, 1, n, inembed, dct3_istride, dct3_idist,
+                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch)) != CUFFT_SUCCESS)
             fail("D2Z", "");
     } else if (type == CUDA_DST_2) {
         // DST-2: Z2D FFT of size N - FCT/FST style (Makhoul 1980)
         int n[1] = {N};
         int inembed[1] = {N / 2 + 1};
         int onembed[1] = {N};
-        if (cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
-                          onembed, 1, N, CUFFT_Z2D, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlanMany(&plan, 1, n, inembed, 1, N / 2 + 1,
+                          onembed, 1, N, CUFFT_Z2D, batch)) != CUFFT_SUCCESS)
             fail("Z2D", " (DST-2)");
     } else if (type == CUDA_DST_3) {
         // DST-3: D2Z FFT of size N - FCT/FST style (Makhoul 1980) with a padded
@@ -4120,15 +4120,15 @@ static void create_axis_plan(
         int n[1] = {N};
         int inembed[1] = {N + 2};
         int onembed[1] = {N / 2 + 1};
-        if (cufftPlanMany(&plan, 1, n, inembed, 1, N + 2,
-                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlanMany(&plan, 1, n, inembed, 1, N + 2,
+                          onembed, 1, N / 2 + 1, CUFFT_D2Z, batch)) != CUFFT_SUCCESS)
             fail("D2Z", " (DST-3)");
     } else {
         int n[1] = {fft_size};
         int inembed[1] = {fft_size};
         int onembed[1] = {fft_size / 2 + 1};
-        if (cufftPlanMany(&plan, 1, n, inembed, 1, fft_size,
-                          onembed, 1, fft_size / 2 + 1, CUFFT_D2Z, batch) != CUFFT_SUCCESS)
+        if (count_cufft_plan(cufftPlanMany(&plan, 1, n, inembed, 1, fft_size,
+                          onembed, 1, fft_size / 2 + 1, CUFFT_D2Z, batch)) != CUFFT_SUCCESS)
             fail("D2Z", "");
     }
 }
@@ -4166,7 +4166,7 @@ void CudaRealTransform2D::init()
         M_padded_ = 2 * Nx_ * 2 * Ny_;
         d_work_.allocate(M_padded_);
         d_x1_.allocate(4 * static_cast<size_t>(Nx_) * (Ny_ + 1));   // complex values
-        if (cufftPlan2d(&plan_y_, 2 * Nx_, 2 * Ny_, CUFFT_D2Z) != CUFFT_SUCCESS) {
+        if (count_cufft_plan(cufftPlan2d(&plan_y_, 2 * Nx_, 2 * Ny_, CUFFT_D2Z)) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DCT-1");
         }
         plan_y_created_ = true;
@@ -4181,7 +4181,7 @@ void CudaRealTransform2D::init()
         M_padded_ = ext_Nx * ext_Ny;
         d_work_.allocate(M_padded_);
         d_x1_.allocate(2 * static_cast<size_t>(ext_Nx) * (Ny_ + 2));   // complex values
-        if (cufftPlan2d(&plan_y_, ext_Nx, ext_Ny, CUFFT_D2Z) != CUFFT_SUCCESS) {
+        if (count_cufft_plan(cufftPlan2d(&plan_y_, ext_Nx, ext_Ny, CUFFT_D2Z)) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 2D plan for DST-1");
         }
         plan_y_created_ = true;
@@ -4240,8 +4240,8 @@ void CudaRealTransform2D::release()
     dct4_cos_x_.release();
     dct4_sin_y_.release();
     dct4_cos_y_.release();
-    if (plan_y_created_) ignore_release_error(cufftDestroy(plan_y_));
-    if (plan_x_created_) ignore_release_error(cufftDestroy(plan_x_));
+    if (plan_y_created_) release_cufft_plan(plan_y_);
+    if (plan_x_created_) release_cufft_plan(plan_x_);
     plan_x_ = plan_y_ = 0;
     plan_x_created_ = plan_y_created_ = false;
     initialized_ = false;
@@ -4669,7 +4669,7 @@ void CudaRealTransform3D::init()
 
         M_padded_ = ext_size;
 
-        if (cufftPlan3d(&plan_x_, 2 * Nx_, 2 * Ny_, 2 * Nz_, CUFFT_D2Z) != CUFFT_SUCCESS) {
+        if (count_cufft_plan(cufftPlan3d(&plan_x_, 2 * Nx_, 2 * Ny_, 2 * Nz_, CUFFT_D2Z)) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 3D plan for DCT-1");
         }
         plan_x_created_ = true;
@@ -4693,7 +4693,7 @@ void CudaRealTransform3D::init()
 
         M_padded_ = ext_size;
 
-        if (cufftPlan3d(&plan_x_, 2 * (Nx_ + 1), 2 * (Ny_ + 1), 2 * (Nz_ + 1), CUFFT_D2Z) != CUFFT_SUCCESS) {
+        if (count_cufft_plan(cufftPlan3d(&plan_x_, 2 * (Nx_ + 1), 2 * (Ny_ + 1), 2 * (Nz_ + 1), CUFFT_D2Z)) != CUFFT_SUCCESS) {
             throw std::runtime_error("Failed to create cuFFT D2Z 3D plan for DST-1");
         }
         plan_x_created_ = true;
@@ -4803,9 +4803,9 @@ void CudaRealTransform3D::release()
     dct4_cos_y_.release();
     dct4_sin_z_.release();
     dct4_cos_z_.release();
-    if (plan_z_created_) ignore_release_error(cufftDestroy(plan_z_));
-    if (plan_y_created_) ignore_release_error(cufftDestroy(plan_y_));
-    if (plan_x_created_) ignore_release_error(cufftDestroy(plan_x_));
+    if (plan_z_created_) release_cufft_plan(plan_z_);
+    if (plan_y_created_) release_cufft_plan(plan_y_);
+    if (plan_x_created_) release_cufft_plan(plan_x_);
     plan_x_ = plan_y_ = plan_z_ = 0;
     plan_x_created_ = plan_y_created_ = plan_z_created_ = false;
     initialized_ = false;

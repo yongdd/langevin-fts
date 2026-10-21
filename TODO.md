@@ -4,7 +4,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 
 ## Features
 
-1. Parallel tempering.
 2. Parameter sweep / continuation: reuse the previous solution as the initial guess when building phase diagrams.
 3. Grand canonical ensemble: the core functions exist (`get_stress_gce`, `get_total_concentration_gce`); the SCFT/L-FTS high-level API is missing.
 4. SCFT preconditioner for Anderson mixing (left preconditioning failed; try right preconditioning or a modified inner product).
@@ -18,7 +17,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 
 10. GPU bandwidth test.
 11. Check whether two GPUs can be used for `CudaAndersonMixing`, and why two-GPU performance fluctuates on A100.
-12. Check whether a cuFFT callback function is applicable.
 13. Reduce the number of splits in the scheduler.
 
 ## Tests
@@ -33,14 +31,11 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Build and packaging
 
 22. Check whether CUDA can be installed with conda.
-23. Check whether CUDA cub works with CUDA 12.0 and later.
 24. Figure out why `os.environ` does not take effect with the conda-forge Python + OpenMP combination.
-25. Figure out why `std::map<std::string, std::map<int, double *>>` causes errors in `omp parallel for`, and why `propagator_half_steps[key].find(0) == ...end()` fixes it.
 
 ## Documentation
 
 26. Python API reference (Sphinx + autodoc for `PropagatorSolver`, `SCFT`, `LFTS`).
-27. File formats (`fields_*.mat`, `structure_function_*.mat`, YAML/JSON configuration).
 28. Examples guide (detailed README for `examples/scft/` and `examples/lfts/`).
 
 ## Open investigations (research notes)
@@ -125,6 +120,19 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 
 ## Done (removed from the list above)
 
+- 1. Parallel tempering: dropped (maintainer's decision, 2026-10-21).
+- 12. cuFFT callbacks (2026-10-20 kernel review): measured slower than the separate
+  kernels on an A10, so they are not used.
+- 25. `std::map` errors in `omp parallel for` (2026-10-21): `operator[]` inserts a missing
+  key, which is a write; two threads doing it race on the tree. `find()`/`at()` only read,
+  which the standard allows concurrently. The propagator loops read their maps with
+  `at()`/`find()` (the tables are filled before the parallel regions).
+- 27. File formats: `fields_*.mat`, SCFT results and `structure_function_*.mat` are
+  described in docs/references/Tools.md (section 5), YAML/JSON parameter files in
+  docs/references/Parameters.md.
+- Check whether CUDA cub works with CUDA 12.0 and later (2026-10-21): the CUDA code is
+  C++20 and needs CUDA 12.2+; it builds with 12.2.1, 12.4.1 and configures with 13.0.2,
+  and the full test suite passes with 12.4.1.
 - Replace raw `new` and `cudaMalloc`/`cudaFree` with owning buffers (2026-10-21):
   `CudaDeviceBuffer`/`CudaPinnedBuffer`, `std::vector` and `std::unique_ptr` (the FFTW/MKL
   plans and `fftw_malloc` buffers stay in the CPU FFT classes' `release()`); see

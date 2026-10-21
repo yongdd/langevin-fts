@@ -18,13 +18,15 @@ build:
   number: 0
   skip: true  # [win]
   skip: true  # [py<311]
-  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  # FFTW is the CPU backend of this package; the GPU backend is not built here
+  # (it needs a CUDA 12.2+ toolkit, which this recipe does not provide)
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation -Ccmake.define.POLYMERFTS_USE_FFTW=ON -Ccmake.define.POLYMERFTS_USE_CUDA=OFF
 
 requirements:
   build:
     - {{ compiler('cxx') }}
     - {{ stdlib("c") }}
-    - cmake >=3.17
+    - cmake >=3.25.2
     - make  # [unix]
     - ninja  # [win]
   host:

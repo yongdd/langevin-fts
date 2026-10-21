@@ -34,6 +34,7 @@ RUN mkdir -p build && cd build && \
              -DFFTW_ROOT=/opt/conda/envs/polymerfts \
              -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
              -DPOLYMERFTS_USE_CUDA=OFF \
+             -DPOLYMERFTS_USE_FFTW=ON \
              -DPOLYMERFTS_BUILD_TESTS=OFF && \
     make -j$(nproc) && \
     make install

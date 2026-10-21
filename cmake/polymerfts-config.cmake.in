@@ -13,7 +13,7 @@ find_dependency(OpenMP REQUIRED)
 # Report what was found during the original build
 set(POLYMERFTS_VERSION "@PROJECT_VERSION@")
 set(POLYMERFTS_HAS_FFTW @BUILD_CPU_FFTW_LIB@)
-set(POLYMERFTS_HAS_CUDA @CUDAToolkit_FOUND@)
+set(POLYMERFTS_HAS_CUDA @POLYMERFTS_BUILD_CUDA@)
 
 # Optional dependencies based on build configuration
 if(POLYMERFTS_HAS_FFTW)
@@ -28,7 +28,7 @@ if(POLYMERFTS_HAS_FFTW)
 endif()
 
 if(POLYMERFTS_HAS_CUDA)
-    find_dependency(CUDAToolkit)
+    find_dependency(CUDAToolkit 12.2)
 endif()
 
 # Include the targets file

@@ -50,7 +50,7 @@ Assume GPU commands require `require_escalated` unless proven otherwise.
   (`QOSMaxGRESPerUser`). Fallback accepted by the maintainer: CPU-only SLURM jobs
   (no `--gres`). Without a visible GPU, `avail_platforms()` omits `cuda`, so the Python
   tests pass there; the C++ tests that construct CUDA objects unconditionally
-  (TestPseudo*, TestCrankNicolson*, TestCrysFFT*, about 22 of 74) fail with
+  (TestPseudo*, TestCrankNicolson*, TestCrysFFT*, about 22 of 75) fail with
   `cudaErrorNoDevice`, which is expected on such a node, not a regression.
 - **Constructing `SCFT`/`LFTS`/`CLFTS` writes `polymer_<id>.png`** into the current
   directory (chain-architecture drawings). Run throwaway checks from a scratch directory,

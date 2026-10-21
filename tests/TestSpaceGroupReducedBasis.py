@@ -7,6 +7,7 @@ Tests:
 2. ComputationBox with space group - integral, inner_product with reduced basis
 3. SCFT with space group - full workflow with reduced basis
 4. save_results with space group - verify full grid output
+5. A masked ComputationBox given one space group, another and none
 """
 
 import sys
@@ -139,6 +140,68 @@ def test_computation_box_reduced_basis():
     cb.set_space_group(None)
     assert cb.get_n_basis() == total_grid, "n_grid should return to total_grid"
     print(f"  After clearing: n_grid = {cb.get_n_basis()}")
+
+    print("  PASSED\n")
+
+
+def test_masked_box_changes_space_group():
+    """A masked box given a space group, then another, then none, computes the
+    partition function of a box built fresh for each case: the mask is reduced
+    from the full grid every time (it used to stay in the first group's basis,
+    so the later computations read past it)."""
+    print("Test 5: masked ComputationBox, space group changed twice and cleared")
+    print("-" * 50)
+
+    nx = [16, 16, 16]
+    lx = [4.0, 4.0, 4.0]
+    bc = ["periodic"] * 6
+    platform = get_platform()
+    factory = _core.PlatformSelector.create_factory(platform, False)
+
+    # Impenetrable spheres at the corner and the body center (BCC: symmetric
+    # under Im-3m and its subgroup Pm-3m), and a field with the same symmetry
+    x = (np.arange(nx[0]) + 0.5) / nx[0]
+    X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+    def dist2(center):
+        d = np.abs(np.stack([X, Y, Z]) - center)
+        d = np.minimum(d, 1.0 - d)
+        return np.sum(d * d, axis=0)
+    mask = np.ones(nx)
+    mask[dist2(0.0) < 0.2 ** 2] = 0.0
+    mask[dist2(0.5) < 0.2 ** 2] = 0.0
+    mask = mask.ravel()
+    w_full = (0.5 * (np.cos(4 * np.pi * X) + np.cos(4 * np.pi * Y) + np.cos(4 * np.pi * Z))).ravel()
+
+    molecules = factory.create_molecules_information("continuous", 0.05, {"A": 1.0})
+    molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
+    optimizer = factory.create_propagator_computation_optimizer(molecules, False)
+
+    def partition(cb, sg):
+        computation = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", sg)
+        w = sg.to_reduced_basis(w_full) if sg is not None else w_full
+        computation.compute_propagators({"A": w})
+        return computation.get_total_partition(0)
+
+    sg_bcc = _core.SpaceGroup(nx, "Im-3m", 529)
+    sg_sc = _core.SpaceGroup(nx, "Pm-3m", 517)
+    assert sg_bcc.get_n_reduced_basis() != sg_sc.get_n_reduced_basis()
+
+    # Reference: a fresh box for every case
+    q_bcc = partition(factory.create_computation_box(nx, lx, None, bc, mask), sg_bcc)
+    q_sc = partition(factory.create_computation_box(nx, lx, None, bc, mask), sg_sc)
+    q_none = partition(factory.create_computation_box(nx, lx, None, bc, mask), None)
+    print(f"  fresh boxes: Q(Im-3m) = {q_bcc:.12e}, Q(Pm-3m) = {q_sc:.12e}, Q(none) = {q_none:.12e}")
+
+    # One box, given Im-3m, then Pm-3m, then no group
+    cb = factory.create_computation_box(nx, lx, None, bc, mask)
+    q1 = partition(cb, sg_bcc)
+    q2 = partition(cb, sg_sc)
+    cb.set_space_group(None)
+    q3 = partition(cb, None)
+    print(f"  one box:     Q(Im-3m) = {q1:.12e}, Q(Pm-3m) = {q2:.12e}, Q(none) = {q3:.12e}")
+    for name, q, ref in (("Im-3m", q1, q_bcc), ("Pm-3m", q2, q_sc), ("none", q3, q_none)):
+        assert abs(q - ref) <= 1e-10 * abs(ref), f"Q({name}) of the reused box {q} != fresh box {ref}"
+    assert cb.get_n_basis() == int(np.prod(nx))
 
     print("  PASSED\n")
 
@@ -388,6 +451,7 @@ def main():
         test_scft_with_space_group()
         test_save_results_full_grid()
         test_save_results_m3_same_size()
+        test_masked_box_changes_space_group()
 
         print("=" * 60)
         print("All tests PASSED")

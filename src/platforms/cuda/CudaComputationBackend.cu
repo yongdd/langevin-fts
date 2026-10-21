@@ -117,10 +117,10 @@ CudaComputationBackend<T>::CudaComputationBackend(
         n_streams = std::min({this->n_streams_from_env(/*default_n_streams=*/MAX_STREAMS), MAX_STREAMS, max_n_streams});
         for (int i = 0; i < n_streams; i++)
         {
-            CUDA_CHECK(cudaStreamCreate(&streams[i][0]));  // kernels
-            CUDA_CHECK(cudaStreamCreate(&streams[i][1]));  // copies
-            CUDA_CHECK(cudaEventCreateWithFlags(&kernel_done[i], cudaEventDisableTiming));
-            CUDA_CHECK(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming));
+            CUDA_CHECK(count_cuda_stream(cudaStreamCreate(&streams[i][0])));  // kernels
+            CUDA_CHECK(count_cuda_stream(cudaStreamCreate(&streams[i][1])));  // copies
+            CUDA_CHECK(count_cuda_event(cudaEventCreateWithFlags(&kernel_done[i], cudaEventDisableTiming)));
+            CUDA_CHECK(count_cuda_event(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming)));
         }
 
         if (chain_model == "discrete")
@@ -221,13 +221,13 @@ void CudaComputationBackend<T>::release()
         d_block_stress[i].release();
         h_block_stress[i].release();
         if (kernel_done[i] != nullptr)
-            ignore_release_error(cudaEventDestroy(kernel_done[i]));
+            release_cuda_event(kernel_done[i]);
         if (copy_done[i] != nullptr)
-            ignore_release_error(cudaEventDestroy(copy_done[i]));
+            release_cuda_event(copy_done[i]);
         if (streams[i][0] != nullptr)
-            ignore_release_error(cudaStreamDestroy(streams[i][0]));
+            release_cuda_stream(streams[i][0]);
         if (streams[i][1] != nullptr)
-            ignore_release_error(cudaStreamDestroy(streams[i][1]));
+            release_cuda_stream(streams[i][1]);
         kernel_done[i] = nullptr;
         copy_done[i] = nullptr;
         streams[i][0] = nullptr;

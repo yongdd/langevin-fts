@@ -126,8 +126,8 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             {
                 const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
                 double local_ds = mapping.get_ds_from_index(ds_index);
-                auto bond_lengths = this->molecules->get_bond_lengths();
-                double bond_length_sq = bond_lengths[monomer_type] * bond_lengths[monomer_type];
+                const double bond_length = this->molecules->get_bond_lengths().at(monomer_type);   // no map copy per step
+                double bond_length_sq = bond_length * bond_length;
                 double coeff_full = bond_length_sq * local_ds / 6.0;
                 double coeff_half = bond_length_sq * local_ds / 12.0;
 

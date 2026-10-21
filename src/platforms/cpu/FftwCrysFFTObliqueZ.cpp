@@ -331,7 +331,7 @@ void FftwCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
     if (!state.boltz_current)
         throw_with_line_number("FftwCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
-    const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_CPU_DETAIL") != nullptr);
+    static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_CPU_DETAIL") != nullptr);   // read once
     static std::atomic<bool> prof_once{false};
     const bool profile_this = do_profile && !prof_once.exchange(true);
 

@@ -73,7 +73,9 @@ Issues = "https://github.com/yongdd/langevin-fts/issues"
 
 [tool.scikit-build]
 # CMake configuration
-cmake.version = ">=3.17"
+# 3.25.2+: CMake passes -std=c++20 to nvcc from that version on (the GPU backend
+# needs it); scikit-build-core fetches a newer CMake when the installed one is older
+cmake.version = ">=3.25.2"
 cmake.build-type = "Release"
 
 # Pure-Python files and the compiled extension are both installed into the

@@ -322,12 +322,12 @@ void CudaCrysFFTRecursive3m::init_plans()
 {
     if (plans_initialized_)
         return;
-    if (cufftPlan3d(&plan_r2c_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_D2Z) != CUFFT_SUCCESS)
+    if (count_cufft_plan(cufftPlan3d(&plan_r2c_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_D2Z)) != CUFFT_SUCCESS)
         throw_with_line_number("Failed to create cuFFT D2Z plan for CudaCrysFFTRecursive3m.");
-    if (cufftPlan3d(&plan_c2r_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_Z2D) != CUFFT_SUCCESS)
+    if (count_cufft_plan(cufftPlan3d(&plan_c2r_, nx_physical_[0], nx_physical_[1], nx_physical_[2], CUFFT_Z2D)) != CUFFT_SUCCESS)
     {
         // plans_initialized_ covers both plans; destroy the first one here
-        ignore_release_error(cufftDestroy(plan_r2c_));
+        release_cufft_plan(plan_r2c_);
         throw_with_line_number("Failed to create cuFFT Z2D plan for CudaCrysFFTRecursive3m.");
     }
     plans_initialized_ = true;
@@ -337,8 +337,8 @@ void CudaCrysFFTRecursive3m::free_plans()
 {
     if (!plans_initialized_)
         return;
-    ignore_release_error(cufftDestroy(plan_r2c_));
-    ignore_release_error(cufftDestroy(plan_c2r_));
+    release_cufft_plan(plan_r2c_);
+    release_cufft_plan(plan_c2r_);
     plans_initialized_ = false;
 }
 

@@ -160,11 +160,11 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
     long long int batch = nx_physical_[2];
     size_t work_size = 0;
 
-    if (cufftCreate(&plan_xy_fwd_) != CUFFT_SUCCESS)
+    if (count_cufft_plan(cufftCreate(&plan_xy_fwd_)) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan handle for XY.");
-    if (cufftCreate(&plan_xy_bwd_) != CUFFT_SUCCESS)
+    if (count_cufft_plan(cufftCreate(&plan_xy_bwd_)) != CUFFT_SUCCESS)
     {
-        ignore_release_error(cufftDestroy(plan_xy_fwd_));
+        release_cufft_plan(plan_xy_fwd_);
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan handle for XY.");
     }
 
@@ -174,8 +174,8 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
                                          batch, &work_size, CUDA_C_64F);
     if (rf != CUFFT_SUCCESS)
     {
-        ignore_release_error(cufftDestroy(plan_xy_fwd_));
-        ignore_release_error(cufftDestroy(plan_xy_bwd_));
+        release_cufft_plan(plan_xy_fwd_);
+        release_cufft_plan(plan_xy_bwd_);
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan for XY.");
     }
 
@@ -185,8 +185,8 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
                                          batch, &work_size, CUDA_C_64F);
     if (rb != CUFFT_SUCCESS)
     {
-        ignore_release_error(cufftDestroy(plan_xy_fwd_));
-        ignore_release_error(cufftDestroy(plan_xy_bwd_));
+        release_cufft_plan(plan_xy_fwd_);
+        release_cufft_plan(plan_xy_bwd_);
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan for XY.");
     }
 
@@ -200,8 +200,8 @@ void CudaCrysFFTObliqueZ::free_fft_xy()
 {
     if (plan_xy_initialized_)
     {
-        ignore_release_error(cufftDestroy(plan_xy_fwd_));
-        ignore_release_error(cufftDestroy(plan_xy_bwd_));
+        release_cufft_plan(plan_xy_fwd_);
+        release_cufft_plan(plan_xy_bwd_);
         plan_xy_initialized_ = false;
     }
 }

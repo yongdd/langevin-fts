@@ -323,8 +323,8 @@ void CudaSolverPseudoBase<T>::release_base()
     {
         for (int b = 0; b < 2; b++)
         {
-            if (plan_for_created_[i][b]) ignore_release_error(cufftDestroy(plan_for_[i][b]));
-            if (plan_bak_created_[i][b]) ignore_release_error(cufftDestroy(plan_bak_[i][b]));
+            if (plan_for_created_[i][b]) release_cufft_plan(plan_for_[i][b]);
+            if (plan_bak_created_[i][b]) release_cufft_plan(plan_bak_[i][b]);
             plan_for_created_[i][b] = plan_bak_created_[i][b] = false;
             plan_for_[i][b] = plan_bak_[i][b] = 0;
         }
@@ -363,9 +363,9 @@ void CudaSolverPseudoBase<T>::init_fft()
         {
             for (int b = 0; b < max_fft_batch_; b++)
             {
-                CUFFT_CHECK(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1));
+                CUFFT_CHECK(count_cufft_plan(cufftPlanMany(&plan_for_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::forward,  b + 1)));
                 plan_for_created_[i][b] = true;
-                CUFFT_CHECK(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1));
+                CUFFT_CHECK(count_cufft_plan(cufftPlanMany(&plan_bak_[i][b], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, CufftPlanType<T>::backward, b + 1)));
                 plan_bak_created_[i][b] = true;
                 CUFFT_CHECK(cufftSetStream(plan_for_[i][b], streams[i][0]));
                 CUFFT_CHECK(cufftSetStream(plan_bak_[i][b], streams[i][0]));

@@ -192,6 +192,15 @@ int main()
             for(int i=0; i<M; i++)
                 q_prev[i] = q_next[i];
         }
+        // Release the computations, then their boxes and the shared objects
+        for (PropagatorComputation<double>* solver : solver_list)
+        {
+            ComputationBox<double>* cb = solver->get_cb();
+            delete solver;
+            delete cb;
+        }
+        delete propagator_computation_optimizer;
+        delete molecules;
         return 0;
     }
     catch(std::exception& exc)

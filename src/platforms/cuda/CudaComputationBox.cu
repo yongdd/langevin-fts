@@ -106,7 +106,8 @@ template <typename T>
 void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
     // Build the device orbit counts first (empty without a space group): if the
-    // allocation or the copy fails, the box keeps its previous group and state
+    // allocation or the copy fails, or the base class rejects the group, the box
+    // keeps its previous group and state (the base class commits only at its end)
     CudaDeviceBuffer<int> orbit_counts_new;
     if (sg != nullptr)
     {
@@ -116,7 +117,8 @@ void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
         CUDA_CHECK(cudaMemcpy(orbit_counts_new, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
     }
 
-    // Base class: checks the cell, then sets the group, the basis size and the mask
+    // Base class: checks the cell, builds the basis size, orbit counts and mask,
+    // then commits them
     ComputationBox<T>::set_space_group(sg);
     d_orbit_counts_ = std::move(orbit_counts_new);
 }

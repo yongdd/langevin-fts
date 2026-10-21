@@ -7,21 +7,23 @@
  *    memory), release, containers, the destructor, pinned memory, a failed
  *    allocation (its message names the caller and the size).
  * 2. Every kind of CUDA object (propagator computations of all solvers, the CrysFFT
- *    engines, non-periodic transforms, complex fields, the Anderson mixers) returns
- *    all its allocations when destroyed. Checked exactly with the live-allocation
- *    counters, which count CudaBuffer and the backend's propagator and checkpoint
- *    arrays, and which other processes and cuFFT's own plan memory do not affect.
- *    No release may fail (cuda_release_failures(); a double free would count).
- * 3. Failure-injection sweep: the test hook cuda_buffer_fail_countdown() makes the
- *    N-th counted allocation throw; N runs over every allocation of each
- *    construction (and its first run), and after each failure the counters must be
- *    back where they started. This covers every path on which a counted
- *    allocation fails; failures of cuFFT plan, stream and event creation are not
- *    injected (section 4 reaches some of them for real).
+ *    engines, non-periodic transforms, complex fields, the Anderson mixers), built
+ *    with 4 streams, returns everything when destroyed. Checked exactly with the
+ *    library's live counters: CudaBuffer and the backend's propagator and
+ *    checkpoint arrays, cuFFT plans, streams and events (other processes and
+ *    cuFFT's own retained memory do not affect them). No release may fail
+ *    (cuda_release_failures(); a double free would count).
+ * 3. Failure-injection sweep with 2 streams: the test hook
+ *    cuda_buffer_fail_countdown() makes the N-th counted allocation throw; N runs
+ *    over every allocation of each construction (and its first run), and after
+ *    each failure the counters must be back where they started; the run in which
+ *    no allocation fails must succeed. Failures of cuFFT plan, stream and event
+ *    creation are not injected; section 4 may reach them for real.
  * 4. A small construction that really runs out of device memory releases what it
- *    took (counters, and device free memory end to end): a ballast holds the rest
- *    of the free memory for a moment, with several leftovers so the failure falls
- *    at different stages. The test runs serially (tests/CMakeLists.txt).
+ *    took (the counters, and device free memory end to end): a ballast holds the
+ *    rest of the free memory for a moment, with several leftovers so the failure
+ *    falls at different stages. When the device memory cannot be held, the test
+ *    exits with code 77 (a ctest skip). It runs serially (tests/CMakeLists.txt).
  */
 #include <algorithm>
 #include <complex>
@@ -47,6 +49,48 @@
 static long long live_device() { return CudaDeviceMemory::counters().live_count.load(); }
 static long long live_pinned() { return CudaPinnedMemory::counters().live_count.load(); }
 static long long live_device_bytes() { return CudaDeviceMemory::counters().live_bytes.load(); }
+
+/// Everything the library counts: live device and pinned allocations, cuFFT
+/// plans, streams and events.
+struct Live
+{
+    long long device = 0, pinned = 0, plans = 0, streams = 0, events = 0;
+    static Live now()
+    {
+        const CudaHandleCounters& h = cuda_handle_counters();
+        return {live_device(), live_pinned(), h.cufft_plans.load(), h.streams.load(), h.events.load()};
+    }
+    bool operator==(const Live&) const = default;
+    std::string minus(const Live& before) const
+    {
+        return std::to_string(device - before.device) + " device and " + std::to_string(pinned - before.pinned)
+            + " pinned allocations, " + std::to_string(plans - before.plans) + " cuFFT plans, "
+            + std::to_string(streams - before.streams) + " streams, " + std::to_string(events - before.events) + " events";
+    }
+};
+
+/// Sets OMP_NUM_THREADS (the backends create one stream per thread, at most 4)
+/// for a scope and restores the caller's value afterwards.
+struct ScopedStreams
+{
+    explicit ScopedStreams(const char* n)
+    {
+        const char* value = std::getenv("OMP_NUM_THREADS");
+        had = (value != nullptr);
+        if (had)
+            saved = value;
+        setenv("OMP_NUM_THREADS", n, 1);
+    }
+    ~ScopedStreams()
+    {
+        if (had)
+            setenv("OMP_NUM_THREADS", saved.c_str(), 1);
+        else
+            unsetenv("OMP_NUM_THREADS");
+    }
+    bool had = false;
+    std::string saved;
+};
 
 static size_t free_bytes()
 {
@@ -336,76 +380,89 @@ int main()
     cuda_buffer_fail_countdown().store(-1);
 
     //--------------------------------------------------------------------------
-    // 2. Every kind of object returns all its buffers
+    // 2. Every kind of object returns everything it took
     //--------------------------------------------------------------------------
-    printf("--- objects release their buffers (4 streams) ---\n");
+    printf("--- objects release their buffers, plans, streams and events (4 streams) ---\n");
     const std::vector<Case> all = cases();
-    for (const Case& c : all)
     {
-        const long long d0 = live_device(), p0 = live_pinned();
-        bool ran = true;
-        try { c.run(); }
-        catch (const std::exception& e) { ran = false; printf("  %s threw: %s\n", c.name.c_str(), e.what()); }
-        const bool no_error = no_cuda_error(c.name);
-        ok &= check(ran && no_error && live_device() == d0 && live_pinned() == p0, c.name);
+        ScopedStreams streams("4");
+        for (const Case& c : all)
+        {
+            const Live before = Live::now();
+            bool ran = true;
+            try { c.run(); }
+            catch (const std::exception& e) { ran = false; printf("  %s threw: %s\n", c.name.c_str(), e.what()); }
+            const bool no_error = no_cuda_error(c.name);
+            const Live after = Live::now();
+            if (!(after == before))
+                printf("  %s left %s\n", c.name.c_str(), after.minus(before).c_str());
+            ok &= check(ran && no_error && after == before, c.name);
+        }
     }
 
     //--------------------------------------------------------------------------
-    // 3. Failure-injection sweep (one stream: fewer allocations, same code)
+    // 3. Failure-injection sweep (2 streams: the per-stream code runs for a
+    //    stream other than the first, with fewer allocations than 4 streams)
     //--------------------------------------------------------------------------
-    printf("--- every allocation of every construction fails once ---\n");
-    const char* omp_env = std::getenv("OMP_NUM_THREADS");
-    const bool had_omp_env = (omp_env != nullptr);
-    const std::string saved_omp_env = had_omp_env ? omp_env : "";
-    setenv("OMP_NUM_THREADS", "1", 1);                   // the backends size their streams from it
-    for (const Case& c : all)
+    printf("--- every allocation of every construction fails once (2 streams) ---\n");
     {
-        const long long d0 = live_device(), p0 = live_pinned();
-        long long points = 0;
-        bool clean = true;
-        for (long long k = 0; k < 100000; ++k)
+        ScopedStreams streams("2");
+        for (const Case& c : all)
         {
-            cuda_buffer_fail_countdown().store(k);
-            try { c.run(); }
-            catch (const std::exception&) {}
-            const bool fired = cuda_buffer_fail_countdown().load() < 0;
-            cuda_buffer_fail_countdown().store(-1);
-            const bool no_error = no_cuda_error(c.name);
-            if (!no_error || live_device() != d0 || live_pinned() != p0)
+            const Live before = Live::now();
+            long long points = 0;
+            bool clean = true;
+            for (long long k = 0; k < 100000; ++k)
             {
-                printf("  %s: allocation %lld failed and left %lld device / %lld pinned buffers\n",
-                       c.name.c_str(), k, live_device() - d0, live_pinned() - p0);
-                clean = false;
-                break;
+                cuda_buffer_fail_countdown().store(k);
+                bool threw = false;
+                std::string message;
+                try { c.run(); }
+                catch (const std::exception& e) { threw = true; message = e.what(); }
+                const bool fired = cuda_buffer_fail_countdown().load() < 0;
+                cuda_buffer_fail_countdown().store(-1);
+                const bool no_error = no_cuda_error(c.name);
+                const Live after = Live::now();
+                if (!no_error || !(after == before))
+                {
+                    printf("  %s: allocation %lld failed and left %s\n", c.name.c_str(), k, after.minus(before).c_str());
+                    clean = false;
+                    break;
+                }
+                if (!fired)                              // the run made fewer than k+1 allocations
+                {
+                    if (threw)                           // so nothing was injected: it must succeed
+                    {
+                        printf("  %s threw without an injected failure: %s\n", c.name.c_str(), message.c_str());
+                        clean = false;
+                    }
+                    points = k;
+                    break;
+                }
             }
-            if (!fired)                                  // the run made fewer than k+1 allocations
-            {
-                points = k;
-                break;
-            }
+            ok &= check(clean && points > 0, c.name + ": " + std::to_string(points) + " failure points, nothing left behind");
         }
-        ok &= check(clean && points > 0, c.name + ": " + std::to_string(points) + " failure points, nothing left behind");
     }
-    if (had_omp_env)
-        setenv("OMP_NUM_THREADS", saved_omp_env.c_str(), 1);
-    else
-        unsetenv("OMP_NUM_THREADS");
 
     //--------------------------------------------------------------------------
     // 4. A construction that really runs out of device memory
     //--------------------------------------------------------------------------
     printf("--- out of device memory ---\n");
+    bool oom_skipped = false;
     {
-        const size_t free_start = free_bytes();
         ComputationSpec spec;
         spec.nx = {64, 64, 64};
         spec.lx = {4.0, 4.0, 4.0};
 
-        // What one construction and run take (CudaBuffers, propagator arrays and
-        // cuFFT's plan memory), measured once while the objects are alive
+        // What one construction and run take, measured once while the objects
+        // are alive: at least the counted bytes, and by device free memory also
+        // cuFFT's plan work areas (unless another process changed it meanwhile)
         size_t need = 0;
+        bool measured = false;
+        try
         {
-            const size_t before = free_bytes();
+            const size_t free_before = free_bytes();
+            const long long counted_before = live_device_bytes();
             std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
             std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box(spec.nx, spec.lx, {}));
             std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
@@ -417,57 +474,85 @@ int main()
             computation->compute_propagators({{"A", w.data()}, {"B", w.data()}});
             computation->compute_concentrations();
             computation->compute_stress();
-            const size_t during = free_bytes();
-            need = before > during ? before - during : 0;
+            const size_t free_during = free_bytes();
+            const size_t counted = static_cast<size_t>(live_device_bytes() - counted_before);
+            need = std::max(counted, free_before > free_during ? free_before - free_during : size_t(0));
+            measured = true;
         }
-        printf("  a 64^3 computation takes about %.1f MiB of device memory\n", need / 1048576.0);
+        catch (const std::exception& e)
+        {
+            printf("  the 64^3 computation itself did not fit: %s\n", e.what());
+        }
+        ok &= check(no_cuda_error("the measurement"), "the measurement leaves no release failure or pending error");
+
+        // Free memory after the measurement (modules loaded, cuFFT's retained
+        // per-plan memory included), for the end-to-end check below
+        const size_t free_start = free_bytes();
+        const Live live_start = Live::now();
 
         // Leave a fraction of that free; the rest of the free memory is held by a
         // ballast for the moment of the construction. The last case leaves (almost)
         // nothing, so one construction runs out even if another process changed the
         // free memory while `need` was measured.
         int ran_out = 0, tried = 0;
-        for (double fraction : {0.9, 0.6, 0.3, 0.1, 0.02, 0.0})
+        if (measured)
         {
-            const size_t leftover = static_cast<size_t>(fraction * need);
-            const size_t free_now = free_bytes();
-            if (free_now <= leftover)
-                continue;
-            const long long d0 = live_device(), p0 = live_pinned();
-            std::vector<CudaDeviceBuffer<char>> ballast = hold_device_memory(free_now - leftover);
-            const size_t free_left = free_bytes();
-            if (free_left > leftover + need)
+            printf("  a 64^3 computation takes about %.1f MiB of device memory\n", need / 1048576.0);
+            for (double fraction : {0.9, 0.6, 0.3, 0.1, 0.02, 0.0})
             {
-                printf("  [SKIP] leftover %.1f MiB: could hold only part of the device memory (%.1f MiB left free)\n",
-                       leftover / 1048576.0, free_left / 1048576.0);
-                continue;
+                const size_t leftover = static_cast<size_t>(fraction * need);
+                const size_t free_now = free_bytes();
+                if (free_now <= leftover)
+                    continue;
+                const Live before = Live::now();
+                std::vector<CudaDeviceBuffer<char>> ballast = hold_device_memory(free_now - leftover);
+                const size_t free_left = free_bytes();
+                if (free_left > leftover + need)
+                {
+                    printf("  [SKIP] leftover %.1f MiB: could hold only part of the device memory (%.1f MiB left free)\n",
+                           leftover / 1048576.0, free_left / 1048576.0);
+                    continue;
+                }
+                ++tried;
+                std::string message;
+                bool threw = false;
+                try { run_computation<double>(spec); }
+                catch (const std::exception& e) { threw = true; message = e.what(); }
+                const bool no_error = no_cuda_error("an out-of-memory construction");
+                ballast.clear();
+                if (threw)
+                    ++ran_out;
+                // The innermost failure is at the end of the message (outer frames prepend theirs)
+                if (message.size() > 240)
+                    message = "..." + message.substr(message.size() - 240);
+                const Live after = Live::now();
+                if (!(after == before))
+                    printf("  left %s\n", after.minus(before).c_str());
+                ok &= check(no_error && after == before,
+                            "free " + std::to_string(free_left >> 20) + " MiB: "
+                            + (threw ? "ran out (" + message + ")" : "fit") + "; everything released");
             }
-            ++tried;
-            std::string message;
-            bool threw = false;
-            try { run_computation<double>(spec); }
-            catch (const std::exception& e) { threw = true; message = e.what(); }
-            const bool no_error = no_cuda_error("an out-of-memory construction");
-            ballast.clear();
-            if (threw)
-                ++ran_out;
-            if (message.size() > 200)
-                message = message.substr(0, 200) + "...";
-            ok &= check(no_error && live_device() == d0 && live_pinned() == p0,
-                        "free " + std::to_string(free_left >> 20) + " MiB: "
-                        + (threw ? "ran out (" + message + ")" : "fit") + "; everything released");
         }
         if (tried > 0)
+        {
             ok &= check(ran_out > 0, "at least one construction ran out of device memory");
+            // End to end, for memory the counters do not see (cuFFT's own); a leaked
+            // 64^3 plan holds several MiB
+            const size_t free_end = free_bytes();
+            const double drift_mib = (static_cast<double>(free_start) - static_cast<double>(free_end)) / 1048576.0;
+            ok &= check(Live::now() == live_start && free_end + (size_t(8) << 20) >= free_start,
+                        "the device memory returns to its level before these constructions ("
+                        + std::to_string(drift_mib) + " MiB less; 8 MiB allowed for the 2 MiB pages and cuFFT's retained memory)");
+        }
         else
-            printf("  [SKIP] the out-of-memory check could not hold the device memory\n");
-        // End to end, also for memory the counters do not see (cuFFT plan work areas)
-        const size_t free_end = free_bytes();
-        ok &= check(free_end + (size_t(64) << 20) >= free_start,
-                    "the device memory returns to its level before these constructions "
-                    "(64 MiB margin for cuFFT's per-plan memory and the 2 MiB pages)");
+        {
+            printf("  [SKIP] the out-of-memory check could not run (device memory could not be held)\n");
+            oom_skipped = true;
+        }
     }
 
-    printf("TestCudaDeviceBuffer: %s\n", ok ? "PASSED" : "FAILED");
-    return ok ? 0 : 1;
+    printf("TestCudaDeviceBuffer: %s\n", ok ? (oom_skipped ? "PASSED (out-of-memory check skipped)" : "PASSED") : "FAILED");
+    if (!ok)
+        return 1;
+    return oom_skipped ? 77 : 0;   // 77: SKIP_RETURN_CODE in tests/CMakeLists.txt
 }

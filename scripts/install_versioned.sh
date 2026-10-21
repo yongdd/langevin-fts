@@ -14,9 +14,11 @@
 # Use a version with:
 #   source ~/venvs/polymerfts-<version>/bin/activate
 #
-# Run it with the conda environment active that provides CMake, the CUDA
-# toolkit, MKL/FFTW, spglib and LAPACKE; the build takes the same options as
-# the CMake build (see --mkl/--fftw/--cuda).
+# Run it with the conda environment active that provides CMake, MKL/FFTW, spglib
+# and LAPACKE, and with a CUDA 12.2+ nvcc first on PATH for the GPU backend (the
+# conda environment has no nvcc); the build takes the same options as the CMake
+# build (see --mkl/--fftw/--cuda; --cuda AUTO builds without the GPU backend when
+# no usable toolkit is found, ON stops instead).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,6 +55,21 @@ echo "polymerfts ${VERSION}  (python: ${PYTHON})"
 
 # 1. Wheel -----------------------------------------------------------------
 mkdir -p "${WHEEL_DIR}"
+if [[ "${SKIP_BUILD}" -eq 0 && "${USE_CUDA}" != "OFF" ]]; then
+    # scikit-build-core keeps its build directories (build/<wheel tag>, see
+    # pyproject.toml). One configured with another nvcc keeps that compiler
+    # cached, so start it afresh when the nvcc on PATH has changed.
+    NVCC="$(command -v nvcc || true)"
+    for CACHE in "${ROOT}"/build/cp*-*/CMakeCache.txt; do
+        [[ -f "${CACHE}" ]] || continue
+        CACHED="$(sed -n 's/^CMAKE_CUDA_COMPILER:[A-Z]*=//p' "${CACHE}")"
+        if [[ -n "${CACHED}" && -n "${NVCC}" && "$(readlink -f "${CACHED}")" != "$(readlink -f "${NVCC}")" ]]; then
+            echo "== ${CACHE%/*} was configured with ${CACHED}; reconfiguring with ${NVCC}"
+            rm -f "${CACHE}"
+            rm -rf "${CACHE%/*}/CMakeFiles"
+        fi
+    done
+fi
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
     echo "== building wheel into ${WHEEL_DIR} (MKL=${USE_MKL} FFTW=${USE_FFTW} CUDA=${USE_CUDA}, ${JOBS} jobs)"
     CMAKE_BUILD_PARALLEL_LEVEL="${JOBS}" \

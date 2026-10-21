@@ -29,6 +29,8 @@ make -j8 && make install && ctest -L basic
 
 > **CPU Backend**: both CPU backends are OFF by default — enable at least one. `-DPOLYMERFTS_USE_MKL=ON` uses Intel MKL (included via conda); `-DPOLYMERFTS_USE_FFTW=ON` uses FFTW instead (GPL license).
 
+> **GPU Backend**: built automatically when a CUDA 12.2+ `nvcc` is on PATH (the conda environment does not provide one) and CMake is 3.25.2+; otherwise the configure step warns and builds without it. `-DPOLYMERFTS_USE_CUDA=ON` makes a missing GPU backend an error, `OFF` skips it.
+
 For detailed instructions, troubleshooting, and dependencies, see [Installation.md](docs/getting-started/Installation.md).
 
 ## Getting Started

@@ -50,9 +50,8 @@
  * @code
  * CudaComputationBox<double> cb(nx, lx, bc);
  *
- * // Allocate device array
- * double* d_field;
- * cudaMalloc(&d_field, n_grid * sizeof(double));
+ * // Device array (owned; see CudaDeviceBuffer in CudaCommon.h)
+ * CudaDeviceBuffer<double> d_field(n_grid);
  *
  * // Compute integral on GPU
  * double result = cb.integral_device(d_field);
