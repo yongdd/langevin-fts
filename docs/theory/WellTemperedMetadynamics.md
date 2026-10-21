@@ -403,10 +403,10 @@ P = np.exp(-F)  # Unnormalized probability
 ### 8.3 Checkpoint and Resume
 
 ```python
-# The WTMD bias (U, U' and I0) is stored in the fields_*.mat checkpoints, written
-# every recording["recording_period"] steps, and continue_run() restores it from there.
-# The wtmd_statistics_*.mat files are output only; the I1 (dH/dchi) accumulation
-# restarts from zero after a resume.
+# The WTMD state (U, U', I0, I1 and the samples stored since the last update) is
+# stored in the fields_*.mat checkpoints, written every recording["recording_period"]
+# steps, and continue_run() restores it from there, so a resumed run continues the
+# statistics of an uninterrupted one. The wtmd_statistics_*.mat files are output only.
 
 # Resume simulation from checkpoint
 simulation.continue_run("fields_100000.mat")

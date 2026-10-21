@@ -291,7 +291,9 @@ class LFTS:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            params.get("smearing", None)
+            params.get("smearing", None),
+            angles=self.prop_solver.get_angles_degrees(),
+            bc=self.prop_solver.bc
         )
 
         # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
@@ -301,6 +303,7 @@ class LFTS:
             self.wtmd = WTMD(
                 nx=list(self.cb.get_nx()),
                 lx=list(self.cb.get_lx()),
+                angles=self.prop_solver.get_angles_degrees(),
                 nbar=params["langevin"]["nbar"],
                 eigenvalues=self.mpt.eigenvalues,
                 real_fields_idx=self.mpt.aux_fields_real_idx,
@@ -369,7 +372,7 @@ class LFTS:
             raise ValidationError(f"compressor['name'] must be 'am', 'lr' or 'lram', got '{params['compressor']['name']}'")
 
         # Standard deviation of normal noise of Langevin dynamics
-        langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
+        langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), self.prop_solver.get_volume())
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
@@ -551,6 +554,15 @@ class LFTS:
             mdic["wtmd_u"] = self.wtmd.u * self.wtmd.CV
             mdic["wtmd_up"] = self.wtmd.up * self.wtmd.CV
             mdic["wtmd_I0"] = self.wtmd.I0
+            # I1 and the samples stored since the last update, so that a continued run
+            # carries the same statistics as an uninterrupted one
+            for key, value in self.wtmd.I1.items():
+                monomer_pair = sorted(key.split(","))
+                mdic["wtmd_I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = value * self.wtmd.CV
+            mdic["wtmd_order_parameter_history"] = np.array(self.wtmd.order_parameter_history, dtype=np.float64)
+            for key, values in self.wtmd.dH_history.items():
+                monomer_pair = sorted(key.split(","))
+                mdic["wtmd_dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = np.array(values, dtype=np.float64)
             mdic["wtmd_params"] = {
                 "l": self.wtmd.l,
                 "sigma_psi": self.wtmd.sigma_psi,
@@ -602,6 +614,16 @@ class LFTS:
             self.wtmd.up = np.array(load_data["wtmd_up"]) / self.wtmd.CV
             if "wtmd_I0" in load_data:
                 self.wtmd.I0 = np.array(load_data["wtmd_I0"])
+            n_pending = np.atleast_1d(load_data.get("wtmd_order_parameter_history", np.zeros(0))).size
+            self.wtmd.order_parameter_history = list(np.atleast_1d(load_data["wtmd_order_parameter_history"])) if n_pending > 0 else []
+            self.wtmd.dH_history = {}
+            for key in self.chi_n:
+                monomer_pair = sorted(key.split(","))
+                name = monomer_pair[0] + "_" + monomer_pair[1]
+                if "wtmd_I1_" + name in load_data:
+                    self.wtmd.I1[key] = np.array(load_data["wtmd_I1_" + name]) / self.wtmd.CV
+                if n_pending > 0 and "wtmd_dH_history_" + name in load_data:
+                    self.wtmd.dH_history[key] = list(np.atleast_1d(load_data["wtmd_dH_history_" + name]))
             print("Restored WTMD state")
 
         # Make initial_fields
@@ -680,13 +702,6 @@ class LFTS:
         else:
             phi, _ = self.compute_concentrations(w_aux)
 
-        # For compressible models, pin mean(W+) to the initial saddle value.
-        # Without this, mean drifts slowly (tau~170) because the LRAM k=0
-        # correction is weak. The initial saddle is the natural SCFT solution.
-        if self.zeta_n is not None:
-            self._target_mean_wp = float(self.cb.mean(w_aux[M-1]))
-            print(f"  Compressible: pinning mean(W+) = {self._target_mean_wp:.6f}")
-
         # Dictionary to record history of H and dH/dχN
         H_history = []
         dH_history = {}
@@ -710,7 +725,6 @@ class LFTS:
 
         # The number of times that 'find_saddle_point' has failed to find a saddle point
         saddle_fail_count = 0
-        successive_fail_count = 0
 
         # Init timers
         total_saddle_iter = 0
@@ -738,43 +752,41 @@ class LFTS:
                 # Add bias to w_lambda
                 self.wtmd.add_bias_to_langevin(psi, w_lambda)
 
-            # Update w_aux using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
-            for count, i in enumerate(self.mpt.aux_fields_real_idx):
-                scaling = self.dt_scaling[i]
-                w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+            # Update w_aux using Leimkuhler-Matthews method. If the saddle point of the
+            # imaginary fields is not found, the step is repeated from the same fields with
+            # new noise (the previous noise of the Leimkuhler-Matthews pair is kept), up to
+            # five times, so that every Langevin step yields one sample
+            for attempt in range(6):
+                w_aux = w_aux_copy.copy()
+                normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
+                for count, i in enumerate(self.mpt.aux_fields_real_idx):
+                    scaling = self.dt_scaling[i]
+                    w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+
+                # Find saddle point of the pressure field
+                phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
+                total_saddle_iter += saddle_iter
+                total_error_level += error_level
+                saddle_failed = np.isnan(error_level) or error_level >= self.saddle["tolerance"]
+                if not saddle_failed:
+                    break
+                saddle_fail_count += 1
+                if attempt < 5:
+                    print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
+            if saddle_failed:
+                print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (attempt + 1))
+                w_aux = w_aux_copy
+                phi = phi_copy
+                break
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # Find saddle point of the pressure field
-            phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
-            total_saddle_iter += saddle_iter
-            total_error_level += error_level
-
-            # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
-            if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:
-                if successive_fail_count < 5:                
-                    print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
-
-                    # Restore w_aux and phi
-                    w_aux = w_aux_copy
-                    phi = phi_copy
-                    
-                    # Increment counts and continue
-                    successive_fail_count += 1
-                    saddle_fail_count += 1
-                    continue
-                else:
-                    print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (successive_fail_count))
-                    break
-            else:
-                successive_fail_count = 0
-
             # WTMD: store order parameter and update statistics (same as deep-langevin-fts)
             if self.wtmd is not None:
-                # Store current order parameter and dH/dχN for updating statistics
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
+                # Store the order parameter with dH/dχN of the same fields (the fields
+                # before the update, at which psi and the bias were computed)
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux_copy)
                 self.wtmd.store_order_parameter(psi, dH)
 
                 # Update WTMD bias
@@ -808,7 +820,9 @@ class LFTS:
                     
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
-                # Perform Fourier transforms
+                # Perform Fourier transforms.
+                # Shifting the Gaussian integral over Ω_k gives <Ω_k φ_j> = (λ_k/M) Σ_l A_lk <φ_l φ_j>,
+                # and A Aᵀ = M I, so μ_i = Σ_k A_ik Ω_k/λ_k gives <μ_i φ_j> = <δφ_i δφ_j>
                 mu_fourier = {}
                 phi_fourier = {}
                 for i in range(M):
@@ -816,7 +830,9 @@ class LFTS:
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))/self.prop_solver.n_grid
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(M-1) :
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.prop_solver.nx))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.prop_solver.n_grid
+                        if np.isclose(self.mpt.eigenvalues[k], 0.0):
+                            continue
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.prop_solver.nx))*self.mpt.matrix_a[i,k]/self.mpt.eigenvalues[k]/self.prop_solver.n_grid
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -836,6 +852,12 @@ class LFTS:
                 for key in sf_average:
                     sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.prop_solver.get_volume()*np.sqrt(self.langevin["nbar"])
+                    # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
+                    # divide by Γ to record S(k) of the densities (modes the smeared interaction
+                    # does not see, Γ < 1e-12, are recorded as 0)
+                    if self.smearing.enabled:
+                        gamma = self.smearing.fourier[..., :self.prop_solver.nx[-1]//2+1]
+                        sf_average[key] = np.divide(sf_average[key], gamma, out=np.zeros_like(sf_average[key]), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
@@ -903,9 +925,24 @@ class LFTS:
         # Reset compressor
         self.compressor.reset_count()
 
+        # The uniform mode of each imaginary field (except the incompressible pressure
+        # field, a gauge freedom) has the analytic saddle value
+        # mean(Ω_k) = -(c1_k + Σ_j A_jk mean(φ_j))/(2 c2_k), mean(φ) being fixed by the
+        # chain compositions. It is pinned in every iteration, so the concentrations and
+        # partition functions of the last iteration belong to the returned fields; the
+        # convergence test (standard deviation) does not see this mode.
+        phi_mean = self.mean_concentrations()
+        mean_targets = {}
+        for k in self.mpt.aux_fields_imag_idx:
+            if not np.isclose(self.mpt.h_coef_mu2[k], 0.0):
+                mean_targets[k] = -(self.mpt.h_coef_mu1[k] + np.dot(self.mpt.matrix_a[:, k], phi_mean)) / (2*self.mpt.h_coef_mu2[k])
+
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
-            
+
+            for k, target in mean_targets.items():
+                w_aux[k] += target - self.cb.mean(w_aux[k])
+
             # Compute total concentrations
             phi, _ = self.compute_concentrations(w_aux)
 
@@ -946,12 +983,24 @@ class LFTS:
             # Calculate new fields using compressor (AM, LR, LRAM)
             w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.prop_solver.n_grid])
 
-        # Fix mean of pressure field after convergence.
-        # Incompressible: gauge fix to mean=0.
-        # Compressible: pin to target_mean (set during first saddle solve).
+        # Incompressible: gauge fix of the pressure field to mean 0 (H and φ do not change)
         if self.zeta_n is None:
             w_aux[M-1] -= self.cb.mean(w_aux[M-1])
-        elif hasattr(self, '_target_mean_wp'):
-            w_aux[M-1] -= (self.cb.mean(w_aux[M-1]) - self._target_mean_wp)
 
         return phi, hamiltonian, saddle_iter, error_level
+
+    def mean_concentrations(self):
+        """Volume-averaged concentration of each monomer type from the chain compositions.
+
+        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b),
+        which is what the C++ normalization of the concentrations gives.
+        """
+        phi_mean = np.zeros(len(self.monomer_types))
+        for p, polymer in enumerate(self.distinct_polymers):
+            alpha = self.prop_solver.get_polymer(p).get_alpha()
+            for block in polymer["blocks"]:
+                weight = polymer["volume_fraction"] * block["length"] / alpha
+                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+                for monomer_type, fraction in fractions.items():
+                    phi_mean[self.monomer_types.index(monomer_type)] += weight * fraction
+        return phi_mean

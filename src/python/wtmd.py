@@ -29,7 +29,7 @@ class WTMD:
                  dpsi=1e-3,
                  update_freq=1000,
                  recording_period=100000,
-                 u=None, up=None, I0=None, I1=None):
+                 u=None, up=None, I0=None, I1=None, angles=None):
 
         self.l = l
         self.kc = kc
@@ -49,7 +49,17 @@ class WTMD:
         self.M = nx[0] * nx[1] * nx[2]
         self.Mk = nx[0] * nx[1] * (nx[2] // 2 + 1)
 
-        self.V = lx[0] * lx[1] * lx[2]
+        # Cell volume and metric (angles [alpha, beta, gamma] in degrees; None: orthogonal)
+        cos_a, cos_b, cos_g = np.cos(np.deg2rad(angles)) if angles is not None else (0.0, 0.0, 0.0)
+        self.orthogonal = bool(np.allclose([cos_a, cos_b, cos_g], 0.0, rtol=0.0, atol=1e-12))
+        if self.orthogonal:
+            self.V = lx[0] * lx[1] * lx[2]
+        else:
+            self.V = lx[0] * lx[1] * lx[2] * np.sqrt(1.0 - cos_a**2 - cos_b**2 - cos_g**2 + 2.0 * cos_a * cos_b * cos_g)
+            L = np.array(lx, dtype=np.float64)
+            self._metric_inv = np.linalg.inv(np.outer(L, L) * np.array([[1.0, cos_g, cos_b],
+                                                                         [cos_g, 1.0, cos_a],
+                                                                         [cos_b, cos_a, 1.0]]))
         self.CV = np.sqrt(nbar) * self.V
 
         # Choose one index of w_aux to use order parameter
@@ -91,11 +101,23 @@ class WTMD:
         self.wt = 2 * np.ones([nx[0], nx[1], nx[2] // 2 + 1])
         self.wt[:, :, [0, nx[2] // 2]] = 1.0
 
-        space_kx, space_ky, space_kz = np.meshgrid(
-            2 * np.pi / lx[0] * np.concatenate([np.arange((nx[0] + 1) // 2), nx[0] // 2 - np.arange(nx[0] // 2)]),
-            2 * np.pi / lx[1] * np.concatenate([np.arange((nx[1] + 1) // 2), nx[1] // 2 - np.arange(nx[1] // 2)]),
-            2 * np.pi / lx[2] * np.arange(nx[2] // 2 + 1), indexing='ij')
-        mag_k = np.sqrt(space_kx**2 + space_ky**2 + space_kz**2)
+        if self.orthogonal:
+            space_kx, space_ky, space_kz = np.meshgrid(
+                2 * np.pi / lx[0] * np.concatenate([np.arange((nx[0] + 1) // 2), nx[0] // 2 - np.arange(nx[0] // 2)]),
+                2 * np.pi / lx[1] * np.concatenate([np.arange((nx[1] + 1) // 2), nx[1] // 2 - np.arange(nx[1] // 2)]),
+                2 * np.pi / lx[2] * np.arange(nx[2] // 2 + 1), indexing='ij')
+            mag_k = np.sqrt(space_kx**2 + space_ky**2 + space_kz**2)
+        else:
+            # |k|^2 = 4π² mᵀ g⁻¹ m with the alias representative that minimizes the form,
+            # as the propagator solvers choose it (r2c layout: last axis m3 = 0 ... N3/2)
+            m = np.array(np.meshgrid(np.fft.fftfreq(nx[0]) * nx[0], np.fft.fftfreq(nx[1]) * nx[1],
+                                     np.arange(nx[2] // 2 + 1), indexing="ij")).reshape(3, -1)
+            k_sq = None
+            for t in np.array(np.meshgrid(*[(-1, 0, 1)] * 3, indexing="ij")).reshape(3, -1).T:
+                mt = m + (t * np.array(nx))[:, None]
+                k_sq_t = 4 * np.pi**2 * np.einsum("ij,in,jn->n", self._metric_inv, mt, mt)
+                k_sq = k_sq_t if k_sq is None else np.minimum(k_sq, k_sq_t)
+            mag_k = np.reshape(np.sqrt(k_sq), [nx[0], nx[1], nx[2] // 2 + 1])
         self.fk = 1.0 / (1.0 + np.exp(12.0 * (mag_k - kc) / kc))
 
         # Compute fourier transform of gaussian functions

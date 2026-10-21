@@ -60,15 +60,10 @@ class SymmetricPolymerTheory:
         Coefficients for ∫μ(r) term in Hamiltonian, shape (M,).
     h_coef_mu2 : ndarray
         Coefficients for ∫μ(r)² term in Hamiltonian, shape (M,).
-    h_const_deriv_chin : dict
-        Derivatives of h_const w.r.t. χN parameters.
-    h_coef_mu1_deriv_chin : dict
-        Derivatives of h_coef_mu1 w.r.t. χN parameters.
-    h_coef_mu2_deriv_chin : dict
-        Derivatives of h_coef_mu2 w.r.t. χN parameters.
     """
     def __init__(self, monomer_types, chi_n, zeta_n):
         self.monomer_types = monomer_types
+        self.zeta_n = zeta_n
         M = len(self.monomer_types)
         
         # Compute eigenvalues, orthogonal matrix, vector_s and vector_S
@@ -114,32 +109,6 @@ class SymmetricPolymerTheory:
         if not np.isclose(error, 0.0):
             raise ValidationError("Invalid inverse of matrix A. Perhaps matrix O is not orthogonal.")
         
-        # Compute derivatives of Hamiltonian coefficients w.r.t. χN
-        epsilon = 1e-5
-        self.h_const_deriv_chin = {}
-        self.h_coef_mu1_deriv_chin = {}
-        self.h_coef_mu2_deriv_chin = {}
-        for key in chi_n:
-            
-            chi_n_p = chi_n.copy()
-            chi_n_n = chi_n.copy()
-            
-            chi_n_p[key] += epsilon
-            chi_n_n[key] -= epsilon
-
-            # Compute eigenvalues and orthogonal matrix
-            eigenvalues_p, _, vector_s_p, vector_large_s_p = self.compute_eigen_system(monomer_types, chi_n_p, zeta_n)
-            eigenvalues_n, _, vector_s_n, vector_large_s_n = self.compute_eigen_system(monomer_types, chi_n_n, zeta_n)
-            
-            # Compute coefficients for Hamiltonian computation
-            h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(eigenvalues_p, vector_s_p, vector_large_s_p, zeta_n)
-            h_const_n, h_coef_mu1_n, h_coef_mu2_n = self.compute_h_coef(eigenvalues_n, vector_s_n, vector_large_s_n, zeta_n)
-            
-            # Compute derivatives using finite difference
-            self.h_const_deriv_chin[key] = (h_const_p - h_const_n)/(2*epsilon)
-            self.h_coef_mu1_deriv_chin[key] = (h_coef_mu1_p - h_coef_mu1_n)/(2*epsilon)
-            self.h_coef_mu2_deriv_chin[key] = (h_coef_mu2_p - h_coef_mu2_n)/(2*epsilon)
-
         self.h_const = h_const
         self.h_coef_mu1 = h_coef_mu1
         self.h_coef_mu2 = h_coef_mu2
@@ -161,9 +130,6 @@ class SymmetricPolymerTheory:
         print("\treference energy: ", self.h_const)
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-        print("\tdH_ref/dχN: ", self.h_const_deriv_chin)
-        print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
-        print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
     def to_aux_fields(self, w):
         """Transform monomer potential fields to auxiliary fields.
@@ -274,9 +240,8 @@ class SymmetricPolymerTheory:
             # Set the last eigenvector to [1, 1, ..., 1]/√S
             eigenvectors[:,-1] = np.ones(M)/np.sqrt(M)
 
-            # Construct vector_s and vector_S
+            # Construct vector_s (vector_S follows from the final eigenvectors below)
             vector_s = np.matmul(matrix_chin, np.ones(M))/M
-            vector_large_s = np.matmul(np.transpose(eigenvectors), vector_s)
 
         # Compressible model
         else:
@@ -289,9 +254,8 @@ class SymmetricPolymerTheory:
             eigenvalues = eigenvalues[sorted_indexes]
             eigenvectors = eigenvectors[:,sorted_indexes]     
 
-            # Construct vector_s and vector_S
+            # Construct vector_s (vector_S follows from the final eigenvectors below)
             vector_s = np.zeros(M)
-            vector_large_s = -zeta_n*np.matmul(np.transpose(eigenvectors), np.ones(M))*np.sqrt(M)
         
         # Make a orthogonal matrix using Gram-Schmidt
         eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
@@ -311,6 +275,14 @@ class SymmetricPolymerTheory:
 
         # Multiply √S to eigenvectors
         eigenvectors *= np.sqrt(M)
+
+        # vector_S = Aᵀs (incompressible) or -ζ Aᵀ(1, ..., 1) (compressible) with the final
+        # matrix A: it sets the linear coefficients S/λ, so it must carry the signs and the
+        # √M scaling of the eigenvectors above
+        if zeta_n is None:
+            vector_large_s = np.matmul(np.transpose(eigenvectors), vector_s)
+        else:
+            vector_large_s = -zeta_n*np.matmul(np.transpose(eigenvectors), np.ones(M))
 
         return eigenvalues, eigenvectors, vector_s, vector_large_s
 
@@ -438,6 +410,15 @@ class SymmetricPolymerTheory:
         Calculates dH/dχ_{ij}N for all interaction parameters. Used in L-FTS
         to estimate how free energy changes with interaction strength.
 
+        The derivative is taken at fixed monomer fields w = A w_aux, where the
+        polymer part -ln Q[w] does not depend on χ; the auxiliary fields
+        Ω = A(χ)⁻¹ w and the coefficients of the field part change with χ. The
+        field part is a function of w alone, so the result does not depend on how
+        the eigenvectors are chosen (signs, degenerate eigenvalues). For three or
+        more monomer types A rotates with χ, so this differs sample by sample from
+        the derivative at fixed Ω; the averages are equal (the rotation generator
+        is antisymmetric), and at a saddle point the two values are equal.
+
         Parameters
         ----------
         chi_n : dict
@@ -452,10 +433,30 @@ class SymmetricPolymerTheory:
         """
         M = len(self.monomer_types)
 
+        # Volume averages <w_i> and <w_i w_j> (no conjugate: H is holomorphic in complex fields)
+        w = np.matmul(self.matrix_a, np.asarray(w_aux))
+        w_mean = np.mean(w, axis=1)
+        w_product_mean = np.matmul(w, np.transpose(w))/w.shape[1]
+
+        def field_part(chi):
+            eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(self.monomer_types, chi, self.zeta_n)
+            h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(eigenvalues, vector_s, vector_large_s, self.zeta_n)
+            matrix_a_inv = np.transpose(matrix_o)/M
+            omega_mean = np.matmul(matrix_a_inv, w_mean)
+            omega_sq_mean = np.einsum("ki,ij,kj->k", matrix_a_inv, w_product_mean, matrix_a_inv)
+            return h_const + np.sum(h_coef_mu2*omega_sq_mean + h_coef_mu1*omega_mean)
+
+        # Central differences with Richardson extrapolation (the field part is smooth in χ;
+        # a larger step keeps the round-off of the large compressible terms small)
+        def central_difference(key, epsilon):
+            chi_n_p = chi_n.copy()
+            chi_n_n = chi_n.copy()
+            chi_n_p[key] += epsilon
+            chi_n_n[key] -= epsilon
+            return (field_part(chi_n_p) - field_part(chi_n_n))/(2*epsilon)
+
+        epsilon = 1e-3
         dH = {}
         for key in chi_n:
-            dH[key] = self.h_const_deriv_chin[key]
-            for i in range(M):
-                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_aux[i]**2)
-                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_aux[i])                   
+            dH[key] = (4*central_difference(key, epsilon/2) - central_difference(key, epsilon))/3
         return dH

@@ -339,6 +339,12 @@ T CpuComputationBackend<T>::solvent_concentration(
     const T norm = volume_fraction / partition;
     for (int i = 0; i < n_basis; i++)
         _phi[i] *= norm;
+
+    // No solvent inside impenetrable regions (the mask is in the field basis)
+    const double* mask = cb->get_mask();
+    if (mask != nullptr)
+        for (int i = 0; i < n_basis; i++)
+            _phi[i] *= mask[i];
     return partition;
 }
 

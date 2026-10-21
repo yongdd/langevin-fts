@@ -206,6 +206,21 @@ protected:
     std::vector<int> orbit_counts_;
 
     /**
+     * @brief Integration weights of the reduced-basis points.
+     *
+     * basis_weights_[i] = orbit_counts_[i] * mask[i] (the orbit counts without a
+     * mask), so that the reduced-basis integrals equal the full-grid ones, whose
+     * dv carries the mask.
+     */
+    std::vector<double> basis_weights_;
+
+    /**
+     * @brief Reduced-basis integration weights for a space group (orbit counts
+     *        times the reduced mask); does not change the box.
+     */
+    std::vector<double> make_basis_weights(SpaceGroup* sg) const;
+
+    /**
      * @brief Number of reduced-basis points.
      *
      * When space_group_ is nullptr, this equals total_grid.

@@ -241,7 +241,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `axis_ordering` | list[str] | Order in which `nx`, `lx` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]` | `["a", "b", "c"]` |
+| `axis_ordering` | list[str] | Order in which `nx`, `lx` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]`. The arrays of `initial_fields` (and `q_init`) are given in the same order as `nx` and transposed too; results are in the standard order | `["a", "b", "c"]` |
 
 `space_group` and `smearing` are described under [Advanced Options](#advanced-options).
 
@@ -391,7 +391,7 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 | `{"type": "gaussian", "a_int": a}` | smearing length $`a`$ in units of $`R_0`$ (universality needs $`a \lesssim 0.02 R_0`$) | $`\exp(-a^2 k^2 / 2)`$ |
 | `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $`k_c \gtrsim 20 / R_0`$, transition width $`dk`$ (default 5.0) | $`C_0 [1 - \tanh((k - k_c)/dk)]`$ |
 
-Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
+$`k`$ is the physical wavenumber of the cell, including the cell angles. Along an axis with reflecting or absorbing walls the field is smeared in the cosine or sine basis of the propagators, i.e. together with its image across the wall (both sides of the axis must have the same wall type). In SCFT box relaxation the kernel follows the box, and the stress includes the derivative of $`\Gamma(k)`$. Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
 
 ### Box Optimization
 

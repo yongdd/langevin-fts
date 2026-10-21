@@ -647,6 +647,13 @@ T CudaComputationBackend<T>::solvent_concentration(
         norm = cuCdiv(make_cuDoubleComplex(volume_fraction, 0.0), stdToCuDoubleComplex(partition));
     ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_phi, 0.0, d_phi, n_basis);
     CUDA_CHECK_LAUNCH();
+
+    // No solvent inside impenetrable regions (the mask is in the field basis)
+    if (!d_q_mask.empty())
+    {
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_q_mask, 1.0, n_basis);
+        CUDA_CHECK_LAUNCH();
+    }
     return partition;
 }
 

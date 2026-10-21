@@ -105,22 +105,21 @@ void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, s
 template <typename T>
 void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
-    // Build the device orbit counts first (empty without a space group): if the
-    // allocation or the copy fails, or the base class rejects the group, the box
+    // Build the device integration weights first (empty without a space group): if
+    // the allocation or the copy fails, or the base class rejects the group, the box
     // keeps its previous group and state (the base class commits only at its end)
-    CudaDeviceBuffer<int> orbit_counts_new;
+    CudaDeviceBuffer<double> basis_weights_new;
     if (sg != nullptr)
     {
-        const auto& orbit_counts = sg->get_orbit_counts();
-        int N = sg->get_n_reduced_basis();
-        orbit_counts_new.allocate(N);
-        CUDA_CHECK(cudaMemcpy(orbit_counts_new, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
+        const std::vector<double> weights = this->make_basis_weights(sg);
+        basis_weights_new.allocate(weights.size());
+        CUDA_CHECK(cudaMemcpy(basis_weights_new, weights.data(), sizeof(double)*weights.size(), cudaMemcpyHostToDevice));
     }
 
-    // Base class: checks the cell, builds the basis size, orbit counts and mask,
-    // then commits them
+    // Base class: checks the cell and the mask, builds the basis size, orbit counts,
+    // mask and weights, then commits them
     ComputationBox<T>::set_space_group(sg);
-    d_orbit_counts_ = std::move(orbit_counts_new);
+    d_basis_weights_ = std::move(basis_weights_new);
 }
 //-----------------------------------------------------------
 template <typename T>
@@ -132,11 +131,11 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
 
     if (this->space_group_ != nullptr)
     {
-        // Reduced basis mode: sum = Σ_j g[j] * orbit_counts[j] * dv_base
+        // Reduced basis mode: sum = Σ_j g[j] * weight[j] * dv_base (orbit counts times the mask)
         int N = this->n_basis_;
         double dv_base = this->volume / this->total_grid;
 
-        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_orbit_counts_, N);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
 
         if constexpr (std::is_same<T, double>::value)
@@ -178,13 +177,13 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
 
     if (this->space_group_ != nullptr)
     {
-        // Reduced basis mode: sum = Σ_j g[j] * h[j] * orbit_counts[j] * dv_base
+        // Reduced basis mode: sum = Σ_j g[j] * h[j] * weight[j] * dv_base
         int N = this->n_basis_;
         double dv_base = this->volume / this->total_grid;
 
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, N);
         CUDA_CHECK_LAUNCH();
-        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_orbit_counts_, N);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
 
         if constexpr (std::is_same<T, double>::value)
@@ -228,7 +227,7 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
         CUDA_CHECK_LAUNCH();
         ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, N);
         CUDA_CHECK_LAUNCH();
-        ker_multi_weight<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_orbit_counts_, N);
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
         if constexpr (std::is_same<T, double>::value)
             CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));

@@ -94,13 +94,11 @@ With finite compressibility $`\zeta N`$, the pressure field is known:
 w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \xi(\mathbf{r})
 ```
 
-In SCFT iteration, the same projection residual $`\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}`$ is used for the fluctuation part. With `"fts_consistent_energy": True`, the field means are pinned to the saddle-point values:
+In SCFT iteration, the residual is the compressible one, $`\mathbf{R}_w = X \boldsymbol{\phi} + \zeta N (\sum_j \phi_j - 1)\,\mathbf{e} - \mathbf{w}`$, with its stiff part along $`\mathbf{e}`$ rescaled through the projection $`P`$ of Section 1.3. The field means, which have no gauge freedom here, are always pinned to the saddle-point values:
 
 ```math
 \langle w_i \rangle = \sum_j X_{ij} \langle \phi_j \rangle + \xi, \qquad \xi = \zeta N \left( \left\langle \sum_j \phi_j \right\rangle - 1 \right)
 ```
-
-With the default (`False`), the field means keep their initial values.
 
 See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on the compressible SCFT iteration.
 

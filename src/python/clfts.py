@@ -154,7 +154,7 @@ class CLFTS:
             params["langevin"]["nbar"],
             params["langevin"]["dt"],
             np.prod(params["nx"]),
-            np.prod(params["lx"])
+            self.prop_solver.get_volume()
         )
 
         # Dynamical stabilization constant for complex Langevin simulations
@@ -233,7 +233,9 @@ class CLFTS:
         self.smearing = Smearing(
             self.prop_solver.nx,
             self.prop_solver.get_lx(),
-            params.get("smearing", None)
+            params.get("smearing", None),
+            angles=self.prop_solver.get_angles_degrees(),
+            bc=self.prop_solver.bc
         )
 
     def compute_concentrations(self, w_aux):
@@ -466,15 +468,16 @@ class CLFTS:
 
         # Langevin iteration begins here
         langevin_step = start_langevin_step - 1   # stays when max_step < start_langevin_step
+
+        # Concentrations of the initial fields. Afterwards they are computed right after
+        # each update, so that the measurements of a step (H, dH/dχN, S(k), saved φ) and
+        # the forces of the next step use the concentrations of the same fields.
+        # Smearing implements finite-range interactions: φ_Γ = FFT⁻¹[FFT[φ]·Γ(k)]
+        # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
+        phi, _ = self.compute_concentrations(w_aux=w_aux)
+        phi_for_force = self.smearing.apply_to_dict(phi)
+
         for langevin_step in range(start_langevin_step, self.langevin["max_step"] + 1):
-
-            # Compute total concentrations
-            phi, _ = self.compute_concentrations(w_aux=w_aux)
-
-            # Apply smearing to concentrations for force calculation
-            # Smearing implements finite-range interactions: φ_Γ = FFT⁻¹[FFT[φ]·Γ(k)]
-            # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-            phi_for_force = self.smearing.apply_to_dict(phi)
 
             # Compute functional derivatives of Hamiltonian w.r.t. all fields
             # For an AB diblock, compute_func_deriv transforms per-monomer concentrations as:
@@ -509,6 +512,10 @@ class CLFTS:
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+
+            # Concentrations and partition functions of the updated fields
+            phi, _ = self.compute_concentrations(w_aux=w_aux)
+            phi_for_force = self.smearing.apply_to_dict(phi)
 
             # Compute functional derivatives for error monitoring (use smeared phi for consistency)
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
@@ -558,24 +565,31 @@ class CLFTS:
 
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
-                # Perform Fourier transforms (full FFT for complex fields)
+                # Perform Fourier transforms (full FFT for complex fields).
+                # Shifting the Gaussian integral over Ω_k gives <Ω_k φ_j> = (λ_k/M) Σ_l A_lk <φ_l φ_j>,
+                # and A Aᵀ = M I, so μ_i = Σ_k A_ik Ω_k/λ_k gives <μ_i φ_j> = <δφ_i δφ_j>. All fields
+                # fluctuate in CL-FTS; only the incompressible pressure field (λ = 0) is left out.
+                # The fields are complex, so φ(-k) is not the conjugate of φ(k):
+                # φ(-k) = conj(FFT[conj φ](k)).
                 mu_fourier = {}
-                phi_fourier = {}
+                phi_fourier = {}   # φ(-k)
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.fftn(
-                        np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx)
-                    ) / self.prop_solver.n_grid
+                    phi_fourier[key] = np.conj(np.fft.fftn(
+                        np.conj(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))
+                    )) / self.prop_solver.n_grid
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(M - 1):
+                    for k in range(M):
+                        if np.isclose(self.mpt.eigenvalues[k], 0.0):
+                            continue
                         mu_fourier[key] += (
                             np.fft.fftn(np.reshape(w_aux[k], self.prop_solver.nx)) *
-                            self.mpt.matrix_a_inv[k, i] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
+                            self.mpt.matrix_a[i, k] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
                         )
-                # Accumulate S_ij(K)
+                # Accumulate S_ij(K) = <μ_i(k) φ_j(-k)>
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
-                    sf_average[key] += mu_fourier[monomer_pair[0]] * np.conj(phi_fourier[monomer_pair[1]])
+                    sf_average[key] += mu_fourier[monomer_pair[0]] * phi_fourier[monomer_pair[1]]
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -602,6 +616,12 @@ class CLFTS:
                         self.recording["sf_computing_period"] / self.recording["sf_recording_period"] *
                         self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     )
+                    # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
+                    # divide by Γ to record S(k) of the densities (modes the smeared interaction
+                    # does not see, Γ < 1e-12, are recorded as 0)
+                    if self.smearing.enabled:
+                        gamma = self.smearing.fourier
+                        sf_scaled = np.divide(sf_scaled, gamma, out=np.zeros_like(sf_scaled), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(sf_scaled)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(sf_scaled)

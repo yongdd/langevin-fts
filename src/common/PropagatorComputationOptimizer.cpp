@@ -399,9 +399,14 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
         // - Continuous chains: segment values are length_index (0 for slicing), need conversion
         // - Discrete chains: segment values are n_segment, no conversion needed
         // Keys containing '[' include:
-        // - Direct aggregated keys like "[A0,B0]C+1" (continuous) or "[A1,B1]C+1" (discrete)
-        // - Mixed keys from substitute_right_keys like "([A0,B0]C5)D+1"
-        if (new_key.find('[') != std::string::npos)
+        // - Direct aggregated keys like "[A0,B0]C+1" (continuous) or "[A1,B1]C+1" (discrete),
+        //   whose sliced deps all share the ds_index of the key
+        // - Mixed keys from substitute_right_keys like "([A0,B0]C5)D+1", whose deps are
+        //   different blocks: for continuous chains each takes the ds_index of its own
+        //   contour length (the aggregated dep's length index is that of its full block),
+        //   which convert_deps_to_n_segment does; discrete chains have a single ds
+        const bool continuous_mixed_key = (this->model_name == "continuous" && new_key[0] != '[');
+        if (new_key.find('[') != std::string::npos && !continuous_mixed_key)
         {
             // Aggregated key or key containing aggregated sub-keys
             // All deps in an aggregated key share the same ds_index as the outer key

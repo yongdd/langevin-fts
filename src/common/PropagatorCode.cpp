@@ -461,9 +461,19 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     bool use_semicolon_format = false;
     {
         std::stack<char> temp_stack;
+        bool in_label = false;
         for(size_t i=0; i<key.size(); i++)
         {
-            if(key[i] == '(' || key[i] == '[')
+            // Labels of custom initial conditions, "{label}", are opaque
+            if(in_label)
+            {
+                if(key[i] == '}')
+                    in_label = false;
+                continue;
+            }
+            if(key[i] == '{')
+                in_label = true;
+            else if(key[i] == '(' || key[i] == '[')
                 temp_stack.push(key[i]);
             else if(key[i] == ')' || key[i] == ']')
                 temp_stack.pop();
@@ -475,8 +485,18 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
         }
     }
 
+    bool in_label = false;
     for(size_t i=0; i<key.size();i++)
     {
+        // Labels of custom initial conditions, "{label}", are part of the sub-key:
+        // their characters (digits included) are not segment numbers. The opening
+        // brace itself goes through the parser below (it ends a preceding number).
+        if(in_label)
+        {
+            if(key[i] == '}')
+                in_label = false;
+            continue;
+        }
         if(stack_brace.size() == 1)
         {
             // For keys using ; separator format: look for ';' to find end of key
@@ -531,7 +551,11 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
                 pos_start = i;
             }
         }
-        if(key[i] == '(' || key[i] == '[')
+        if(key[i] == '{')
+        {
+            in_label = true;
+        }
+        else if(key[i] == '(' || key[i] == '[')
         {
             stack_brace.push(key[i]);
         }

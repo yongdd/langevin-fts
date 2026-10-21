@@ -444,6 +444,8 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 ## Limitations
 
 - Only **periodic boundary conditions** supported
+- A **mask** (impenetrable regions) must have the symmetry of the group; a mask without
+  it is rejected (the reduced basis keeps one value per orbit)
 - Grid must be compatible with space group symmetry: along each axis, a translation
   part p/q of a symmetry operation requires that axis to be a multiple of q (checked
   per axis, so a 6_3 screw constrains only nz)

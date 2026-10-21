@@ -293,7 +293,13 @@ class SCFT:
         except np.linalg.LinAlgError:
             raise ValidationError("SCFT needs an invertible chi N matrix (a single monomer type, or a zero "
                                   "chi N pair in a three-monomer system, makes it singular).") from None
+        # P divides by 1ᵀχ⁻¹1, which vanishes for some χ N matrices (e.g. χ_AB = χ_AC = 10,
+        # χ_BC = 40): the projection, and with it the residual, is then undefined
+        if abs(np.sum(matrix_chi_inv)) < 1e-8 * np.max(np.abs(matrix_chi_inv)):
+            raise ValidationError("SCFT needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse chi N matrix); "
+                                  "for this chi N matrix it vanishes, and the field residual is undefined.")
         self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        self.sum_chi_inv = np.sum(matrix_chi_inv)
 
         # Create space group object early (before PropagatorSolver) if specified
         if params.get("space_group", None) is not None:
@@ -416,7 +422,9 @@ class SCFT:
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
-            params.get("smearing", None)
+            params.get("smearing", None),
+            angles=self.prop_solver.get_angles_degrees(),
+            bc=self.prop_solver.bc
         )
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
@@ -514,7 +522,8 @@ class SCFT:
 
         if self.zeta_n is not None:
             print("zeta_n: %f" % self.zeta_n)
-        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+        else:
+            print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         self.prop_solver.display_architectures()
         self.prop_solver.display_statistics()
@@ -648,6 +657,13 @@ class SCFT:
 
         return phi, elapsed_time
 
+    def _to_standard_axes(self, field):
+        """Transpose a full-grid array given in the user's axis order (axis_ordering) to [a, b, c]."""
+        user_nx = [0] * len(self._axis_perm)
+        for i, axis in enumerate(self._axis_perm):
+            user_nx[axis] = self.prop_solver.nx[i]
+        return np.ravel(np.transpose(np.reshape(np.asarray(field), user_nx), self._axis_perm))
+
     def _to_full_grid(self, field: np.ndarray) -> np.ndarray:
         """Expand a field of the working basis to the full grid (a copy without a space group)."""
         if self.sg is None:
@@ -757,25 +773,25 @@ class SCFT:
         """Normalize the field means in place (mean() works in the reduced basis
         when a space group is set).
 
-        fts_consistent_energy: pin the means to the saddle point,
-        mean(w_i) = sum_j chi_ij mean(phi_j) + xi. For incompressible systems only the
-        P-projected mean is pinned; mean(W+) is a gauge freedom that P annihilates.
-        Otherwise (mean = 0 convention) incompressible fields are shifted to zero
-        mean and compressible fields are left as they are.
+        Compressible systems have no gauge freedom: the means are always pinned to the
+        saddle point, mean(w_i) = sum_j chi_ij mean(phi_j) + xi with
+        xi = zeta (mean(sum_j phi_j) - 1) (the residual leaves the means out).
+        Incompressible systems with fts_consistent_energy: only the P-projected mean is
+        pinned; mean(W+) is a gauge freedom that P annihilates. Otherwise (mean = 0
+        convention) incompressible fields are shifted to zero mean.
         """
         M = len(self.monomer_types)
-        if self.fts_consistent_energy:
-            if self.zeta_n is None:
-                p_target = self.matrix_p @ chi_phi_mean
-                w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
-                p_current = self.matrix_p @ w_mean
-                shift = p_target - p_current
-                for i in range(M):
-                    w[i] += shift[i]
-            else:
-                for i in range(M):
-                    w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
-        elif self.zeta_n is None:
+        if self.zeta_n is not None:
+            for i in range(M):
+                w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
+        elif self.fts_consistent_energy:
+            p_target = self.matrix_p @ chi_phi_mean
+            w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
+            p_current = self.matrix_p @ w_mean
+            shift = p_target - p_current
+            for i in range(M):
+                w[i] += shift[i]
+        else:
             for i in range(M):
                 w[i] -= self.prop_solver.mean(w[i])
 
@@ -812,7 +828,8 @@ class SCFT:
         current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
         current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
 
-        am_current = np.concatenate((w.flatten(), current_lx, current_angles))
+        # Angles enter the optimizer in radians, the unit of their residual -dH/dθ
+        am_current = np.concatenate((w.flatten(), current_lx, np.deg2rad(current_angles)))
         am_diff = np.concatenate((w_diff.flatten(),
                                  self.scale_stress*dlx_reduced,
                                  self.scale_stress*dangle))
@@ -831,7 +848,7 @@ class SCFT:
 
         if n_angles > 0:
             old_angles = current_angles
-            new_angles = np.array(am_new[-n_angles:])
+            new_angles = np.rad2deg(np.array(am_new[-n_angles:]))
             new_dangle = np.clip(new_angles - old_angles, -5.0, 5.0)
             new_angles = old_angles + new_dangle
 
@@ -844,6 +861,9 @@ class SCFT:
 
         # Update bond parameters using new lx
         self.prop_solver.update_laplacian_operator()
+
+        # The smearing kernel Γ(k) is a function of the physical wavenumber
+        self.smearing.set_box(self.prop_solver.get_lx(), self.prop_solver.get_angles_degrees())
         return w
 
     def run(
@@ -913,6 +933,13 @@ class SCFT:
         print(", box size" if self.box_is_altering else "")
 
         # ---- 1. Initial fields -> working array of shape (M, n_grid) ----
+        # With axis_ordering the arrays are given in the axis order of nx and lx and are
+        # transposed to the standard [a, b, c] order (the results are in that order)
+        if self._axis_perm is not None:
+            initial_fields = {m: self._to_standard_axes(f) for m, f in initial_fields.items()}
+            if q_init is not None:
+                q_init = {label: self._to_standard_axes(f) for label, f in q_init.items()}
+
         # With a space group the fields are symmetrized and converted to the irreducible basis.
         if self.sg is not None:
             w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
@@ -926,10 +953,13 @@ class SCFT:
             for i in range(M):
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
-        # Normalize the initial field means. With fts_consistent_energy the target is
-        # chi N . mean(phi) from the chain compositions (see mean_concentrations)
-        if self.fts_consistent_energy:
-            self._pin_field_means(w, self.matrix_chi @ self.mean_concentrations())
+        # Normalize the initial field means. With fts_consistent_energy or a compressible
+        # model the target is chi N . mean(phi) (+ xi) from the chain compositions
+        # (see mean_concentrations)
+        if self.fts_consistent_energy or self.zeta_n is not None:
+            phi_mean = self.mean_concentrations()
+            xi = 0.0 if self.zeta_n is None else self.zeta_n * (np.sum(phi_mean) - 1.0)
+            self._pin_field_means(w, self.matrix_chi @ phi_mean, xi)
         else:
             self._pin_field_means(w, None)
 
@@ -972,7 +1002,16 @@ class SCFT:
             # Self-consistency residual, phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
             phi_smeared = self.smearing.apply_to_dict(phi)
             phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
-            w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
+            if self.zeta_n is None:
+                w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
+            else:
+                # Compressible: E = χφ + ζ(Σφ - 1) - w = 0. The stiff ζ term lies along (1, ..., 1),
+                # which is the range of I - P, so that part of E is divided by c(1 + ζ),
+                # c = 1ᵀχ⁻¹1. The fixed point is unchanged, and for ζ → ∞ the residual becomes
+                # the incompressible one, Pχφ - Pw + (Σφ - 1)/c
+                residual = self.matrix_chi @ phi_array + self.zeta_n * (np.sum(phi_array, axis=0) - 1.0) - w
+                p_residual = self.matrix_p @ residual
+                w_diff = p_residual + (residual - p_residual) / (self.sum_chi_inv * (1.0 + self.zeta_n))
 
             # Keep the level of functional derivatives
             for i in range(M):
@@ -999,6 +1038,13 @@ class SCFT:
                 if (iter == 1) or (iter % stress_interval == 0):
                     self.prop_solver.compute_stress()
                     stress_array = np.array(self.prop_solver.get_stress())
+                    if self.smearing.enabled:
+                        # H contains -ln Q[Γ*w], so it depends on the box also through Γ(k);
+                        # the solver's stress is the derivative at fixed smeared fields
+                        smearing_stress = self.smearing.stress(w, [phi[m] for m in self.monomer_types])
+                        if self.smearing.orthogonal and not angle_stress_indices:
+                            smearing_stress[dim:] = 0.0  # the solver skips the angle derivatives too
+                        stress_array = stress_array + smearing_stress[:len(stress_array)]
                 # The stress components being optimized (box lengths of the existing
                 # dimensions and, if active, the angles) count towards the error
                 relevant_stress = np.concatenate([stress_array[0:dim],
@@ -1049,7 +1095,7 @@ class SCFT:
                 w = np.reshape(w, (M, -1))
 
             # Normalize field means
-            if self.fts_consistent_energy:
+            if self.fts_consistent_energy or self.zeta_n is not None:
                 # mean(φ_i) = f_i exactly by chain normalization, so the target is constant
                 chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
                 xi = 0.0 if self.zeta_n is None else self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)

@@ -153,17 +153,21 @@ where $`\chi_{\Omega_+}`$ is the response function.
 The structure function is computed using response theory (chemical potential-density correlation):
 
 ```math
-S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k}) \rangle
+S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k}) \rangle, \qquad \mu_i(\mathbf{r}) = \sum_{k} \frac{A_{ik}\, \Omega_k(\mathbf{r})}{\lambda_k}
 ```
 
-where $`\tilde{\mu}_i(\mathbf{k})`$ is the Fourier transform of the chemical potential field and $`\tilde{\phi}_j(\mathbf{k})`$ is the Fourier transform of the concentration field.
+where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field, and the sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: the exchange fields; CL-FTS: all fluctuating fields). Shifting the Gaussian integral over $`\Omega_k`$ gives $`\langle \Omega_k \phi_j \rangle = (\lambda_k / M) \sum_l A_{lk} \langle \phi_l \phi_j \rangle`$, and $`A A^T = M I`$, so $`\langle \mu_i \phi_j \rangle = \langle \delta\phi_i \delta\phi_j \rangle`$ and $`S_{ij}`$ is the structure function in units of $`\rho_0 N`$ (for a disordered AB diblock at weak fluctuations, $`N/S_{AA}(k) = F(x) - 2\chi N`$ of Leibler's RPA). For real fields $`\tilde{\phi}_j(-\mathbf{k}) = \tilde{\phi}_j^*(\mathbf{k})`$; CL-FTS fields are complex and use $`\tilde{\phi}_j(-\mathbf{k})`$. For AB systems the estimator equals $`V\sqrt{\bar{n}}\,\langle|\tilde{W}_-(\mathbf{k})|^2\rangle/(\chi N)^2 - 1/(2\chi N)`$ on average.
+
+With smearing the fields couple to the smeared densities, so the estimator gives $`\Gamma(\mathbf{k}) S_{ij}(\mathbf{k})`$; the recorded structure function is divided by $`\Gamma(\mathbf{k})`$ and is that of the densities (modes with $`\Gamma < 10^{-12}`$, which the smeared interaction does not see, are recorded as 0).
+
+> Until 2026-10 the code used $`A^{-1}_{ki} = A_{ik}/M`$ in $`\mu_i`$, so recorded structure functions were too small by the factor $`M`$ (one half for AB), and with smearing they also carried the factor $`\Gamma(\mathbf{k})`$.
 
 ### 5.2 Computing Structure Functions
 
 In L-FTS, structure functions are computed by:
 1. Fourier transforming the chemical potential fields $`\mu_i(\mathbf{r})`$
 2. Fourier transforming the concentration fields $`\phi_j(\mathbf{r})`$
-3. Computing $`\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j^*(\mathbf{k})`$
+3. Computing $`\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k})`$ from the concentrations of the same fields
 4. Averaging over Langevin trajectory
 5. Multiplying by $`V \sqrt{\bar{n}}`$ normalization factor
 

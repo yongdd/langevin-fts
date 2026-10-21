@@ -346,10 +346,10 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | Variable | Description |
 |----------|-------------|
 | `nx`, `lx` | Grid and box dimensions |
-| `structure_function_A_A` | $`S_{AA}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_A^*(\mathbf{k}) \rangle`$ |
-| `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B^*(\mathbf{k}) \rangle`$ |
-| `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B^*(\mathbf{k}) \rangle`$ |
+| `structure_function_A_A` | $`S_{AA}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_A(-\mathbf{k}) \rangle`$ |
+| `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
+| `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 
-$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$ and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#5-structure-functions).
+$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#5-structure-functions). Files written before 2026-10-21 hold $`S/M`$ ($`M`$ monomer types; one half for AB); CL-FTS files of that time also paired the fields and concentrations of different steps and cannot be corrected by a factor.
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).

@@ -392,7 +392,7 @@ void update_weighted_fourier_basis_periodic_impl(
 
     // Oblique cells need the group-invariant (minimal-form) alias
     // representative, consistent with the diffusion Boltzmann factors;
-    // see min_form_alias_rep(). Note the search runs in loop-index space
+    // see min_form_alias_rep(). The search runs in loop-index space
     // (i,j,k with padded leading dims), before mapping to Miller indices.
     // Relative-tolerance gate: exact 90-degree angles produce cos(pi/2)
     // ~ 6e-17, which must not flip orthogonal cells onto this path.
@@ -400,20 +400,102 @@ void update_weighted_fourier_basis_periodic_impl(
     const bool oblique = (std::abs(G12) > 1e-12 * G_diag_max2 ||
                           std::abs(G13) > 1e-12 * G_diag_max2 ||
                           std::abs(G23) > 1e-12 * G_diag_max2);
-    const std::array<int, 3> tnx3 = {tnx[0], tnx[1], tnx[2]};
-    auto to_min_form_rep = [&](int& i_s, int& j_s, int& k_s) {
-        // recip metric in loop-index space: for DIM==3 (i,j,k)=(m1,m2,m3);
-        // DIM==2 (j,k)=(m1,m2); DIM==1 k=m1.
-        if (DIM == 3)
-            min_form_alias_rep(i_s, j_s, k_s, tnx3, G11, G22, G33, G12, G13, G23);
-        else if (DIM == 2)
-        {
-            int dummy = 0;
-            min_form_alias_rep(dummy, j_s, k_s, tnx3, 0.0, G11, G22, 0.0, 0.0, G12);
+
+    // Recip metric in loop-index space: for DIM==3 (i,j,k)=(m1,m2,m3);
+    // DIM==2 (j,k)=(m1,m2); DIM==1 k=m1
+    double La, Lb, Lc, Lab, Lac, Lbc;
+    if (DIM == 3) {
+        La = G11; Lb = G22; Lc = G33; Lab = G12; Lac = G13; Lbc = G23;
+    } else if (DIM == 2) {
+        La = 0.0; Lb = G11; Lc = G22; Lab = 0.0; Lac = 0.0; Lbc = G12;
+    } else {
+        La = 0.0; Lb = 0.0; Lc = G11; Lab = 0.0; Lac = 0.0; Lbc = 0.0;
+    }
+    auto form = [&](int a, int b, int c) {
+        return La * a * a + Lb * b * b + Lc * c * c + 2.0 * (Lab * a * b + Lac * a * c + Lbc * b * c);
+    };
+    // Deformation vector v = 2π g⁻¹ m of a loop-index representative
+    auto deformation = [&](int a, int b, int c, double& v1, double& v2, double& v3) {
+        int m1, m2, m3;
+        if (DIM == 3) {
+            m1 = a; m2 = b; m3 = c;
+        } else if (DIM == 2) {
+            m1 = b; m2 = c; m3 = 0;
+        } else {
+            m1 = c; m2 = 0; m3 = 0;
         }
-        // DIM==1: separable, componentwise representative already minimal
+        v1 = TWO_PI * (G11 * m1 + G12 * m2 + G13 * m3);
+        v2 = TWO_PI * (G12 * m1 + G22 * m2 + G23 * m3);
+        v3 = TWO_PI * (G13 * m1 + G23 * m2 + G33 * m3);
     };
 
+    // v⊗v of one mode (x, y, z, xy, xz, yz). The Boltzmann factor depends only on
+    // the minimum of the form over the aliases m + N t, but v⊗v differs between
+    // representatives that tie for the minimum: the Brillouin-zone boundary of an
+    // oblique cell (e.g. 2 m1 + m2 = N in a hexagonal cell) and the Nyquist planes
+    // (m = N/2 and -N/2) of any cell. The products are averaged over the tied
+    // representatives, which keeps the stress invariant under the point group
+    // (sigma_a = sigma_b in a hexagonal cell); for two tied representatives the
+    // average is the central difference of the minimum. Orthogonal cells keep the
+    // componentwise representative for the diagonal terms (bit-identical); only
+    // their cross terms on the Nyquist planes are averaged.
+    const int s1 = (tnx[0] > 1) ? 1 : 0;
+    const int s2 = (tnx[1] > 1) ? 1 : 0;
+    const int s3 = (tnx[2] > 1) ? 1 : 0;
+    auto mode_basis = [&](int i_s, int j_s, int k_s, double* vv) {
+        double v1, v2, v3;
+        if (oblique)
+        {
+            double best = form(i_s, j_s, k_s);
+            for (int a = -s1; a <= s1; ++a)
+                for (int b = -s2; b <= s2; ++b)
+                    for (int c = -s3; c <= s3; ++c)
+                        best = std::min(best, form(i_s + a * tnx[0], j_s + b * tnx[1], k_s + c * tnx[2]));
+            const double tol = 1e-10 * best;
+            int n_tied = 0;
+            for (int t = 0; t < 6; ++t)
+                vv[t] = 0.0;
+            for (int a = -s1; a <= s1; ++a)
+                for (int b = -s2; b <= s2; ++b)
+                    for (int c = -s3; c <= s3; ++c)
+                    {
+                        const int ia = i_s + a * tnx[0], jb = j_s + b * tnx[1], kc = k_s + c * tnx[2];
+                        if (form(ia, jb, kc) > best + tol)
+                            continue;
+                        deformation(ia, jb, kc, v1, v2, v3);
+                        vv[0] += v1 * v1; vv[1] += v2 * v2; vv[2] += v3 * v3;
+                        vv[3] += v1 * v2; vv[4] += v1 * v3; vv[5] += v2 * v3;
+                        ++n_tied;
+                    }
+            for (int t = 0; t < 6; ++t)
+                vv[t] /= n_tied;
+            return;
+        }
+
+        deformation(i_s, j_s, k_s, v1, v2, v3);
+        vv[0] = v1 * v1; vv[1] = v2 * v2; vv[2] = v3 * v3;
+        vv[3] = v1 * v2; vv[4] = v1 * v3; vv[5] = v2 * v3;
+
+        // Nyquist components (index N/2 of an even N) and their aliases -N/2
+        const bool na = (tnx[0] > 1 && 2 * i_s == tnx[0]);
+        const bool nb = (tnx[1] > 1 && 2 * j_s == tnx[1]);
+        const bool nc = (tnx[2] > 1 && 2 * k_s == tnx[2]);
+        if (!(na || nb || nc))
+            return;
+        double cross[3] = {0.0, 0.0, 0.0};
+        int n_tied = 0;
+        for (int a = 0; a <= (na ? 1 : 0); ++a)
+            for (int b = 0; b <= (nb ? 1 : 0); ++b)
+                for (int c = 0; c <= (nc ? 1 : 0); ++c)
+                {
+                    deformation(i_s - a * tnx[0], j_s - b * tnx[1], k_s - c * tnx[2], v1, v2, v3);
+                    cross[0] += v1 * v2; cross[1] += v1 * v3; cross[2] += v2 * v3;
+                    ++n_tied;
+                }
+        vv[3] = cross[0] / n_tied; vv[4] = cross[1] / n_tied; vv[5] = cross[2] / n_tied;
+    };
+
+    double vv[6];
     for (int i = 0; i < tnx[0]; i++)
     {
         int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
@@ -426,44 +508,17 @@ void update_weighted_fourier_basis_periodic_impl(
             {
                 for (int k = 0; k < tnx[2]/2+1; k++)
                 {
-                    int k_signed = k;
                     int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
-
-                    // Get Miller indices based on dimension
-                    int m1, m2, m3;
-                    int i_rep = i_signed, j_rep = j_signed, k_rep = k_signed;
-                    if (oblique)
-                        to_min_form_rep(i_rep, j_rep, k_rep);
-                    if (DIM == 3) {
-                        m1 = i_rep; m2 = j_rep; m3 = k_rep;
-                    } else if (DIM == 2) {
-                        m1 = j_rep; m2 = k_rep; m3 = 0;
-                    } else {
-                        m1 = k_rep; m2 = 0; m3 = 0;
-                    }
-
-                    // Compute deformation vector v = 2π g⁻¹ m
-                    double v1 = TWO_PI * (G11 * m1 + G12 * m2 + G13 * m3);
-                    double v2 = TWO_PI * (G12 * m1 + G22 * m2 + G23 * m3);
-                    double v3 = TWO_PI * (G13 * m1 + G23 * m2 + G33 * m3);
-
-                    // Store v⊗v components
-                    fourier_basis_x[idx] = v1 * v1;
-                    fourier_basis_y[idx] = v2 * v2;
-                    fourier_basis_z[idx] = v3 * v3;
-                    fourier_basis_xy[idx] = v1 * v2;
-                    fourier_basis_xz[idx] = v1 * v3;
-                    fourier_basis_yz[idx] = v2 * v3;
+                    mode_basis(i_signed, j_signed, k, vv);
 
                     // Weight factor of 2 for interior k modes (r2c symmetry)
-                    if (k != 0 && 2*k != tnx[2]) {
-                        fourier_basis_x[idx] *= 2;
-                        fourier_basis_y[idx] *= 2;
-                        fourier_basis_z[idx] *= 2;
-                        fourier_basis_xy[idx] *= 2;
-                        fourier_basis_xz[idx] *= 2;
-                        fourier_basis_yz[idx] *= 2;
-                    }
+                    const double weight = (k != 0 && 2*k != tnx[2]) ? 2.0 : 1.0;
+                    fourier_basis_x[idx] = weight * vv[0];
+                    fourier_basis_y[idx] = weight * vv[1];
+                    fourier_basis_z[idx] = weight * vv[2];
+                    fourier_basis_xy[idx] = weight * vv[3];
+                    fourier_basis_xz[idx] = weight * vv[4];
+                    fourier_basis_yz[idx] = weight * vv[5];
                 }
             }
             else
@@ -472,32 +527,14 @@ void update_weighted_fourier_basis_periodic_impl(
                 {
                     int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
                     int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
+                    mode_basis(i_signed, j_signed, k_signed, vv);
 
-                    // Get Miller indices based on dimension
-                    int m1, m2, m3;
-                    int i_rep = i_signed, j_rep = j_signed, k_rep = k_signed;
-                    if (oblique)
-                        to_min_form_rep(i_rep, j_rep, k_rep);
-                    if (DIM == 3) {
-                        m1 = i_rep; m2 = j_rep; m3 = k_rep;
-                    } else if (DIM == 2) {
-                        m1 = j_rep; m2 = k_rep; m3 = 0;
-                    } else {
-                        m1 = k_rep; m2 = 0; m3 = 0;
-                    }
-
-                    // Compute deformation vector v = 2π g⁻¹ m
-                    double v1 = TWO_PI * (G11 * m1 + G12 * m2 + G13 * m3);
-                    double v2 = TWO_PI * (G12 * m1 + G22 * m2 + G23 * m3);
-                    double v3 = TWO_PI * (G13 * m1 + G23 * m2 + G33 * m3);
-
-                    // Store v⊗v components
-                    fourier_basis_x[idx] = v1 * v1;
-                    fourier_basis_y[idx] = v2 * v2;
-                    fourier_basis_z[idx] = v3 * v3;
-                    fourier_basis_xy[idx] = v1 * v2;
-                    fourier_basis_xz[idx] = v1 * v3;
-                    fourier_basis_yz[idx] = v2 * v3;
+                    fourier_basis_x[idx] = vv[0];
+                    fourier_basis_y[idx] = vv[1];
+                    fourier_basis_z[idx] = vv[2];
+                    fourier_basis_xy[idx] = vv[3];
+                    fourier_basis_xz[idx] = vv[4];
+                    fourier_basis_yz[idx] = vv[5];
                 }
             }
         }

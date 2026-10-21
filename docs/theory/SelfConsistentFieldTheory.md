@@ -97,29 +97,23 @@ w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \zeta N \left
 
 A direct residual formulation using $`R_w = (X + \zeta N \, \mathbf{e}\mathbf{e}^T) \boldsymbol{\phi} - \zeta N \, \mathbf{e} - \mathbf{w}`$ is mathematically correct but numerically stiff. The effective interaction matrix $`X + \zeta N \, \mathbf{e}\mathbf{e}^T`$ has eigenvalue $`\chi N + 2\zeta N`$ (e.g., 213.27 for $`\chi N = 13.27`$, $`\zeta N = 100`$), requiring very small mixing rates for convergence.
 
-Instead, the iteration separates the field into fluctuations and mean:
-
-1. **Fluctuation residual** (same as incompressible):
+Instead, the residual is split with the projection matrix $`P`$ of Section 2.2. The stiff $`\zeta N`$ term lies along $`\mathbf{e}`$, which spans the range of $`I - P`$, so only that part of $`R_w`$ is rescaled:
 
 ```math
-\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}, \qquad R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle
+\mathbf{R} = P \mathbf{R}_w + \frac{(I - P) \mathbf{R}_w}{c\,(1 + \zeta N)}, \qquad c = \mathbf{e}^T X^{-1} \mathbf{e}, \qquad R_i \leftarrow R_i - \langle R_i \rangle
 ```
 
-The projection matrix $`P`$ eliminates the stiff pressure mode from the residual, leaving only composition modes with eigenvalue $`\sim \chi N`$.
+$`\mathbf{R} = 0`$ exactly when $`\mathbf{R}_w = 0`$, so the fixed point is unchanged. For $`\zeta N \to \infty`$ the residual becomes the incompressible one, $`P X \boldsymbol{\phi} - P \mathbf{w} + (\sum_j \phi_j - 1)\,\mathbf{e}/c`$, and the iteration converges as fast as in the incompressible model (72–95 iterations for $`\zeta N = 5`$ to $`10^5`$ in a 1D lamella; the incompressible run takes 89–101).
 
-2. **Mean pinning** (after each field update):
+The field means have no gauge freedom in the compressible model; they are set directly after each field update:
 
 ```math
 \langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi
 ```
 
-where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$.
+where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$ and $`\langle \phi_j \rangle`$ is fixed by the chain compositions. This pinning runs for every compressible run, whatever `fts_consistent_energy` is.
 
-> **Implementation note:** In `scft.py`, this per-iteration mean pinning runs only when `"fts_consistent_energy": True` is set in the parameters (default: `False`). With the default setting, the residual means are subtracted each iteration but the field means themselves are not pinned: in the compressible case they retain their initial values, and in the incompressible case they are simply zeroed ($`\langle w_i \rangle = 0`$ convention).
-
-This approach converges at the same rate as the incompressible case because:
-- The fluctuation part sees only the $`\chi N`$ eigenvalue (via $`P`$)
-- The mean is set directly from the known pressure field, requiring no iteration
+> **History:** until 2026-10, `scft.py` used the incompressible residual $`X \boldsymbol{\phi} - P \mathbf{w}`$ for compressible runs as well. It eliminates the stiff mode by replacing the compressible pressure equation with the incompressibility constraint, so those runs returned the incompressible structure ($`\sum_i \phi_i = 1`$ everywhere) for any $`\zeta N`$.
 
 #### Example: AB Diblock (Compressible)
 

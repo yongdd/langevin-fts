@@ -210,6 +210,12 @@ public:
     const std::vector<int>& get_orbit_counts() const { return orbit_counts_; }
 
     /**
+     * @brief True when a full-grid field is constant (within tolerance) on every
+     *        orbit of the full space group, also when a physical basis is enabled.
+     */
+    bool is_invariant(const double* full_field, double tolerance) const;
+
+    /**
      * @brief Check for mirror planes perpendicular to x, y, and z axes.
      *
      * Returns true if symmetry operations include reflections x->-x,

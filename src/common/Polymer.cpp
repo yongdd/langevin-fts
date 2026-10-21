@@ -83,7 +83,16 @@ Polymer::Polymer(
         validation::require_string_key(bond_lengths, block_inputs[i].monomer_type, "bond_lengths");
     }
 
-    // chain_end_to_q_init
+    // chain_end_to_q_init: the labels become part of the propagator keys, so they may
+    // not contain the characters of the key format
+    for(const auto& item : chain_end_to_q_init)
+    {
+        if (item.second.empty() || !std::all_of(item.second.begin(), item.second.end(),
+                [](unsigned char c){ return std::isalnum(c) || c=='_'; }))
+        {
+            throw_with_line_number("\"" + item.second + "\" is an invalid initial condition label. Only alphabets, digits and underscore(_) are allowed.")
+        }
+    }
     this->chain_end_to_q_init = chain_end_to_q_init;
 
     // Save variables

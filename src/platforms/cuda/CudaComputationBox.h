@@ -76,7 +76,7 @@ private:
 
     /// @name Space Group Support
     /// @{
-    CudaDeviceBuffer<int> d_orbit_counts_;  ///< Device copy of orbit counts for reduced basis
+    CudaDeviceBuffer<double> d_basis_weights_;  ///< Device copy of the reduced-basis integration weights (orbit counts times the mask)
     /// @}
 
     /**

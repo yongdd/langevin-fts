@@ -88,6 +88,27 @@ namespace {
                 std::to_string(angles.size()))
         }
     }
+
+    /// True when a boundary is a wall (reflecting or absorbing)
+    bool has_wall(const std::vector<BoundaryCondition>& bc)
+    {
+        return std::any_of(bc.begin(), bc.end(),
+            [](BoundaryCondition b) { return b != BoundaryCondition::PERIODIC; });
+    }
+
+    /**
+     * @brief Reject walls in a non-orthogonal cell.
+     *
+     * The wall solvers (DCT/DST pseudo-spectral and CN-ADI) treat each axis
+     * separately and have no cross terms of the metric; the pseudo-spectral
+     * ones would silently compute an orthogonal box.
+     */
+    void require_orthogonal_with_walls(const std::vector<BoundaryCondition>& bc, bool orthogonal)
+    {
+        if (has_wall(bc) && !orthogonal)
+            throw_with_line_number("Reflecting and absorbing boundary conditions need an orthogonal box "
+                "(all angles 90 degrees).")
+    }
 }
 
 /**
@@ -395,6 +416,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                 }
             }
         }
+        require_orthogonal_with_walls(this->bc, is_orthogonal_);
 
         // Initialize space group (disabled by default)
         space_group_ = nullptr;
@@ -729,6 +751,8 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
         validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
             "angles[" + std::to_string(i) + "]");
     }
+    require_orthogonal_with_walls(bc, std::all_of(full_angles.begin(), full_angles.end(), [](double a) {
+        return std::abs(a * std::numbers::pi / 180.0 - std::numbers::pi / 2.0) < ANGLE_TOLERANCE; }));
     if (space_group_ != nullptr)
         space_group_->check_cell(new_lx, full_angles);
 
@@ -781,6 +805,10 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
     if (sg != nullptr)
     {
+        // Walls do not commute with the group's translations, rotations and glides
+        if (has_wall(bc))
+            throw_with_line_number("Space group symmetry needs periodic boundary conditions in all directions.")
+
         // The group's maps index the grid it was built for
         if (sg->get_nx() != nx)
         {
@@ -794,6 +822,12 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
                 + " grid, but the computation box has " + join(nx) + ".");
         }
         sg->check_cell(lx, get_angles_degrees());
+
+        // The reduced basis stores one value per orbit: a mask without the symmetry of
+        // the group would silently become another one
+        if (!mask_full_.empty() && !sg->is_invariant(mask_full_.data(), MASK_TOLERANCE))
+            throw_with_line_number("The mask is not invariant under the space group; "
+                "a mask used with a space group must have the symmetry of the group.")
     }
 
     // Build the new state first and commit it with moves only, so a failure
@@ -813,14 +847,32 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
         }
     }
 
+    std::vector<double> new_basis_weights = (sg != nullptr) ? make_basis_weights(sg) : std::vector<double>();
+
     space_group_ = sg;
     orbit_counts_ = std::move(new_orbit_counts);
     n_basis_ = new_n_basis;
     mask = std::move(new_mask);
+    basis_weights_ = std::move(new_basis_weights);
 
     // The sizes and maps above are snapshots: freeze the physical basis
     if (sg != nullptr)
         sg->mark_in_use();
+}
+
+template <typename T>
+std::vector<double> ComputationBox<T>::make_basis_weights(SpaceGroup* sg) const
+{
+    const std::vector<int>& orbit_counts = sg->get_orbit_counts();
+    std::vector<double> weights(orbit_counts.begin(), orbit_counts.end());
+    if (!mask_full_.empty())
+    {
+        std::vector<double> reduced_mask(weights.size());
+        sg->to_reduced_basis(mask_full_.data(), reduced_mask.data(), 1);
+        for (size_t i = 0; i < weights.size(); i++)
+            weights[i] *= reduced_mask[i];
+    }
+    return weights;
 }
 
 template <typename T>
@@ -859,7 +911,7 @@ T ComputationBox<T>::integral(const T *g)
         // Reduced basis mode
         double dv_base = volume / total_grid;
         for (int i = 0; i < n_basis_; i++)
-            sum += static_cast<T>(orbit_counts_[i]) * g[i];
+            sum += static_cast<T>(basis_weights_[i]) * g[i];
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -895,7 +947,7 @@ T ComputationBox<T>::inner_product(const T *g, const T *h)
         // Reduced basis mode
         double dv_base = volume / total_grid;
         for (int i = 0; i < n_basis_; i++)
-            sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i];
+            sum += static_cast<T>(basis_weights_[i]) * g[i] * h[i];
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -922,7 +974,7 @@ T ComputationBox<T>::inner_product_inverse_weight(const T *g, const T *h, const 
         // Reduced basis mode
         double dv_base = volume / total_grid;
         for (int i = 0; i < n_basis_; i++)
-            sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i] / w[i];
+            sum += static_cast<T>(basis_weights_[i]) * g[i] * h[i] / w[i];
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -952,7 +1004,7 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
         {
             const size_t offset = static_cast<size_t>(n) * n_basis_;
             for (int i = 0; i < n_basis_; i++)
-                sum += static_cast<T>(orbit_counts_[i]) * g[offset + i] * h[offset + i];
+                sum += static_cast<T>(basis_weights_[i]) * g[offset + i] * h[offset + i];
         }
         return sum * static_cast<T>(dv_base);
     }
@@ -982,14 +1034,11 @@ void ComputationBox<T>::zero_mean(T *g)
 
     if (space_group_ != nullptr)
     {
-        // Reduced basis mode: compute weighted mean
-        int total_count = 0;
+        // Reduced basis mode: the weighted sum over the volume, as in the full-grid
+        // branch (Σ dv g / V; the weights carry the mask)
         for (int i = 0; i < n_basis_; i++)
-        {
-            sum += static_cast<T>(orbit_counts_[i]) * g[i];
-            total_count += orbit_counts_[i];
-        }
-        T mean = sum / static_cast<T>(total_count);
+            sum += static_cast<T>(basis_weights_[i]) * g[i];
+        T mean = sum / static_cast<T>(total_grid);
 
         for (int i = 0; i < n_basis_; i++)
             g[i] -= mean;

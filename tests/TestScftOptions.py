@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""
+SCFT options: angle relaxation, axis_ordering and the field-residual projector.
+
+1. Angle relaxation (Oblique2D): hexagonal cylinders started from gamma = 100 deg
+   relax to gamma = 120 deg with a = b. The angles enter the optimizer in radians,
+   the unit of their residual -dH/dgamma; until 2026-10 they entered in degrees,
+   which made the angle steps 57 times smaller (1493 iterations here instead of
+   about 240). The check requires fewer than 600 iterations.
+2. axis_ordering: a run whose nx, lx and initial fields are given in the order
+   ["b", "a"] reproduces the run in the standard order (results are in the
+   standard order). Until 2026-10 the initial fields were not transposed.
+3. A chi N matrix with 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10, chi_BC = 40)
+   leaves the residual projector undefined and is rejected.
+"""
+
+import os
+import io
+import sys
+import contextlib
+
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
+import numpy as np
+from polymerfts import _core, scft, ValidationError
+
+n_pass = 0
+n_fail = 0
+
+
+def check(cond, msg):
+    global n_pass, n_fail
+    if cond:
+        n_pass += 1
+        print(f"[PASS] {msg}")
+    else:
+        n_fail += 1
+        print(f"[FAIL] {msg}")
+
+
+def cpu_platform():
+    cpu = [p for p in _core.PlatformSelector.avail_platforms() if p.startswith("cpu")]
+    return cpu[0] if cpu else "cuda"
+
+
+def base(nx, lx, chi_n, blocks, box):
+    return {"nx": nx, "lx": lx, "box_is_altering": box, "chain_model": "continuous", "ds": 1 / 50,
+            "segment_lengths": {t: 1.0 for t, _ in blocks}, "chi_n": chi_n, "platform": cpu_platform(),
+            "distinct_polymers": [{"volume_fraction": 1.0,
+                                   "blocks": [{"type": t, "length": length} for t, length in blocks]}],
+            "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
+            "max_iter": 3000, "tolerance": 1e-8}
+
+
+def run(params, fields):
+    with contextlib.redirect_stdout(io.StringIO()):
+        calc = scft.SCFT(params=params)
+        calc.run(initial_fields=fields)
+    return calc
+
+
+def test_angle_relaxation():
+    nx = [32, 32]
+    x = (np.arange(32) + 0.5) / 32
+    X, Y = np.meshgrid(x, x, indexing="ij")
+    d2 = np.minimum(np.abs(X - 0.5), 1 - np.abs(X - 0.5)) ** 2 + np.minimum(np.abs(Y - 0.5), 1 - np.abs(Y - 0.5)) ** 2
+    w_a = (-5.0 * np.exp(-d2 / 0.03)).ravel()
+    params = base(nx, [1.8, 1.8], {"A,B": 20.0}, [("A", 0.3), ("B", 0.7)], True)
+    params["angles"] = [90.0, 90.0, 100.0]
+    calc = run(params, {"A": w_a, "B": -w_a})
+    lx = calc.prop_solver.get_lx()
+    gamma = calc.prop_solver.get_angles_degrees()[2]
+    check(calc.error_level < 1e-8 and abs(gamma - 120.0) < 1e-4 and abs(lx[0] - lx[1]) < 1e-6 * lx[0] and calc.iter < 600,
+          f"Oblique2D from 100 deg: gamma {gamma:.6f}, a {lx[0]:.6f}, b {lx[1]:.6f}, {calc.iter} iterations")
+
+
+def test_axis_ordering():
+    nx, lx = [24, 16], [2.4, 1.6]
+    x = (np.arange(24) + 0.5) / 24
+    y = (np.arange(16) + 0.5) / 16
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    w_a = 3.0 * np.cos(2 * np.pi * X) + 1.0 * np.cos(2 * np.pi * Y)          # shape (24, 16): standard [a, b]
+    blocks = [("A", 0.5), ("B", 0.5)]
+    standard = run(base(nx, lx, {"A,B": 15.0}, blocks, False), {"A": w_a.ravel(), "B": -w_a.ravel()})
+    params = base([16, 24], [1.6, 2.4], {"A,B": 15.0}, blocks, False)
+    params["axis_ordering"] = ["b", "a"]
+    reordered = run(params, {"A": w_a.T.copy(), "B": -w_a.T.copy()})               # given in the order [b, a]
+    d_phi = np.max(np.abs(np.array(standard.phi["A"]) - np.array(reordered.phi["A"])))
+    check(abs(standard.free_energy - reordered.free_energy) < 1e-10 and d_phi < 1e-8,
+          f"axis_ordering ['b', 'a'] reproduces the standard run (dF {abs(standard.free_energy - reordered.free_energy):.1e}, "
+          f"dphi {d_phi:.1e})")
+
+
+def test_singular_projector():
+    params = base([16], [2.0], {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], False)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            scft.SCFT(params=params)
+        rejected = False
+    except ValidationError as e:
+        rejected = "1ᵀ(χN)⁻¹1" in str(e)
+    check(rejected, "chi N with 1^T (chi N)^-1 1 = 0 is rejected")
+
+
+def main():
+    test_angle_relaxation()
+    test_axis_ordering()
+    test_singular_projector()
+    print(f"\n{n_pass} passed, {n_fail} failed")
+    sys.exit(0 if n_fail == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()

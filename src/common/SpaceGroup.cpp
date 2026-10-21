@@ -665,6 +665,29 @@ void SpaceGroup::from_reduced_basis(const double* reduced_field, double* full_fi
     }
 }
 
+bool SpaceGroup::is_invariant(const double* full_field, double tolerance) const
+{
+    // Orbits of the full group (kept from the constructor; a physical basis replaces
+    // only the active map)
+    const std::vector<int>& orbit_of = full_to_reduced_map_full_;
+    const int n_orbits = n_irreducible_full_;
+
+    std::vector<double> value(n_orbits, 0.0);
+    std::vector<char> seen(n_orbits, 0);
+    for (int i = 0; i < total_grid_; i++)
+    {
+        const int orbit = orbit_of[i];
+        if (!seen[orbit])
+        {
+            seen[orbit] = 1;
+            value[orbit] = full_field[i];
+        }
+        else if (std::abs(full_field[i] - value[orbit]) > tolerance)
+            return false;
+    }
+    return true;
+}
+
 void SpaceGroup::symmetrize(double* field, int n_fields) const
 {
     const auto& full_to_reduced = full_to_reduced_map_;
