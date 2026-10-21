@@ -31,6 +31,7 @@
 #include <atomic>
 #include <complex>
 #include <map>
+#include <source_location>
 #include <string>
 #include <cufft.h>
 
@@ -218,10 +219,13 @@ public:
  * recommends: the check is a host-side read that does not synchronize,
  * and cudaGetLastError() clears the slot, so an error is reported at the
  * launch that caused it and not again by a later, unrelated check. Errors of
- * a running kernel (e.g. an illegal address) surface at the next synchronizing
- * call; run with CUDA_LAUNCH_BLOCKING=1 (or compute-sanitizer) to see them at
- * their launch. Release calls (cudaFree, *Destroy) are not checked: they run
- * in destructors, which must not throw.
+ * a running kernel (e.g. an illegal address) are not seen by the launch check:
+ * they surface at the first CUDA call made after the fault, at the latest at
+ * the next synchronizing call, which names its own line; run with
+ * CUDA_LAUNCH_BLOCKING=1 (or compute-sanitizer) to see them at their launch.
+ * Release calls (cudaFree, cudaFreeHost, *Destroy) are not checked: they run
+ * in destructors and release() paths, which must not throw, and go through
+ * ignore_release_error() so a failed one is not reported by a later check.
  *
  * @example
  * @code
@@ -244,6 +248,11 @@ public:
 
 /// Throw the exception for a failed CUDA call (out of line: only the error path pays).
 [[noreturn]] void report_cuda_error(cudaError_t code, const char *file, int line, const char *func);
+
+/// Throw the exception for a failed (or, with `injected`, a test-hook) allocation of
+/// `bytes` bytes of `kind` memory, naming the code that asked for it.
+[[noreturn]] void report_cuda_allocation_error(cudaError_t code, size_t bytes, const char *kind,
+                                               const std::source_location& where, bool injected = false);
 
 /**
  * @brief Throw exception on CUDA error.
@@ -297,6 +306,71 @@ inline void throw_on_cufft_error(cufftResult code, const char *file, int line, c
     if (code != CUFFT_SUCCESS)
         throw Exception("cuFFT error code " + std::to_string(static_cast<int>(code)), file, line, func);
 }
+
+/// Release calls that failed since the process started (a double free, or a
+/// release on a broken context); the tests check that it does not grow.
+inline std::atomic<long long>& cuda_release_failures()
+{
+    static std::atomic<long long> count{0};
+    return count;
+}
+
+/**
+ * @brief Take the result of a release call (cudaFree, cudaFreeHost,
+ *        cudaStreamDestroy, cudaEventDestroy, cufftDestroy) without throwing.
+ *
+ * Releases run in destructors and release() paths, which must not throw, and a
+ * failed release cannot be retried. The failed call still left its error in the
+ * per-thread slot, where the next CUDA_CHECK_LAUNCH() would report it against an
+ * unrelated launch; this clears the slot and counts the failure in
+ * cuda_release_failures(). A sticky error of a broken context stays and is
+ * reported by the next checked call, as it must.
+ *
+ * @code
+ * ignore_release_error(cudaStreamDestroy(stream));
+ * ignore_release_error(cufftDestroy(plan));
+ * @endcode
+ */
+inline void ignore_release_error(cudaError_t code) noexcept
+{
+    if (code != cudaSuccess)
+    {
+        (void)cudaGetLastError();
+        cuda_release_failures().fetch_add(1, std::memory_order_relaxed);
+    }
+}
+/// cuFFT overload: cufftDestroy frees through the runtime, which may leave an error in the slot.
+inline void ignore_release_error(cufftResult code) noexcept
+{
+    if (code != CUFFT_SUCCESS)
+    {
+        (void)cudaGetLastError();
+        cuda_release_failures().fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+/**
+ * @brief Owning CUDA event, destroyed with the object.
+ *
+ * The profiling paths time their steps with these, so an exception between
+ * the create and the elapsed-time read does not leak the events.
+ *
+ * @code
+ * std::vector<CudaEvent> ev(profile ? 2 : 0);   // created only when profiling
+ * if (profile) CUDA_CHECK(cudaEventRecord(ev[0], stream));
+ * @endcode
+ */
+class CudaEvent
+{
+public:
+    CudaEvent() { CUDA_CHECK(cudaEventCreate(&event_)); }
+    ~CudaEvent() { ignore_release_error(cudaEventDestroy(event_)); }
+    CudaEvent(const CudaEvent&) = delete;
+    CudaEvent& operator=(const CudaEvent&) = delete;
+    operator cudaEvent_t() const noexcept { return event_; }   ///< lends the handle
+private:
+    cudaEvent_t event_ = nullptr;
+};
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M);
 
@@ -485,17 +559,19 @@ __global__ void ker_multi_weight(
 // Owning CUDA allocations
 //==============================================================================
 
-/// Live CudaBuffer allocations of one memory kind. Exact (unlike device-wide
-/// free memory, which other processes and cuFFT's own plan memory change), so
-/// the tests can check that destroyed objects released everything.
+/// Live counted allocations of one memory kind (CudaBuffer and the backend's
+/// propagator and checkpoint arrays). Exact (unlike device-wide free memory,
+/// which other processes and cuFFT's own plan memory change), so the tests can
+/// check that destroyed objects released everything.
 struct CudaBufferCounters
 {
     std::atomic<long long> live_count{0};
     std::atomic<long long> live_bytes{0};
 };
 
-/// Test hook: when set to N >= 0, the N-th following CudaBuffer allocation
-/// (0-based) throws instead of allocating, once; -1 (the default) disables it.
+/// Test hook: when set to N >= 0, the N-th following counted allocation
+/// (0-based; CudaBuffer and the backends' propagator and checkpoint arrays)
+/// throws instead of allocating, once; -1 (the default) disables it.
 /// tests/TestCudaDeviceBuffer.cu sweeps N to fail every allocation of a
 /// construction in turn and checks that the counters return to their start.
 inline std::atomic<long long>& cuda_buffer_fail_countdown()
@@ -507,18 +583,57 @@ inline std::atomic<long long>& cuda_buffer_fail_countdown()
 /// cudaMalloc / cudaFree policy of CudaBuffer
 struct CudaDeviceMemory
 {
+    static constexpr const char* kind = "device";
     static cudaError_t allocate(void** p, size_t bytes) { return cudaMalloc(p, bytes); }
-    static void release(void* p) { cudaFree(p); }
+    static cudaError_t release(void* p) { return cudaFree(p); }
     static CudaBufferCounters& counters() { static CudaBufferCounters c; return c; }
 };
 
 /// cudaMallocHost / cudaFreeHost (pinned host memory) policy of CudaBuffer
 struct CudaPinnedMemory
 {
+    static constexpr const char* kind = "pinned host";
     static cudaError_t allocate(void** p, size_t bytes) { return cudaMallocHost(p, bytes); }
-    static void release(void* p) { cudaFreeHost(p); }
+    static cudaError_t release(void* p) { return cudaFreeHost(p); }
     static CudaBufferCounters& counters() { static CudaBufferCounters c; return c; }
 };
+
+/**
+ * @brief Allocate `bytes` bytes with a memory policy and count the allocation.
+ *
+ * Every owned CUDA allocation goes through this pair: CudaBuffer, and the
+ * backend's propagator (allocate()) and checkpoint (allocate_checkpoint())
+ * arrays, which are handed out as raw handles. So the live counters and the
+ * failure hook cover all of them. A failure throws with the size and the
+ * caller's file, line and function (`where`, the caller by default).
+ */
+template <typename Memory>
+void* counted_cuda_allocate(size_t bytes, const std::source_location& where = std::source_location::current())
+{
+    std::atomic<long long>& countdown = cuda_buffer_fail_countdown();
+    if (countdown.load(std::memory_order_relaxed) >= 0 && countdown.fetch_sub(1) == 0)
+        report_cuda_allocation_error(cudaErrorMemoryAllocation, bytes, Memory::kind, where, /*injected=*/true);
+    void* p = nullptr;
+    const cudaError_t code = Memory::allocate(&p, bytes);
+    if (code != cudaSuccess)
+        report_cuda_allocation_error(code, bytes, Memory::kind, where);
+    if (p == nullptr)          // zero bytes: nothing to count (or to release)
+        return nullptr;
+    Memory::counters().live_count.fetch_add(1, std::memory_order_relaxed);
+    Memory::counters().live_bytes.fetch_add(static_cast<long long>(bytes), std::memory_order_relaxed);
+    return p;
+}
+
+/// Release an allocation of counted_cuda_allocate() (no-op for nullptr); `bytes` as allocated.
+template <typename Memory>
+void counted_cuda_release(void* p, size_t bytes) noexcept
+{
+    if (p == nullptr)
+        return;
+    ignore_release_error(Memory::release(p));
+    Memory::counters().live_count.fetch_sub(1, std::memory_order_relaxed);
+    Memory::counters().live_bytes.fetch_sub(static_cast<long long>(bytes), std::memory_order_relaxed);
+}
 
 /**
  * @brief Owning device (or pinned host) allocation of `count` elements of T.
@@ -528,9 +643,12 @@ struct CudaPinnedMemory
  * leaks nothing when its constructor throws. The raw pointer is lent through
  * get() or the implicit conversion, so kernel launches, cudaMemcpy and cuFFT
  * calls read as before; template functions that deduce the pointer type
- * (CUB, thrust) take get(). Errors of the release call are ignored on
- * purpose: a destructor must not throw, and at process exit the runtime may
- * already be gone.
+ * (CUB, thrust) take get(), and so do tests for null (`buf.empty()` or
+ * `buf.get() == nullptr`), because the second conversion (to void*), with
+ * which GCC and Clang reject `delete buf`, makes `if (buf)` ambiguous too. A failed
+ * allocation throws with its size and the caller's location. Errors of the
+ * release call do not throw (see ignore_release_error()): a destructor must
+ * not throw, and at process exit the runtime may already be gone.
  *
  * @code
  * CudaDeviceBuffer<double> d_q(M);            // allocated
@@ -544,7 +662,10 @@ class CudaBuffer
 {
 public:
     CudaBuffer() = default;
-    explicit CudaBuffer(size_t count) { allocate(count); }
+    explicit CudaBuffer(size_t count, std::source_location where = std::source_location::current())
+    {
+        allocate(count, where);
+    }
     ~CudaBuffer() { release(); }
 
     CudaBuffer(CudaBuffer&& other) noexcept : ptr_(other.ptr_), count_(other.count_)
@@ -568,36 +689,31 @@ public:
     CudaBuffer& operator=(const CudaBuffer&) = delete;
 
     /// Allocate `count` elements, releasing a previous allocation first (count 0 only releases).
-    void allocate(size_t count)
+    /// A failure names the caller (`where`) in the exception.
+    void allocate(size_t count, std::source_location where = std::source_location::current())
     {
         release();
         if (count == 0)
             return;
-        std::atomic<long long>& countdown = cuda_buffer_fail_countdown();
-        if (countdown.load(std::memory_order_relaxed) >= 0 && countdown.fetch_sub(1) == 0)
-            throw_with_line_number("CudaBuffer: injected allocation failure (test hook)");
-        void* p = nullptr;
-        CUDA_CHECK(Memory::allocate(&p, sizeof(T) * count));
-        ptr_ = static_cast<T*>(p);
+        ptr_ = static_cast<T*>(counted_cuda_allocate<Memory>(sizeof(T) * count, where));
         count_ = count;
-        Memory::counters().live_count.fetch_add(1, std::memory_order_relaxed);
-        Memory::counters().live_bytes.fetch_add(static_cast<long long>(bytes()), std::memory_order_relaxed);
     }
     /// Free the allocation (no-op when empty).
     void release() noexcept
     {
-        if (ptr_ != nullptr)
-        {
-            Memory::release(ptr_);
-            Memory::counters().live_count.fetch_sub(1, std::memory_order_relaxed);
-            Memory::counters().live_bytes.fetch_sub(static_cast<long long>(bytes()), std::memory_order_relaxed);
-        }
+        counted_cuda_release<Memory>(ptr_, bytes());
         ptr_ = nullptr;
         count_ = 0;
     }
 
     T* get() const noexcept { return ptr_; }
     operator T*() const noexcept { return ptr_; }   ///< lends the pointer (no ownership transfer)
+    /// Second pointer conversion, with which GCC and Clang (also as nvcc's host
+    /// compiler) reject `delete buf` as ambiguous; that delete would free memory
+    /// the buffer frees again. (The standard counts only conversions to object
+    /// pointer types for delete, so a stricter compiler may accept it.) Passing
+    /// a buffer to a void* parameter (cudaMemcpy, cudaMemset) picks this one.
+    operator void*() const noexcept { return ptr_; }
     size_t size() const noexcept { return count_; }   ///< number of elements
     size_t bytes() const noexcept { return sizeof(T) * count_; }
     bool empty() const noexcept { return ptr_ == nullptr; }
@@ -614,5 +730,6 @@ template <typename T> using CudaPinnedBuffer = CudaBuffer<T, CudaPinnedMemory>;
 // the buffer then frees again; these overloads make that a compile error.
 template <typename T, typename M> cudaError_t cudaFree(const CudaBuffer<T, M>&) = delete;
 template <typename T, typename M> cudaError_t cudaFreeHost(const CudaBuffer<T, M>&) = delete;
+template <typename T, typename M> cudaError_t cudaFreeAsync(const CudaBuffer<T, M>&, cudaStream_t) = delete;
 
 #endif

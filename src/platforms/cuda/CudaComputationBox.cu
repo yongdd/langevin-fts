@@ -105,18 +105,20 @@ void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, s
 template <typename T>
 void CudaComputationBox<T>::set_space_group(SpaceGroup* sg)
 {
-    // Call base class implementation
-    ComputationBox<T>::set_space_group(sg);
-
-    // Replace the device orbit counts (empty without a space group)
-    d_orbit_counts_.release();
+    // Build the device orbit counts first (empty without a space group): if the
+    // allocation or the copy fails, the box keeps its previous group and state
+    CudaDeviceBuffer<int> orbit_counts_new;
     if (sg != nullptr)
     {
         const auto& orbit_counts = sg->get_orbit_counts();
         int N = sg->get_n_reduced_basis();
-        d_orbit_counts_.allocate(N);
-        CUDA_CHECK(cudaMemcpy(d_orbit_counts_, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
+        orbit_counts_new.allocate(N);
+        CUDA_CHECK(cudaMemcpy(orbit_counts_new, orbit_counts.data(), sizeof(int)*N, cudaMemcpyHostToDevice));
     }
+
+    // Base class: checks the cell, then sets the group, the basis size and the mask
+    ComputationBox<T>::set_space_group(sg);
+    d_orbit_counts_ = std::move(orbit_counts_new);
 }
 //-----------------------------------------------------------
 template <typename T>

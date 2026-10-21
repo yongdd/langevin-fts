@@ -262,9 +262,9 @@ void CudaFFT<T, DIM>::release()
     d_work_buffer_.release();
 
     if (plan_forward_created_)
-        cufftDestroy(plan_forward_);
+        ignore_release_error(cufftDestroy(plan_forward_));
     if (plan_backward_created_)
-        cufftDestroy(plan_backward_);
+        ignore_release_error(cufftDestroy(plan_backward_));
     plan_forward_created_ = false;
     plan_backward_created_ = false;
 

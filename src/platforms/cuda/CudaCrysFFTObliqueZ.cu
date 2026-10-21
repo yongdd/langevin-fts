@@ -164,7 +164,7 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan handle for XY.");
     if (cufftCreate(&plan_xy_bwd_) != CUFFT_SUCCESS)
     {
-        cufftDestroy(plan_xy_fwd_);
+        ignore_release_error(cufftDestroy(plan_xy_fwd_));
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan handle for XY.");
     }
 
@@ -174,8 +174,8 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
                                          batch, &work_size, CUDA_C_64F);
     if (rf != CUFFT_SUCCESS)
     {
-        cufftDestroy(plan_xy_fwd_);
-        cufftDestroy(plan_xy_bwd_);
+        ignore_release_error(cufftDestroy(plan_xy_fwd_));
+        ignore_release_error(cufftDestroy(plan_xy_bwd_));
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT plan for XY.");
     }
 
@@ -185,8 +185,8 @@ void CudaCrysFFTObliqueZ::init_fft_xy()
                                          batch, &work_size, CUDA_C_64F);
     if (rb != CUFFT_SUCCESS)
     {
-        cufftDestroy(plan_xy_fwd_);
-        cufftDestroy(plan_xy_bwd_);
+        ignore_release_error(cufftDestroy(plan_xy_fwd_));
+        ignore_release_error(cufftDestroy(plan_xy_bwd_));
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create cuFFT inverse plan for XY.");
     }
 
@@ -200,8 +200,8 @@ void CudaCrysFFTObliqueZ::free_fft_xy()
 {
     if (plan_xy_initialized_)
     {
-        cufftDestroy(plan_xy_fwd_);
-        cufftDestroy(plan_xy_bwd_);
+        ignore_release_error(cufftDestroy(plan_xy_fwd_));
+        ignore_release_error(cufftDestroy(plan_xy_bwd_));
         plan_xy_initialized_ = false;
     }
 }
@@ -351,66 +351,52 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
 
     if (profile_this)
     {
-        cudaEvent_t e0{}, e1{}, e2{}, e3{}, e4{}, e5{}, e6{};
-        CUDA_CHECK(cudaEventCreate(&e0));
-        CUDA_CHECK(cudaEventCreate(&e1));
-        CUDA_CHECK(cudaEventCreate(&e2));
-        CUDA_CHECK(cudaEventCreate(&e3));
-        CUDA_CHECK(cudaEventCreate(&e4));
-        CUDA_CHECK(cudaEventCreate(&e5));
-        CUDA_CHECK(cudaEventCreate(&e6));
+        std::vector<CudaEvent> e(7);   // destroyed on every exit
 
-        CUDA_CHECK(cudaEventRecord(e0, stream_));
+        CUDA_CHECK(cudaEventRecord(e[0], stream_));
         if (d_q_in != d_q_out)
         {
             CUDA_CHECK(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_,
                                             cudaMemcpyDeviceToDevice, stream_));
         }
-        CUDA_CHECK(cudaEventRecord(e1, stream_));
+        CUDA_CHECK(cudaEventRecord(e[1], stream_));
 
         // DCT-II along z -> z-major layout (contiguous XY per z)
         dct_forward_z_->execute_z_dct2_to_zmajor(d_work, d_real_xy_, stream_);
-        CUDA_CHECK(cudaEventRecord(e2, stream_));
+        CUDA_CHECK(cudaEventRecord(e[2], stream_));
 
         // FFT along x,y (batched over z)
         if (cufftExecD2Z(plan_xy_fwd_, d_real_xy_, d_complex_) != CUFFT_SUCCESS)
             throw_with_line_number("CudaCrysFFTObliqueZ cufftExecD2Z forward failed.");
-        CUDA_CHECK(cudaEventRecord(e3, stream_));
+        CUDA_CHECK(cudaEventRecord(e[3], stream_));
 
         // Apply Boltzmann in spectral space (includes normalization)
         ker_multi_complex_real<<<blocks, threads, 0, stream_>>>(d_complex_, d_boltz_current_, 1.0, M_complex_xy_);
         CUDA_CHECK_LAUNCH();
-        CUDA_CHECK(cudaEventRecord(e4, stream_));
+        CUDA_CHECK(cudaEventRecord(e[4], stream_));
 
         if (cufftExecZ2D(plan_xy_bwd_, d_complex_, d_real_xy_) != CUFFT_SUCCESS)
             throw_with_line_number("CudaCrysFFTObliqueZ cufftExecZ2D inverse failed.");
-        CUDA_CHECK(cudaEventRecord(e5, stream_));
+        CUDA_CHECK(cudaEventRecord(e[5], stream_));
 
         // DCT-III along z from z-major (normalization already applied in boltzmann)
         dct_backward_z_->execute_z_dct3_from_zmajor(d_real_xy_, d_work, stream_);
-        CUDA_CHECK(cudaEventRecord(e6, stream_));
+        CUDA_CHECK(cudaEventRecord(e[6], stream_));
 
-        CUDA_CHECK(cudaEventSynchronize(e6));
+        CUDA_CHECK(cudaEventSynchronize(e[6]));
 
         float ms_copy = 0.0f, ms_dct2 = 0.0f, ms_fft = 0.0f, ms_boltz = 0.0f, ms_ifft = 0.0f, ms_dct3 = 0.0f, ms_total = 0.0f;
-        CUDA_CHECK(cudaEventElapsedTime(&ms_copy, e0, e1));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_dct2, e1, e2));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_fft, e2, e3));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_boltz, e3, e4));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_ifft, e4, e5));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_dct3, e5, e6));
-        CUDA_CHECK(cudaEventElapsedTime(&ms_total, e0, e6));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_copy, e[0], e[1]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_dct2, e[1], e[2]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_fft, e[2], e[3]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_boltz, e[3], e[4]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_ifft, e[4], e[5]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_dct3, e[5], e[6]));
+        CUDA_CHECK(cudaEventElapsedTime(&ms_total, e[0], e[6]));
 
         std::printf("[CrysFFT-ObliqueZ] copy(ms)=%.4f dct2(ms)=%.4f fft(ms)=%.4f boltz(ms)=%.4f ifft(ms)=%.4f dct3(ms)=%.4f total(ms)=%.4f\n",
                     ms_copy, ms_dct2, ms_fft, ms_boltz, ms_ifft, ms_dct3, ms_total);
 
-        cudaEventDestroy(e0);
-        cudaEventDestroy(e1);
-        cudaEventDestroy(e2);
-        cudaEventDestroy(e3);
-        cudaEventDestroy(e4);
-        cudaEventDestroy(e5);
-        cudaEventDestroy(e6);
         return;
     }
 

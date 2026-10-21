@@ -11,6 +11,7 @@
 #ifndef MKL_CRYS_FFT_OBLIQUEZ_H_
 #define MKL_CRYS_FFT_OBLIQUEZ_H_
 
+#include <array>
 #include <complex>
 #include <vector>
 #include "mkl_dfti.h"
@@ -52,6 +53,10 @@ public:
 
     void diffusion(double* q_in, double* q_out);
     void apply_multiplier(const double* q_in, double* q_out, const double* multiplier);
+
+    /// Elements of this thread's z work arrays {mirrored real, spectrum}, as sized
+    /// by the last transform on the thread (tests check them against the grid).
+    static std::array<size_t, 2> thread_z_work_sizes();
 };
 
 #endif  // MKL_CRYS_FFT_OBLIQUEZ_H_

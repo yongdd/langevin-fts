@@ -137,7 +137,7 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
             if (!this->exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
-            std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
+            std::vector<T>& exp_dw_vec = this->exp_dw.at(ds_idx).at(monomer_type);
             exp_dw_vec.resize(M_use);
 
             for (int i = 0; i < M_use; ++i)
@@ -173,7 +173,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
             k_q_in.resize(coeff_size);
 
         // Get Boltzmann factors for the correct ds_index
-        const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
+        const T* _exp_dw = this->exp_dw.at(ds_index).at(monomer_type).data();
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
 
         // Determine input/output pointers based on space group

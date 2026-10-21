@@ -109,8 +109,8 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[ds_index][monomer_type];
-        CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[ds_index][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw.at(ds_index).at(monomer_type);
+        CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half.at(ds_index).at(monomer_type);
         const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type, ds_index);
         const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, ds_index);
 

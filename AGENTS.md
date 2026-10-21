@@ -36,8 +36,12 @@ Assume GPU commands require `require_escalated` unless proven otherwise.
 
 ## Notes for any agent on this cluster
 
-- **CUDA toolkit**: `conda activate polymerfts` does not provide `nvcc`; put the toolkit
-  on PATH (`/opt/ohpc/pub/cuda/11.8.0/bin`, or `module load cuda/11.8`) before configuring.
+- **CUDA toolkit**: `conda activate polymerfts` does not provide `nvcc`; put a 12.2+
+  toolkit on PATH (`/opt/ohpc/pub/cuda/12.4.1/bin`, or `module load cuda/12.4.1`) before
+  configuring. The device code is C++20, so CUDA 11.x (still the default in some shell
+  profiles) stops the configure step with an error. The `polymerfts` conda environment
+  carries CUDA 11.8 runtime libraries (`cudatoolkit`); the build links the toolkit's own
+  cuFFT regardless.
 - **Warning check for new host C++** (CI builds with `POLYMERFTS_WERROR`, see CLAUDE.md):
   `g++ -O3 -DNDEBUG -Wall -Werror -c file.cpp` (a `-fsyntax-only` pass misses
   `-Wmaybe-uninitialized`). nvcc-compiled `.cu` files are not covered by the option.

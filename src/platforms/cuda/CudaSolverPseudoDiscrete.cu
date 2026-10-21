@@ -112,7 +112,7 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
         // Get Boltzmann factors for the correct ds_index
-        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[ds_index][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw.at(ds_index).at(monomer_type);
         const double* _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, ds_index);
 
         const bool use_crysfft = (use_crysfft_ && space_group_ != nullptr);

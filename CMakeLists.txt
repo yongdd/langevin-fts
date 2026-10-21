@@ -35,9 +35,9 @@ SET(POLYMERFTS_CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90" CACHE STRING
 # ============================================================================
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-# nvcc (CUDA 11.x) supports at most C++17, so headers shared between host and
-# device code must stay C++17-compatible even though host-only code may use C++20.
-SET(CMAKE_CUDA_STANDARD 17)
+# Device code is C++20 too (nvcc 12.2+; std::source_location needs 12.2, see the
+# CUDA backend section below).
+SET(CMAKE_CUDA_STANDARD 20)
 SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
 # Default to an optimized build when the user does not choose one:
@@ -271,6 +271,34 @@ IF(POLYMERFTS_USE_CUDA)
 ENDIF()
 
 IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
+    # The .cu files are C++20: nvcc 11.x has no -std=c++20, and nvcc 12.0/12.1
+    # cannot evaluate std::source_location::current() (used by CudaBuffer to name
+    # the caller of a failed allocation).
+    IF(CUDAToolkit_VERSION VERSION_LESS 12.2)
+        MESSAGE(FATAL_ERROR "CUDA toolkit ${CUDAToolkit_VERSION} found at ${CUDAToolkit_TARGET_DIR}; "
+            "the GPU backend needs CUDA 12.2 or newer (C++20 device code). Configure a new build "
+            "directory (or delete CMakeCache.txt) with a newer toolkit's nvcc first on PATH or "
+            "given as -DCMAKE_CUDA_COMPILER=..., or configure with -DPOLYMERFTS_USE_CUDA=OFF.")
+    ENDIF()
+    # CMake passes -std=c++20 to nvcc from 3.25.2 on
+    IF(CMAKE_VERSION VERSION_LESS 3.25.2)
+        MESSAGE(FATAL_ERROR "CMake ${CMAKE_VERSION}: the GPU backend needs CMake 3.25.2 or newer "
+            "(C++20 device code; environment.yml installs 3.31), or configure with "
+            "-DPOLYMERFTS_USE_CUDA=OFF.")
+    ENDIF()
+    # CudaCommon.h, which host C++ sources include as well, uses std::source_location
+    # (libstdc++ of GCC 11+, Clang 15+)
+    INCLUDE(CheckCXXSourceCompiles)
+    CHECK_CXX_SOURCE_COMPILES("
+        #include <source_location>
+        int line(std::source_location where = std::source_location::current())
+        { return static_cast<int>(where.line()); }
+        int main() { return line() > 0 ? 0 : 1; }" POLYMERFTS_HAVE_SOURCE_LOCATION)
+    IF(NOT POLYMERFTS_HAVE_SOURCE_LOCATION)
+        MESSAGE(FATAL_ERROR "The C++ compiler (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) "
+            "has no std::source_location, which the GPU backend uses: use GCC 11+ or Clang 15+, "
+            "or configure with -DPOLYMERFTS_USE_CUDA=OFF.")
+    ENDIF()
     ENABLE_LANGUAGE(CUDA)
     MESSAGE(STATUS "CUDA toolkit ${CUDAToolkit_VERSION}: ${CUDAToolkit_TARGET_DIR}")
 
@@ -296,6 +324,20 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
             LIST(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "${_dir}")
         ENDIF()
     ENDFOREACH()
+
+    # Link the cuFFT of the toolkit whose nvcc and cufft.h build the code.
+    # FindCUDAToolkit looks for the libraries on CMAKE_PREFIX_PATH first, so a
+    # conda environment that carries another CUDA's runtime libraries (e.g.
+    # cudatoolkit for CuPy) would otherwise supply a cuFFT of another version.
+    FOREACH(_dir "${CUDAToolkit_TARGET_DIR}/lib64" "${CUDAToolkit_TARGET_DIR}/lib")
+        SET(_toolkit_cufft "${_dir}/${CMAKE_SHARED_LIBRARY_PREFIX}cufft${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        IF(EXISTS "${_toolkit_cufft}")
+            SET_TARGET_PROPERTIES(CUDA::cufft PROPERTIES IMPORTED_LOCATION "${_toolkit_cufft}")
+            BREAK()
+        ENDIF()
+    ENDFOREACH()
+    GET_TARGET_PROPERTY(_cufft_location CUDA::cufft IMPORTED_LOCATION)
+    MESSAGE(STATUS "cuFFT: ${_cufft_location}")
 
     # Host-compiled sources (PlatformSelector.cpp, the pybind module, tests)
     # include cufft.h, so the toolkit headers go on the C++ include path too.

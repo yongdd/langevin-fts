@@ -104,21 +104,27 @@ int Pseudo<T>::get_total_complex_grid()
 template <typename T>
 double* Pseudo<T>::get_boltz_bond(std::string monomer_type, int ds_index)
 {
-    if (!boltz_bond.contains(ds_index))
+    // Called from the propagator threads: find(), not operator[] (which may insert)
+    auto ds_entry = boltz_bond.find(ds_index);
+    if (ds_entry == boltz_bond.end())
         throw_with_line_number("ds_index " + std::to_string(ds_index) + " not found in boltz_bond. Call add_ds_value() and finalize_ds_values() first.");
-    if (!boltz_bond[ds_index].contains(monomer_type))
+    auto entry = ds_entry->second.find(monomer_type);
+    if (entry == ds_entry->second.end())
         throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in boltz_bond[" + std::to_string(ds_index) + "].");
-    return boltz_bond[ds_index][monomer_type].data();
+    return entry->second.data();
 }
 
 template <typename T>
 double* Pseudo<T>::get_boltz_bond_half(std::string monomer_type, int ds_index)
 {
-    if (!boltz_bond_half.contains(ds_index))
+    // Called from the propagator threads: find(), not operator[] (which may insert)
+    auto ds_entry = boltz_bond_half.find(ds_index);
+    if (ds_entry == boltz_bond_half.end())
         throw_with_line_number("ds_index " + std::to_string(ds_index) + " not found in boltz_bond_half. Call add_ds_value() and finalize_ds_values() first.");
-    if (!boltz_bond_half[ds_index].contains(monomer_type))
+    auto entry = ds_entry->second.find(monomer_type);
+    if (entry == ds_entry->second.end())
         throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in boltz_bond_half[" + std::to_string(ds_index) + "].");
-    return boltz_bond_half[ds_index][monomer_type].data();
+    return entry->second.data();
 }
 
 template <typename T>

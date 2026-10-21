@@ -78,6 +78,14 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
         const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
+        // One tridiagonal coefficient per grid position along each axis (an axis
+        // the grid does not have gets one unused entry, as in the CUDA solver)
+        const int DIM = cb->get_dim();
+        const std::vector<int> nx = cb->get_nx();
+        const size_t n_x = nx[0];
+        const size_t n_y = DIM >= 2 ? nx[1] : 1;
+        const size_t n_z = DIM >= 3 ? nx[2] : 1;
+
         // Create exp_dw vectors and tridiagonal matrix coefficient arrays for each ds_index
         for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
@@ -87,8 +95,12 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules)
                 exp_dw     [ds_idx][monomer_type].resize(M);
 
                 // Full step coefficients (xl, xd, xh, yl, ..., zh)
-                for(auto* coeff: {&xl, &xd, &xh, &yl, &yd, &yh, &zl, &zd, &zh})
-                    (*coeff)[ds_idx][monomer_type].resize(M);
+                for(auto* coeff: {&xl, &xd, &xh})
+                    (*coeff)[ds_idx][monomer_type].resize(n_x);
+                for(auto* coeff: {&yl, &yd, &yh})
+                    (*coeff)[ds_idx][monomer_type].resize(n_y);
+                for(auto* coeff: {&zl, &zd, &zh})
+                    (*coeff)[ds_idx][monomer_type].resize(n_z);
             }
         }
 
@@ -130,9 +142,9 @@ void CpuSolverCNADI::update_laplacian_operator()
                 FiniteDifference::get_laplacian_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
-                    xl[ds_idx][monomer_type].data(), xd[ds_idx][monomer_type].data(), xh[ds_idx][monomer_type].data(),
-                    yl[ds_idx][monomer_type].data(), yd[ds_idx][monomer_type].data(), yh[ds_idx][monomer_type].data(),
-                    zl[ds_idx][monomer_type].data(), zd[ds_idx][monomer_type].data(), zh[ds_idx][monomer_type].data(),
+                    xl.at(ds_idx).at(monomer_type).data(), xd.at(ds_idx).at(monomer_type).data(), xh.at(ds_idx).at(monomer_type).data(),
+                    yl.at(ds_idx).at(monomer_type).data(), yd.at(ds_idx).at(monomer_type).data(), yh.at(ds_idx).at(monomer_type).data(),
+                    zl.at(ds_idx).at(monomer_type).data(), zd.at(ds_idx).at(monomer_type).data(), zh.at(ds_idx).at(monomer_type).data(),
                     bond_length_sq, local_ds);
 
             }
@@ -176,7 +188,7 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
             if( !exp_dw[ds_idx].contains(monomer_type))
                 throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
-            std::vector<double>& exp_dw_vec = exp_dw[ds_idx][monomer_type];
+            std::vector<double>& exp_dw_vec = exp_dw.at(ds_idx).at(monomer_type);
 
             for(int i=0; i<M; i++)
             {
@@ -219,13 +231,13 @@ void CpuSolverCNADI::advance_propagator(
         }
 
         // CN-ADI2: single full step only (2nd order accuracy)
-        const double *_exp_dw = exp_dw[ds_index][monomer_type].data();           // exp(-w*local_ds/2)
+        const double *_exp_dw = exp_dw.at(ds_index).at(monomer_type).data();           // exp(-w*local_ds/2)
         advance_propagator_step(
             q_in_full, q_out_full,
             _exp_dw,
-            xl[ds_index][monomer_type].data(), xd[ds_index][monomer_type].data(), xh[ds_index][monomer_type].data(),
-            yl[ds_index][monomer_type].data(), yd[ds_index][monomer_type].data(), yh[ds_index][monomer_type].data(),
-            zl[ds_index][monomer_type].data(), zd[ds_index][monomer_type].data(), zh[ds_index][monomer_type].data(),
+            xl.at(ds_index).at(monomer_type).data(), xd.at(ds_index).at(monomer_type).data(), xh.at(ds_index).at(monomer_type).data(),
+            yl.at(ds_index).at(monomer_type).data(), yd.at(ds_index).at(monomer_type).data(), yh.at(ds_index).at(monomer_type).data(),
+            zl.at(ds_index).at(monomer_type).data(), zd.at(ds_index).at(monomer_type).data(), zh.at(ds_index).at(monomer_type).data(),
             nullptr);
 
         // Multiply mask
@@ -296,17 +308,17 @@ void CpuSolverCNADI::advance_propagator_3d(
         double temp2[nx[1]];
         double temp3[nx[2]];
 
-        double *_xl = xl[ds_index][monomer_type].data();
-        double *_xd = xd[ds_index][monomer_type].data();
-        double *_xh = xh[ds_index][monomer_type].data();
+        double *_xl = xl.at(ds_index).at(monomer_type).data();
+        double *_xd = xd.at(ds_index).at(monomer_type).data();
+        double *_xh = xh.at(ds_index).at(monomer_type).data();
 
-        double *_yl = yl[ds_index][monomer_type].data();
-        double *_yd = yd[ds_index][monomer_type].data();
-        double *_yh = yh[ds_index][monomer_type].data();
+        double *_yl = yl.at(ds_index).at(monomer_type).data();
+        double *_yd = yd.at(ds_index).at(monomer_type).data();
+        double *_yh = yh.at(ds_index).at(monomer_type).data();
 
-        double *_zl = zl[ds_index][monomer_type].data();
-        double *_zd = zd[ds_index][monomer_type].data();
-        double *_zh = zh[ds_index][monomer_type].data();
+        double *_zl = zl.at(ds_index).at(monomer_type).data();
+        double *_zd = zd.at(ds_index).at(monomer_type).data();
+        double *_zh = zh.at(ds_index).at(monomer_type).data();
 
         int im, ip, jm, jp, km, kp;
 
@@ -444,13 +456,13 @@ void CpuSolverCNADI::advance_propagator_2d(
         double temp1[nx[0]];
         double temp2[nx[1]];
 
-        double *_xl = xl[ds_index][monomer_type].data();
-        double *_xd = xd[ds_index][monomer_type].data();
-        double *_xh = xh[ds_index][monomer_type].data();
+        double *_xl = xl.at(ds_index).at(monomer_type).data();
+        double *_xd = xd.at(ds_index).at(monomer_type).data();
+        double *_xh = xh.at(ds_index).at(monomer_type).data();
 
-        double *_yl = yl[ds_index][monomer_type].data();
-        double *_yd = yd[ds_index][monomer_type].data();
-        double *_yh = yh[ds_index][monomer_type].data();
+        double *_yl = yl.at(ds_index).at(monomer_type).data();
+        double *_yd = yd.at(ds_index).at(monomer_type).data();
+        double *_yh = yh.at(ds_index).at(monomer_type).data();
 
         int im, ip, jm, jp;
 
@@ -538,9 +550,9 @@ void CpuSolverCNADI::advance_propagator_1d(
         const std::vector<int> nx = this->cb->get_nx();
         double q_star[nx[0]];
 
-        double *_xl = xl[ds_index][monomer_type].data();
-        double *_xd = xd[ds_index][monomer_type].data();
-        double *_xh = xh[ds_index][monomer_type].data();
+        double *_xl = xl.at(ds_index).at(monomer_type).data();
+        double *_xd = xd.at(ds_index).at(monomer_type).data();
+        double *_xh = xh.at(ds_index).at(monomer_type).data();
 
         int im, ip;
 

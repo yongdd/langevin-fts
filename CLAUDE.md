@@ -71,10 +71,10 @@ For every computation, launch a separate SLURM job for each parameter value inst
 |------------|-----------------|-------|
 | spglib | - | Space group symmetry (required) |
 | LAPACKE | - | Anderson mixing SVD solver (required) |
-| CMake | 3.17+ | Build system |
-| C++ Compiler | C++20 support | GCC 10+, Clang 10+ |
+| CMake | 3.17+ | Build system (3.25.2+ for the GPU backend: C++20 for nvcc) |
+| C++ Compiler | C++20 support | GCC 10+, Clang 10+ (GPU backend: GCC 11+, Clang 15+ for `std::source_location`) |
 | Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
-| CUDA Toolkit | 11.8+ | For GPU support |
+| CUDA Toolkit | 12.2+ | For GPU support (device code is C++20) |
 | MKL | - | CPU FFT backend (via conda) |
 | FFTW | 3.3+ | Alternative CPU backend (GPL, optional) |
 | pybind11 | 2.13+ | Python bindings |
@@ -111,8 +111,8 @@ cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MK
 
 ### Important Build Notes
 
-- Requires C++20 standard (set in CMakeLists.txt)
-- CUDA Toolkit 11.8+ required for GPU support
+- Requires C++20 standard for host and device code (set in CMakeLists.txt)
+- CUDA Toolkit 12.2+ required for GPU support: nvcc 11.x has no `-std=c++20`, and nvcc 12.0/12.1 cannot evaluate `std::source_location::current()`; configuring with an older toolkit, CMake older than 3.25.2, or a host compiler without `std::source_location` stops with an error. The cuFFT library is taken from the toolkit of that nvcc, not from a conda environment's CUDA libraries
 - Compute capabilities 60-90 are compiled by default; pass `-DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"` to compile for other GPUs
 - If encountering "Unsupported gpu architecture" errors, drop the unsupported capabilities from that list
 - Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
@@ -312,7 +312,7 @@ CUDA code uses:
 - **Kernels loop over their index range**: every element-wise kernel uses a grid-stride loop (`while (i < M) { ...; i += blockDim.x * gridDim.x; }`), so it is correct for any launch configuration; kernels that give one block a row or a whole 1D transform loop over rows with `gridDim.x` and over the row with `blockDim.x`. Write new kernels the same way. The default launch is 1024 blocks of 256 threads (`LFTS_GPU_NUM_BLOCKS`, `LFTS_GPU_NUM_THREADS` override it); line solvers (CN-ADI) size their launch to the number of grid lines
 - **No new OpenMP regions in per-iteration host code of the CUDA path**: a `#pragma omp parallel for` in the box-change table update made the Gyroid example 3x slower (its threads competed with spinning threads elsewhere in the process; `OMP_WAIT_POLICY=PASSIVE` hid it) and was removed. Host work there stays serial or moves to the GPU
 - **Launch shape**: element kernels launched to cover an array use `grid_blocks(n, block_size)` (`CudaCommon.h`), which caps the grid at `MAX_GRID_THREADS` = 2^20 threads so the stride loop cannot overflow `int`
-- **Error checks (CUDA C++ Best Practices Guide 2.3)**: every call that returns an error code is wrapped (`CUDA_CHECK(...)` for runtime and CUB calls, `CUFFT_CHECK(...)` for cuFFT), and every kernel launch is followed by `CUDA_CHECK_LAUNCH();` (one check after an unbraced `if/else` launch pair). The check is a host-side read that does not synchronize, and `cudaGetLastError()` clears the slot, so a launch error is reported at its own launch and never again by a later, unrelated check. Errors of a running kernel surface at the next synchronizing call; run with `CUDA_LAUNCH_BLOCKING=1` or under `compute-sanitizer` to locate them. Release calls (`cudaFree`, `*Destroy`) are not checked because they run in destructors
+- **Error checks (CUDA C++ Best Practices Guide 2.3)**: every call that returns an error code is wrapped (`CUDA_CHECK(...)` for runtime and CUB calls, `CUFFT_CHECK(...)` for cuFFT), and every kernel launch is followed by `CUDA_CHECK_LAUNCH();` (one check after an unbraced `if/else` launch pair). The check is a host-side read that does not synchronize, and `cudaGetLastError()` clears the slot, so a launch error is reported at its own launch and never again by a later, unrelated check. Errors of a running kernel are not seen by the launch check: they surface at the first CUDA call made after the fault, at the latest at the next synchronizing call; run with `CUDA_LAUNCH_BLOCKING=1` or under `compute-sanitizer` to locate them. Release calls (`cudaFree`, `cudaFreeHost`, `*Destroy`) run in destructors and `release()` paths and must not throw: wrap them in `ignore_release_error(...)`, which clears the error a failed release leaves in the slot and counts it
 - **No allocation or default-stream copies inside the propagator loop**: `cudaMalloc`/`cudaFree` and synchronous `cudaMemcpy` serialize all streams. Tables rebuilt after a box change reuse their device buffers and are uploaded with `cudaMemcpyAsync` on the object's own stream
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
@@ -569,7 +569,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent. The order of a computation goes into `src/common/Computation*.cpp` once; new grid operations go into both `ComputationBackend` implementations
 
-3. Memory management: allocations are owned by objects that release them. Device memory lives in `CudaDeviceBuffer<T>` and page-locked host memory in `CudaPinnedBuffer<T>` (`src/platforms/cuda/CudaCommon.h`), host arrays in `std::vector`, owned objects in `std::unique_ptr`, so destructors and constructors that throw need no cleanup code. Raw pointers are only lent (`.get()`, kernel and cuFFT arguments); the exceptions are the factory functions, which hand ownership to the caller, and the backends' `allocate()`/`deallocate()` pair, which is the allocator of the propagator handles; FFTW/MKL plans and descriptors and the `fftw_malloc` buffers of `FftwFFT`/`FftwCrysFFT*` are freed by those classes' `release()`
+3. Memory management: allocations are owned by objects that release them. Device memory lives in `CudaDeviceBuffer<T>` and page-locked host memory in `CudaPinnedBuffer<T>` (`src/platforms/cuda/CudaCommon.h`), host arrays in `std::vector`, owned objects in `std::unique_ptr`, so destructors and constructors that throw need no cleanup code. Raw pointers are only lent (`.get()`, kernel and cuFFT arguments; test a buffer for null with `.empty()`); the exceptions are the factory functions, which hand ownership to the caller, the backends' `allocate()`/`deallocate()` and `allocate_checkpoint()`/`deallocate_checkpoint()` pairs, which are the allocators of the propagator handles and checkpoints, and the `CudaCommon` singleton; FFTW/MKL plans and descriptors and the `fftw_malloc` buffers of `FftwFFT`/`FftwCrysFFT*` are freed by those classes' `release()`. Every owned CUDA allocation goes through `counted_cuda_allocate()`, so the live counters and the failure hook used by `tests/TestCudaDeviceBuffer.cu` see it
 
 4. The propagator computation optimizer (`PropagatorComputationOptimizer`) automatically detects redundant calculations using hash tables of `PropagatorCode` objects - avoid manual optimization
 

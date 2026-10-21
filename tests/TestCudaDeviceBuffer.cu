@@ -4,22 +4,28 @@
  *        built on them.
  *
  * 1. The buffer class: allocation, lending, moves (also over a buffer that holds
- *    memory), release, containers, the destructor, pinned memory, a failed allocation.
+ *    memory), release, containers, the destructor, pinned memory, a failed
+ *    allocation (its message names the caller and the size).
  * 2. Every kind of CUDA object (propagator computations of all solvers, the CrysFFT
  *    engines, non-periodic transforms, complex fields, the Anderson mixers) returns
- *    all its buffers when destroyed. Checked exactly with the live-allocation
- *    counters of the buffer class, which other processes and cuFFT's own plan
- *    memory do not affect.
+ *    all its allocations when destroyed. Checked exactly with the live-allocation
+ *    counters, which count CudaBuffer and the backend's propagator and checkpoint
+ *    arrays, and which other processes and cuFFT's own plan memory do not affect.
+ *    No release may fail (cuda_release_failures(); a double free would count).
  * 3. Failure-injection sweep: the test hook cuda_buffer_fail_countdown() makes the
- *    N-th buffer allocation throw; N runs over every allocation of each construction
- *    (and its first run), and after each failure the counters must be back where
- *    they started. This covers every partial-construction path.
- * 4. A construction that really runs out of device memory releases what it took.
- *    That check fills the GPU on purpose (the test runs serially, see
- *    tests/CMakeLists.txt).
+ *    N-th counted allocation throw; N runs over every allocation of each
+ *    construction (and its first run), and after each failure the counters must be
+ *    back where they started. This covers every path on which a counted
+ *    allocation fails; failures of cuFFT plan, stream and event creation are not
+ *    injected (section 4 reaches some of them for real).
+ * 4. A small construction that really runs out of device memory releases what it
+ *    took (counters, and device free memory end to end): a ballast holds the rest
+ *    of the free memory for a moment, with several leftovers so the failure falls
+ *    at different stages. The test runs serially (tests/CMakeLists.txt).
  */
 #include <algorithm>
 #include <complex>
+#include <concepts>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -40,6 +46,7 @@
 
 static long long live_device() { return CudaDeviceMemory::counters().live_count.load(); }
 static long long live_pinned() { return CudaPinnedMemory::counters().live_count.load(); }
+static long long live_device_bytes() { return CudaDeviceMemory::counters().live_bytes.load(); }
 
 static size_t free_bytes()
 {
@@ -49,21 +56,57 @@ static size_t free_bytes()
     return f;
 }
 
+/// Hold up to `bytes` of device memory, in chunks: one allocation of all the
+/// free memory usually fails, so the chunk size halves down to 1 MiB on failure.
+static std::vector<CudaDeviceBuffer<char>> hold_device_memory(size_t bytes)
+{
+    std::vector<CudaDeviceBuffer<char>> chunks;
+    size_t chunk = bytes, held = 0;
+    while (held < bytes && chunk >= (size_t(1) << 20))
+    {
+        const size_t want = std::min(chunk, bytes - held);
+        try
+        {
+            chunks.emplace_back(want);
+            held += want;
+        }
+        catch (const std::exception&)
+        {
+            chunk /= 2;
+        }
+    }
+    return chunks;
+}
+
 static bool check(bool cond, const std::string& what)
 {
     printf("  [%s] %s\n", cond ? "PASS" : "FAIL", what.c_str());
     return cond;
 }
 
-/// The release calls ignore errors on purpose; a failed cudaFree (e.g. a double
-/// free) still leaves its error in the last-error slot, which this reads.
+/// No release call has failed (ignore_release_error() counts a failed cudaFree,
+/// e.g. a double free, instead of leaving it in the error slot) and no error is
+/// pending in the slot. Reading the slot clears it, so call this before
+/// combining its result with other conditions.
 static bool no_cuda_error(const std::string& where)
 {
+    const long long failed_releases = cuda_release_failures().load();
     const cudaError_t e = cudaGetLastError();
+    if (failed_releases != 0)
+        printf("  %lld failed release call(s) by %s\n", failed_releases, where.c_str());
     if (e != cudaSuccess)
-        printf("  CUDA error after %s: %s\n", where.c_str(), cudaGetErrorString(e));
-    return e == cudaSuccess;
+        printf("  CUDA error pending after %s: %s\n", where.c_str(), cudaGetErrorString(e));
+    return failed_releases == 0 && e == cudaSuccess;
 }
+
+/// The buffer lends its pointer implicitly, also to void* parameters (cudaMemcpy).
+/// (GCC and Clang reject `delete buf`: the two conversions make it ambiguous. A
+/// requires-expression cannot test that: GCC reports the ambiguity as a hard
+/// error, and nvcc's front end treats the expression as valid.)
+static_assert(std::convertible_to<CudaDeviceBuffer<double>, double*>);
+static_assert(std::convertible_to<CudaDeviceBuffer<double>, const double*>);
+static_assert(std::convertible_to<CudaDeviceBuffer<double>, void*>);
+static_assert(std::convertible_to<CudaDeviceBuffer<double>, const void*>);
 
 //------------------------------------------------------------------------------
 // One construction and a short run of each kind of object
@@ -214,14 +257,18 @@ int main()
         d = std::move(c);
         ok &= check(d.get() == raw && live_device() == d_start + 1, "move assignment over a full buffer frees the old allocation");
 
-        const size_t before_allocate = free_bytes();
+        const long long bytes_start = live_device_bytes() - static_cast<long long>(n * sizeof(double));
         d.allocate(16);
-        ok &= check(d.size() == 16 && live_device() == d_start + 1 && free_bytes() > before_allocate + n * sizeof(double) / 2,
+        ok &= check(d.size() == 16 && live_device() == d_start + 1 && live_device_bytes() == bytes_start + 16 * 8,
                     "allocate() frees the previous 32 MiB allocation");
+        d.allocate(0);
+        ok &= check(d.empty() && d.size() == 0 && live_device() == d_start && live_device_bytes() == bytes_start,
+                    "allocate(0) frees the allocation and leaves the buffer empty");
+        d.allocate(16);
         d.release();
         ok &= check(d.empty() && d.size() == 0 && live_device() == d_start, "release() empties the buffer");
-        d.allocate(0);
-        ok &= check(d.empty() && live_device() == d_start, "allocate(0) leaves the buffer empty");
+        d.release();
+        ok &= check(d.empty() && live_device() == d_start, "release() of an empty buffer does nothing");
 
         std::vector<CudaDeviceBuffer<int>> v(3);
         for (auto& e : v)
@@ -232,12 +279,14 @@ int main()
     }
     ok &= check(live_device() == d_start, "the destructor of the vector's buffers frees them");
     {
-        const size_t before = free_bytes();
+        const long long bytes_before = live_device_bytes();
         {
             CudaDeviceBuffer<double> only_destroyed(n);
+            ok &= check(live_device_bytes() == bytes_before + static_cast<long long>(n * sizeof(double)),
+                        "the counters see a 32 MiB allocation");
         }
-        ok &= check(free_bytes() + n * sizeof(double) / 2 > before && live_device() == d_start,
-                    "the destructor alone returns a 32 MiB allocation to the device");
+        ok &= check(live_device_bytes() == bytes_before && live_device() == d_start,
+                    "the destructor alone releases it");
     }
     {
         CudaPinnedBuffer<std::complex<double>> p(1000);
@@ -250,19 +299,41 @@ int main()
         ok &= check(h[999] == std::complex<double>(1.0, 2.0), "pinned -> device -> host round trip");
     }
     ok &= check(live_pinned() == p_start && live_device() == d_start, "pinned and device buffers released");
-    ok &= check(no_cuda_error("the buffer checks"), "no CUDA error left by the releases");
+    ok &= check(no_cuda_error("the buffer checks"), "no release failed and no CUDA error is pending");
 
     bool threw = false;
+    std::string message;
     try
     {
         CudaDeviceBuffer<double> huge(size_t(1) << 50);   // 8 PiB: cannot succeed
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
         threw = true;
+        message = e.what();
     }
-    cudaGetLastError();                                  // clear the allocation error
+    printf("  message: %s\n", message.c_str());
     ok &= check(threw && live_device() == d_start, "an impossible allocation throws and is not counted");
+    ok &= check(message.find("9007199254740992 bytes of device memory") != std::string::npos
+                && message.find("TestCudaDeviceBuffer.cu") != std::string::npos
+                && message.find("main") != std::string::npos,
+                "its message gives the size and the caller's file and function");
+    ok &= check(no_cuda_error("the failed allocation"), "the failed allocation leaves no error pending");
+
+    cuda_buffer_fail_countdown().store(0);
+    message.clear();
+    try
+    {
+        CudaPinnedBuffer<int> injected(4);
+    }
+    catch (const std::exception& e)
+    {
+        message = e.what();
+    }
+    ok &= check(message.find("test hook") != std::string::npos && message.find("16 bytes of pinned host memory") != std::string::npos
+                && cuda_buffer_fail_countdown().load() < 0 && live_pinned() == p_start,
+                "the failure hook throws once, with a message that says so");
+    cuda_buffer_fail_countdown().store(-1);
 
     //--------------------------------------------------------------------------
     // 2. Every kind of object returns all its buffers
@@ -275,13 +346,17 @@ int main()
         bool ran = true;
         try { c.run(); }
         catch (const std::exception& e) { ran = false; printf("  %s threw: %s\n", c.name.c_str(), e.what()); }
-        ok &= check(ran && live_device() == d0 && live_pinned() == p0 && no_cuda_error(c.name), c.name);
+        const bool no_error = no_cuda_error(c.name);
+        ok &= check(ran && no_error && live_device() == d0 && live_pinned() == p0, c.name);
     }
 
     //--------------------------------------------------------------------------
     // 3. Failure-injection sweep (one stream: fewer allocations, same code)
     //--------------------------------------------------------------------------
     printf("--- every allocation of every construction fails once ---\n");
+    const char* omp_env = std::getenv("OMP_NUM_THREADS");
+    const bool had_omp_env = (omp_env != nullptr);
+    const std::string saved_omp_env = had_omp_env ? omp_env : "";
     setenv("OMP_NUM_THREADS", "1", 1);                   // the backends size their streams from it
     for (const Case& c : all)
     {
@@ -295,7 +370,8 @@ int main()
             catch (const std::exception&) {}
             const bool fired = cuda_buffer_fail_countdown().load() < 0;
             cuda_buffer_fail_countdown().store(-1);
-            if (live_device() != d0 || live_pinned() != p0 || !no_cuda_error(c.name))
+            const bool no_error = no_cuda_error(c.name);
+            if (!no_error || live_device() != d0 || live_pinned() != p0)
             {
                 printf("  %s: allocation %lld failed and left %lld device / %lld pinned buffers\n",
                        c.name.c_str(), k, live_device() - d0, live_pinned() - p0);
@@ -310,55 +386,86 @@ int main()
         }
         ok &= check(clean && points > 0, c.name + ": " + std::to_string(points) + " failure points, nothing left behind");
     }
-    unsetenv("OMP_NUM_THREADS");
+    if (had_omp_env)
+        setenv("OMP_NUM_THREADS", saved_omp_env.c_str(), 1);
+    else
+        unsetenv("OMP_NUM_THREADS");
 
     //--------------------------------------------------------------------------
     // 4. A construction that really runs out of device memory
     //--------------------------------------------------------------------------
     printf("--- out of device memory ---\n");
     {
-        const long long d0 = live_device(), p0 = live_pinned();
-        const size_t before_oom = free_bytes();
-        // The box takes 3 fields of m doubles; the computation then runs out partway
-        const size_t m = std::min(before_oom / (8 * 5), size_t(1) << 28);
-        const int ny = 64, nz = 64;
-        const int nxx = static_cast<int>(m / (ny * nz));
-        if (nxx < 2)
+        const size_t free_start = free_bytes();
+        ComputationSpec spec;
+        spec.nx = {64, 64, 64};
+        spec.lx = {4.0, 4.0, 4.0};
+
+        // What one construction and run take (CudaBuffers, propagator arrays and
+        // cuFFT's plan memory), measured once while the objects are alive
+        size_t need = 0;
         {
-            printf("  [SKIP] not enough free device memory for the out-of-memory check\n");
+            const size_t before = free_bytes();
+            std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
+            std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box(spec.nx, spec.lx, {}));
+            std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
+            molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
+            std::unique_ptr<PropagatorComputationOptimizer> optimizer(factory->create_propagator_computation_optimizer(molecules.get(), true));
+            std::unique_ptr<PropagatorComputation<double>> computation(
+                factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4"));
+            std::vector<double> w(cb->get_n_basis(), 0.1);
+            computation->compute_propagators({{"A", w.data()}, {"B", w.data()}});
+            computation->compute_concentrations();
+            computation->compute_stress();
+            const size_t during = free_bytes();
+            need = before > during ? before - during : 0;
         }
-        else
+        printf("  a 64^3 computation takes about %.1f MiB of device memory\n", need / 1048576.0);
+
+        // Leave a fraction of that free; the rest of the free memory is held by a
+        // ballast for the moment of the construction. The last case leaves (almost)
+        // nothing, so one construction runs out even if another process changed the
+        // free memory while `need` was measured.
+        int ran_out = 0, tried = 0;
+        for (double fraction : {0.9, 0.6, 0.3, 0.1, 0.02, 0.0})
         {
-            bool built = false, failed = false;
+            const size_t leftover = static_cast<size_t>(fraction * need);
+            const size_t free_now = free_bytes();
+            if (free_now <= leftover)
+                continue;
+            const long long d0 = live_device(), p0 = live_pinned();
+            std::vector<CudaDeviceBuffer<char>> ballast = hold_device_memory(free_now - leftover);
+            const size_t free_left = free_bytes();
+            if (free_left > leftover + need)
             {
-                std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
-                std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box({nxx, ny, nz}, {4.0, 2.0, 2.0}, {}));
-                std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
-                molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
-                std::unique_ptr<PropagatorComputationOptimizer> optimizer(factory->create_propagator_computation_optimizer(molecules.get(), true));
-                try
-                {
-                    std::unique_ptr<PropagatorComputation<double>> computation(
-                        factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4"));
-                    built = true;
-                }
-                catch (const std::exception&)
-                {
-                    failed = true;
-                }
-                cudaGetLastError();                      // clear the out-of-memory error
+                printf("  [SKIP] leftover %.1f MiB: could hold only part of the device memory (%.1f MiB left free)\n",
+                       leftover / 1048576.0, free_left / 1048576.0);
+                continue;
             }
-            const size_t after_oom = free_bytes();
-            printf("  grid %d x %d x %d: construction %s; device free before %zu, after %zu\n",
-                   nxx, ny, nz, failed ? "ran out of memory" : (built ? "succeeded" : "?"), before_oom, after_oom);
-            if (built)
-                printf("  [SKIP] the device had room for the whole computation; failure path not exercised\n");
-            // The propagator handles come from the backend's own allocator, not
-            // CudaBuffer; the free-memory comparison covers them (64 MiB margin
-            // for cuFFT's per-plan memory and the 2 MiB pages; one field here is GiBs)
-            ok &= check(live_device() == d0 && live_pinned() == p0 && after_oom + (size_t(64) << 20) >= before_oom,
-                        "a construction that runs out of memory releases what it acquired");
+            ++tried;
+            std::string message;
+            bool threw = false;
+            try { run_computation<double>(spec); }
+            catch (const std::exception& e) { threw = true; message = e.what(); }
+            const bool no_error = no_cuda_error("an out-of-memory construction");
+            ballast.clear();
+            if (threw)
+                ++ran_out;
+            if (message.size() > 200)
+                message = message.substr(0, 200) + "...";
+            ok &= check(no_error && live_device() == d0 && live_pinned() == p0,
+                        "free " + std::to_string(free_left >> 20) + " MiB: "
+                        + (threw ? "ran out (" + message + ")" : "fit") + "; everything released");
         }
+        if (tried > 0)
+            ok &= check(ran_out > 0, "at least one construction ran out of device memory");
+        else
+            printf("  [SKIP] the out-of-memory check could not hold the device memory\n");
+        // End to end, also for memory the counters do not see (cuFFT plan work areas)
+        const size_t free_end = free_bytes();
+        ok &= check(free_end + (size_t(64) << 20) >= free_start,
+                    "the device memory returns to its level before these constructions "
+                    "(64 MiB margin for cuFFT's per-plan memory and the 2 MiB pages)");
     }
 
     printf("TestCudaDeviceBuffer: %s\n", ok ? "PASSED" : "FAILED");

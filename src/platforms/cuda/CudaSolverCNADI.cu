@@ -281,17 +281,17 @@ void CudaSolverCNADI::update_laplacian_operator()
                     zl, zd, zh,
                     bond_length_sq, local_ds);
 
-                CUDA_CHECK(cudaMemcpy(d_xl[ds_idx][monomer_type], xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_xd[ds_idx][monomer_type], xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_xh[ds_idx][monomer_type], xh, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xl.at(ds_idx).at(monomer_type), xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xd.at(ds_idx).at(monomer_type), xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_xh.at(ds_idx).at(monomer_type), xh, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
 
-                CUDA_CHECK(cudaMemcpy(d_yl[ds_idx][monomer_type], yl, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_yd[ds_idx][monomer_type], yd, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_yh[ds_idx][monomer_type], yh, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yl.at(ds_idx).at(monomer_type), yl, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yd.at(ds_idx).at(monomer_type), yd, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_yh.at(ds_idx).at(monomer_type), yh, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
 
-                CUDA_CHECK(cudaMemcpy(d_zl[ds_idx][monomer_type], zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_zd[ds_idx][monomer_type], zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-                CUDA_CHECK(cudaMemcpy(d_zh[ds_idx][monomer_type], zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zl.at(ds_idx).at(monomer_type), zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zd.at(ds_idx).at(monomer_type), zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_zh.at(ds_idx).at(monomer_type), zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
 
             }
         }
@@ -340,7 +340,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
                 if (use_reduced_basis && device == "gpu")
                 {
                     ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
-                        d_exp_dw[ds_idx][monomer_type], w, d_full_to_reduced_map_, M);
+                        d_exp_dw.at(ds_idx).at(monomer_type), w, d_full_to_reduced_map_, M);
                     CUDA_CHECK_LAUNCH();
                 }
                 else
@@ -356,14 +356,14 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
 
                     // Copy field configurations from host to device
                     CUDA_CHECK(cudaMemcpyAsync(
-                        d_exp_dw     [ds_idx][monomer_type], w_full,
+                        d_exp_dw.at(ds_idx).at(monomer_type), w_full,
                         sizeof(double)*M, cudaMemcpyInputToDevice));
                 }
 
                 // Compute d_exp_dw
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    ((double*) d_exp_dw[ds_idx][monomer_type],
-                     (double*) d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                    ((double*) d_exp_dw.at(ds_idx).at(monomer_type),
+                     (double*) d_exp_dw.at(ds_idx).at(monomer_type),      1.0, -0.50*local_ds, M);
                 CUDA_CHECK_LAUNCH();
             }
         }
@@ -401,7 +401,7 @@ void CudaSolverCNADI::advance_propagator(
         }
 
         // CN-ADI2: single full step only (2nd order accuracy)
-        double *_d_exp_dw = d_exp_dw[ds_index][monomer_type];
+        double *_d_exp_dw = d_exp_dw.at(ds_index).at(monomer_type);
 
         // Apply exp(-w*local_ds/2) at start
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_in_full, _d_exp_dw, 1.0, M);
@@ -462,17 +462,17 @@ void CudaSolverCNADI::advance_propagator_3d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[ds_index][monomer_type];
-        double *_d_xd = d_xd[ds_index][monomer_type];
-        double *_d_xh = d_xh[ds_index][monomer_type];
+        double *_d_xl = d_xl.at(ds_index).at(monomer_type);
+        double *_d_xd = d_xd.at(ds_index).at(monomer_type);
+        double *_d_xh = d_xh.at(ds_index).at(monomer_type);
 
-        double *_d_yl = d_yl[ds_index][monomer_type];
-        double *_d_yd = d_yd[ds_index][monomer_type];
-        double *_d_yh = d_yh[ds_index][monomer_type];
+        double *_d_yl = d_yl.at(ds_index).at(monomer_type);
+        double *_d_yd = d_yd.at(ds_index).at(monomer_type);
+        double *_d_yh = d_yh.at(ds_index).at(monomer_type);
 
-        double *_d_zl = d_zl[ds_index][monomer_type];
-        double *_d_zd = d_zd[ds_index][monomer_type];
-        double *_d_zh = d_zh[ds_index][monomer_type];
+        double *_d_zl = d_zl.at(ds_index).at(monomer_type);
+        double *_d_zd = d_zd.at(ds_index).at(monomer_type);
+        double *_d_zh = d_zh.at(ds_index).at(monomer_type);
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);
@@ -573,13 +573,13 @@ void CudaSolverCNADI::advance_propagator_2d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[ds_index][monomer_type];
-        double *_d_xd = d_xd[ds_index][monomer_type];
-        double *_d_xh = d_xh[ds_index][monomer_type];
+        double *_d_xl = d_xl.at(ds_index).at(monomer_type);
+        double *_d_xd = d_xd.at(ds_index).at(monomer_type);
+        double *_d_xh = d_xh.at(ds_index).at(monomer_type);
 
-        double *_d_yl = d_yl[ds_index][monomer_type];
-        double *_d_yd = d_yd[ds_index][monomer_type];
-        double *_d_yh = d_yh[ds_index][monomer_type];
+        double *_d_yl = d_yl.at(ds_index).at(monomer_type);
+        double *_d_yd = d_yd.at(ds_index).at(monomer_type);
+        double *_d_yh = d_yh.at(ds_index).at(monomer_type);
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);
@@ -655,9 +655,9 @@ void CudaSolverCNADI::advance_propagator_1d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[ds_index][monomer_type];
-        double *_d_xd = d_xd[ds_index][monomer_type];
-        double *_d_xh = d_xh[ds_index][monomer_type];
+        double *_d_xl = d_xl.at(ds_index).at(monomer_type);
+        double *_d_xd = d_xd.at(ds_index).at(monomer_type);
+        double *_d_xh = d_xh.at(ds_index).at(monomer_type);
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);

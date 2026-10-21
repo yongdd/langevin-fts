@@ -28,14 +28,14 @@ modules that a newer version dropped. When upgrading across versions, remove the
 
 ### Required
 * **Anaconda**: https://www.anaconda.com/download
-* **C++ Compiler**: C++20 support (GCC 10+)
+* **C++ Compiler**: C++20 support (GCC 10+; GCC 11+ or Clang 15+ for the GPU backend, which uses `std::source_location`)
 * **spglib**: space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`)
 * **LAPACKE**: Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`; with MKL the header is `mkl_lapacke.h` from `mkl-include`)
 * **pybind11 2.13+**, **NumPy 2.0+**, **SciPy 1.14+**: Python bindings (all in `environment.yml`)
 * **At least one CPU FFT backend**: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`)
 
 ### Optional
-* **CUDA Toolkit 11.8+**: GPU backend (https://developer.nvidia.com/cuda-toolkit)
+* **CUDA Toolkit 12.2+**: GPU backend (https://developer.nvidia.com/cuda-toolkit). The device code is C++20, which nvcc 11.x cannot compile; nvcc 12.0/12.1 cannot compile `std::source_location`. The GPU backend also needs CMake 3.25.2+ (`environment.yml` installs 3.31)
 * **FFTW3**: Alternative CPU backend — enable with `-DPOLYMERFTS_USE_FFTW=ON`
 
 ## CMake Options
@@ -84,7 +84,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
 
 **Cause**: the build compiles for compute capabilities 60-90 by default
 (`POLYMERFTS_CUDA_ARCHITECTURES`), and a toolkit may not support all of them
-(CUDA 13.x drops sm_60/61; older toolkits lack 89/90).
+(CUDA 13.x drops sm_60, sm_61 and sm_70).
 
 **Solution**: list only the capabilities your toolkit and GPU support, or update the toolkit:
 ```bash
@@ -106,6 +106,21 @@ records the library directories itself):
 ```bash
 export PATH=/usr/local/cuda/bin:$PATH
 ```
+
+### CUDA Toolkit Too Old
+
+**Error**: `CUDA toolkit 11.8.89 found at ...; the GPU backend needs CUDA 12.2 or newer`
+
+**Solution**: put a CUDA 12.2+ toolkit first on PATH before configuring a new build
+directory (an existing build directory keeps the compiler it was configured with, so
+configure a fresh one or delete its `CMakeCache.txt`):
+```bash
+export PATH=/usr/local/cuda-12.4/bin:$PATH
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc
+```
+A conda environment may also hold CUDA runtime libraries of another version (for
+example `cudatoolkit` installed for CuPy). The build links the cuFFT of the toolkit
+whose `nvcc` compiles the code; the configure step prints the path it uses (`cuFFT: ...`).
 
 ## Keeping several versions side by side
 
@@ -176,7 +191,7 @@ Two test modes are available:
 - Aggregation: propagator optimization
 - Scheduler: parallel computation
 
-**Full tests** add (29 tests):
+**Full tests** add (37 tests):
 - SCFT: 3D, hexagonal cylinder
 - Stress tensor: 2D, 3D calculations
 - Complex field: CL-FTS propagators
@@ -185,3 +200,4 @@ Two test modes are available:
 - Nanoparticle, absorbing boundary conditions
 - Complex-field stress on every platform, RK2 stress with non-periodic boundaries
 - L-FTS/CL-FTS run loops and checkpoint continuation, convergence orders
+- CUDA memory ownership: every object returns its device and pinned memory, also when an allocation fails or the device runs out of memory

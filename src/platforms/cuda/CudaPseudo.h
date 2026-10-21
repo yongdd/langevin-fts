@@ -141,7 +141,7 @@ public:
      * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/6)
      */
-    double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond[ds_index][monomer_type].get(); };
+    double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond.at(ds_index).at(monomer_type).get(); };
 
     /**
      * @brief Get half bond factor (device pointer).
@@ -149,7 +149,7 @@ public:
      * @param ds_index Index for ds value (0-based)
      * @return Device pointer to exp(-b²|k|²ds/12)
      */
-    double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type].get();};
+    double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half.at(ds_index).at(monomer_type).get();};
 
     /// Get x-direction Fourier basis (device pointer).
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};

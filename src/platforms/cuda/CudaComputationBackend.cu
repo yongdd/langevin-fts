@@ -221,13 +221,13 @@ void CudaComputationBackend<T>::release()
         d_block_stress[i].release();
         h_block_stress[i].release();
         if (kernel_done[i] != nullptr)
-            cudaEventDestroy(kernel_done[i]);
+            ignore_release_error(cudaEventDestroy(kernel_done[i]));
         if (copy_done[i] != nullptr)
-            cudaEventDestroy(copy_done[i]);
+            ignore_release_error(cudaEventDestroy(copy_done[i]));
         if (streams[i][0] != nullptr)
-            cudaStreamDestroy(streams[i][0]);
+            ignore_release_error(cudaStreamDestroy(streams[i][0]));
         if (streams[i][1] != nullptr)
-            cudaStreamDestroy(streams[i][1]);
+            ignore_release_error(cudaStreamDestroy(streams[i][1]));
         kernel_done[i] = nullptr;
         copy_done[i] = nullptr;
         streams[i][0] = nullptr;
@@ -243,24 +243,27 @@ void CudaComputationBackend<T>::synchronize()
 
 // ==================== Memory ====================
 
+// The propagator and checkpoint arrays are raw handles owned by the
+// computations; they are counted like CudaBuffer allocations, so the tests'
+// live counters and failure hook cover them as well.
 template <typename T>
 BackendArray<T>* CudaComputationBackend<T>::allocate()
 {
-    CuDeviceData<T>* d_a = nullptr;
-    CUDA_CHECK(cudaMalloc((void**)&d_a, sizeof(T)*n_basis));
-    const cudaError_t err = cudaMemset(d_a, 0, sizeof(T)*n_basis);
+    const size_t bytes = sizeof(T)*n_basis;
+    void* d_a = counted_cuda_allocate<CudaDeviceMemory>(bytes);
+    const cudaError_t err = cudaMemset(d_a, 0, bytes);
     if (err != cudaSuccess)
     {
-        cudaFree(d_a);
+        counted_cuda_release<CudaDeviceMemory>(d_a, bytes);
         CUDA_CHECK(err);
     }
-    return wrap(d_a);
+    return wrap(static_cast<CuDeviceData<T>*>(d_a));
 }
 
 template <typename T>
 void CudaComputationBackend<T>::deallocate(BackendArray<T>* a)
 {
-    cudaFree(raw(a));
+    counted_cuda_release<CudaDeviceMemory>(raw(a), sizeof(T)*n_basis);
 }
 
 template <typename T>
@@ -278,15 +281,14 @@ void CudaComputationBackend<T>::copy_to_host(T* dst, BackendArray<T>* src)
 template <typename T>
 CheckpointArray<T>* CudaComputationBackend<T>::allocate_checkpoint()
 {
-    CuDeviceData<T>* h_a = nullptr;
-    CUDA_CHECK(cudaMallocHost((void**)&h_a, sizeof(T)*n_basis));
+    void* h_a = counted_cuda_allocate<CudaPinnedMemory>(sizeof(T)*n_basis);
     return reinterpret_cast<CheckpointArray<T>*>(h_a);
 }
 
 template <typename T>
 void CudaComputationBackend<T>::deallocate_checkpoint(CheckpointArray<T>* a)
 {
-    cudaFreeHost(raw(a));
+    counted_cuda_release<CudaPinnedMemory>(raw(a), sizeof(T)*n_basis);
 }
 
 template <typename T>

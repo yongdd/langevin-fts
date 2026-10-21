@@ -93,7 +93,7 @@ void CudaPseudo<T>::upload_boltz_bond()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            CUDA_CHECK(cudaMemcpy(d_boltz_bond[ds_index][monomer_type], item.second.data(),
+            CUDA_CHECK(cudaMemcpy(d_boltz_bond.at(ds_index).at(monomer_type), item.second.data(),
                                        sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
@@ -104,7 +104,7 @@ void CudaPseudo<T>::upload_boltz_bond()
         for (const auto& item : ds_entry.second)
         {
             std::string monomer_type = item.first;
-            CUDA_CHECK(cudaMemcpy(d_boltz_bond_half[ds_index][monomer_type], item.second.data(),
+            CUDA_CHECK(cudaMemcpy(d_boltz_bond_half.at(ds_index).at(monomer_type), item.second.data(),
                                        sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }

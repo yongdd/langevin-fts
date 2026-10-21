@@ -47,6 +47,19 @@ void report_cuda_error(cudaError_t code, const char *file, int line, const char 
     throw thrust::system_error(code, thrust::cuda_category(), file_and_line);
 }
 
+void report_cuda_allocation_error(cudaError_t code, size_t bytes, const char *kind,
+                                  const std::source_location& where, bool injected)
+{
+    if (!injected)
+        (void)cudaGetLastError();   // as above (an injected failure made no CUDA call)
+    std::string what = std::string(injected ? "injected failure (test hook) of the allocation"
+                                            : "allocation")
+        + " of " + std::to_string(bytes) + " bytes of " + kind + " memory; File: \""
+        + where.file_name() + "\", line: " + std::to_string(where.line())
+        + ", function <" + where.function_name() + ">";
+    throw thrust::system_error(code, thrust::cuda_category(), what);
+}
+
 std::complex<double> cuDoubleToStdComplex(cuDoubleComplex z) {
     return std::complex<double>(z.x, z.y);
 }

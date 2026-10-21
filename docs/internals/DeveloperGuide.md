@@ -479,28 +479,42 @@ that throw need no cleanup code:
 
 - device memory: `CudaDeviceBuffer<T>`; page-locked host memory: `CudaPinnedBuffer<T>`
   (both in `src/platforms/cuda/CudaCommon.h`; move-only, `allocate(n)`, `release()`,
-  `get()`, and an implicit conversion that lends the raw pointer to kernels, `cudaMemcpy`
-  and cuFFT; template calls such as CUB take `get()`);
+  `get()`, `empty()`, and an implicit conversion that lends the raw pointer to kernels,
+  `cudaMemcpy` and cuFFT; template calls such as CUB take `get()`, and tests for null use
+  `empty()`, because the second conversion to `void*`, with which GCC and Clang reject
+  `delete buffer`, makes `if (buffer)` ambiguous too); a failed allocation throws with its size and
+  the caller's file, line and function (`std::source_location`);
 - host arrays: `std::vector`; owned objects (solvers, transforms, CrysFFT engines,
   `Pseudo`, the scheduler, the backend): `std::unique_ptr`.
 
-Raw pointers are lent, never owned. Two places hand out ownership on purpose: the
+Raw pointers are lent, never owned. Three places hand out ownership on purpose: the
 factory functions (`create_computation_box`, `create_propagator_computation`, ...),
-whose results the caller (the Python bindings or a C++ test) deletes, and the backends'
-`allocate()`/`deallocate()` pair, the allocator of the propagator handles that the
-computation classes free in one place. cuFFT plans, CUDA streams and events are not
-memory and are destroyed explicitly where their order matters (the solver before the
-streams it runs on). The CPU FFT classes keep their FFTW/MKL plans and descriptors and
-the `fftw_malloc`-aligned buffers of `FftwFFT`/`FftwCrysFFT*` in hand-written
-`release()` functions, which their destructors call. `CudaBuffer` keeps exact counts of its live device and pinned allocations
-(`CudaDeviceMemory::counters()`, `CudaPinnedMemory::counters()`), and
-`cuda_buffer_fail_countdown()` is a test hook that makes the N-th following allocation
-throw. `tests/TestCudaDeviceBuffer.cu` uses both: every kind of CUDA object (all
-solvers, the CrysFFT engines, non-periodic transforms, complex fields, the Anderson
-mixers) must return the counters to their start when destroyed, and a sweep fails each
-allocation of each construction in turn and requires the same after every failure. The
-test also lets one construction run out of device memory for real, so it runs serially.
-Freeing a buffer by hand (`cudaFree(buffer)`) does not compile.
+whose results the caller (the Python bindings or a C++ test) deletes; the backends'
+`allocate()`/`deallocate()` and `allocate_checkpoint()`/`deallocate_checkpoint()` pairs,
+the allocators of the propagator handles and the reduce-memory checkpoints, which the
+computation classes free in one place; and the `CudaCommon` singleton, which is created
+with `new` and deliberately never deleted (it lives until the process exits). cuFFT plans, CUDA streams and events are not memory and are destroyed
+explicitly where their order matters (the solver before the streams it runs on); events
+used only for profiling are `CudaEvent` objects. The CPU FFT classes keep their FFTW/MKL
+plans and descriptors and the `fftw_malloc`-aligned buffers of `FftwFFT`/`FftwCrysFFT*`
+in hand-written `release()` functions, which their destructors call.
+
+Every owned CUDA allocation (the buffers and the backends' propagator and checkpoint
+arrays) goes through `counted_cuda_allocate()`/`counted_cuda_release()`, which keep exact
+counts of the live device and pinned allocations (`CudaDeviceMemory::counters()`,
+`CudaPinnedMemory::counters()`); `cuda_buffer_fail_countdown()` is a test hook that makes
+the N-th following counted allocation throw. Release calls (`cudaFree`, `cudaFreeHost`,
+`*Destroy`) go through `ignore_release_error()`, which does not throw, clears the error a
+failed release leaves in the per-thread slot and counts it in `cuda_release_failures()`.
+`tests/TestCudaDeviceBuffer.cu` uses all three: every kind of CUDA object (all solvers,
+the CrysFFT engines, non-periodic transforms, complex fields, the Anderson mixers) must
+return the counters to their start when destroyed without a failed release, and a sweep
+fails each counted allocation of each construction in turn and requires the same after
+every failure (failures of cuFFT plan, stream and event creation are not injected). The
+test also lets a small construction run out of device memory for real, by holding the
+rest of the free memory in a ballast buffer for a moment, so it runs serially. Freeing a
+buffer by hand does not compile (`cudaFree`, `cudaFreeHost` and `cudaFreeAsync` have deleted
+overloads for buffers; GCC and Clang also reject `delete buffer` as ambiguous).
 
 ### Propagator Computation Optimizer
 
@@ -530,7 +544,9 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
   an error code (`CUDA_CHECK(...)` for runtime and CUB calls, `CUFFT_CHECK(...)` for
   cuFFT) and follow every kernel launch with `CUDA_CHECK_LAUNCH();`. The check
   reads a host-side value and does not synchronize; `cudaGetLastError()` clears the slot, so an
-  error is reported at the launch that caused it. Release calls in destructors stay unchecked.
+  error is reported at the launch that caused it. Release calls run in destructors and
+  `release()` paths and do not throw: wrap them in `ignore_release_error(...)`, so a failed
+  one is not reported later by an unrelated check.
 
 ### Python
 
@@ -550,9 +566,14 @@ See [Installation.md](../getting-started/Installation.md#segmentation-fault) for
 
 - A launch error (bad configuration, too much shared memory) is reported by the check right
   after its launch.
-- An error inside a running kernel (e.g. an illegal address) is reported by the next call that
-  waits for the GPU, not at its launch. Run with `CUDA_LAUNCH_BLOCKING=1` to make every launch
-  synchronous, so the error appears at its own launch check (slower; for debugging only).
+- An error inside a running kernel (e.g. an illegal address) is not seen by its launch check.
+  It is reported by the first CUDA call made after the fault, at the latest by the next call that
+  waits for the GPU, and that call names its own line. Run with `CUDA_LAUNCH_BLOCKING=1` to make
+  every launch synchronous, so the error appears at its own launch check (slower; for debugging
+  only).
+- An allocation that fails names its size and the code that asked for it, e.g.
+  `allocation of 268435456 bytes of device memory; File: ".../CudaPseudo.cu", line: ...,
+  function <...>: out of memory`.
 - `compute-sanitizer --tool memcheck` finds out-of-bounds accesses and, with
   `--report-api-errors all`, every CUDA call that returns an error.
 - Use Nsight Systems / Nsight Compute for profiling.

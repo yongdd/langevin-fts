@@ -171,8 +171,8 @@ IF(CUDAToolkit_FOUND)
             SET_TEST_LABELS(${TEST_NAME})
         ENDIF()
     ENDFOREACH()
-    # Its out-of-memory check fills the GPU on purpose; keep it away from the
-    # other tests under ctest -j
+    # Its out-of-memory check holds most of the free device memory for a moment
+    # (a ballast buffer); keep it away from the other tests under ctest -j
     IF(TARGET TestCudaDeviceBuffer)
         SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE)
     ENDIF()

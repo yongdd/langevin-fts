@@ -323,8 +323,8 @@ void CudaSolverPseudoBase<T>::release_base()
     {
         for (int b = 0; b < 2; b++)
         {
-            if (plan_for_created_[i][b]) cufftDestroy(plan_for_[i][b]);
-            if (plan_bak_created_[i][b]) cufftDestroy(plan_bak_[i][b]);
+            if (plan_for_created_[i][b]) ignore_release_error(cufftDestroy(plan_for_[i][b]));
+            if (plan_bak_created_[i][b]) ignore_release_error(cufftDestroy(plan_bak_[i][b]));
             plan_for_created_[i][b] = plan_bak_created_[i][b] = false;
             plan_for_[i][b] = plan_bak_[i][b] = 0;
         }
@@ -657,8 +657,8 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
 
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-                CuDeviceData<T>* d_full = this->d_exp_dw[ds_idx][monomer_type].get();
-                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half[ds_idx][monomer_type].get() : nullptr;
+                CuDeviceData<T>* d_full = this->d_exp_dw.at(ds_idx).at(monomer_type).get();
+                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half.at(ds_idx).at(monomer_type).get() : nullptr;
 
                 if (use_reduced_basis && device == "gpu" && !use_crysfft)
                 {

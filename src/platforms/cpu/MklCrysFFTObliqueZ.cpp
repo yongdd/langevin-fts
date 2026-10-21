@@ -23,6 +23,34 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+namespace
+{
+/// Work arrays of the z DCT steps, one set per thread and shared by every
+/// instance on that thread. Each array is sized from its own requirement: two
+/// grids with the same Nx*Ny*Nz but a different Nz need the same real size and
+/// different spectrum sizes.
+struct ZWork
+{
+    std::vector<double> z_extended;               ///< mirrored sequences, howmany * Nz
+    std::vector<std::complex<double>> z_freq;     ///< their spectra, howmany * (Nz/2 + 1)
+};
+thread_local ZWork z_work;
+
+ZWork& z_work_for(size_t n_extended, size_t n_freq)
+{
+    if (z_work.z_extended.size() != n_extended)
+        z_work.z_extended.resize(n_extended);
+    if (z_work.z_freq.size() != n_freq)
+        z_work.z_freq.resize(n_freq);
+    return z_work;
+}
+}  // namespace
+
+std::array<size_t, 2> MklCrysFFTObliqueZ::thread_z_work_sizes()
+{
+    return {z_work.z_extended.size(), z_work.z_freq.size()};
+}
+
 //------------------------------------------------------------------------------
 // Constructor / Destructor
 //------------------------------------------------------------------------------
@@ -151,23 +179,7 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
     const int howmany = Nx * Ny;
     const int freq_stride = Nz / 2 + 1;
 
-    struct ThreadBuffers
-    {
-        std::unique_ptr<double[]> z_extended;
-        std::unique_ptr<std::complex<double>[]> z_freq;
-        int size = 0;        ///< elements of z_extended
-        int size_freq = 0;   ///< elements of z_freq
-    };
-    // Shared by every instance on this thread: two grids with the same
-    // Nx*Ny*Nz but a different Nz need different z_freq sizes
-    thread_local ThreadBuffers buffers;
-    if (buffers.size != howmany * Nz || buffers.size_freq != howmany * freq_stride)
-    {
-        buffers.z_extended = std::make_unique<double[]>(howmany * Nz);
-        buffers.z_freq = std::make_unique<std::complex<double>[]>(howmany * freq_stride);
-        buffers.size = howmany * Nz;
-        buffers.size_freq = howmany * freq_stride;
-    }
+    ZWork& buffers = z_work_for(static_cast<size_t>(howmany) * Nz, static_cast<size_t>(howmany) * freq_stride);
 
     // Create mirrored sequences for all (x, y) columns
     for (int ixy = 0; ixy < howmany; ++ixy)
@@ -176,14 +188,14 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
         const int base_full = ixy * Nz;
         // First half: copy
         for (int iz = 0; iz < Nz2; ++iz)
-            buffers.z_extended.get()[base_full + iz] = in[base_half + iz];
+            buffers.z_extended[base_full + iz] = in[base_half + iz];
         // Second half: mirror
         for (int iz = 0; iz < Nz2; ++iz)
-            buffers.z_extended.get()[base_full + Nz - 1 - iz] = in[base_half + iz];
+            buffers.z_extended[base_full + Nz - 1 - iz] = in[base_half + iz];
     }
 
     // Batched FFT along z
-    mkl_dfti_check(DftiComputeForward(plan_dct_forward_z_, buffers.z_extended.get(), buffers.z_freq.get()), "DftiComputeForward (z DCT-II)");
+    mkl_dfti_check(DftiComputeForward(plan_dct_forward_z_, buffers.z_extended.data(), buffers.z_freq.data()), "DftiComputeForward (z DCT-II)");
 
     // Extract DCT-II coefficients with twiddle factors
     for (int ixy = 0; ixy < howmany; ++ixy)
@@ -192,8 +204,8 @@ void MklCrysFFTObliqueZ::applyDCT2ForwardZ(const double* in, double* out) const
         const int base_freq = ixy * freq_stride;
         for (int k = 0; k < Nz2; ++k)
         {
-            double re = buffers.z_freq.get()[base_freq + k].real();
-            double im = buffers.z_freq.get()[base_freq + k].imag();
+            double re = buffers.z_freq[base_freq + k].real();
+            double im = buffers.z_freq[base_freq + k].imag();
             // Twiddle factor: exp(-i*pi*k/(2*Nz2)) = cos - i*sin
             // DCT-II[k] = Re(FFT[k] * exp(-i*theta)) = Re*cos + Im*sin
             // Factor 0.5 because mirrored sequence FFT gives 2x the DCT-II
@@ -216,23 +228,7 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
     const int howmany = Nx * Ny;
     const int freq_stride = Nz / 2 + 1;
 
-    struct ThreadBuffers
-    {
-        std::unique_ptr<std::complex<double>[]> z_freq;
-        std::unique_ptr<double[]> z_extended;
-        int size = 0;        ///< elements of z_extended
-        int size_freq = 0;   ///< elements of z_freq
-    };
-    // Shared by every instance on this thread: two grids with the same
-    // Nx*Ny*Nz but a different Nz need different z_freq sizes
-    thread_local ThreadBuffers buffers;
-    if (buffers.size != howmany * Nz || buffers.size_freq != howmany * freq_stride)
-    {
-        buffers.z_freq = std::make_unique<std::complex<double>[]>(howmany * freq_stride);
-        buffers.z_extended = std::make_unique<double[]>(howmany * Nz);
-        buffers.size = howmany * Nz;
-        buffers.size_freq = howmany * freq_stride;
-    }
+    ZWork& buffers = z_work_for(static_cast<size_t>(howmany) * Nz, static_cast<size_t>(howmany) * freq_stride);
 
     // Apply twiddle factors to create symmetric spectrum
     for (int ixy = 0; ixy < howmany; ++ixy)
@@ -244,17 +240,17 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
             const double xk = in[base_half + k];
             // Twiddle factor: exp(i*pi*k/(2*Nz2)) = cos + i*sin
             // Factor 2 for inverse mirroring
-            buffers.z_freq.get()[base_freq + k] = std::complex<double>(
+            buffers.z_freq[base_freq + k] = std::complex<double>(
                 2.0 * xk * dct_cos_[k],
                 2.0 * xk * dct_sin_[k]
             );
         }
         // Nyquist frequency
-        buffers.z_freq.get()[base_freq + Nz2] = std::complex<double>(0.0, 0.0);
+        buffers.z_freq[base_freq + Nz2] = std::complex<double>(0.0, 0.0);
     }
 
     // Batched backward FFT along z
-    mkl_dfti_check(DftiComputeBackward(plan_dct_backward_z_, buffers.z_freq.get(), buffers.z_extended.get()), "DftiComputeBackward (z DCT-III)");
+    mkl_dfti_check(DftiComputeBackward(plan_dct_backward_z_, buffers.z_freq.data(), buffers.z_extended.data()), "DftiComputeBackward (z DCT-III)");
 
     // Extract first half (DCT-III result) with normalization
     // IFFT returns 2N values, we take the first N
@@ -265,7 +261,7 @@ void MklCrysFFTObliqueZ::applyDCT3BackwardZ(const double* in, double* out) const
         const int base_half = ixy * Nz2;
         const int base_full = ixy * Nz;
         for (int iz = 0; iz < Nz2; ++iz)
-            out[base_half + iz] = buffers.z_extended.get()[base_full + iz] * scale;
+            out[base_half + iz] = buffers.z_extended[base_full + iz] * scale;
     }
 }
 

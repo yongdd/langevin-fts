@@ -251,15 +251,11 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     static std::atomic<bool> profile_once{false};
     static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_PMMM") != nullptr);
     const bool profile_this = do_profile && !profile_once.exchange(true);
-    cudaEvent_t ev0{}, ev1{}, ev2{}, ev3{}, ev4{};
+    // Created only when profiling; CudaEvent destroys them on every exit
+    std::vector<CudaEvent> ev(profile_this ? 5 : 0);
     if (profile_this)
     {
-        CUDA_CHECK(cudaEventCreate(&ev0));
-        CUDA_CHECK(cudaEventCreate(&ev1));
-        CUDA_CHECK(cudaEventCreate(&ev2));
-        CUDA_CHECK(cudaEventCreate(&ev3));
-        CUDA_CHECK(cudaEventCreate(&ev4));
-        CUDA_CHECK(cudaEventRecord(ev0, stream_));
+        CUDA_CHECK(cudaEventRecord(ev[0], stream_));
     }
 
     // Determine working buffer to minimize memory copies
@@ -275,20 +271,20 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
     }
 
     if (profile_this)
-        CUDA_CHECK(cudaEventRecord(ev1, stream_));
+        CUDA_CHECK(cudaEventRecord(ev[1], stream_));
 
     // Step 1: Forward DCT-II (in-place)
     dct_forward_->execute(d_work);
 
     if (profile_this)
-        CUDA_CHECK(cudaEventRecord(ev2, stream_));
+        CUDA_CHECK(cudaEventRecord(ev[2], stream_));
 
     // Step 2: Apply Boltzmann factor (in-place)
     kernel_apply_boltzmann_crys<<<blocks, threads, 0, stream_>>>(d_work, d_boltz_current_, M_physical_);
     CUDA_CHECK_LAUNCH();
 
     if (profile_this)
-        CUDA_CHECK(cudaEventRecord(ev3, stream_));
+        CUDA_CHECK(cudaEventRecord(ev[3], stream_));
 
     // Step 3: Backward DCT-III (in-place)
     // Normalization is already included in Boltzmann factor (pre-multiplied in generateBoltzmann)
@@ -296,14 +292,14 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
 
     if (profile_this)
     {
-        CUDA_CHECK(cudaEventRecord(ev4, stream_));
-        CUDA_CHECK(cudaEventSynchronize(ev4));
+        CUDA_CHECK(cudaEventRecord(ev[4], stream_));
+        CUDA_CHECK(cudaEventSynchronize(ev[4]));
         float t_copy = 0.0f, t_fwd = 0.0f, t_boltz = 0.0f, t_bwd = 0.0f, t_total = 0.0f;
-        CUDA_CHECK(cudaEventElapsedTime(&t_copy, ev0, ev1));
-        CUDA_CHECK(cudaEventElapsedTime(&t_fwd, ev1, ev2));
-        CUDA_CHECK(cudaEventElapsedTime(&t_boltz, ev2, ev3));
-        CUDA_CHECK(cudaEventElapsedTime(&t_bwd, ev3, ev4));
-        CUDA_CHECK(cudaEventElapsedTime(&t_total, ev0, ev4));
+        CUDA_CHECK(cudaEventElapsedTime(&t_copy, ev[0], ev[1]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_fwd, ev[1], ev[2]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_boltz, ev[2], ev[3]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_bwd, ev[3], ev[4]));
+        CUDA_CHECK(cudaEventElapsedTime(&t_total, ev[0], ev[4]));
 
         std::cout << "[CrysFFT-Pmmm profile] M_phys=" << M_physical_
                   << " copy(ms)=" << t_copy
@@ -312,11 +308,6 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream
                   << " bwd(ms)=" << t_bwd
                   << " total(ms)=" << t_total << std::endl;
 
-        cudaEventDestroy(ev0);
-        cudaEventDestroy(ev1);
-        cudaEventDestroy(ev2);
-        cudaEventDestroy(ev3);
-        cudaEventDestroy(ev4);
     }
 }
 

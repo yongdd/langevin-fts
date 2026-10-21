@@ -114,7 +114,10 @@ commits are omitted.
   requests at most the device's opt-in shared-memory limit instead of an unchecked 96000 bytes.
   The check macros are named as is conventional for macros (C++ Core Guidelines ES.32):
   `CUDA_CHECK(...)`, `CUFFT_CHECK(...)` and `CUDA_CHECK_LAUNCH()` after a kernel launch
-  (formerly `gpu_error_check`, `cufft_error_check`).
+  (formerly `gpu_error_check`, `cufft_error_check`). Release calls (`cudaFree`,
+  `cudaFreeHost`, `*Destroy`) go through `ignore_release_error()`, so a failed release no
+  longer leaves its error for the next, unrelated launch check. A failed allocation names
+  its size and the calling file, line and function.
 - C++ ownership (2026-10-21): device memory is held in `CudaDeviceBuffer<T>` /
   `CudaPinnedBuffer<T>` (`CudaCommon.h`), host arrays in `std::vector` and owned objects in
   `std::unique_ptr`, replacing hand-written allocation and cleanup code (the FFTW/MKL plans
@@ -122,8 +125,15 @@ commits are omitted.
   `createFFT()` returns a `std::unique_ptr<FFT<T>>`, and the computation classes take a
   backend factory returning `std::unique_ptr<ComputationBackend<T>>`. The factory functions
   still return raw pointers that the caller owns. Results are unchanged. The MKL ObliqueZ
-  CrysFFT reallocates its per-thread z buffers also when only Nz changes (two grids with the
-  same Nx*Ny*Nz but a different Nz overflowed the spectrum buffer on one thread).
+  CrysFFT sizes each of its per-thread z buffers from its own requirement (two grids with the
+  same Nx*Ny*Nz but a different Nz overflowed the spectrum buffer on one thread). Every owned
+  CUDA allocation, including the backend's propagator and checkpoint arrays, is counted, so
+  the tests check that every object returns all of it, also after an injected or a real
+  allocation failure; GCC and Clang reject `delete` on a buffer. The CPU CN-ADI tridiagonal
+  tables hold one entry per grid position along their axis (they were sized to the whole
+  grid). The per-monomer tables in the propagator loops are read with `at()`, so a missing
+  entry throws instead of being inserted from several threads at once, and the CUDA
+  `set_space_group` builds its device table before it changes the box.
 - The Python layer is organised for researchers: each simulation class reads its options
   straight from the `params` dictionary, and the package has fewer files (`compressor.py`
   merged into `lfts.py`; `config.py` and `io.py` into `utils.py`; `result.py` into
@@ -278,6 +288,12 @@ commits are omitted.
   thread-local maps keyed by the object's address, so they are released when the object
   is destroyed (long sessions that create many solvers no longer accumulate stale
   tables in every worker thread).
+- Build: the GPU backend needs CUDA 12.2 or newer (2026-10-21): the device code is C++20
+  (nvcc 11.x has no `-std=c++20`; nvcc 12.0/12.1 cannot compile `std::source_location`),
+  with CMake 3.25.2+ (which passes `-std=c++20` to nvcc) and a host compiler with
+  `std::source_location` (GCC 11+, Clang 15+); configuring without them stops with an error. The cuFFT library is the one
+  of the toolkit that compiles the code, also when a conda environment on
+  `CMAKE_PREFIX_PATH` carries CUDA libraries of another version.
 - Build: C++20, CMake 3.17+, spglib and LAPACKE are required at configure time; the CPU
   backends share a `cpu-common` object library; `POLYMERFTS_WERROR` turns warnings into
   errors (on in CI); the LAPACKE header may be `mkl_lapacke.h` (conda-forge's MKL build of
