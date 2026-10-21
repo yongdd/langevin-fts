@@ -5,8 +5,8 @@ Propagator keys and masked solvents.
 1. Grafting labels are opaque names: labels with digits ("G1", "g_2", "1", "L10")
    give the same Q and phi as the label "G" for linear and branched chains with
    grafted ends. Until 2026-10 the digits inside {label} were read as segment
-   numbers (map::at on any chain of two or more blocks). Labels with characters
-   of the key format are rejected.
+   numbers (map::at or "Length index out of range" on any chain of two or more
+   blocks). Labels with characters of the key format are rejected.
 2. Aggregation with blocks of different local ds: a comb whose side blocks are
    not multiples of ds gives the same Q and phi with aggregation on and off.
    Until 2026-10 the mixed keys of the aggregated propagators took the ds index
@@ -17,8 +17,8 @@ Propagator keys and masked solvents.
 4. A mask with a space group: for a mask with the symmetry of the group, the
    space group (irreducible and m3 bases) gives the result of the full grid,
    including the solvent partition function and volume averages; until 2026-10
-   the reduced-basis integrals had no mask weights (Q_solvent 0.9955 instead of
-   0.9694 here). A mask without the symmetry is rejected (it used to be replaced
+   the reduced-basis integrals had no mask weights (Q_solvent 0.98946 instead
+   of 0.96279 here). A mask without the symmetry is rejected (it used to be replaced
    silently: an off-center obstacle disappeared, Q off by 4.5 %).
 """
 

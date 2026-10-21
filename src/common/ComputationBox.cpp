@@ -756,10 +756,19 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     if (space_group_ != nullptr)
         space_group_->check_cell(new_lx, full_angles);
 
+    // Validate that the angles form a unit cell before anything changes
+    const double deg_to_rad = std::numbers::pi / 180.0;
+    {
+        const double ca = std::cos(full_angles[0] * deg_to_rad);
+        const double cb = std::cos(full_angles[1] * deg_to_rad);
+        const double cg = std::cos(full_angles[2] * deg_to_rad);
+        if (1.0 - ca*ca - cb*cb - cg*cg + 2.0*ca*cb*cg <= 0.0)
+            throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell.");
+    }
+
     lx = new_lx;
 
     // Convert angles from degrees to radians and store
-    const double deg_to_rad = std::numbers::pi / 180.0;
     for (int d = 0; d < 3; d++)
         angles_[d] = full_angles[d] * deg_to_rad;
 
@@ -768,14 +777,6 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     is_orthogonal_ = (std::abs(angles_[0] - std::numbers::pi/2.0) < angle_tolerance &&
                       std::abs(angles_[1] - std::numbers::pi/2.0) < angle_tolerance &&
                       std::abs(angles_[2] - std::numbers::pi/2.0) < angle_tolerance);
-
-    // Validate that angles can form a valid unit cell
-    double cos_a = std::cos(angles_[0]);
-    double cos_b = std::cos(angles_[1]);
-    double cos_g = std::cos(angles_[2]);
-    double vol_factor = 1.0 - cos_a*cos_a - cos_b*cos_b - cos_g*cos_g + 2.0*cos_a*cos_b*cos_g;
-    if (vol_factor <= 0.0)
-        throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell.");
 
     // Grid interval
     for(int d=0; d<dim; d++)
@@ -801,7 +802,7 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
 // ==================== Space Group Methods ====================
 
 template <typename T>
-void ComputationBox<T>::set_space_group(SpaceGroup* sg)
+void ComputationBox<T>::check_space_group(SpaceGroup* sg) const
 {
     if (sg != nullptr)
     {
@@ -829,6 +830,12 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
             throw_with_line_number("The mask is not invariant under the space group; "
                 "a mask used with a space group must have the symmetry of the group.")
     }
+}
+
+template <typename T>
+void ComputationBox<T>::set_space_group(SpaceGroup* sg)
+{
+    check_space_group(sg);
 
     // Build the new state first and commit it with moves only, so a failure
     // leaves the box as it was. The mask always starts from the full grid

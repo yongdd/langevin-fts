@@ -786,7 +786,7 @@ class LFTS:
             if self.wtmd is not None:
                 # Store the order parameter with dH/dχN of the same fields (the fields
                 # before the update, at which psi and the bias were computed)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux_copy)
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux_copy, phi_for_force, wtmd=True)
                 self.wtmd.store_order_parameter(psi, dH)
 
                 # Update WTMD bias
@@ -800,7 +800,7 @@ class LFTS:
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 H_history.append(hamiltonian)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, self.smearing.apply_to_dict(phi))
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 
@@ -854,8 +854,9 @@ class LFTS:
                             self.prop_solver.get_volume()*np.sqrt(self.langevin["nbar"])
                     # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
                     # divide by Γ to record S(k) of the densities (modes the smeared interaction
-                    # does not see, Γ < 1e-12, are recorded as 0)
-                    if self.smearing.enabled:
+                    # does not see, Γ < 1e-12, are recorded as 0). With walls Γ lives in the cosine
+                    # basis while S(k) is a Fourier transform, so it is recorded as it is.
+                    if self.smearing.enabled and self.smearing.periodic:
                         gamma = self.smearing.fourier[..., :self.prop_solver.nx[-1]//2+1]
                         sf_average[key] = np.divide(sf_average[key], gamma, out=np.zeros_like(sf_average[key]), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))

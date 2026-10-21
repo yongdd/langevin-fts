@@ -105,7 +105,7 @@ make install
 # Run basic tests (installation verification, ~1 min)
 ctest -L basic
 
-# Run full tests (development validation, ~7 min)
+# Run full tests (development validation, ~8 min)
 ctest
 
 # Clean build (if needed)
@@ -157,7 +157,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 94 | ~7 min | Development validation |
+| **Full** | `ctest` | 103 | ~8 min | Development validation |
 
 ### Running Tests
 

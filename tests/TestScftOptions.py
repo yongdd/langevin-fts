@@ -5,13 +5,25 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
 1. Angle relaxation (Oblique2D): hexagonal cylinders started from gamma = 100 deg
    relax to gamma = 120 deg with a = b. The angles enter the optimizer in radians,
    the unit of their residual -dH/dgamma; until 2026-10 they entered in degrees,
-   which made the angle steps 57 times smaller (1493 iterations here instead of
-   about 240). The check requires fewer than 600 iterations.
-2. axis_ordering: a run whose nx, lx and initial fields are given in the order
-   ["b", "a"] reproduces the run in the standard order (results are in the
-   standard order). Until 2026-10 the initial fields were not transposed.
-3. A chi N matrix with 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10, chi_BC = 40)
-   leaves the residual projector undefined and is rejected.
+   which made the angle steps 57 times smaller (1493 iterations here with
+   cpu-mkl, 1544 with cpu-fftw, instead of about 240). The check requires fewer
+   than 600 iterations.
+2. axis_ordering: a run whose nx, lx, bc and initial fields are given in the
+   order ["b", "a"] reproduces the run in the standard order (results are in the
+   standard order). Until 2026-10 the initial fields and the boundary conditions
+   were not reordered (walls on the wrong axis: dF 9e-2 here).
+3. An incompressible run with 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10,
+   chi_BC = 40) is rejected: the auxiliary field of the zero eigenvalue of the
+   projected chi N carries a linear term, so the field theory does not hold.
+4. Field residual: the incompressible and compressible SCFT converge for chi N
+   matrices with c = 1^T (chi N)^-1 1 < 0 (AB with chi N = -5; ABC with chi_AB N =
+   chi_BC N = 10, chi_AC N = 60, and with chi_AB N = chi_AC N = 10, chi_BC N = 50),
+   near c = 0 (chi_BC N = 39.9 and 40.1: c = +5e-4 and -5e-4) and at small zeta N
+   (0.5, 2). Until 2026-10 the residual projected with
+   P = I - e e^T (chi N)^-1/c: its pressure part, (1, ..., 1) sum phi/c, had the
+   wrong sign for c < 0 and grew without bound near c = 0, and the compressible
+   pressure part was amplified for small zeta N; these runs ended in NaN or did
+   not converge.
 """
 
 import os
@@ -91,6 +103,23 @@ def test_axis_ordering():
           f"axis_ordering ['b', 'a'] reproduces the standard run (dF {abs(standard.free_energy - reordered.free_energy):.1e}, "
           f"dphi {d_phi:.1e})")
 
+    # Walls on the a axis only (mixed boundary conditions: real-space solver); the
+    # field is not periodic along a, so that walls and periodic boundaries differ
+    w_a = 3.0 * np.cos(np.pi * X) + 1.0 * np.cos(2 * np.pi * Y)
+    params = base(nx, lx, {"A,B": 15.0}, blocks, False)
+    params["numerical_method"] = "cn-adi2"
+    params["bc"] = ["reflecting", "reflecting", "periodic", "periodic"]
+    standard = run(params, {"A": w_a.ravel(), "B": -w_a.ravel()})
+    params = base([16, 24], [1.6, 2.4], {"A,B": 15.0}, blocks, False)
+    params["numerical_method"] = "cn-adi2"
+    params["bc"] = ["periodic", "periodic", "reflecting", "reflecting"]
+    params["axis_ordering"] = ["b", "a"]
+    reordered = run(params, {"A": w_a.T.copy(), "B": -w_a.T.copy()})
+    d_phi = np.max(np.abs(np.array(standard.phi["A"]) - np.array(reordered.phi["A"])))
+    check(abs(standard.free_energy - reordered.free_energy) < 1e-10 and d_phi < 1e-8,
+          f"axis_ordering ['b', 'a'] with walls on a reproduces the standard run "
+          f"(dF {abs(standard.free_energy - reordered.free_energy):.1e}, dphi {d_phi:.1e})")
+
 
 def test_singular_projector():
     params = base([16], [2.0], {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], False)
@@ -103,10 +132,39 @@ def test_singular_projector():
     check(rejected, "chi N with 1^T (chi N)^-1 1 = 0 is rejected")
 
 
+def test_field_residual():
+    x = (np.arange(64) + 0.5) / 64
+    wave = 3.0 * np.cos(2 * np.pi * x)
+    ab = {"A": wave, "B": -wave}
+    abc = {"A": wave, "B": np.zeros(64), "C": -wave}
+    triblock = [("A", 0.3), ("B", 0.4), ("C", 0.3)]
+    cases = [
+        ("AB chi N = -5", {"A,B": -5.0}, [("A", 0.5), ("B", 0.5)], 1.6, ab, (None, 5.0, 100.0)),
+        ("ABC chi N AB/BC/AC = 10/10/60", {"A,B": 10.0, "B,C": 10.0, "A,C": 60.0}, triblock, 1.8, abc, (None, 5.0, 100.0)),
+        ("ABC chi N AB/AC/BC = 10/10/50", {"A,B": 10.0, "A,C": 10.0, "B,C": 50.0}, triblock, 1.8, abc, (None, 2.0, 100.0)),
+        ("ABC chi N AB/AC/BC = 10/10/39.9", {"A,B": 10.0, "A,C": 10.0, "B,C": 39.9}, triblock, 1.8, abc, (None, 2.0, 100.0)),
+        ("ABC chi N AB/AC/BC = 10/10/40.1", {"A,B": 10.0, "A,C": 10.0, "B,C": 40.1}, triblock, 1.8, abc, (None, 2.0, 100.0)),
+        ("AB f = 0.3, chi N = 20", {"A,B": 20.0}, [("A", 0.3), ("B", 0.7)], 1.6, ab, (0.5,)),
+        ("ABC chi N AB/BC/AC = 3/3/12.5", {"A,B": 3.0, "B,C": 3.0, "A,C": 12.5}, [("A", 0.45), ("B", 0.1), ("C", 0.45)], 1.8,
+         abc, (0.5, 2.0)),
+    ]
+    for name, chi_n, blocks, lx, fields, models in cases:
+        for zeta_n in models:
+            params = base([64], [lx], chi_n, blocks, False)
+            params["max_iter"] = 500
+            if zeta_n is not None:
+                params["zeta_n"] = zeta_n
+            calc = run(params, fields)
+            model = "incompressible" if zeta_n is None else f"compressible (zeta N {zeta_n:g})"
+            check(calc.error_level < 1e-8, f"{name}, {model}: converges ({calc.iter} iterations, "
+                  f"error {calc.error_level:.1e})")
+
+
 def main():
     test_angle_relaxation()
     test_axis_ordering()
     test_singular_projector()
+    test_field_residual()
     print(f"\n{n_pass} passed, {n_fail} failed")
     sys.exit(0 if n_fail == 0 else 1)
 

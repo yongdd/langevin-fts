@@ -14,27 +14,31 @@ that go with them.
    depends on the lattice parameters theta also through Gamma(k(theta)). The
    solver's stress plus Smearing.stress() must equal the central difference of
    H at fixed w. Discrete chains, whose stress is the exact derivative of their
-   Q: all cells agree to ~1e-11 (the orthogonal cell with angle derivatives
-   needs the averaged stress of its tied Nyquist modes; before 2026-10 it was
-   1e-7 off). The check also requires the smearing term to matter (without it
-   the error is > 1e-3).
+   Q: all cells agree to ~1e-11, checked to 1e-6 (the orthogonal cell with
+   angle derivatives needs the averaged stress of its tied Nyquist modes; the
+   1e-7 error it had before 2026-10 is checked by TestStressAliasTies). The
+   check also requires the smearing term to matter (without it the error is
+   > 1e-3).
 
 3. SCFT box relaxation with smearing: the relaxed period must be the minimum
    of F(L) of fixed-box runs whose kernel is built at L. Until 2026-10 the
    kernel stayed at the initial box (smearing length a_int L/L0) and the
-   stress had no Gamma term: the relaxed L was 5 % off.
+   stress had no Gamma term: the relaxed L was 16 % off here (1.5388 instead
+   of 1.8417 for a_int = 0.1).
 
 4. L-FTS and CL-FTS noise: sigma uses the cell volume (with the angle factor),
    not the product of the box lengths.
 
 5. Walls need an orthogonal cell, and a space group needs periodic boundaries:
    both combinations are rejected (they used to give silently wrong results).
+   Angles that form no cell are rejected before the box changes (until 2026-10
+   the box kept the new lengths and angles after the error).
 
-6. Smearing with reflecting or absorbing walls uses the image of the field (the
-   DCT-II/DST-II basis of the propagators): it must equal the periodic smearing of
-   the even or odd extension. Until 2026-10 it wrapped around the box (a ramp in a
-   reflecting box gave 0.89 instead of 0.08 in the first cell). Item 2 includes
-   boxes with walls.
+6. Smearing with reflecting or absorbing walls uses the mirror image of the field
+   (the DCT-II basis; across an absorbing wall the propagators are odd, so fields
+   and concentrations are even): it must equal the periodic smearing of the even
+   extension. Until 2026-10 it wrapped around the box (a ramp in a reflecting box
+   gave 0.89 instead of 0.08 in the first cell). Item 2 includes boxes with walls.
 """
 
 import os
@@ -210,8 +214,8 @@ def test_stress():
 
 
 def test_walls():
-    """Smearing across a wall is the periodic smearing of the image of the field:
-    even across a reflecting wall, odd across an absorbing one."""
+    """Smearing across a wall (reflecting or absorbing) is the periodic smearing of the
+    even mirror image of the field."""
     rng = np.random.default_rng(4)
     nx, lx = [12, 10], [1.5, 1.3]
     field = rng.normal(0.0, 1.0, size=nx)
@@ -223,8 +227,7 @@ def test_walls():
             image, image_lx = field.copy(), list(lx)
             for axis, kind in enumerate(walls):
                 if kind != "periodic":
-                    sign = 1.0 if kind == "reflecting" else -1.0
-                    image = np.concatenate([image, sign * np.flip(image, axis=axis)], axis=axis)
+                    image = np.concatenate([image, np.flip(image, axis=axis)], axis=axis)
                     image_lx[axis] = 2 * lx[axis]
             periodic = quiet(Smearing, list(image.shape), image_lx, smearing)
             reference = np.reshape(periodic.apply(image.ravel()), image.shape)[:nx[0], :nx[1]]
@@ -234,11 +237,14 @@ def test_walls():
             check(err < 1e-12 and complex_err < 1e-12,
                   f"{smearing['type']} smearing, {walls[0]} x / {walls[1]} y: equals the smeared image "
                   f"(max diff {err:.1e}; complex fields {complex_err:.1e})")
-    try:
-        quiet(Smearing, [8], [1.0], {"type": "gaussian", "a_int": 0.1}, bc=["reflecting", "absorbing"])
-        check(False, "different walls on the two sides of an axis are rejected")
-    except NotImplementedError:
-        check(True, "different walls on the two sides of an axis are rejected")
+    # Different walls on the two sides of an axis: also the mirror image; without
+    # smearing nothing is checked (a reflecting/absorbing axis is valid for CN-ADI)
+    field_1d = np.random.default_rng(5).normal(0.0, 1.0, 8)
+    mixed = quiet(Smearing, [8], [1.0], {"type": "gaussian", "a_int": 0.1}, bc=["reflecting", "absorbing"])
+    walls = quiet(Smearing, [8], [1.0], {"type": "gaussian", "a_int": 0.1}, bc=["reflecting", "reflecting"])
+    disabled = quiet(Smearing, [8], [1.0], None, bc=["reflecting", "absorbing"])
+    check(np.array_equal(mixed.apply(field_1d), walls.apply(field_1d)) and not disabled.enabled,
+          "an axis with different walls is smeared with the mirror image; without smearing it is accepted")
 
 
 def test_scft_box_relaxation():
@@ -325,6 +331,11 @@ def test_cell_checks():
     sg = quiet(_core.SpaceGroup, [12, 12, 12], "Ia-3d", 530)
     check(rejected(lambda: solver(walls, space_group=sg).computation_box, "periodic boundary conditions"),
           "a space group with walls is rejected")
+    s = solver(["periodic"] * 6)
+    before = quiet(lambda: (list(s.get_lx()), list(s.get_angles_degrees()), s.get_volume()))
+    check(rejected(lambda: s.set_lattice_parameters([2.0, 2.5, 3.0], [60.0, 60.0, 150.0]), "valid unit cell")
+          and (list(s.get_lx()), list(s.get_angles_degrees()), s.get_volume()) == before,
+          "set_lattice_parameters with angles that form no cell is rejected, the box is unchanged")
 
 
 def main():

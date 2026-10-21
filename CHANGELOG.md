@@ -133,21 +133,22 @@ commits are omitted.
   (χN = 6, N̄ = 10⁶) the recorded S(k) was 0.50 of RPA and of the estimator
   n<|W₋(k)|²>/(χN)² - 1/(2χN) used by other codes (lfts_cpu, clfts_gpu); now it agrees with
   RPA (tests/TestStructureFunctionRPA.py). Recorded L-FTS files can be corrected by the
-  factor M. CL-FTS had three more errors, so its files cannot: it multiplied μ(k) by the
-  conjugate of φ(k) instead of φ(-k), which differ for complex fields; it paired the
+  factor M (with smearing they also carry Γ(k), see below). CL-FTS had three more errors,
+  so its files cannot: it multiplied μ(k) by the conjugate of φ(k) instead of φ(-k), which
+  differ for complex fields; it paired the
   concentrations and partition functions of one step with the fields of the next in H,
   dH/dχN, S(k) and the saved φ; and with a compressible model it left out the fluctuating
   field of the largest eigenvalue. Compressible AB (ζN = 100, dt = 1): S_AA was 0.43 of RPA,
-  now 1.006. The CL-FTS trajectory is unchanged bit for bit; the recorded H now pairs each
-  field with its own partition function.
+  now 1.006. The CL-FTS fields are unchanged (to round-off, about 10⁻¹⁴ after 300 steps);
+  the recorded H now pairs each field with its own partition function.
 - **Compressible SCFT (`zeta_n`) solved the incompressible equations** (2026-10-21): the
   residual χφ - Pw was used for both models, and ζ entered nowhere, so every compressible
   run returned the incompressible structure (Σφ = 1 everywhere) and its free energy was the
-  compressible Hamiltonian away from its saddle point (1D AB lamella, χN = 15: F = 1.886 for
-  ζN = 5, -0.060 for ζN = 100). The residual is now the compressible one,
-  χφ + ζ(Σφ - 1) - w, with its pressure component (the range of I - P) divided by
-  c(1 + ζ), c = 1ᵀχ⁻¹1, which keeps the stiff ζ direction as well conditioned as the
-  incompressible iteration (72-95 iterations for ζN = 5 to 10⁵); the field means, which have
+  compressible Hamiltonian away from its saddle point (1D AB lamella, χN = 15: residual
+  9.68, F = -0.364 for ζN = 5 and -0.322 for ζN = 100; with `fts_consistent_energy`
+  residual 2.18, F = 1.886 and -0.060). The residual is now the compressible one,
+  E = χφ + ζ(Σφ - 1) - w, with its component along (1, ..., 1), where the stiff ζ term lies,
+  scaled by κ/(κ + ζ) (see the field residual entry below); the field means, which have
   no gauge freedom in the compressible model, are pinned to the saddle point. ζN = 5 now
   gives 0.90 <= Σφ <= 1.07 for that lamella, the free energy equals the mean-field value
   computed from the fields, and F and φ approach the incompressible solution as 1/ζ
@@ -160,18 +161,26 @@ commits are omitted.
   were unchanged (only uniform field modes shift), but absolute H, chemical potentials and
   `fts_consistent_energy` free energies were wrong. AB systems were correct.
 - dH/dχN for three or more monomer types (2026-10-21): it differentiated the coefficients at
-  fixed auxiliary fields, missing the rotation of the eigenvectors with χ, and blew up when
-  an eigenvector changed sign between χ ± ε (χN = 10/30/20: ±4·10⁴ instead of about 0.1).
-  It is now the derivative of the field part at fixed monomer fields, which does not depend
-  on the choice of eigenvectors; at the saddle point both derivatives agree, and on average
-  they agree in L-FTS. The coefficient derivatives `h_const_deriv_chin`,
-  `h_coef_mu1_deriv_chin` and `h_coef_mu2_deriv_chin` are removed. Checked by
-  dH/dχ_ab = <φ_a φ_b> at the field saddle for 2, 3 and 4 monomer types
-  (tests/TestPolymerFieldTheory.py). AB systems are unchanged.
+  fixed auxiliary fields but missed the change of the polymer part through A(χ) (the
+  eigenvectors rotate with χ), and blew up when an eigenvector changed sign between χ ± ε
+  (χN = 10/30/20: ±4·10⁴ instead of about 0.1), and it left out fields dropped at a zero
+  eigenvalue (AB at χN = 0, f = 0.3: 0.25 instead of f(1 - f) = 0.21; B and C chemically
+  identical: 10-20 %). It is now the derivative at fixed auxiliary fields Ω including the
+  rotation term <φ · (∂A/∂χ) Ω>, computed analytically from the first-order perturbation of
+  the eigenvectors in a frame that moves only between real, imaginary and dropped fields
+  (docs/theory/PolymerFieldTheory.md, Section 4.5), so nearly equal eigenvalues need no
+  care; this is the exact dF/dχN of the L-FTS ensemble, where the imaginary fields sit at
+  their saddle point (the derivative at fixed monomer fields would differ from it by
+  O(1/C)). Dropped fields add their mean-field term. Checked by dH/dχ_ab = <φ_a φ_b> at the
+  field saddle for 2, 3 and 4 monomer types (with nearly equal eigenvalues and dropped
+  fields) and by a zero-dimensional three-component model of the L-FTS approximation
+  (tests/TestPolymerFieldTheory.py). AB systems at χN ≠ 0 are unchanged.
 - Smearing with reflecting or absorbing walls (2026-10-21) convolved with a periodic FFT,
   coupling the two walls (a ramp in a reflecting box: 0.89 in the first cell instead of
-  0.08). Wall axes are now smeared in the DCT-II/DST-II basis of the propagators, i.e. with
-  the image of the field across the wall.
+  0.08). Wall axes are now smeared in the DCT-II basis, i.e. with the even image of the
+  field across the wall; across an absorbing wall the propagators are odd, so fields and
+  concentrations are even there too. An axis with different walls on its two sides is
+  accepted (CN-ADI).
 - Stress at alias ties (2026-10-21): the stress table v⊗v took the first of the alias
   representatives that tie for the smallest |k|², on the Brillouin-zone boundary of
   oblique cells and on the Nyquist planes. For a hexagonal field dH/da and dH/db differed
@@ -181,14 +190,15 @@ commits are omitted.
   averages tied lengths, and the a = b derivative was exact); orthogonal cells without
   angle derivatives are bit-identical.
 - Structure functions with smearing (2026-10-21): the fields couple to the smeared densities,
-  so the estimator gives Γ(k)·S(k); the recorded S(k) is now divided by Γ(k) and is that of
-  the densities (tests/TestStructureFunctionRPA.py compares smeared L-FTS and CL-FTS runs
-  with the smeared RPA).
+  so the estimator gives Γ(k)·S(k); in a periodic box the recorded S(k) is now divided by
+  Γ(k) and is that of the densities (tests/TestStructureFunctionRPA.py compares smeared
+  L-FTS and CL-FTS runs with the smeared RPA). With walls Γ is defined in the cosine basis,
+  and Γ·S is recorded as it is.
 - A solvent in a masked box (2026-10-21) had a nonzero concentration inside the obstacles
   (0.23 in tests/TestPropagatorKeys.py); it is now zero there and its volume average is its
   volume fraction. With a space group the reduced-basis integrals (volume averages, inner
   products, the solvent partition function) had no mask weights (Q_solvent of a masked
-  Im-3m box: 0.9955 with the space group, 0.9694 without); they now weight each orbit by
+  Im-3m box: 0.98946 with the space group, 0.96279 without); they now weight each orbit by
   its count times the mask, and agree with the full grid to 1e-14.
 - WTMD (2026-10-21): the volume and |k| of the order parameter ignored the cell angles; a
   continued run lost I1 and the samples since the last update (dH/dψ = I1/I0 was
@@ -206,15 +216,41 @@ commits are omitted.
   belongs to the returned fields.
 - SCFT box relaxation with free angles (2026-10-21): the angles entered the optimizer in
   degrees while their residual is per radian, making the angle steps 57 times smaller
-  (Oblique2D hexagonal cylinders from γ = 100°: 1493 iterations, now 241; the converged
-  cell is unchanged).
-- SCFT `axis_ordering` (2026-10-21) reordered nx, lx and angles but not the initial fields,
-  which were then read in the wrong order (dF = 9.4·10⁻² in tests/TestScftOptions.py). The
-  initial fields and `q_init` are given in the order of nx and transposed.
+  (Oblique2D hexagonal cylinders from γ = 100°: 1493 iterations with cpu-mkl and 1544 with
+  cpu-fftw, now 241; the converged cell is unchanged).
+- SCFT `axis_ordering` (2026-10-21) reordered nx, lx and angles but not the initial fields
+  and the boundary conditions, which were then read in the wrong order (dF = 9.4·10⁻² for
+  the fields and 9.0·10⁻² for walls on the wrong axis in tests/TestScftOptions.py). The
+  initial fields, `q_init` and `bc` are given in the order of nx and reordered; the results
+  (fields, concentrations, saved files) are in the standard order [a, b, c].
+- SCFT field residual (2026-10-21): it projected with P = I - e eᵀ(χN)⁻¹/c,
+  c = 1ᵀ(χN)⁻¹1. Its pressure part, (1, ..., 1)Σφ/c, pushed the pressure along the excess
+  density for c < 0 (AB with χN < 0; ABC with χ_AB N = χ_BC N = 10, χ_AC N = 60, or with
+  χ_AB N = χ_AC N = 10, χ_BC N = 50), grew without bound near c = 0 for either sign (the
+  latter with χ_BC N = 39.9 and 40.1, c = +5·10⁻⁴ and -5·10⁻⁴), and in compressible runs
+  it was amplified at small ζN (AB f = 0.3, χN = 20, ζN = 0.5); these runs ended in NaN
+  or did not converge. The residual is now P⊥(χφ - w) + κ e(Σφ - 1) with the orthogonal
+  projector P⊥ = I - eeᵀ/M and κ = max(max|λ|, 1)/2 (λ: the eigenvalues of P⊥ χN P⊥), and
+  for compressible runs P⊥E + κ/(κ + ζN) (I - P⊥)E (docs/theory/SelfConsistentFieldTheory.md,
+  Section 2.2). It needs no (χN)⁻¹ and the fixed points are unchanged. For incompressible
+  AB runs with χN >= 1 it differs from the old residual by a constant that the subtracted
+  means remove (κ = χN/2 = 1/c), so the iteration is the same up to round-off. In a sweep
+  of 70 runs (1D and 2D, AB and ABC, incompressible and ζN = 0.5 to 100) all converge,
+  against 18 before; tests/TestScftOptions.py checks 18 of them. Compressible SCFT no
+  longer needs an invertible χN matrix, and a negative `zeta_n` is rejected.
 - Aggregation with blocks of different local ds (2026-10-21) failed with `map::at`: the
   keys that contain an aggregated propagator took the ds index of the outer block for
   every dependency. Grafting labels with digits ("G1") failed the same way (the digits were
   read as segment numbers); labels may now contain letters, digits and underscores only.
+- `set_lattice_parameters` with angles that form no cell (2026-10-21) raised the error after
+  it had stored the new lengths and angles, so a caught error left the box inconsistent;
+  the cell is now checked before anything changes.
+- The CUDA box's device `zero_mean` added the sum to real fields instead of subtracting the
+  mean, and the device multi-component inner product and zero mean ignored a space group
+  (2026-10-21; no simulation path calls them).
+- A masked CUDA box given a space group built for another grid read the mask out of bounds
+  before the grid mismatch was reported (2026-10-21): the reduced mask weights were built
+  before the group was checked. The checks now run first.
 
 ### Interface changes
 
@@ -222,13 +258,27 @@ commits are omitted.
   reflecting or absorbing boundaries, are rejected (2026-10-21). Both were accepted and
   gave silently wrong results: the wall transforms have no metric cross terms (the
   pseudo-spectral path computed an orthogonal box, CN-ADI already refused), and walls do
-  not commute with the group's operations (Ia-3d, 16³, reflecting walls: Q off by 3 %;
+  not commute with the group's operations (Ia-3d, 16³, reflecting walls: Q off by less
+  than 1 % to tens of percent depending on the field;
   groups whose mirror planes lie on the walls, such as Pm-3m, happened to be exact).
   `Smearing` takes the cell `angles` and has `set_box()` and `stress()`.
+- `SymmetricPolymerTheory.compute_h_deriv_chin(chi_n, w_aux, phi)` takes the concentrations
+  (2026-10-21): the rotation term needs them whenever the eigenvectors depend on χ (three or
+  more monomer types; a call without `phi` is then rejected), and `chi_n` must be the one
+  the object was built with. `h_deriv_chin_from_moments()` takes the averages instead. The
+  coefficient derivatives `h_const_deriv_chin`, `h_coef_mu1_deriv_chin` and
+  `h_coef_mu2_deriv_chin` are removed.
+- `SymmetricPolymerTheory.compute_hamiltonian()` takes the computation box (2026-01-26,
+  65309e1f, for the reduced-basis integrals of a space group); the tutorials that called it
+  without the box are updated (2026-10-21).
+- Grafting labels (the values of `initial_conditions` and `grafting_points`, the keys of
+  `q_init`) may contain
+  letters, digits and underscores only (2026-10-21); other characters are rejected.
 - A mask without the symmetry of the space group is rejected (2026-10-21): the reduced basis
   keeps one value per orbit, so such a mask was silently replaced (an off-center obstacle
-  in an Im-3m box disappeared, Q off by 4.5 %). SCFT rejects a chi N matrix with
-  1ᵀ(χN)⁻¹1 = 0, for which the residual projector is undefined.
+  in an Im-3m box disappeared, Q off by 4.5 %). Incompressible SCFT rejects a chi N
+  matrix with 1ᵀ(χN)⁻¹1 = 0: the auxiliary field of the zero eigenvalue of the projected
+  χN then carries a linear term and cannot be dropped, so the field theory does not hold.
 
 - **CUDA 11 is no longer supported** (2026-10-21): the GPU backend needs CUDA 12.2 or
   newer, because the device code is C++20 (nvcc 11.x has no `-std=c++20`; nvcc 12.0/12.1

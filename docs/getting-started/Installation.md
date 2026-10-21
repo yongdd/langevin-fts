@@ -217,7 +217,7 @@ Two test modes are available:
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
 | **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 94 | ~7 min | Development validation |
+| **Full** | `ctest` | 103 | ~8 min | Development validation |
 
 **Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
 
@@ -235,7 +235,7 @@ backend that is not built are left out.
 - Aggregation: propagator optimization
 - Scheduler: parallel computation
 
-**Full tests** add (37 tests):
+**Full tests** add (46 tests):
 - SCFT: 3D, hexagonal cylinder
 - Stress tensor: 2D, 3D calculations
 - Complex field: CL-FTS propagators
@@ -245,3 +245,4 @@ backend that is not built are left out.
 - Complex-field stress on every platform, RK2 stress with non-periodic boundaries
 - L-FTS/CL-FTS run loops and checkpoint continuation, convergence orders
 - CUDA memory ownership: every object returns its device and pinned memory, also when an allocation fails or the device runs out of memory
+- Structure functions against RPA (L-FTS, CL-FTS, smearing), compressible SCFT, multi-monomer field theory and dH/dχN, smearing in non-orthogonal cells and with walls, stress at alias ties, propagator keys and masks, block concentrations, L-FTS/WTMD details, SCFT options

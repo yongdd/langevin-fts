@@ -188,7 +188,7 @@ class SCFT:
     """
     @staticmethod
     def _apply_axis_ordering(params):
-        """Reorder nx/lx/angles in ``params`` (in place) from the user's axis ordering
+        """Reorder nx/lx/bc/angles in ``params`` (in place) from the user's axis ordering
         to the standard [a, b, c]. Returns (axis_ordering, perm); both None when the
         option is absent. perm[i] is the position of standard axis i in the user's arrays.
         """
@@ -204,6 +204,10 @@ class SCFT:
         perm = [axis_ordering.index(label) for label in labels]
         params["nx"] = [params["nx"][perm[i]] for i in range(dim)]
         params["lx"] = [params["lx"][perm[i]] for i in range(dim)]
+        bc = params.get("bc", None)
+        if bc is not None and len(bc) == 2 * dim:
+            # bc = [low, high] of each axis in the order of nx
+            params["bc"] = [bc[2 * perm[i] + side] for i in range(dim) for side in (0, 1)]
         angles = params.get("angles", None)
         if angles is not None and dim == 3:
             # angles = [alpha, beta, gamma] are the angles between axes (b,c), (a,c), (a,b);
@@ -213,6 +217,8 @@ class SCFT:
                                 for (i, j) in ((1, 2), (0, 2), (0, 1))]
         print(f"Axis ordering: {axis_ordering} -> reordered to [a, b, c]")
         print(f"  nx: {params['nx']}, lx: {params['lx']}")
+        if params.get("bc", None) is not None:
+            print(f"  bc: {params['bc']}")
         if params.get("angles", None) is not None:
             print(f"  angles: {params['angles']}")
         return axis_ordering, perm
@@ -227,7 +233,7 @@ class SCFT:
         params = copy.deepcopy(params)
 
         # Handle axis ordering (convert user ordering to standard [a, b, c]); this
-        # rewrites nx/lx/angles in `params`, so the key is dropped from the copy that
+        # rewrites nx/lx/bc/angles in `params`, so the key is dropped from the copy that
         # save_results() writes as "initial_params" (it must not be applied twice)
         self.axis_ordering, self._axis_perm = self._apply_axis_ordering(params)
         params.pop("axis_ordering", None)
@@ -246,6 +252,8 @@ class SCFT:
 
         # Compressibility parameter (None: incompressible)
         self.zeta_n = params.get("zeta_n", None)
+        if self.zeta_n is not None and self.zeta_n < 0:
+            raise ValidationError(f"zeta_n must not be negative, got {self.zeta_n}.")
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
         for polymer in self.distinct_polymers:
@@ -273,8 +281,7 @@ class SCFT:
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
 
-        # Matrix for field residuals.
-        # See *J. Chem. Phys.* **2017**, 146, 244902
+        # χN matrix
         M = len(self.monomer_types)
         matrix_chi = np.zeros((M,M))
         for i in range(M):
@@ -285,21 +292,28 @@ class SCFT:
                     matrix_chi[j,i] = self.chi_n[key]
         
         self.matrix_chi = matrix_chi
-        # The field residual projects out the pressure with chi^-1 (Macromolecules 2025,
-        # 58, 816), so SCFT needs an invertible chi N matrix. A single monomer type, or a
-        # zero pair in a three-monomer system, makes it singular.
-        try:
-            matrix_chi_inv = np.linalg.inv(matrix_chi)
-        except np.linalg.LinAlgError:
-            raise ValidationError("SCFT needs an invertible chi N matrix (a single monomer type, or a zero "
-                                  "chi N pair in a three-monomer system, makes it singular).") from None
-        # P divides by 1ᵀχ⁻¹1, which vanishes for some χ N matrices (e.g. χ_AB = χ_AC = 10,
-        # χ_BC = 40): the projection, and with it the residual, is then undefined
-        if abs(np.sum(matrix_chi_inv)) < 1e-8 * np.max(np.abs(matrix_chi_inv)):
-            raise ValidationError("SCFT needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse chi N matrix); "
-                                  "for this chi N matrix it vanishes, and the field residual is undefined.")
-        self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        self.sum_chi_inv = np.sum(matrix_chi_inv)
+        if self.zeta_n is None:
+            # Incompressible: an invertible chi N matrix with 1ᵀ(χN)⁻¹1 != 0. At 1ᵀ(χN)⁻¹1 = 0
+            # (e.g. χ_AB = χ_AC = 10, χ_BC = 40) the auxiliary field of the zero eigenvalue of
+            # the projected χN carries a linear term and cannot be dropped, so the field theory
+            # and its free energy do not hold. A single monomer type, or a zero pair in a
+            # three-monomer system, makes χN singular.
+            try:
+                matrix_chi_inv = np.linalg.inv(matrix_chi)
+            except np.linalg.LinAlgError:
+                raise ValidationError("SCFT needs an invertible chi N matrix (a single monomer type, or a zero "
+                                      "chi N pair in a three-monomer system, makes it singular).") from None
+            if abs(np.sum(matrix_chi_inv)) < 1e-8 * np.max(np.abs(matrix_chi_inv)):
+                raise ValidationError("SCFT needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse chi N matrix); "
+                                      "for this chi N matrix it vanishes, and the field theory does not hold.")
+
+        # Field residual (see the run loop): the composition part is projected with
+        # P⊥ = I - eeᵀ/M, and the pressure part is scaled by κ = max(max|λ|, 1)/2 with λ
+        # the eigenvalues of P⊥ χN P⊥, the size of the composition-pressure coupling
+        # (χN/2 for AB)
+        self.matrix_q_perp = np.identity(M) - np.ones((M, M))/M
+        projected_chi = self.matrix_q_perp @ matrix_chi @ self.matrix_q_perp
+        self.pressure_kappa = max(np.max(np.abs(np.linalg.eigvalsh(projected_chi))), 1.0)/2
 
         # Create space group object early (before PropagatorSolver) if specified
         if params.get("space_group", None) is not None:
@@ -522,8 +536,7 @@ class SCFT:
 
         if self.zeta_n is not None:
             print("zeta_n: %f" % self.zeta_n)
-        else:
-            print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+        print("Pressure scale of the field residual, κ: %f" % self.pressure_kappa)
 
         self.prop_solver.display_architectures()
         self.prop_solver.display_statistics()
@@ -776,18 +789,18 @@ class SCFT:
         Compressible systems have no gauge freedom: the means are always pinned to the
         saddle point, mean(w_i) = sum_j chi_ij mean(phi_j) + xi with
         xi = zeta (mean(sum_j phi_j) - 1) (the residual leaves the means out).
-        Incompressible systems with fts_consistent_energy: only the P-projected mean is
-        pinned; mean(W+) is a gauge freedom that P annihilates. Otherwise (mean = 0
-        convention) incompressible fields are shifted to zero mean.
+        Incompressible systems with fts_consistent_energy: only the composition part of the
+        means (P⊥ = I - eeᵀ/M) is pinned; the uniform pressure mean(W+) is a gauge freedom.
+        Otherwise (mean = 0 convention) incompressible fields are shifted to zero mean.
         """
         M = len(self.monomer_types)
         if self.zeta_n is not None:
             for i in range(M):
                 w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
         elif self.fts_consistent_energy:
-            p_target = self.matrix_p @ chi_phi_mean
+            p_target = self.matrix_q_perp @ chi_phi_mean
             w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
-            p_current = self.matrix_p @ w_mean
+            p_current = self.matrix_q_perp @ w_mean
             shift = p_target - p_current
             for i in range(M):
                 w[i] += shift[i]
@@ -1002,16 +1015,21 @@ class SCFT:
             # Self-consistency residual, phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
             phi_smeared = self.smearing.apply_to_dict(phi)
             phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
+            # The SCFT equations are w = χφ + ξe with Σφ = 1 (incompressible), or w = χφ + ζ(Σφ - 1)e
+            # (compressible), e = (1, ..., 1). Composition part: P⊥(χφ - w), the residual of the
+            # exchange fields of the symmetric theory. Pressure part along e: κ(Σφ - 1), which raises
+            # the pressure where the density is too high; κ = max(max|λ|, 1)/2 follows the coupling
+            # of the composition and the pressure (for AB κ = χN/2). Compressible: the stiff ζ term
+            # lies along e, so that part of E = χφ + ζ(Σφ - 1)e - w is scaled by κ/(κ + ζ), which
+            # gives the incompressible residual for ζ → ∞ and leaves E unscaled for ζ → 0
+            e_column = np.ones((M, 1))
             if self.zeta_n is None:
-                w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
+                w_diff = self.matrix_q_perp @ (self.matrix_chi @ phi_array - w) \
+                    + self.pressure_kappa * e_column * (np.sum(phi_array, axis=0) - 1.0)[None, :]
             else:
-                # Compressible: E = χφ + ζ(Σφ - 1) - w = 0. The stiff ζ term lies along (1, ..., 1),
-                # which is the range of I - P, so that part of E is divided by c(1 + ζ),
-                # c = 1ᵀχ⁻¹1. The fixed point is unchanged, and for ζ → ∞ the residual becomes
-                # the incompressible one, Pχφ - Pw + (Σφ - 1)/c
                 residual = self.matrix_chi @ phi_array + self.zeta_n * (np.sum(phi_array, axis=0) - 1.0) - w
-                p_residual = self.matrix_p @ residual
-                w_diff = p_residual + (residual - p_residual) / (self.sum_chi_inv * (1.0 + self.zeta_n))
+                composition = self.matrix_q_perp @ residual
+                w_diff = composition + (self.pressure_kappa / (self.pressure_kappa + self.zeta_n)) * (residual - composition)
 
             # Keep the level of functional derivatives
             for i in range(M):

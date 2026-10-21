@@ -13,8 +13,9 @@ L-FTS details that change recorded results.
    no dH file at a recording step, two periods in the next one).
 4. Compressible L-FTS: the uniform mode of the pressure-like field sits at its
    analytic saddle value -(c1 + sum_j A_jk <phi_j>)/(2 c2) (until 2026-10 it was
-   pinned to whatever the first solve left, here the input mean), and the
-   recorded H belongs to the returned fields.
+   pinned to whatever the first solve left, here 7.49993 instead of 7.5), and
+   the recorded H belongs to the returned fields (a consistency check that also
+   held before).
 """
 
 import os

@@ -264,6 +264,7 @@ wtmd = WTMD(
     dpsi=1e-3,                 # Bin width
     update_freq=1000,          # Statistics update frequency
     recording_period=100000,   # Data recording frequency
+    angles=None,               # Lattice angles in degrees (None: orthogonal box)
 )
 ```
 
@@ -318,13 +319,16 @@ The WTMD methods are called in the following order during the Langevin loop:
 
 ```python
 # Before Langevin update
+w_aux_before = w_aux.copy()
+phi_before = phi            # concentrations of w_aux_before (smeared, when smearing is used)
 psi = wtmd.compute_order_parameter(langevin_step, w_aux)
 wtmd.add_bias_to_langevin(psi, w_lambda)
 
 # ... Langevin update and saddle point ...
 
-# After successful saddle point convergence
-dH = mpt.compute_h_deriv_chin(chi_n, w_aux)
+# After successful saddle point convergence: dH/dχN of the fields at which psi
+# was computed (the fields before the update), so that psi and dH form one sample
+dH = mpt.compute_h_deriv_chin(chi_n, w_aux_before, phi_before)
 wtmd.store_order_parameter(psi, dH)
 
 if langevin_step % wtmd.update_freq == 0:

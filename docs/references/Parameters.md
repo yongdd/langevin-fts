@@ -42,6 +42,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 - Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require every direction to be periodic or every direction to be non-periodic; each non-periodic direction may be reflecting or absorbing independently of the others (e.g. reflecting in x and z, absorbing in y). Mixing periodic with non-periodic directions raises an error on all platforms.
 - Mixing periodic and non-periodic directions (e.g., periodic in x/y, reflecting in z) requires `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot mix periodic and non-periodic directions.
 - Stress computation (and therefore `box_is_altering`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
+- Reflecting or absorbing walls need an orthogonal cell (all angles 90°), and a `space_group` needs periodic boundaries in every direction; both combinations are rejected.
 
 **Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
 ```python
@@ -66,8 +67,8 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `segment_lengths` | dict | Relative statistical segment lengths $`b/b_{ref}`$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). SCFT needs an invertible χN matrix (its field residual uses χ⁻¹): a single monomer type, or a zero pair in a three-monomer system, is rejected; L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
-| `zeta_n` | float | (Optional) Compressibility parameter $`\zeta N`$ of the compressible model. Omitted: incompressible ($`\sum_i \phi_i = 1`$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
+| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). Incompressible SCFT needs an invertible χN matrix with $`\mathbf{1}^T (\chi N)^{-1} \mathbf{1} \neq 0`$ (otherwise the auxiliary field of a zero eigenvalue of the projected χN carries a linear term): a single monomer type, or a zero pair in a three-monomer system, is rejected; compressible SCFT, L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
+| `zeta_n` | float | (Optional) Compressibility parameter $`\zeta N \geq 0`$ of the compressible model. Omitted: incompressible ($`\sum_i \phi_i = 1`$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition
 
@@ -81,7 +82,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 |-----|------|-------------|
 | `volume_fraction` | float | Volume fraction in system |
 | `blocks` | list | Block specifications |
-| `initial_conditions` | dict | (Optional) Custom propagator initial conditions per node, e.g. `{0: "G"}` maps node 0 to the initial condition labeled `"G"` in `q_init` (used for grafted chains) |
+| `initial_conditions` | dict | (Optional) Custom propagator initial conditions per node, e.g. `{0: "G"}` maps node 0 to the initial condition labeled `"G"` in `q_init` (used for grafted chains). Labels may contain letters, digits and underscores only |
 
 **Block format:** Each block is a dictionary with:
 - `"type"`: Monomer type (string)
@@ -216,7 +217,7 @@ All keys are **required** (omitting one raises `KeyError`). The values above are
 | `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
 | `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
 | `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
-| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $`F = -\chi N (f - 1/2)^2`$ instead of 0) | `False` |
+| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $`F = -\chi N (f - 1/2)^2`$ instead of 0). No effect on compressible runs (`zeta_n`), whose field means are fixed by the saddle point | `False` |
 
 Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
 
@@ -241,7 +242,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `axis_ordering` | list[str] | Order in which `nx`, `lx` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]`. The arrays of `initial_fields` (and `q_init`) are given in the same order as `nx` and transposed too; results are in the standard order | `["a", "b", "c"]` |
+| `axis_ordering` | list[str] | Order in which `nx`, `lx`, `bc` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]`. The arrays of `initial_fields` (and `q_init`) are given in the same order as `nx` and transposed too. Results (fields, concentrations, saved files with their `nx` and `lx`) are in the standard order; to pass them back as initial fields of a run with `axis_ordering`, transpose them to its order | `["a", "b", "c"]` |
 
 `space_group` and `smearing` are described under [Advanced Options](#advanced-options).
 
@@ -271,6 +272,8 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 |-----|------|-------------|---------|
 | `max_iter` | int | Maximum iterations for saddle point | Required |
 | `tolerance` | float | Convergence tolerance | Required |
+
+If the saddle point is not found within `max_iter` iterations (or the error is NaN), the Langevin step is repeated from the same fields with new noise, up to five times; after the sixth failure in a row the run stops.
 
 ### Recording
 
@@ -373,7 +376,7 @@ When `True`:
 }
 ```
 
-The box must match the crystal system of the group: cubic groups need equal `lx` and 90° angles, tetragonal a = b with 90° angles, orthorhombic 90° angles, hexagonal and trigonal groups on hexagonal axes a = b with `"angles": [90, 90, 120]`, and rhombohedral-axes settings a = b = c with α = β = γ (box relaxation is not supported for them). `SCFT` raises `ValidationError` otherwise.
+The box must match the crystal system of the group: cubic groups need equal `lx` and 90° angles, tetragonal a = b with 90° angles, orthorhombic 90° angles, hexagonal and trigonal groups on hexagonal axes a = b with `"angles": [90, 90, 120]`, and rhombohedral-axes settings a = b = c with α = β = γ (box relaxation is not supported for them). `SCFT` raises `ValidationError` otherwise. A space group needs periodic boundaries in every direction, and a `mask` used with it must have the symmetry of the group (a mask without it is rejected); the reduced-basis integrals weight each orbit by its size times the mask.
 
 **Platform support:**
 - **Discrete chains + space group** is supported on both CPU and CUDA platforms, in both standard and `reduce_memory=True` modes.
@@ -391,7 +394,7 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 | `{"type": "gaussian", "a_int": a}` | smearing length $`a`$ in units of $`R_0`$ (universality needs $`a \lesssim 0.02 R_0`$) | $`\exp(-a^2 k^2 / 2)`$ |
 | `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $`k_c \gtrsim 20 / R_0`$, transition width $`dk`$ (default 5.0) | $`C_0 [1 - \tanh((k - k_c)/dk)]`$ |
 
-$`k`$ is the physical wavenumber of the cell, including the cell angles. Along an axis with reflecting or absorbing walls the field is smeared in the cosine or sine basis of the propagators, i.e. together with its image across the wall (both sides of the axis must have the same wall type). In SCFT box relaxation the kernel follows the box, and the stress includes the derivative of $`\Gamma(k)`$. Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
+$`k`$ is the physical wavenumber of the cell, including the cell angles. Along an axis with reflecting or absorbing walls the field is smeared in the cosine (DCT-II) basis, i.e. together with its even image across the wall (across an absorbing wall the propagators are odd, so fields and concentrations are even); the two sides of an axis may have different walls. In SCFT box relaxation the kernel follows the box, and the stress includes the derivative of $`\Gamma(k)`$. Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.
 
 ### Box Optimization
 
@@ -413,6 +416,8 @@ Following crystallographic convention:
 ```python
 "angles": [90.0, 90.0, 120.0]  # Hexagonal: alpha=90, beta=90, gamma=120
 ```
+
+Non-orthogonal cells need periodic boundaries in every direction (walls are rejected), and the angles must form a cell ($`1 - \cos^2\alpha - \cos^2\beta - \cos^2\gamma + 2\cos\alpha\cos\beta\cos\gamma > 0`$).
 
 ### Parameter Files (YAML/JSON)
 

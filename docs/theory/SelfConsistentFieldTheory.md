@@ -43,35 +43,32 @@ where:
 
 ### 2.2 Field Residuals
 
-The field residuals measure the deviation from self-consistency:
+The field residuals measure the deviation from self-consistency. They have a composition part and a pressure part:
 
 ```math
-\mathbf{R}_w = X \boldsymbol{\phi} - P \mathbf{w}
+\mathbf{R}_w = P_\perp \left( X \boldsymbol{\phi} - \mathbf{w} \right) + \kappa \, \mathbf{e} \left( \sum_i \phi_i - 1 \right), \qquad P_\perp = I - \frac{\mathbf{e}\mathbf{e}^T}{M}, \qquad \kappa = \frac{\max(\max_k \vert\lambda_k\vert, 1)}{2}
 ```
 
 where:
 - $`X`$: the $`\chi N`$ matrix
-- $`P = I - \frac{\mathbf{e}\mathbf{e}^T X^{-1}}{\mathbf{e}^T X^{-1} \mathbf{e}}`$: projection matrix
+- $`\mathbf{e} = (1, \ldots, 1)`$
+- $`\lambda_k`$: the eigenvalues of $`P_\perp X P_\perp`$ (the $`\lambda_i`$ of the auxiliary fields, [PolymerFieldTheory.md](PolymerFieldTheory.md))
 
-At the saddle point $`X \boldsymbol{\phi} - P \mathbf{w}`$ is the uniform vector $`\mathbf{e} / (\mathbf{e}^T X^{-1} \mathbf{e})`$ (since $`P \mathbf{e} = 0`$ and $`\sum_i \phi_i = 1`$), so the spatial mean of each component is subtracted, $`R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle`$, and the residual vanishes at the saddle point.
+$`\mathbf{R}_w = 0`$ exactly at the saddle point: $`P_\perp (X \boldsymbol{\phi} - \mathbf{w}) = 0`$ means $`\mathbf{w} = X \boldsymbol{\phi} + \xi \mathbf{e}`$ for some $`\xi(\mathbf{r})`$, and the second part requires $`\sum_i \phi_i = 1`$. Where $`\sum_i \phi_i = 1`$ the composition part is the residual of the exchange fields of the symmetric theory, $`\Omega_k \leftarrow (\lambda_k \Phi_k + S_k)/M`$, written for the monomer fields; it needs no inverse of $`X`$. The pressure part raises the pressure where the total density is too high. Its scale $`\kappa`$ follows the coupling between the composition and the pressure, which grows with $`\chi N`$ ($`\kappa = \chi N / 2`$ for AB); it does not depend on $`\mathbf{e}^T X^{-1} \mathbf{e}`$, which can be negative or close to zero (e.g. ABC with $`\chi_{AC} N`$ large). The spatial mean of each component is subtracted, $`R_{w_i} \leftarrow R_{w_i} - \langle R_{w_i} \rangle`$; the field means are set separately (Section 1.3 of [PolymerFieldTheory.md](PolymerFieldTheory.md#13-scft-iteration-incompressible)).
 
 ### 2.3 Example: AB Diblock Copolymer
 
-For AB-type systems:
+For AB-type systems $`\lambda = -\chi N`$ and $`\kappa = \chi N / 2`$ (for $`\chi N \geq 1`$), so
 
 ```math
-\mathbf{R}_w = \begin{pmatrix} 0 & \chi N \\ \chi N & 0 \end{pmatrix} \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix} - \begin{pmatrix} 1/2 & -1/2 \\ -1/2 & 1/2 \end{pmatrix} \begin{pmatrix} w_A(\mathbf{r}) \\ w_B(\mathbf{r}) \end{pmatrix}
-```
-
-Explicitly:
-
-```math
-R_{w_A} = \chi N \phi_B(\mathbf{r}) - \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))
+R_{w_A} = \chi N \phi_B(\mathbf{r}) - \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r})) - \frac{\chi N}{2}
 ```
 
 ```math
-R_{w_B} = \chi N \phi_A(\mathbf{r}) + \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r}))
+R_{w_B} = \chi N \phi_A(\mathbf{r}) + \frac{1}{2}(w_A(\mathbf{r}) - w_B(\mathbf{r})) - \frac{\chi N}{2}
 ```
+
+(the constants drop out with the subtracted means).
 
 ### 2.4 Compressible Model ($`\zeta N \neq 0`$)
 
@@ -97,13 +94,13 @@ w_i(\mathbf{r}) = \sum_{j \neq i} \chi_{ij} N \phi_j(\mathbf{r}) + \zeta N \left
 
 A direct residual formulation using $`R_w = (X + \zeta N \, \mathbf{e}\mathbf{e}^T) \boldsymbol{\phi} - \zeta N \, \mathbf{e} - \mathbf{w}`$ is mathematically correct but numerically stiff. The effective interaction matrix $`X + \zeta N \, \mathbf{e}\mathbf{e}^T`$ has eigenvalue $`\chi N + 2\zeta N`$ (e.g., 213.27 for $`\chi N = 13.27`$, $`\zeta N = 100`$), requiring very small mixing rates for convergence.
 
-Instead, the residual is split with the projection matrix $`P`$ of Section 2.2. The stiff $`\zeta N`$ term lies along $`\mathbf{e}`$, which spans the range of $`I - P`$, so only that part of $`R_w`$ is rescaled:
+Instead, the stiff $`\zeta N`$ term, which lies along $`\mathbf{e}`$, is rescaled with the $`\kappa`$ of Section 2.2:
 
 ```math
-\mathbf{R} = P \mathbf{R}_w + \frac{(I - P) \mathbf{R}_w}{c\,(1 + \zeta N)}, \qquad c = \mathbf{e}^T X^{-1} \mathbf{e}, \qquad R_i \leftarrow R_i - \langle R_i \rangle
+\mathbf{R} = P_\perp \mathbf{R}_w + \frac{\kappa}{\kappa + \zeta N} \, P_\parallel \mathbf{R}_w, \qquad P_\parallel = \frac{\mathbf{e}\mathbf{e}^T}{M}, \qquad R_i \leftarrow R_i - \langle R_i \rangle
 ```
 
-$`\mathbf{R} = 0`$ exactly when $`\mathbf{R}_w = 0`$, so the fixed point is unchanged. For $`\zeta N \to \infty`$ the residual becomes the incompressible one, $`P X \boldsymbol{\phi} - P \mathbf{w} + (\sum_j \phi_j - 1)\,\mathbf{e}/c`$, and the iteration converges as fast as in the incompressible model (72–95 iterations for $`\zeta N = 5`$ to $`10^5`$ in a 1D lamella; the incompressible run takes 89–101).
+$`\mathbf{R} = 0`$ exactly when $`\mathbf{R}_w = 0`$, so the fixed point is unchanged. For $`\zeta N \to \infty`$ the residual becomes the incompressible one of Section 2.2, $`P_\perp (X \boldsymbol{\phi} - \mathbf{w}) + \kappa \, \mathbf{e} (\sum_j \phi_j - 1)`$, and the iteration converges as fast as in the incompressible model; for $`\zeta N \to 0`$ it is $`\mathbf{R}_w`$ itself.
 
 The field means have no gauge freedom in the compressible model; they are set directly after each field update:
 
@@ -112,8 +109,6 @@ The field means have no gauge freedom in the compressible model; they are set di
 ```
 
 where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$ and $`\langle \phi_j \rangle`$ is fixed by the chain compositions. This pinning runs for every compressible run, whatever `fts_consistent_energy` is.
-
-> **History:** until 2026-10, `scft.py` used the incompressible residual $`X \boldsymbol{\phi} - P \mathbf{w}`$ for compressible runs as well. It eliminates the stiff mode by replacing the compressible pressure equation with the incompressibility constraint, so those runs returned the incompressible structure ($`\sum_i \phi_i = 1`$ everywhere) for any $`\zeta N`$.
 
 #### Example: AB Diblock (Compressible)
 

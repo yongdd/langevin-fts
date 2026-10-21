@@ -221,6 +221,12 @@ protected:
     std::vector<double> make_basis_weights(SpaceGroup* sg) const;
 
     /**
+     * @brief The checks of set_space_group (walls, grid, cell, mask symmetry), without
+     *        changing the box; throws if the group cannot be set.
+     */
+    void check_space_group(SpaceGroup* sg) const;
+
+    /**
      * @brief Number of reduced-basis points.
      *
      * When space_group_ is nullptr, this equals total_grid.
@@ -479,7 +485,8 @@ public:
      *   Array size: total_grid
      *
      * When space group IS set (reduced basis mode):
-     *   Computes: integral(g) = (V/M) * sum_i orbit_counts[i] * g[i]
+     *   Computes: integral(g) = (V/M) * sum_i basis_weights[i] * g[i]
+     *   (basis_weights = orbit counts times the mask)
      *   Array size: n_basis
      *
      * @param g Field array (length: get_n_basis())
@@ -505,7 +512,7 @@ public:
      *   Array size: total_grid
      *
      * When space group IS set (reduced basis mode):
-     *   Computes: <g|h> = (V/M) * sum_i orbit_counts[i] * g[i] * h[i]
+     *   Computes: <g|h> = (V/M) * sum_i basis_weights[i] * g[i] * h[i]
      *   Array size: n_basis
      *
      * @param g First field array (length: get_n_basis())
@@ -549,7 +556,8 @@ public:
      *
      * Modifies g in-place: g[i] -= mean(g)
      *
-     * When space group is set, uses weighted mean with orbit_counts.
+     * When space group is set, uses the mean weighted with the basis weights
+     * (orbit counts times the mask).
      *
      * @param g Field array (length: get_n_basis(), modified in-place)
      */

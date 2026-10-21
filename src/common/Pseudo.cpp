@@ -446,27 +446,35 @@ void update_weighted_fourier_basis_periodic_impl(
         double v1, v2, v3;
         if (oblique)
         {
+            // Aliases m + N t (t in {-1, 0, 1} on each axis with N > 1) and their forms
+            int alias[27][3];
+            double alias_form[27];
+            int n_alias = 0;
             double best = form(i_s, j_s, k_s);
             for (int a = -s1; a <= s1; ++a)
                 for (int b = -s2; b <= s2; ++b)
                     for (int c = -s3; c <= s3; ++c)
-                        best = std::min(best, form(i_s + a * tnx[0], j_s + b * tnx[1], k_s + c * tnx[2]));
+                    {
+                        alias[n_alias][0] = i_s + a * tnx[0];
+                        alias[n_alias][1] = j_s + b * tnx[1];
+                        alias[n_alias][2] = k_s + c * tnx[2];
+                        alias_form[n_alias] = form(alias[n_alias][0], alias[n_alias][1], alias[n_alias][2]);
+                        best = std::min(best, alias_form[n_alias]);
+                        ++n_alias;
+                    }
             const double tol = 1e-10 * best;
             int n_tied = 0;
             for (int t = 0; t < 6; ++t)
                 vv[t] = 0.0;
-            for (int a = -s1; a <= s1; ++a)
-                for (int b = -s2; b <= s2; ++b)
-                    for (int c = -s3; c <= s3; ++c)
-                    {
-                        const int ia = i_s + a * tnx[0], jb = j_s + b * tnx[1], kc = k_s + c * tnx[2];
-                        if (form(ia, jb, kc) > best + tol)
-                            continue;
-                        deformation(ia, jb, kc, v1, v2, v3);
-                        vv[0] += v1 * v1; vv[1] += v2 * v2; vv[2] += v3 * v3;
-                        vv[3] += v1 * v2; vv[4] += v1 * v3; vv[5] += v2 * v3;
-                        ++n_tied;
-                    }
+            for (int n = 0; n < n_alias; ++n)
+            {
+                if (alias_form[n] > best + tol)
+                    continue;
+                deformation(alias[n][0], alias[n][1], alias[n][2], v1, v2, v3);
+                vv[0] += v1 * v1; vv[1] += v2 * v2; vv[2] += v3 * v3;
+                vv[3] += v1 * v2; vv[4] += v1 * v3; vv[5] += v2 * v3;
+                ++n_tied;
+            }
             for (int t = 0; t < 6; ++t)
                 vv[t] /= n_tied;
             return;

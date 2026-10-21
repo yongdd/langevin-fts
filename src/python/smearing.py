@@ -46,10 +46,12 @@ class Smearing:
         None means an orthogonal cell.
     bc : list of str or None
         Boundary conditions, two per axis as for the propagator solver
-        ("periodic", "reflecting", "absorbing"). None means periodic. A wall
-        axis is smeared in the cosine (reflecting, DCT-II) or sine (absorbing,
-        DST-II) basis of the propagators, i.e. with the image of the field
-        across the wall, instead of wrapping around the box.
+        ("periodic", "reflecting", "absorbing"). None means periodic. An axis
+        with walls is smeared in the cosine (DCT-II) basis, i.e. with the mirror
+        image of the field across the wall, instead of wrapping around the box.
+        This holds for absorbing walls too: the propagators are odd across such
+        a wall, so the fields and the concentrations (products of two
+        propagators) are even.
 
     Attributes
     ----------
@@ -89,18 +91,14 @@ class Smearing:
         self.n_grid = int(np.prod(nx))
         self.dim = len(nx)
 
-        # Boundary condition of each axis
+        # Boundary condition of each axis: periodic, or walls (any type: the fields and
+        # concentrations are even across a wall, so a wall axis is smeared with the
+        # mirror image, in the DCT-II basis)
         if bc is None:
             bc = ["periodic"] * (2 * self.dim)
         if len(bc) != 2 * self.dim:
             raise ValueError(f"bc needs two entries per axis, got {len(bc)} for {self.dim} axes.")
-        self.axis_bc = []
-        for d in range(self.dim):
-            low, high = bc[2 * d].lower(), bc[2 * d + 1].lower()
-            if low != high:
-                raise NotImplementedError(
-                    f"Smearing needs the same boundary condition on both sides of an axis, got '{low}' and '{high}'.")
-            self.axis_bc.append(low)
+        self.axis_bc = ["periodic" if bc[2 * d].lower() == "periodic" else "wall" for d in range(self.dim)]
         self.periodic = all(b == "periodic" for b in self.axis_bc)
 
         if smearing_params is None:
@@ -170,19 +168,18 @@ class Smearing:
         self._metric_inv = np.linalg.inv(np.outer(L, L) * self._cos)
 
         # Integer frequencies m (componentwise principal zone), shape (dim, n_grid)
-        self._m = np.array(np.meshgrid(*[np.fft.fftfreq(n) * n for n in self.nx], indexing="ij")).reshape(self.dim, -1)
+        frequencies = [np.concatenate([np.arange((n + 1) // 2), np.arange(-(n // 2), 0)]) for n in self.nx]
+        self._m = np.array(np.meshgrid(*frequencies, indexing="ij")).reshape(self.dim, -1)
 
         if self.orthogonal:
             # Separable wavenumbers of the transform of each axis: k = 2π·n/L (FFT; the
-            # componentwise alias is minimal), πn/L (DCT-II) or π(n+1)/L (DST-II)
+            # componentwise alias is minimal) or πn/L (DCT-II, wall axes)
             self._k_axes = []
             for i in range(self.dim):
                 if self.axis_bc[i] == "periodic":
                     self._k_axes.append(2 * np.pi * np.fft.fftfreq(self.nx[i], d=self.lx[i] / self.nx[i]))
-                elif self.axis_bc[i] == "reflecting":
-                    self._k_axes.append(np.pi * np.arange(self.nx[i]) / self.lx[i])
                 else:
-                    self._k_axes.append(np.pi * (np.arange(self.nx[i]) + 1) / self.lx[i])
+                    self._k_axes.append(np.pi * np.arange(self.nx[i]) / self.lx[i])
             k_grids = np.meshgrid(*self._k_axes, indexing="ij")
             self.k_sq = sum(k ** 2 for k in k_grids)
         else:
@@ -327,7 +324,7 @@ class Smearing:
         # Reshape to grid dimensions
         field_grid = np.reshape(field, self.nx)
 
-        # FFT -> multiply by Γ(k) -> IFFT (DCT-II/DST-II along wall axes)
+        # FFT -> multiply by Γ(k) -> IFFT (DCT-II along wall axes)
         if self.periodic:
             field_fourier = np.fft.fftn(field_grid)
             field_smeared_fourier = field_fourier * self.fourier
@@ -343,14 +340,12 @@ class Smearing:
         return result
 
     def _forward(self, field):
-        """Orthonormal transform of each axis: FFT (periodic), DCT-II (reflecting), DST-II (absorbing)."""
+        """Orthonormal transform of each axis: FFT (periodic) or DCT-II (walls)."""
         for axis, kind in enumerate(self.axis_bc):
             if kind == "periodic":
                 field = scipy.fft.fft(field, axis=axis, norm="ortho")
-            elif kind == "reflecting":
-                field = scipy.fft.dct(field, type=2, axis=axis, norm="ortho")
             else:
-                field = scipy.fft.dst(field, type=2, axis=axis, norm="ortho")
+                field = scipy.fft.dct(field, type=2, axis=axis, norm="ortho")
         return field
 
     def _backward(self, field):
@@ -358,10 +353,8 @@ class Smearing:
         for axis, kind in enumerate(self.axis_bc):
             if kind == "periodic":
                 field = scipy.fft.ifft(field, axis=axis, norm="ortho")
-            elif kind == "reflecting":
-                field = scipy.fft.idct(field, type=2, axis=axis, norm="ortho")
             else:
-                field = scipy.fft.idst(field, type=2, axis=axis, norm="ortho")
+                field = scipy.fft.idct(field, type=2, axis=axis, norm="ortho")
         return field
 
     def apply_to_dict(self, fields):

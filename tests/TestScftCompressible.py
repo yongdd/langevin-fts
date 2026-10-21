@@ -6,8 +6,9 @@ field equations w_i = sum_j chi_ij phi_j + zeta (sum_j phi_j - 1).
 Until 2026-10 the residual was the incompressible one for both models, so a
 compressible run returned the incompressible solution (sum phi = 1 everywhere)
 whatever zeta was, and its free energy was the compressible Hamiltonian away
-from its saddle point (1D AB lamella, chi N = 15: residual 2.18, F = 1.886 for
-zeta N = 5 and -0.060 for zeta N = 100).
+from its saddle point (1D AB lamella, chi N = 15, as in this test: residual
+9.68, F = -0.364 for zeta N = 5 and -0.322 for zeta N = 100; with
+fts_consistent_energy residual 2.18, F = 1.886 and -0.060).
 
 Checks (1D lamellae of AB diblocks and an ABC triblock):
 1. The compressible residual is below 1e-6 and sum phi is not uniform.

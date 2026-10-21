@@ -65,6 +65,8 @@ class SymmetricPolymerTheory:
         self.monomer_types = monomer_types
         self.zeta_n = zeta_n
         M = len(self.monomer_types)
+        # Pair keys in sorted order ("B,A" -> "A,B"), as compute_eigen_system looks them up
+        chi_n = {",".join(sorted(key.split(","))): value for key, value in chi_n.items()}
         
         # Compute eigenvalues, orthogonal matrix, vector_s and vector_S
         eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
@@ -117,6 +119,33 @@ class SymmetricPolymerTheory:
         self.matrix_o = matrix_o
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
+
+        # Role of each auxiliary field for the χN derivatives (see _field_coefficients_derivative)
+        self._roles = []
+        for i in range(M):
+            if zeta_n is None and i == M-1:
+                self._roles.append("pressure")
+            elif np.isclose(eigenvalues[i], 0.0):
+                self._roles.append("dropped")
+            else:
+                self._roles.append("imaginary" if eigenvalues[i] > 0 else "real")
+        self._vector_s = vector_s
+        self._vector_large_s = vector_large_s
+        if self.R > 1:
+            lead = self.aux_fields_real_idx[0]
+            gap = min(abs(eigenvalues[j] - eigenvalues[lead]) for j in self.aux_fields_real_idx[1:])
+            if gap < 1e-2*abs(eigenvalues[lead]):
+                print("(Warning!) The leading real field has (nearly) the same eigenvalue as another real field. ", end="")
+                print("Its eigenvector is then not well defined, and an order parameter built from it (WTMD) changes abruptly with χN.")
+
+        # χN derivatives of the field part at fixed auxiliary fields (see compute_h_deriv_chin);
+        # with WTMD the leading real field follows its own eigenvector
+        self.chi_n = {key: float(value) for key, value in chi_n.items()}
+        self.h_deriv_chin_coefficients = {key: self._field_coefficients_derivative(key, False) for key in chi_n}
+        if self.R > 1:
+            self._h_deriv_chin_coefficients_wtmd = {key: self._field_coefficients_derivative(key, True) for key in chi_n}
+        else:
+            self._h_deriv_chin_coefficients_wtmd = self.h_deriv_chin_coefficients
 
         print("------------ Polymer Field Theory for Multimonomer System------------")
         print("Eigenvalues:\n\t", self.eigenvalues)
@@ -404,59 +433,166 @@ class SymmetricPolymerTheory:
 
         return h_deriv
 
-    def compute_h_deriv_chin(self, chi_n, w_aux):
+    def _field_coefficients_derivative(self, key, follow_lead):
+        """d/dχN[key] of the field part at fixed auxiliary fields Ω (see compute_h_deriv_chin).
+
+        First-order perturbation of U a_k = λ_k a_k (U = PχP, or χ + ζ11ᵀ for the
+        compressible model; |a_k|² = M). The fields follow a frame Ã(χ) with dÃ = A K, K
+        antisymmetric. Between fields of different roles (real, imaginary, dropped) K is the
+        motion of the eigenvectors, K_jk = a_jᵀ dU a_k / (M (λ_k - λ_j)); it moves the
+        subspaces on which the real and the imaginary fields live, and no denominator
+        vanishes. Within a role the frame is a free choice (it changes single values of
+        dH/dχN, not their average) and K = 0. With follow_lead (WTMD) the leading real field
+        follows its own eigenvector, K_jk = a_jᵀ dU a_k / (M (λ_k - λ_j)) also with the other
+        real fields, so that an order parameter built from it stays fixed (K = 0 where its
+        eigenvalue is degenerate and the eigenvector undefined).
+        In this frame Λ = ÃᵀUÃ/M stays block diagonal, the field part is
+        -(M/2) Ωᵀ Λ⁻¹ Ω + (Λ⁻¹ S)·Ω - Sᵀ Λ⁻¹ S/(2M) + const over the fields with λ ≠ 0, with
+        S = Ãᵀ s, and dΛ = [Λ, K] + Aᵀ dU A/M, dS = -K S + Aᵀ ds.
+
+        Fields dropped at a zero eigenvalue (other than the pressure field) have no field
+        (their rows of w_aux are not used); their mean-field part (1/2) yᵀ Λ_d y/M + S_d·y/M,
+        y = A_dᵀ φ, has the derivative (1/2) yᵀ dΛ_d y/M + dS_d·y/M + S_d·dy/M with
+        dy_d = Σ_j K_jd y_j, which gives coefficients of <φ_i φ_j> and <φ_j>.
+
+        Returns (d_h_const, d_Q2, d_q1, d_A, d_phi2, d_phi1): dH/dχN = d_h_const
+        + Σ d_Q2 ∘ <ΩΩᵀ> + d_q1·<Ω> + Σ d_A ∘ <φΩᵀ> + Σ d_phi2 ∘ <φφᵀ> + d_phi1·<φ>.
+        """
+        M = len(self.monomer_types)
+        A = self.matrix_a
+        lam = self.eigenvalues
+        roles = self._roles
+
+        # dχ/dχN[key], dU and ds
+        i, j = [self.monomer_types.index(t) for t in key.split(",")]
+        d_chi = np.zeros((M, M))
+        d_chi[i, j] = d_chi[j, i] = 1.0
+        if self.zeta_n is None:
+            matrix_p = np.identity(M) - np.ones((M, M))/M
+            d_u = np.matmul(matrix_p, np.matmul(d_chi, matrix_p))
+            d_s = np.matmul(d_chi, np.ones(M))/M
+            d_const = 0.5*np.sum(d_chi)/M**2
+        else:
+            d_u = d_chi
+            d_s = np.zeros(M)
+            d_const = 0.0
+        coupling = np.matmul(np.transpose(A), np.matmul(d_u, A))/M      # a_jᵀ dU a_k / M
+
+        # Frame generator K
+        K = np.zeros((M, M))
+        lead = self.aux_fields_real_idx[0] if (follow_lead and self.R > 0) else None
+        for a in range(M):
+            for b in range(M):
+                if a == b or "pressure" in (roles[a], roles[b]):
+                    continue
+                degenerate = abs(lam[a] - lam[b]) <= 1e-8*max(abs(lam[a]), abs(lam[b]), 1.0)
+                if roles[a] != roles[b] or (lead in (a, b) and not degenerate):
+                    K[a, b] = coupling[a, b]/(lam[b] - lam[a])
+
+        d_lam = np.matmul(np.diag(lam), K) - np.matmul(K, np.diag(lam)) + coupling
+        S = self._vector_large_s
+        d_S = -np.matmul(K, S) + np.matmul(np.transpose(A), d_s)
+
+        # Fields with λ ≠ 0 (kept), their coefficients and h_const
+        kept = [k for k in range(M) if roles[k] in ("real", "imaginary")]
+        inv = np.zeros(M)
+        inv[kept] = 1.0/lam[kept]
+        d_Q2 = np.zeros((M, M))
+        d_Q2[np.ix_(kept, kept)] = 0.5*M*inv[kept][:, None]*d_lam[np.ix_(kept, kept)]*inv[kept][None, :]
+        lam_inv_S = inv*S
+        d_q1 = np.zeros(M)
+        d_q1[kept] = inv[kept]*(d_S[kept] - np.matmul(d_lam[np.ix_(kept, kept)], lam_inv_S[kept]))
+        d_h_const = -np.dot(d_S[kept], lam_inv_S[kept])/M \
+            + 0.5*np.dot(lam_inv_S[kept], np.matmul(d_lam[np.ix_(kept, kept)], lam_inv_S[kept]))/M + d_const
+
+        # Dropped fields: (1/2) yᵀ dΛ_d y/M + dS_d·y/M + S_d·dy/M with y = A_dᵀ φ and
+        # dy = (A K)[:, d]ᵀ φ; the rotation of their own columns enters only through S_d·dy
+        dropped = [k for k in range(M) if roles[k] == "dropped"]
+        A_d = A[:, dropped]
+        d_A = np.matmul(A, K)
+        d_phi2 = np.matmul(A_d, np.matmul(d_lam[np.ix_(dropped, dropped)], np.transpose(A_d)))/(2*M)
+        d_phi1 = (np.matmul(A_d, d_S[dropped]) + np.matmul(d_A[:, dropped], S[dropped]))/M
+        d_A[:, dropped] = 0.0
+
+        return d_h_const, d_Q2, d_q1, d_A, d_phi2, d_phi1
+
+    def compute_h_deriv_chin(self, chi_n, w_aux, phi=None, wtmd=False):
         """Compute derivatives of Hamiltonian w.r.t. χN parameters.
 
         Calculates dH/dχ_{ij}N for all interaction parameters. Used in L-FTS
         to estimate how free energy changes with interaction strength.
 
-        The derivative is taken at fixed monomer fields w = A w_aux, where the
-        polymer part -ln Q[w] does not depend on χ; the auxiliary fields
-        Ω = A(χ)⁻¹ w and the coefficients of the field part change with χ. The
-        field part is a function of w alone, so the result does not depend on how
-        the eigenvectors are chosen (signs, degenerate eigenvalues). For three or
-        more monomer types A rotates with χ, so this differs sample by sample from
-        the derivative at fixed Ω; the averages are equal (the rotation generator
-        is antisymmetric), and at a saddle point the two values are equal.
+        The derivative is taken at fixed auxiliary fields Ω, the integration variables:
+        the coefficients of the field part change with χ, and for three or more monomer
+        types so does the mapping w = A(χ) Ω, which changes the polymer part -ln Q[w] by
+        <Σ_j φ_j (∂A/∂χ Ω)_j>. Averaged over the real fields with the imaginary fields at
+        their saddle point (L-FTS), this is the χ derivative of the free energy of that
+        approximation; with every field fluctuating (CL-FTS) it is the derivative of the
+        full free energy. At a saddle point it equals the derivative at fixed monomer fields.
+        The derivatives are analytic (first-order perturbation of the eigenvectors, see
+        _field_coefficients_derivative), so nearly equal eigenvalues need no special care.
+        The frame of the auxiliary fields moves only between real, imaginary and dropped
+        fields; with wtmd=True the leading real field (the WTMD order parameter) also follows
+        its own eigenvector, which keeps the order parameter fixed but makes single values
+        noisy (variance growing as 1/gap) when its eigenvalue nears another real one.
+        The χ-dependent normalization of the Hubbard-Stratonovich transformation, a
+        constant independent of the fields, is not included (as for AB systems).
+
+        A field dropped at a zero eigenvalue contributes the mean-field term
+        (1/2)(dλ/dχ)<y²>/M + (dS/dχ)<y>/M with y = a·φ, computed from the concentrations
+        of the fields. In a fluctuating simulation the exact term holds the correlation of
+        the microscopic densities, which also has an intrachain part of order 1/C that no
+        field represents; that part is missing.
 
         Parameters
         ----------
         chi_n : dict
-            Flory-Huggins interaction parameters, {monomer_pair: value}.
+            Flory-Huggins interaction parameters, {monomer_pair: value}; the ones of this object.
         w_aux : ndarray
             Current auxiliary potential fields, shape (M, total_grid).
+        phi : dict, optional
+            Concentrations {monomer_type: array} of the fields (smeared, as in the forces,
+            when smearing is used). Needed when A depends on χ (three or more monomer types)
+            or a field is dropped (e.g. AB at χN = 0).
+        wtmd : bool
+            The leading real field follows its own eigenvector (for WTMD statistics).
 
         Returns
         -------
         dH : dict
             Derivatives {monomer_pair: dH/dχN_value}.
         """
-        M = len(self.monomer_types)
+        if {",".join(sorted(key.split(","))): float(value) for key, value in chi_n.items()} != self.chi_n:
+            raise ValueError("compute_h_deriv_chin needs the chi N of this SymmetricPolymerTheory.")
 
-        # Volume averages <w_i> and <w_i w_j> (no conjugate: H is holomorphic in complex fields)
-        w = np.matmul(self.matrix_a, np.asarray(w_aux))
-        w_mean = np.mean(w, axis=1)
-        w_product_mean = np.matmul(w, np.transpose(w))/w.shape[1]
+        # Volume averages <Ω_k>, <Ω_k Ω_l>, <φ_j Ω_k>, <φ_j> and <φ_i φ_j> (no conjugate: H is
+        # holomorphic in complex fields)
+        w_aux = np.asarray(w_aux)
+        n_grid = w_aux.shape[1]
+        omega_mean = np.mean(w_aux, axis=1)
+        omega_product_mean = np.matmul(w_aux, np.transpose(w_aux))/n_grid
+        if phi is None:
+            return self.h_deriv_chin_from_moments(omega_mean, omega_product_mean, wtmd=wtmd)
+        phi_array = np.array([phi[monomer_type] for monomer_type in self.monomer_types])
+        phi_omega_mean = np.matmul(phi_array, np.transpose(w_aux))/n_grid
+        phi_mean = np.mean(phi_array, axis=1)
+        phi_product_mean = np.matmul(phi_array, np.transpose(phi_array))/n_grid
+        return self.h_deriv_chin_from_moments(omega_mean, omega_product_mean, phi_omega_mean, phi_mean, phi_product_mean, wtmd)
 
-        def field_part(chi):
-            eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(self.monomer_types, chi, self.zeta_n)
-            h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(eigenvalues, vector_s, vector_large_s, self.zeta_n)
-            matrix_a_inv = np.transpose(matrix_o)/M
-            omega_mean = np.matmul(matrix_a_inv, w_mean)
-            omega_sq_mean = np.einsum("ki,ij,kj->k", matrix_a_inv, w_product_mean, matrix_a_inv)
-            return h_const + np.sum(h_coef_mu2*omega_sq_mean + h_coef_mu1*omega_mean)
-
-        # Central differences with Richardson extrapolation (the field part is smooth in χ;
-        # a larger step keeps the round-off of the large compressible terms small)
-        def central_difference(key, epsilon):
-            chi_n_p = chi_n.copy()
-            chi_n_n = chi_n.copy()
-            chi_n_p[key] += epsilon
-            chi_n_n[key] -= epsilon
-            return (field_part(chi_n_p) - field_part(chi_n_n))/(2*epsilon)
-
-        epsilon = 1e-3
+    def h_deriv_chin_from_moments(self, omega_mean, omega_product_mean, phi_omega_mean=None, phi_mean=None, phi_product_mean=None,
+                                  wtmd=False):
+        """dH/dχN from the averages <Ω_k>, <Ω_k Ω_l>, <φ_j Ω_k>, <φ_j> and <φ_i φ_j> (see
+        compute_h_deriv_chin); the concentration moments may be omitted when their
+        coefficients vanish."""
         dH = {}
-        for key in chi_n:
-            dH[key] = (4*central_difference(key, epsilon/2) - central_difference(key, epsilon))/3
+        coefficients = self._h_deriv_chin_coefficients_wtmd if wtmd else self.h_deriv_chin_coefficients
+        for key, (d_h_const, d_Q2, d_q1, d_A, d_phi2, d_phi1) in coefficients.items():
+            value = d_h_const + np.sum(d_Q2*omega_product_mean) + np.dot(d_q1, omega_mean)
+            for coefficient, moment in ((d_A, phi_omega_mean), (d_phi2, phi_product_mean), (d_phi1, phi_mean)):
+                if moment is not None:
+                    value += np.sum(coefficient*moment)
+                elif np.max(np.abs(coefficient), initial=0.0) > 1e-10:
+                    raise ValueError("For this chi N the auxiliary-field mapping depends on chi N or a field "
+                                     "is dropped; compute_h_deriv_chin needs the concentrations phi.")
+            dH[key] = value
         return dH

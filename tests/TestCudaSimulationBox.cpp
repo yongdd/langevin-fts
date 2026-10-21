@@ -12,9 +12,44 @@
 #include <iostream>
 #include <complex>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <vector>
 #include "CudaComputationBox.h"
+#include "SpaceGroup.h"
+
+// Device reductions of a box against its host ones, for two fields of length n
+// (the full grid, or the reduced basis with a space group); returns the largest
+// difference, including the field after zero_mean_device
+static double device_host_difference(CudaComputationBox<double>& cb, int n)
+{
+    std::vector<double> g(2*n), h(2*n), g_device(n);
+    for (int i = 0; i < 2*n; i++)
+    {
+        g[i] = std::sin(0.7*i + 0.3) + 0.5;
+        h[i] = std::cos(1.3*i) - 0.2;
+    }
+    double *d_g, *d_h;
+    cudaMalloc((void**)&d_g, sizeof(double)*2*n);
+    cudaMalloc((void**)&d_h, sizeof(double)*2*n);
+    cudaMemcpy(d_g, g.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_h, h.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice);
+
+    double diff = std::abs(cb.integral_device(d_g) - cb.integral(g.data()));
+    diff = std::max(diff, std::abs(cb.inner_product_device(d_g, d_h) - cb.inner_product(g.data(), h.data())));
+    diff = std::max(diff, std::abs(cb.multi_inner_product_device(2, d_g, d_h) - cb.multi_inner_product(2, g.data(), h.data())));
+
+    cb.zero_mean(g.data());
+    cb.zero_mean_device(d_g);
+    cudaMemcpy(g_device.data(), d_g, sizeof(double)*n, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < n; i++)
+        diff = std::max(diff, std::abs(g_device[i] - g[i]));
+
+    cudaFree(d_g);
+    cudaFree(d_h);
+    return diff;
+}
 
 int main()
 {
@@ -51,6 +86,42 @@ int main()
         if( std::abs(cb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
             return -1;
         if( std::abs(sum_w) > 1e-7)
+            return -1;
+
+        // Device reductions = host reductions, on the full grid and on the reduced
+        // basis of Im-3m with a mask of that symmetry (cavities at the corner and the
+        // body center). Until 2026-10 zero_mean_device added the sum to real fields
+        // instead of subtracting the mean, and the device multi inner product and
+        // zero mean ignored the space group.
+        double diff_full = device_host_difference(cb, cb.get_total_grid());
+        std::cout<< "device - host reductions, full grid: " << diff_full << std::endl;
+        if( diff_full > 1e-10)
+            return -1;
+
+        const int n = 16;
+        std::vector<double> mask(n*n*n, 1.0);
+        for(int i=0; i<n*n*n; i++)
+        {
+            const int idx[3] {i/(n*n), (i/n)%n, i%n};
+            for(double c : {0.0, 0.5})
+            {
+                double dist2 = 0.0;
+                for(int d=0; d<3; d++)
+                {
+                    double x = std::abs((idx[d] + 0.5)/n - c);
+                    x = std::min(x, 1.0 - x);
+                    dist2 += x*x;
+                }
+                if (dist2 < 0.15*0.15)
+                    mask[i] = 0.0;
+            }
+        }
+        CudaComputationBox<double> cb_sg({n,n,n}, {3.0,3.0,3.0}, {}, mask.data());
+        SpaceGroup sg({n,n,n}, "Im-3m", 529);
+        cb_sg.set_space_group(&sg);
+        double diff_sg = device_host_difference(cb_sg, cb_sg.get_n_basis());
+        std::cout<< "device - host reductions, Im-3m reduced basis with a mask: " << diff_sg << std::endl;
+        if( diff_sg > 1e-10)
             return -1;
         return 0;
     }

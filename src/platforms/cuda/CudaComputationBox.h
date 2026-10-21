@@ -128,7 +128,8 @@ public:
     /**
      * @brief Set space group for reduced basis operations.
      *
-     * Copies orbit_counts to device memory for GPU-accelerated reductions.
+     * Copies the reduced-basis weights (orbit counts times the mask) to device
+     * memory for GPU-accelerated reductions.
      *
      * @param sg Space group pointer (nullptr to disable reduced basis)
      */
@@ -142,7 +143,7 @@ public:
      *
      * Calculates: ∫ g(r) dr = Σᵢ g[i] * dV
      *
-     * @param d_g Device array (size n_grid)
+     * @param d_g Device array (size n_grid; n_basis with a space group)
      * @return Integral value
      */
     T integral_device(const CuDeviceData<T> *d_g);
@@ -152,7 +153,7 @@ public:
      *
      * Calculates: (1/V) ∫ g(r) dr = integral_device(g) / volume
      *
-     * @param d_g Device array (size n_grid)
+     * @param d_g Device array (size n_grid; n_basis with a space group)
      * @return Mean value
      */
     T mean_device(const CuDeviceData<T> *d_g);
@@ -162,8 +163,8 @@ public:
      *
      * Calculates: ∫ g(r) h(r) dr = Σᵢ g[i] * h[i] * dV
      *
-     * @param d_g First device array (size n_grid)
-     * @param d_h Second device array (size n_grid)
+     * @param d_g First device array (size n_grid; n_basis with a space group)
+     * @param d_h Second device array (same size)
      * @return Inner product value
      */
     T inner_product_device(const CuDeviceData<T> *d_g, const CuDeviceData<T> *d_h);
@@ -186,8 +187,8 @@ public:
      * Computes n_comp inner products for multi-species systems.
      *
      * @param n_comp Number of components
-     * @param d_g    First array (size n_comp * n_grid)
-     * @param d_h    Second array (size n_comp * n_grid)
+     * @param d_g    First array (size n_comp * n_grid; n_comp * n_basis with a space group)
+     * @param d_h    Second array (same size)
      * @return Sum of inner products
      */
     T multi_inner_product_device(int n_comp, const CuDeviceData<T> *d_g, const CuDeviceData<T> *d_h);
@@ -195,9 +196,10 @@ public:
     /**
      * @brief Subtract mean from device array.
      *
-     * Makes the array have zero mean: g = g - mean(g)
+     * Makes the array have zero mean: g = g - mean(g), mean = integral / volume
+     * (as ComputationBox::zero_mean)
      *
-     * @param d_g Device array to modify in-place
+     * @param d_g Device array to modify in-place (size n_grid; n_basis with a space group)
      */
     void zero_mean_device(CuDeviceData<T> *d_g);
 

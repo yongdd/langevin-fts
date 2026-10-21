@@ -541,7 +541,7 @@ class CLFTS:
             # Compute H and dH/dchi_n
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 H_history.append(hamiltonian)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, phi_for_force)
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 
@@ -618,8 +618,9 @@ class CLFTS:
                     )
                     # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
                     # divide by Γ to record S(k) of the densities (modes the smeared interaction
-                    # does not see, Γ < 1e-12, are recorded as 0)
-                    if self.smearing.enabled:
+                    # does not see, Γ < 1e-12, are recorded as 0). With walls Γ lives in the cosine
+                    # basis while S(k) is a Fourier transform, so it is recorded as it is.
+                    if self.smearing.enabled and self.smearing.periodic:
                         gamma = self.smearing.fourier
                         sf_scaled = np.divide(sf_scaled, gamma, out=np.zeros_like(sf_scaled), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))
