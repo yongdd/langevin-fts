@@ -175,6 +175,15 @@ commits are omitted.
   field saddle for 2, 3 and 4 monomer types (with nearly equal eigenvalues and dropped
   fields) and by a zero-dimensional three-component model of the L-FTS approximation
   (tests/TestPolymerFieldTheory.py). AB systems at χN ≠ 0 are unchanged.
+- Multi-monomer field theory with a composition eigenvalue next to the pressure's zero
+  (2026-10-22): for 10⁻¹² < |λ| < about 10⁻⁸ (e.g. χ_AB N = χ_AC N = 15, χ_BC N = 10⁻⁸)
+  `SymmetricPolymerTheory` failed with "Invalid inverse of matrix A". eigh mixed a part of
+  the uniform pressure vector into that eigenvector (about ε|χN|/|λ|, 1.8·10⁻⁷ there), and
+  the zero test of the eigenvalues used 10⁻¹² while the roles of the fields used 10⁻⁸. The
+  eigenvectors are now made orthogonal to the pressure vector when they hold such a part
+  (matrices without such a part are unchanged bit for bit), and one tolerance, |λ| <= 10⁻⁸,
+  decides which fields
+  are dropped (tests/TestPolymerFieldTheory.py).
 - Smearing with reflecting or absorbing walls (2026-10-21) convolved with a periodic FFT,
   coupling the two walls (a ramp in a reflecting box: 0.89 in the first cell instead of
   0.08). Wall axes are now smeared in the DCT-II basis, i.e. with the even image of the
@@ -236,8 +245,8 @@ commits are omitted.
   AB runs with χN >= 1 it differs from the old residual by a constant that the subtracted
   means remove (κ = χN/2 = 1/c), so the iteration is the same up to round-off. In a sweep
   of 70 runs (1D and 2D, AB and ABC, incompressible and ζN = 0.5 to 100) all converge,
-  against 18 before; tests/TestScftOptions.py checks 18 of them. Compressible SCFT no
-  longer needs an invertible χN matrix, and a negative `zeta_n` is rejected.
+  against 18 before; tests/TestScftOptions.py checks 18 of them. A negative `zeta_n` is
+  rejected.
 - Aggregation with blocks of different local ds (2026-10-21) failed with `map::at`: the
   keys that contain an aggregated propagator took the ds index of the outer block for
   every dependency. Grafting labels with digits ("G1") failed the same way (the digits were
@@ -276,9 +285,19 @@ commits are omitted.
   letters, digits and underscores only (2026-10-21); other characters are rejected.
 - A mask without the symmetry of the space group is rejected (2026-10-21): the reduced basis
   keeps one value per orbit, so such a mask was silently replaced (an off-center obstacle
-  in an Im-3m box disappeared, Q off by 4.5 %). Incompressible SCFT rejects a chi N
-  matrix with 1ᵀ(χN)⁻¹1 = 0: the auxiliary field of the zero eigenvalue of the projected
-  χN then carries a linear term and cannot be dropped, so the field theory does not hold.
+  in an Im-3m box disappeared, Q off by 4.5 %).
+- SCFT accepts a singular χN matrix (2026-10-22): the field residual no longer uses
+  (χN)⁻¹, so SCFT no longer rejects every singular χN, which included any zero pair in a
+  three-monomer system (det χN = 2 χ_AB χ_AC χ_BC) and chemically identical monomers, nor
+  1ᵀ(χN)⁻¹1 = 0. There the auxiliary field of a zero eigenvalue of the projected χN has a
+  linear term; it acts as a uniform field and leaves the default free energy unchanged
+  (χ_AB N = χ_AC N = 10, χ_BC N = 40: the mean of χ_BC N = 40 -+ 10⁻⁴ to 4·10⁻¹¹), but the
+  constant that `fts_consistent_energy` includes holds -S²/(2λM) and has no value, so that
+  combination is rejected, as is a single monomer type in the incompressible model. Within
+  about 2·10⁻⁷ of 1ᵀ(χN)⁻¹1 = 0 the reported free energy loses precision (about 10⁻⁷)
+  through the coefficient S/λ of a field mean; fields and box are unaffected. An ABC
+  triblock whose B and C are identical gives the free energy of the AB diblock to 10⁻¹³,
+  and a zero pair (χ_AC N = 0) the limit χ_AC N → 0 (tests/TestScftOptions.py).
 
 - **CUDA 11 is no longer supported** (2026-10-21): the GPU backend needs CUDA 12.2 or
   newer, because the device code is C++20 (nvcc 11.x has no `-std=c++20`; nvcc 12.0/12.1

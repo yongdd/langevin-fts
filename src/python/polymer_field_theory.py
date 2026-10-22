@@ -260,14 +260,26 @@ class SymmetricPolymerTheory:
             eigenvalues = eigenvalues[sorted_indexes]
             eigenvectors = eigenvectors[:,sorted_indexes]
 
-            # Reordering eigenvalues and eigenvectors to move the unit vector to M-1
-            eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
+            # Reordering eigenvalues and eigenvectors to move the unit vector to M-1 (zero
+            # eigenvalues: |λ| <= 1e-8, the tolerance used for the roles of the fields)
+            eigen_val_0 = np.isclose(eigenvalues, 0.0)
             eigen_vec_0 = eigenvectors[:,eigen_val_0]
             sorted_indexes = np.argsort(np.std(eigen_vec_0, axis=0))[::-1]
             eigenvectors[:,eigen_val_0] = eigen_vec_0[:,sorted_indexes]
 
             # Set the last eigenvector to [1, 1, ..., 1]/√S
             eigenvectors[:,-1] = np.ones(M)/np.sqrt(M)
+
+            # The other eigenvectors lie in the plane orthogonal to it. eigh mixes a little of the
+            # uniform vector (about ε|χN|/|λ|) into an eigenvector whose eigenvalue is close to the
+            # pressure's 0; then remove it and make the set orthonormal again, in the order of |λ|
+            # (when none holds such a part, the eigenvectors are left as they are)
+            if np.max(np.abs(np.matmul(eigenvectors[:,-1], eigenvectors[:,:-1])), initial=0.0) > 1e-12:
+                for i in range(M-1):
+                    vector = eigenvectors[:,i] - eigenvectors[:,-1]*np.dot(eigenvectors[:,-1], eigenvectors[:,i])
+                    for j in range(i):
+                        vector -= eigenvectors[:,j]*np.dot(eigenvectors[:,j], vector)
+                    eigenvectors[:,i] = vector/np.linalg.norm(vector)
 
             # Construct vector_s (vector_S follows from the final eigenvectors below)
             vector_s = np.matmul(matrix_chin, np.ones(M))/M
@@ -287,7 +299,7 @@ class SymmetricPolymerTheory:
             vector_s = np.zeros(M)
         
         # Make a orthogonal matrix using Gram-Schmidt
-        eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
+        eigen_val_0 = np.isclose(eigenvalues, 0.0)
         eigenvalues[eigen_val_0] = 0.0
         eigen_vec_0 = eigenvectors[:,eigen_val_0]
         for i in range(eigen_vec_0.shape[1]-2,-1,-1):

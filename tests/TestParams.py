@@ -249,11 +249,16 @@ def main():
         print("FAILED: platform auto")
         ok = False
 
-    # ---- SCFT needs an invertible chi N matrix
+    # ---- SCFT accepts a singular chi N matrix (a missing pair) and rejects a single
+    #      monomer type in the incompressible model
     params = base_params()
     params["segment_lengths"] = {"A": 1.0, "B": 1.0, "C": 1.0}
     params["chi_n"] = {"A,B": 15.0, "A,C": 5.0}
-    ok &= expect_error(SCFT, params, "SCFT with a singular chi matrix (missing B,C pair)")
+    try:
+        build(SCFT, params)
+    except ValidationError as e:
+        print(f"FAILED: SCFT with a singular chi matrix (missing B,C pair) raised: {e}")
+        ok = False
     params = base_params()
     params["segment_lengths"] = {"A": 1.0}
     params["chi_n"] = {}

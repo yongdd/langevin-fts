@@ -293,19 +293,22 @@ class SCFT:
         
         self.matrix_chi = matrix_chi
         if self.zeta_n is None:
-            # Incompressible: an invertible chi N matrix with 1ᵀ(χN)⁻¹1 != 0. At 1ᵀ(χN)⁻¹1 = 0
-            # (e.g. χ_AB = χ_AC = 10, χ_BC = 40) the auxiliary field of the zero eigenvalue of
-            # the projected χN carries a linear term and cannot be dropped, so the field theory
-            # and its free energy do not hold. A single monomer type, or a zero pair in a
-            # three-monomer system, makes χN singular.
-            try:
-                matrix_chi_inv = np.linalg.inv(matrix_chi)
-            except np.linalg.LinAlgError:
-                raise ValidationError("SCFT needs an invertible chi N matrix (a single monomer type, or a zero "
-                                      "chi N pair in a three-monomer system, makes it singular).") from None
-            if abs(np.sum(matrix_chi_inv)) < 1e-8 * np.max(np.abs(matrix_chi_inv)):
-                raise ValidationError("SCFT needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse chi N matrix); "
-                                      "for this chi N matrix it vanishes, and the field theory does not hold.")
+            # Incompressible: at least two monomer types. A singular χN (a zero pair in a
+            # three-monomer system, chemically identical monomers) is fine. A zero eigenvalue of
+            # the projected χN whose auxiliary field has a linear coefficient S (for an invertible
+            # χN: 1ᵀ(χN)⁻¹1 = 0, e.g. χ_AB = χ_AC = 10, χ_BC = 40) acts only as a uniform field
+            # and leaves the default free energy unchanged, but the constant of the field theory,
+            # which fts_consistent_energy includes, holds -S²/(2λM) and has no value there
+            if M < 2:
+                raise ValidationError("Incompressible SCFT needs at least two monomer types.")
+            dropped = [k for k, role in enumerate(self.mpt._roles) if role == "dropped"]
+            scale = max(np.max(np.abs(matrix_chi)), 1.0)
+            if params.get("fts_consistent_energy", False) and \
+                    any(abs(self.mpt._vector_large_s[k]) > 1e-8 * scale for k in dropped):
+                raise ValidationError("fts_consistent_energy needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse "
+                                      "chi N matrix): for this chi N matrix a zero eigenvalue of the projected chi N "
+                                      "matrix has a linear term, and the constant of the field-theoretic free energy "
+                                      "is undefined.")
 
         # Field residual (see the run loop): the composition part is projected with
         # P⊥ = I - eeᵀ/M, and the pressure part is scaled by κ = max(max|λ|, 1)/2 with λ

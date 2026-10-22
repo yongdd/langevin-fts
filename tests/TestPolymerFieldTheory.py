@@ -13,9 +13,12 @@ fixed auxiliary fields, including the rotation of A through <phi . dA/dchi Omega
 must return there.
 
 The cases include nearly equal eigenvalues (chi N = 15/15/15.001 and 15.0001,
-where eigenvectors turn by a finite angle within a chi step) and fields dropped at
+where eigenvectors turn by a finite angle within a chi step), fields dropped at
 a zero eigenvalue (B and C chemically identical; AB at chi N = 0), whose term in
-dH/dchiN does not vanish although the field is absent.
+dH/dchiN does not vanish although the field is absent, and composition eigenvalues
+next to the pressure's zero (|lambda| from 1e-9 to 1e-6; until 2026-10 the
+constructor failed for 1e-12 < |lambda| < ~1e-8, its eigenvector holding a part of
+the uniform pressure vector).
 
 The second check is a zero-dimensional model of the L-FTS approximation: three
 monomer types, compressible, two real fields integrated by quadrature and the
@@ -69,12 +72,14 @@ def concentrations(M, n, incompressible, rng):
 
 def test_dropped_fields_and_keys():
     """Dropped fields: dH/dchiN does not depend on their (unused) rows of w_aux, and the
-    identity holds also where the dropped field has a linear coefficient (1^T chi^-1 1 = 0);
-    pair keys in either order."""
+    identity holds also where the dropped field has a linear coefficient (1^T chi^-1 1 = 0,
+    where the field part itself misses that term, so only dH/dchiN is checked); pair keys
+    in either order."""
     rng = np.random.default_rng(3)
     types = ["A", "B", "C"]
     for name, chi_n in (("B = C", {"A,B": 15.0, "A,C": 15.0, "B,C": 0.0}),
-                        ("1^T chi^-1 1 = 0", {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0})):
+                        ("1^T chi^-1 1 = 0", {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0}),
+                        ("1^T chi^-1 1 = 4e-9", {"A,B": 2.0, "A,C": 0.5, "B,C": 0.5 + 1e-9})):
         with contextlib.redirect_stdout(io.StringIO()):
             mpt = SymmetricPolymerTheory(types, chi_n, None)
         phi = concentrations(3, 300, True, rng)
@@ -170,6 +175,9 @@ def main():
         ("ABC 15/15/15.0001", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 15.0001}),
         ("ABC with B = C", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 0.0}),
         ("AB chi N = 0", ["A", "B"], {"A,B": 0.0}),
+        ("ABC 15/15/1e-9", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 1e-9}),
+        ("ABC 15/15/1e-8", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 1e-8}),
+        ("ABC 15/15/1e-6", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 1e-6}),
     ]
     n = 200
     for name, types, chi_n in cases:

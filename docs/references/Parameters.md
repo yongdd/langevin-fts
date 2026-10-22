@@ -67,7 +67,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `segment_lengths` | dict | Relative statistical segment lengths $`b/b_{ref}`$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). Incompressible SCFT needs an invertible χN matrix with $`\mathbf{1}^T (\chi N)^{-1} \mathbf{1} \neq 0`$ (otherwise the auxiliary field of a zero eigenvalue of the projected χN carries a linear term): a single monomer type, or a zero pair in a three-monomer system, is rejected; compressible SCFT, L-FTS and CL-FTS accept zero pairs | `{"A,B": 20.0}` |
+| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). A singular χN matrix (e.g. a zero pair in a three-monomer system, or chemically identical monomers) is accepted. Incompressible SCFT rejects a single monomer type, and with `fts_consistent_energy` a χN matrix for which a zero eigenvalue of the projected χN has a linear coefficient (for an invertible χN: $`\mathbf{1}^T (\chi N)^{-1} \mathbf{1} = 0`$), where the constant of the field-theoretic free energy has no value | `{"A,B": 20.0}` |
 | `zeta_n` | float | (Optional) Compressibility parameter $`\zeta N \geq 0`$ of the compressible model. Omitted: incompressible ($`\sum_i \phi_i = 1`$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition

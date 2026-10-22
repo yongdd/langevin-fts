@@ -12,9 +12,11 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    order ["b", "a"] reproduces the run in the standard order (results are in the
    standard order). Until 2026-10 the initial fields and the boundary conditions
    were not reordered (walls on the wrong axis: dF 9e-2 here).
-3. An incompressible run with 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10,
-   chi_BC = 40) is rejected: the auxiliary field of the zero eigenvalue of the
-   projected chi N carries a linear term, so the field theory does not hold.
+3. 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10, chi_BC = 40): the auxiliary field
+   of the zero eigenvalue of the projected chi N has a linear term and acts as a
+   uniform field. The default free energy and the box are the limit of
+   chi_BC N = 40 -+ 1e-4 (their mean, to 1e-9); with fts_consistent_energy, whose
+   constant holds -S^2/(2 lambda M) and has no value there, the run is rejected.
 4. Field residual: the incompressible and compressible SCFT converge for chi N
    matrices with c = 1^T (chi N)^-1 1 < 0 (AB with chi N = -5; ABC with chi_AB N =
    chi_BC N = 10, chi_AC N = 60, and with chi_AB N = chi_AC N = 10, chi_BC N = 50),
@@ -24,6 +26,12 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    wrong sign for c < 0 and grew without bound near c = 0, and the compressible
    pressure part was amplified for small zeta N; these runs ended in NaN or did
    not converge.
+5. A singular chi N matrix: an ABC triblock whose B and C are chemically identical
+   (chi_AB = chi_AC, chi_BC = 0) gives the free energy of the AB diblock, and an
+   ABC triblock with a zero pair (chi_AB = 25, chi_BC = 20, chi_AC = 0) the limit
+   chi_AC -> 0 (with box relaxation).
+   Until 2026-10 incompressible SCFT rejected every singular chi N matrix, which
+   includes any zero pair in a three-monomer system.
 """
 
 import os
@@ -122,14 +130,29 @@ def test_axis_ordering():
 
 
 def test_singular_projector():
+    x = (np.arange(64) + 0.5) / 64
+    wave = 4.0 * np.cos(2 * np.pi * x)
+    fields = {"A": wave, "B": np.zeros(64), "C": -wave}
+    results = []
+    for chi_bc in (40.0, 40.0 + 1e-4, 40.0 - 1e-4):
+        params = base([64], [1.3], {"A,B": 10.0, "A,C": 10.0, "B,C": chi_bc}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], True)
+        params["tolerance"] = 1e-10
+        results.append(run(params, fields))
+    F = [r.free_energy for r in results]
+    L = [r.prop_solver.get_lx()[0] for r in results]
+    dF, dL = abs(F[0] - 0.5 * (F[1] + F[2])), abs(L[0] - 0.5 * (L[1] + L[2]))
+    check(results[0].error_level < 1e-10 and dF < 1e-9 and dL < 1e-8,
+          f"1^T (chi N)^-1 1 = 0: F and the box are the limit of the neighbors (dF {dF:.1e}, dL {dL:.1e})")
+
     params = base([16], [2.0], {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], False)
+    params["fts_consistent_energy"] = True
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             scft.SCFT(params=params)
         rejected = False
     except ValidationError as e:
         rejected = "1ᵀ(χN)⁻¹1" in str(e)
-    check(rejected, "chi N with 1^T (chi N)^-1 1 = 0 is rejected")
+    check(rejected, "1^T (chi N)^-1 1 = 0 with fts_consistent_energy is rejected")
 
 
 def test_field_residual():
@@ -160,11 +183,45 @@ def test_field_residual():
                   f"error {calc.error_level:.1e})")
 
 
+def test_singular_chi():
+    x = (np.arange(64) + 0.5) / 64
+    wave = 4.0 * np.cos(2 * np.pi * x)
+    for zeta_n in (None, 10.0):
+        model = "incompressible" if zeta_n is None else f"compressible (zeta N {zeta_n:g})"
+        params = base([64], [1.6], {"A,B": 20.0, "A,C": 20.0, "B,C": 0.0}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], False)
+        reference = base([64], [1.6], {"A,B": 20.0}, [("A", 0.3), ("B", 0.7)], False)
+        for p in (params, reference):
+            p["tolerance"] = 1e-10
+            if zeta_n is not None:
+                p["zeta_n"] = zeta_n
+        identical = run(params, {"A": wave, "B": -wave, "C": -wave})
+        diblock = run(reference, {"A": wave, "B": -wave})
+        dF = abs(identical.free_energy - diblock.free_energy)
+        check(identical.error_level < 1e-10 and dF < 1e-9,
+              f"ABC with B = C, {model}: F = F of the AB diblock ({identical.free_energy:.12f}, dF {dF:.1e})")
+
+        results = []
+        for chi_ac in (0.0, 1e-6):
+            p = base([64], [1.0], {"A,B": 25.0, "B,C": 20.0, "A,C": chi_ac}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], True)
+            p["tolerance"] = 1e-10
+            if zeta_n is not None:
+                p["zeta_n"] = zeta_n
+            results.append(run(p, {"A": wave, "B": -wave, "C": 0.5 * wave}))
+        # The compressible free energy leaves out the constant h_const, which depends on chi N
+        # (here by about -20 chi_AC N), so the mean-field free energies F + h_const are compared
+        energy = [r.free_energy + (0.0 if zeta_n is None else r.mpt.h_const) for r in results]
+        dF = abs(energy[0] - energy[1])
+        dL = abs(results[0].prop_solver.get_lx()[0] - results[1].prop_solver.get_lx()[0])
+        check(all(r.error_level < 1e-10 for r in results) and dF < 1e-6 and dL < 1e-6,
+              f"ABC with chi_AC N = 0, {model}: the limit chi_AC N -> 0 (dF {dF:.1e} and dL {dL:.1e} to chi_AC N = 1e-6)")
+
+
 def main():
     test_angle_relaxation()
     test_axis_ordering()
     test_singular_projector()
     test_field_residual()
+    test_singular_chi()
     print(f"\n{n_pass} passed, {n_fail} failed")
     sys.exit(0 if n_fail == 0 else 1)
 
