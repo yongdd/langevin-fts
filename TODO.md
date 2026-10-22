@@ -5,9 +5,12 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Features
 
 2. Parameter sweep / continuation: reuse the previous solution as the initial guess when building phase diagrams.
-3. Grand canonical ensemble: the core functions exist (`get_stress_gce`, `get_total_concentration_gce`); the SCFT/L-FTS high-level API is missing.
+3. Direct grand-canonical SCFT/L-FTS solver API: accept prescribed chemical
+   potentials (fugacities) and handle density, field means and normalization
+   consistently. The native GCE functions, CE SCFT thermodynamic transforms and
+   incompressible phase coexistence are already implemented; see
+   [Phase Equilibrium](docs/theory/PhaseEquilibrium.md).
 4. SCFT preconditioner for Anderson mixing (left preconditioning failed; try right preconditioning or a modified inner product).
-5. Extend `scft.py` to cover a singular chi matrix.
 6. Option to print a data file in a human-readable text format.
 7. Progress bar.
 8. Extend the simulation script builder with more phase-specific initial-field
@@ -16,6 +19,12 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
    initial-field generation in standalone scripts. Keep L-FTS/CL-FTS limited to
    3D orthogonal boxes.
 9. Operator overloading for device arrays (the old `Array` class was removed in 2026-10; revisit if needed).
+32. Compressible phase-equilibrium API: vary both composition and total density
+    in each phase, using a shared reference density and consistent absolute free
+    energies. Match all species chemical potentials and thermodynamic pressure.
+    The current coexistence helper varies composition only and explicitly rejects
+    `zeta_n`; compressible CE SCFT itself is already supported. Validate homogeneous
+    analytical limits, the incompressible limit and coexistence conditions.
 
 ## Numerical methods and performance
 
@@ -124,6 +133,10 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Done (removed from the list above)
 
 - 1. Parallel tempering: dropped (maintainer's decision, 2026-10-21).
+- 5. SCFT with singular chi matrices (verified 2026-10-22): the inverse-free
+  projected incompressible residual and direct compressible residual are already
+  implemented. Coverage also includes invertible chi matrices with a vanishing
+  Arora projection denominator; see `TestScftOptions` and `TestScftCompressible`.
 - 12. cuFFT callbacks (2026-10-20 kernel review): measured slower than the separate
   kernels on an A10, so they are not used.
 - 25. `std::map` errors in `omp parallel for` (2026-10-21): `operator[]` inserts a missing

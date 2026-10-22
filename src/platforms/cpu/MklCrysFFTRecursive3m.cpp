@@ -4,6 +4,7 @@
  */
 
 #include "MklCrysFFTRecursive3m.h"
+#include "MklDftiLayout.h"
 #include "MklStatusCheck.h"
 #include <algorithm>
 #include <cstring>
@@ -71,16 +72,16 @@ void MklCrysFFTRecursive3m::init_fft_plans()
     mkl_dfti_check(DftiCreateDescriptor(&plan_forward_, DFTI_DOUBLE, DFTI_REAL, 3, dims), "DftiCreateDescriptor (3m forward)");
     mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, 3m forward)");
     mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, 3m forward)");
-    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_INPUT_STRIDES, strides_real), "DftiSetValue(DFTI_INPUT_STRIDES, 3m forward)");
-    mkl_dfti_check(DftiSetValue(plan_forward_, DFTI_OUTPUT_STRIDES, strides_complex), "DftiSetValue(DFTI_OUTPUT_STRIDES, 3m forward)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, mkl_dfti::forward_input_strides, strides_real), "DftiSetValue (3m forward input strides)");
+    mkl_dfti_check(DftiSetValue(plan_forward_, mkl_dfti::forward_output_strides, strides_complex), "DftiSetValue (3m forward output strides)");
     mkl_dfti_check(DftiCommitDescriptor(plan_forward_), "DftiCommitDescriptor (3m forward)");
 
     // Backward c2r plan
     mkl_dfti_check(DftiCreateDescriptor(&plan_backward_, DFTI_DOUBLE, DFTI_REAL, 3, dims), "DftiCreateDescriptor (3m backward)");
     mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, 3m backward)");
     mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, 3m backward)");
-    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_INPUT_STRIDES, strides_complex), "DftiSetValue(DFTI_INPUT_STRIDES, 3m backward)");
-    mkl_dfti_check(DftiSetValue(plan_backward_, DFTI_OUTPUT_STRIDES, strides_real), "DftiSetValue(DFTI_OUTPUT_STRIDES, 3m backward)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, mkl_dfti::backward_input_strides, strides_complex), "DftiSetValue (3m backward input strides)");
+    mkl_dfti_check(DftiSetValue(plan_backward_, mkl_dfti::backward_output_strides, strides_real), "DftiSetValue (3m backward output strides)");
     mkl_dfti_check(DftiCommitDescriptor(plan_backward_), "DftiCommitDescriptor (3m backward)");
 }
 

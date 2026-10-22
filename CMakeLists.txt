@@ -111,8 +111,15 @@ IF(PkgConfig_FOUND)
     ENDIF()
 ENDIF()
 IF(NOT SPGLIB_FOUND)
-    FIND_LIBRARY(SPGLIB_LIBRARIES NAMES symspg spglib HINTS ENV SPGLIB_ROOT PATH_SUFFIXES lib lib64)
-    FIND_PATH(SPGLIB_INCLUDE_DIRS spglib.h HINTS ENV SPGLIB_ROOT PATH_SUFFIXES include)
+    # The upstream Python wheels also ship the native library and headers.
+    FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter REQUIRED)
+    EXECUTE_PROCESS(COMMAND ${Python3_EXECUTABLE} -c
+        "import importlib.util, pathlib; spec = importlib.util.find_spec('spglib'); print(pathlib.Path(spec.origin).parent if spec and spec.origin else '')"
+        OUTPUT_VARIABLE _spglib_python_root OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    FIND_LIBRARY(SPGLIB_LIBRARIES NAMES symspg spglib
+        HINTS ENV SPGLIB_ROOT ${_spglib_python_root} PATH_SUFFIXES lib lib64)
+    FIND_PATH(SPGLIB_INCLUDE_DIRS spglib.h
+        HINTS ENV SPGLIB_ROOT ${_spglib_python_root} PATH_SUFFIXES include)
     IF(SPGLIB_LIBRARIES AND SPGLIB_INCLUDE_DIRS)
         SET(SPGLIB_FOUND TRUE)
     ENDIF()
@@ -122,24 +129,61 @@ IF(SPGLIB_FOUND)
     MESSAGE(STATUS "spglib found: ${SPGLIB_LIBRARIES}")
 ELSE()
     MESSAGE(FATAL_ERROR "spglib is required but was not found. "
-        "Install with: conda install -c conda-forge spglib "
+        "Install with: python -m pip install spglib "
         "(or apt install libsymspg-dev), or set SPGLIB_ROOT.")
 ENDIF()
 
-# LAPACKE: SVD solver of Anderson mixing. AndersonMixing.cpp includes lapacke.h or,
-# failing that, MKL's mkl_lapacke.h; the library is linked into 'common', so the
-# library and one of the two headers are required at configure time. (conda-forge's
-# liblapacke built against MKL ships only the shared library; its header is
-# mkl_lapacke.h from mkl-include.)
-FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
-FIND_PATH(LAPACKE_INCLUDE_DIR NAMES lapacke.h mkl_lapacke.h HINTS ENV LAPACKE_ROOT ENV MKLROOT PATH_SUFFIXES include)
+# LAPACKE: SVD solver of Anderson mixing. OpenBLAS can provide its C interface
+# directly; Anaconda's openblas-devel supplies lapacke.h. Keep standalone LAPACKE
+# supported, and use MKL only when its backend was explicitly requested.
+FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke openblas
+    HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
+IF(NOT LAPACKE_LIBRARY AND POLYMERFTS_USE_MKL)
+    FIND_PACKAGE(MKL QUIET)
+    IF(MKL_FOUND)
+        SET(LAPACKE_LIBRARY ${MKL_LIBRARIES})
+    ENDIF()
+ENDIF()
+FIND_PATH(LAPACKE_INCLUDE_DIR NAMES lapacke.h mkl_lapacke.h
+    HINTS ENV LAPACKE_ROOT ENV MKLROOT PATH_SUFFIXES include include/openblas)
 IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
+    # Some OpenBLAS builds omit LAPACKE. Check both SVD entry points with the
+    # selected headers/library before starting the main build.
+    INCLUDE(CheckCXXSourceCompiles)
+    INCLUDE(CMakePushCheckState)
+    CMAKE_PUSH_CHECK_STATE(RESET)
+    SET(CMAKE_REQUIRED_INCLUDES ${LAPACKE_INCLUDE_DIR})
+    SET(CMAKE_REQUIRED_LIBRARIES ${LAPACKE_LIBRARY})
+    UNSET(POLYMERFTS_LAPACKE_HAS_SVD CACHE)
+    CHECK_CXX_SOURCE_COMPILES("
+        #if __has_include(<lapacke.h>)
+        #include <lapacke.h>
+        #else
+        #include <mkl_lapacke.h>
+        #endif
+        int main() {
+            lapack_int rank = 0;
+            double a = 1.0, b = 1.0, s = 0.0;
+            lapack_complex_double z_a{}, z_b{};
+            return LAPACKE_dgelsd(LAPACK_ROW_MAJOR, 1, 1, 1,
+                                 &a, 1, &b, 1, &s, 1e-10, &rank)
+                 + LAPACKE_zgelsd(LAPACK_ROW_MAJOR, 1, 1, 1,
+                                 &z_a, 1, &z_b, 1, &s, 1e-10, &rank);
+        }" POLYMERFTS_LAPACKE_HAS_SVD)
+    CMAKE_POP_CHECK_STATE()
+    IF(NOT POLYMERFTS_LAPACKE_HAS_SVD)
+        MESSAGE(FATAL_ERROR "The selected LAPACKE headers/library do not provide "
+            "LAPACKE_dgelsd and LAPACKE_zgelsd. Install OpenBLAS with LAPACKE support "
+            "(conda install --override-channels -c defaults openblas-devel), "
+            "or set LAPACKE_LIBRARY and LAPACKE_INCLUDE_DIR to a matching provider.")
+    ENDIF()
     INCLUDE_DIRECTORIES(${LAPACKE_INCLUDE_DIR})
     MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY} (${LAPACKE_INCLUDE_DIR})")
 ELSE()
     MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h or mkl_lapacke.h) is required but was not found. "
-        "Install with: conda install -c conda-forge liblapacke (plus mkl-include for the MKL build), "
-        "or apt install liblapacke-dev, or set LAPACKE_ROOT.")
+        "Install with: conda install --override-channels -c defaults openblas-devel, "
+        "or apt install liblapacke-dev, or set LAPACKE_ROOT. "
+        "MKL can also supply LAPACKE when POLYMERFTS_USE_MKL=ON.")
 ENDIF()
 
 # ============================================================================
@@ -204,7 +248,7 @@ IF(POLYMERFTS_USE_FFTW)
     ENDIF()
     IF(NOT FFTW3_FOUND)
         MESSAGE(FATAL_ERROR "POLYMERFTS_USE_FFTW=ON but FFTW3 was not found. "
-            "Install fftw (e.g. conda install -c conda-forge fftw) or set FFTW_ROOT.")
+            "Install fftw (e.g. conda install --override-channels -c defaults fftw) or set FFTW_ROOT.")
     ENDIF()
 
     SET(BUILD_CPU_FFTW_LIB TRUE)
@@ -236,13 +280,15 @@ IF(POLYMERFTS_USE_MKL)
     FIND_PACKAGE(MKL QUIET)
     IF(NOT MKL_FOUND)
         MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
-            "Install MKL (e.g. conda install -c conda-forge mkl mkl-include) "
+            "Install MKL (e.g. conda install --override-channels -c defaults mkl mkl-include) "
             "or set MKLROOT.")
     ENDIF()
 
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
-    INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
+    # Other dependencies may share an include directory with a different MKL.
+    # Use the headers that belong to the selected MKL libraries first.
+    INCLUDE_DIRECTORIES(BEFORE ${MKL_INCLUDE_DIRS})
 ENDIF()
 
 # ---- CPU backend libraries ----
@@ -557,7 +603,11 @@ FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter Development.Module REQUIRED)
 # from the interpreter)
 EXECUTE_PROCESS(COMMAND ${Python3_EXECUTABLE} -m pybind11 --cmakedir
     OUTPUT_VARIABLE _pybind11_cmakedir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-FIND_PACKAGE(pybind11 2.13 REQUIRED HINTS ${_pybind11_cmakedir})
+SET(_pybind11_minimum 2.13)
+IF(Python3_VERSION VERSION_GREATER_EQUAL "3.14")
+    SET(_pybind11_minimum 3.0)
+ENDIF()
+FIND_PACKAGE(pybind11 ${_pybind11_minimum} REQUIRED HINTS ${_pybind11_cmakedir})
 
 # pybind11::module carries the Python and pybind11 include directories
 ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)

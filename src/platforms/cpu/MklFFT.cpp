@@ -35,6 +35,7 @@
 #include <numbers>
 #include <stdexcept>
 #include "MklFFT.h"
+#include "MklDftiLayout.h"
 #include "MklStatusCheck.h"
 
 //------------------------------------------------------------------------------
@@ -227,12 +228,12 @@ void MklFFT<T, DIM>::initPeriodicFFT()
         else
         {
             mkl_dfti_check(DftiCreateDescriptor(&hand_forward_, DFTI_DOUBLE, dtype, DIM, NX), "DftiCreateDescriptor (forward)");
-            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_INPUT_STRIDES, rs), "DftiSetValue(DFTI_INPUT_STRIDES, forward)");
-            mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_OUTPUT_STRIDES, cs), "DftiSetValue(DFTI_OUTPUT_STRIDES, forward)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, mkl_dfti::forward_input_strides, rs), "DftiSetValue (forward input strides)");
+            mkl_dfti_check(DftiSetValue(hand_forward_, mkl_dfti::forward_output_strides, cs), "DftiSetValue (forward output strides)");
 
             mkl_dfti_check(DftiCreateDescriptor(&hand_backward_, DFTI_DOUBLE, dtype, DIM, NX), "DftiCreateDescriptor (backward)");
-            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_INPUT_STRIDES, cs), "DftiSetValue(DFTI_INPUT_STRIDES, backward)");
-            mkl_dfti_check(DftiSetValue(hand_backward_, DFTI_OUTPUT_STRIDES, rs), "DftiSetValue(DFTI_OUTPUT_STRIDES, backward)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, mkl_dfti::backward_input_strides, cs), "DftiSetValue (backward input strides)");
+            mkl_dfti_check(DftiSetValue(hand_backward_, mkl_dfti::backward_output_strides, rs), "DftiSetValue (backward output strides)");
         }
 
         mkl_dfti_check(DftiSetValue(hand_forward_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, forward)");

@@ -9,12 +9,16 @@ cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
 
+# Install the recommended CPU FFT backend from official Anaconda packages
+conda install --override-channels -c defaults --freeze-installed \
+    mkl=2025.0.0 mkl-include=2025.0.0
+
 # GPU backend (optional): a CUDA 12.2+ nvcc first on PATH; the conda environment has none
 export PATH=/usr/local/cuda-12.4/bin:$PATH
 
-# Build and install (enable at least one CPU backend; both are OFF by default)
+# Build and install with the recommended MKL CPU backend
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 make -j8
 make install
 ctest -L basic  # Basic installation verification (~1 minute)
@@ -22,6 +26,33 @@ ctest -L basic  # Basic installation verification (~1 minute)
 # Platforms that were built (cuda appears only with a usable CUDA toolchain and a GPU)
 python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail_platforms())"
 ```
+
+The supplied environment uses Anaconda's official `defaults` channel with
+Python 3.14 and OpenBLAS 0.3.31. Other configured conda channels are excluded.
+The exception is spglib 2.8.0, installed from the upstream project's PyPI wheels
+because it is unavailable in `defaults`. These wheels include the C library and
+headers; CMake discovers them from the selected Python interpreter. Both CPU CI
+configurations start from the same `environment.yml`. One verifies an MKL-free
+OpenBLAS/FFTW build; the other installs MKL 2025.0.0 separately and tests both CPU
+FFT backends, including their agreement checks. Anderson mixing uses OpenBLAS
+in both configurations.
+
+OpenBLAS supplies the LAPACKE SVD routines used by Anderson mixing; NumPy and
+SciPy also use Anaconda's OpenBLAS builds. `openblas-devel` supplies the C headers.
+The base environment does not require MKL; the quick start adds the optional MKL
+packages for the recommended CPU FFT backend. Freezing existing packages keeps
+NumPy and SciPy on OpenBLAS. FFTW is included for development and tests, but is
+linked only when `POLYMERFTS_USE_FFTW=ON`; its GPL distribution requirements are
+described below. OpenBLAS does not replace an FFT library. A CUDA-only build can
+disable both CPU backends.
+CI sets `OPENBLAS_NUM_THREADS=1` to keep BLAS work serial alongside the existing
+propagator-level threading policy.
+
+For an existing Anaconda environment, install the OpenBLAS development package
+with `conda install --override-channels -c defaults openblas-devel`. Creating a
+fresh environment from `environment.yml` avoids retaining old MKL packages and
+CMake paths. Inspect `conda list --show-channel-urls` and the native module's
+linked libraries when checking that a build has no MKL dependency.
 
 The configure step prints `CUDA toolkit ...` when it builds the GPU backend, and a
 `Building without the GPU backend: ...` warning with the reason when it does not
@@ -41,14 +72,14 @@ C++ compiler and the NVIDIA driver.
 | Dependency | Version | Notes |
 |------------|---------|-------|
 | Anaconda | any | https://www.anaconda.com/download |
-| Python | 3.11+ | `environment.yml` installs 3.12, with NumPy 2.0+, SciPy 1.14+ and pybind11 2.13+ |
-| CMake | 3.25.2+ | `environment.yml` installs 3.31. 3.25.2 is what the GPU backend needs (C++20 for nvcc); a CPU-only build also works with 3.18 |
+| Python | 3.11+ | `environment.yml` installs 3.14, with NumPy 2.3, SciPy 1.16 and pybind11 3.1 |
+| CMake | 3.25.2+ | 3.25.2 is what the GPU backend needs (C++20 for nvcc); a CPU-only build also works with 3.18 |
 | C++ compiler | GCC 11–13 or Clang 15+ | C++20 with `std::source_location`. nvcc compiles its host code with it: nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it |
 | CUDA Toolkit | 12.4+ (12.2 minimum) | GPU backend (https://developer.nvidia.com/cuda-toolkit); `nvcc` must be first on PATH (the conda environment has none). nvcc 11.x has no C++20 and nvcc 12.0/12.1 cannot compile `std::source_location` |
 | NVIDIA driver | one that supports the toolkit | R550+ for CUDA 12.4, R580+ for CUDA 13. An older CUDA 12 driver (R525+) runs the code only on GPUs whose architecture is in `POLYMERFTS_CUDA_ARCHITECTURES` |
-| spglib | 2.x | space group symmetry (`conda install -c conda-forge spglib`, or `apt install libsymspg-dev`) |
-| LAPACKE | any | Anderson mixing SVD solver (`conda install -c conda-forge liblapacke`, or `apt install liblapacke-dev`; with MKL the header is `mkl_lapacke.h` from `mkl-include`) |
-| MKL and/or FFTW3 | any | at least one CPU FFT backend: Intel MKL (`-DPOLYMERFTS_USE_MKL=ON`, in `environment.yml`) or FFTW3 (`-DPOLYMERFTS_USE_FFTW=ON`, GPL license) |
+| spglib | 2.x | Space group symmetry; `environment.yml` installs the upstream PyPI wheel, or use `apt install libsymspg-dev` |
+| LAPACKE | any | Anderson mixing SVD solver; supplied by OpenBLAS 0.3.31 (`openblas-devel`) in the default environment, under BSD-3-Clause. Standalone LAPACKE remains supported (`apt install liblapacke-dev`, or set `LAPACKE_ROOT`); MKL can supply it when its backend is enabled |
+| MKL or FFTW3 | any | MKL is the recommended optional CPU FFT backend (`-DPOLYMERFTS_USE_MKL=ON`). FFTW3 is an alternative (`-DPOLYMERFTS_USE_FFTW=ON`, GPL license), included in `environment.yml` for development and tests. CUDA-only builds need neither CPU backend |
 
 ## CMake Options
 
@@ -67,13 +98,26 @@ C++ compiler and the NVIDIA driver.
 
 Two CPU backends are available, and **both are OFF by default** — enable at
 least one (or build CUDA-only):
-- **MKL**: Intel Math Kernel Library, included via conda — enable with `-DPOLYMERFTS_USE_MKL=ON`
+- **MKL (recommended)**: optional Intel Math Kernel Library — install with `conda install --override-channels -c defaults --freeze-installed mkl=2025.0.0 mkl-include=2025.0.0`, then enable with `-DPOLYMERFTS_USE_MKL=ON`. Anderson mixing selects its LAPACKE provider independently of the FFT backend
 - **FFTW**: enable with `-DPOLYMERFTS_USE_FFTW=ON` (GPL license)
 
-Example (enable the MKL CPU backend):
+Recommended user build (MKL enabled, FFTW disabled):
 ```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF
 ```
+
+For development and integrated CPU regression tests, enable both backends after
+installing MKL. This includes the MKL/FFTW agreement checks:
+
+```bash
+cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+    -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
+    -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON
+```
+
+The separate MKL-free CI configuration uses `POLYMERFTS_USE_MKL=OFF` and
+`POLYMERFTS_USE_FFTW=ON` to verify that MKL stays optional.
 
 ## GPL License Warning (FFTW)
 
@@ -154,7 +198,7 @@ their own reason.
 compiler is not kept in the cache):
 ```bash
 export PATH=/usr/local/cuda-12.4/bin:$PATH
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
          -DPOLYMERFTS_USE_CUDA=ON
 ```
 A conda environment may also hold CUDA runtime libraries of another version (for
@@ -171,7 +215,7 @@ conda environment active:
 
 ```bash
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir /path/to/wheels \
-    -Ccmake.define.POLYMERFTS_USE_MKL=ON
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 python -m venv --system-site-packages /path/to/venvs/polymerfts-0.10.0
 /path/to/venvs/polymerfts-0.10.0/bin/python -m pip install --no-deps --force-reinstall \
     /path/to/wheels/polymerfts-0.10.0-*.whl

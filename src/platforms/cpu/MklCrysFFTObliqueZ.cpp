@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "MklCrysFFTObliqueZ.h"
+#include "MklDftiLayout.h"
 #include "MklStatusCheck.h"
 #include "Exception.h"
 
@@ -101,16 +102,16 @@ void MklCrysFFTObliqueZ::initFFTPlans()
     mkl_dfti_check(DftiCreateDescriptor(&plan_dct_forward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long), "DftiCreateDescriptor (z forward)");
     mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, z forward)");
     mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, z forward)");
-    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_INPUT_DISTANCE, Nz_long), "DftiSetValue(DFTI_INPUT_DISTANCE, z forward)");
-    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_OUTPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue(DFTI_OUTPUT_DISTANCE, z forward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, mkl_dfti::forward_input_distance, Nz_long), "DftiSetValue (z forward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, mkl_dfti::forward_output_distance, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue (z forward output distance)");
     mkl_dfti_check(DftiSetValue(plan_dct_forward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, z forward)");
     mkl_dfti_check(DftiCommitDescriptor(plan_dct_forward_z_), "DftiCommitDescriptor (z forward)");
 
     mkl_dfti_check(DftiCreateDescriptor(&plan_dct_backward_z_, DFTI_DOUBLE, DFTI_REAL, 1, Nz_long), "DftiCreateDescriptor (z backward)");
     mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, z backward)");
     mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_z)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, z backward)");
-    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_INPUT_DISTANCE, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue(DFTI_INPUT_DISTANCE, z backward)");
-    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_OUTPUT_DISTANCE, Nz_long), "DftiSetValue(DFTI_OUTPUT_DISTANCE, z backward)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, mkl_dfti::backward_input_distance, static_cast<MKL_LONG>(Nz / 2 + 1)), "DftiSetValue (z backward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, mkl_dfti::backward_output_distance, Nz_long), "DftiSetValue (z backward output distance)");
     mkl_dfti_check(DftiSetValue(plan_dct_backward_z_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, z backward)");
     mkl_dfti_check(DftiCommitDescriptor(plan_dct_backward_z_), "DftiCommitDescriptor (z backward)");
 
@@ -128,20 +129,20 @@ void MklCrysFFTObliqueZ::initFFTPlans()
     mkl_dfti_check(DftiCreateDescriptor(&plan_fft_forward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy forward)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy forward)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy forward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_DISTANCE, 1), "DftiSetValue(DFTI_INPUT_DISTANCE, xy forward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_DISTANCE, 1), "DftiSetValue(DFTI_OUTPUT_DISTANCE, xy forward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_INPUT_STRIDES, input_strides_xy), "DftiSetValue(DFTI_INPUT_STRIDES, xy forward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_OUTPUT_STRIDES, output_strides_xy), "DftiSetValue(DFTI_OUTPUT_STRIDES, xy forward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_input_distance, 1), "DftiSetValue (xy forward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_output_distance, 1), "DftiSetValue (xy forward output distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_input_strides, input_strides_xy), "DftiSetValue (xy forward input strides)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_output_strides, output_strides_xy), "DftiSetValue (xy forward output strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy forward)");
     mkl_dfti_check(DftiCommitDescriptor(plan_fft_forward_xy_), "DftiCommitDescriptor (xy forward)");
 
     mkl_dfti_check(DftiCreateDescriptor(&plan_fft_backward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy backward)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy backward)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy backward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_DISTANCE, 1), "DftiSetValue(DFTI_INPUT_DISTANCE, xy backward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_DISTANCE, 1), "DftiSetValue(DFTI_OUTPUT_DISTANCE, xy backward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_INPUT_STRIDES, output_strides_xy), "DftiSetValue(DFTI_INPUT_STRIDES, xy backward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_OUTPUT_STRIDES, input_strides_xy), "DftiSetValue(DFTI_OUTPUT_STRIDES, xy backward)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_input_distance, 1), "DftiSetValue (xy backward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_output_distance, 1), "DftiSetValue (xy backward output distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_input_strides, output_strides_xy), "DftiSetValue (xy backward input strides)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_output_strides, input_strides_xy), "DftiSetValue (xy backward output strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy backward)");
     mkl_dfti_check(DftiCommitDescriptor(plan_fft_backward_xy_), "DftiCommitDescriptor (xy backward)");
 

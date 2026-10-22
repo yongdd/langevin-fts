@@ -33,7 +33,7 @@
 #elif __has_include(<mkl_lapacke.h>)
 #include <mkl_lapacke.h>
 #else
-#error "LAPACKE header not found. Install with: conda install -c conda-forge lapack"
+#error "LAPACKE header not found. Install with: conda install --override-channels -c defaults openblas-devel"
 #endif
 
 // RAII helper to suppress stderr (LAPACK xerbla warnings)

@@ -16,6 +16,7 @@
 
 #include <fftw3.h>
 #include <mkl_dfti.h>
+#include "MklDftiLayout.h"
 #include "MklRealTransform.h"
 
 using namespace std;
@@ -63,7 +64,7 @@ double test_dft_accuracy_3d(int Nx, int Ny, int Nz)
     DftiSetValue(handle, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
     DftiSetValue(handle, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
     MKL_LONG ostrides[4] = {0, Ny * (Nz/2+1), Nz/2+1, 1};
-    DftiSetValue(handle, DFTI_OUTPUT_STRIDES, ostrides);
+    DftiSetValue(handle, mkl_dfti::forward_output_strides, ostrides);
     DftiCommitDescriptor(handle);
     DftiComputeForward(handle, mkl_in.data(), mkl_out.data());
     DftiFreeDescriptor(&handle);
@@ -131,7 +132,7 @@ double benchmark_mkl_dft_3d(int Nx, int Ny, int Nz, int num_iter)
     DftiSetValue(handle, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
     DftiSetValue(handle, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
     MKL_LONG ostrides[4] = {0, Ny * (Nz/2+1), Nz/2+1, 1};
-    DftiSetValue(handle, DFTI_OUTPUT_STRIDES, ostrides);
+    DftiSetValue(handle, mkl_dfti::forward_output_strides, ostrides);
     DftiCommitDescriptor(handle);
 
     // Warmup

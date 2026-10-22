@@ -22,12 +22,15 @@ git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
+# Recommended CPU FFT backend
+conda install --override-channels -c defaults --freeze-installed \
+    mkl=2025.0.0 mkl-include=2025.0.0
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 make -j8 && make install && ctest -L basic
 ```
 
-> **CPU Backend**: both CPU backends are OFF by default — enable at least one. `-DPOLYMERFTS_USE_MKL=ON` uses Intel MKL (included via conda); `-DPOLYMERFTS_USE_FFTW=ON` uses FFTW instead (GPL license).
+> **CPU Backend**: MKL is recommended for normal installation; the quick start installs it from official Anaconda packages. MKL and FFTW remain optional, and both CMake options default to OFF. FFTW is an alternative with GPL distribution requirements. Development and integrated CPU tests enable both backends; CI also checks a separate MKL-free build. OpenBLAS supplies Anderson mixing independently of the FFT backend. See [Installation](docs/getting-started/Installation.md) for details.
 
 > **GPU Backend**: built automatically when a CUDA 12.2+ `nvcc` is on PATH (the conda environment does not provide one) and CMake is 3.25.2+; otherwise the configure step warns and builds without it. `-DPOLYMERFTS_USE_CUDA=ON` makes a missing GPU backend an error, `OFF` skips it.
 

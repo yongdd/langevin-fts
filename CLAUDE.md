@@ -68,21 +68,27 @@ CUDA builds require a compatible host compiler, CUDA toolkit 12.2+ and CMake
 not supply the `nvcc` compiler. Select the toolkit through the local module system,
 `PATH`, `CUDACXX` or `CMAKE_CUDA_COMPILER`; use a compatible host compiler.
 
-Example development build with the MKL CPU backend:
+Development and integrated CPU regression builds enable both MKL and FFTW
+(GPL distribution requirements are described in Installation). The normal user
+quick start recommends MKL with FFTW disabled:
 
 ```bash
 conda activate polymerfts
+conda install --override-channels -c defaults --freeze-installed \
+    mkl=2025.0.0 mkl-include=2025.0.0
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+    -DPOLYMERFTS_USE_FFTW=ON \
     -DPOLYMERFTS_USE_MKL=ON \
     -DPOLYMERFTS_USE_CUDA=AUTO \
     -DPOLYMERFTS_WERROR=ON
 nice -n 10 cmake --build build --parallel 4
 ```
 
-- Enable FFTW with `-DPOLYMERFTS_USE_FFTW=ON` when its dependencies are available.
-  See Installation for distribution and licensing details.
+- The default environment supplies LAPACKE through OpenBLAS and does not install
+  MKL. The MKL CPU backend remains optional; install its dependencies separately
+  before enabling `-DPOLYMERFTS_USE_MKL=ON`. See Installation for setup details.
 - Use `-DPOLYMERFTS_USE_CUDA=ON` when CUDA must be built: configuration then fails
   if the toolchain is unsuitable. `AUTO` can fall back to CPU; inspect the output.
 - Set `POLYMERFTS_CUDA_ARCHITECTURES` for the intended toolkit and target devices.
