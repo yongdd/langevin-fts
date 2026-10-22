@@ -10,6 +10,7 @@ SET(BASIC_TESTS
     TestParams
     TestComplexMask
     TestComputationSafety
+    TestComputationState
     # Platform & utilities
     TestDisplayArchitecture
     TestCircularBuffer

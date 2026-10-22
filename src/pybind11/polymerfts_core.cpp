@@ -257,6 +257,9 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
 
                 std::map<std::string, const T*> map_buf_w_input;
                 std::map<std::string, const T*> map_buf_q_init;
+                // Casts can own temporary dtype/contiguity conversions. Keep them
+                // alive until the computation has finished reading their buffers.
+                std::map<std::string, array_in<const T>> q_init_map;
 
                 // Validate and collect w_input
                 for (auto it = w_input.begin(); it != w_input.end(); ++it)
@@ -271,7 +274,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 // Handle q_init if provided: in the same basis as w (reduced with a space group),
                 // which is the layout the computations copy
                 if (!q_init.is_none()) {
-                    std::map<std::string, array_in<const T>> q_init_map = q_init.cast<std::map<std::string, array_in<const T>>>();
+                    q_init_map = q_init.cast<std::map<std::string, array_in<const T>>>();
 
                     for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
                     {

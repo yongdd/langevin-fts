@@ -77,6 +77,36 @@ def main():
                 np.testing.assert_allclose(saved["phi_A"], phi["A"], rtol=0, atol=1e-11)
             assert isinstance(short.params["nx"][0], np.int64)
 
+    # Callback stops between stress updates must also return the final stress,
+    # including its smearing contribution, and report the corresponding error.
+    for smearing in (None, {"type": "gaussian", "a_int": 0.1}):
+        p = params([32], [1.7], max_iter=10, tolerance=1e-11,
+                   box_is_altering=True, stress_interval=4, smearing=smearing)
+        with contextlib.redirect_stdout(io.StringIO()):
+            short = SCFT(p)
+            r = short.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short),
+                           "B": -np.sqrt(2)*5*np.cos(2*np.pi*x_short)}, return_result=True,
+                          on_iteration=lambda info: False if info.iteration == 3 else None)
+            phi, _ = short.compute_concentrations(short.w)
+        assert r.iterations == 3
+        short.prop_solver.compute_stress()
+        stress = np.array(short.prop_solver.get_stress())
+        if short.smearing.enabled:
+            correction = short.smearing.stress(short.w, [phi[m] for m in short.monomer_types])
+            correction[1:] = 0.0
+            stress += correction[:len(stress)]
+        np.testing.assert_allclose(r.stress, stress, rtol=0, atol=1e-11)
+        for m in short.monomer_types:
+            np.testing.assert_allclose(r.phi[m], phi[m], rtol=0, atol=1e-11)
+        phi_array = np.array([short.smearing.apply_to_dict(phi)[m] for m in short.monomer_types])
+        diff = short.matrix_q_perp @ (short.matrix_chi @ phi_array - short.w) \
+            + short.pressure_kappa*(sum(phi_array) - 1.0)
+        for row in diff:
+            row -= short.prop_solver.mean(row)
+        field_error = np.sqrt(sum(short.prop_solver.inner_product(row, row) for row in diff) /
+                              (1 + sum(short.prop_solver.inner_product(row, row) for row in short.w)))
+        np.testing.assert_allclose(r.error_level, field_error + abs(stress[0]), rtol=0, atol=1e-11)
+
     # ---- 1D lamella: result = attributes, full-grid fields, restart from result.w
     x = (np.arange(64) + 0.5)/64
     with contextlib.redirect_stdout(io.StringIO()):

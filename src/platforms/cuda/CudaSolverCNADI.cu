@@ -245,6 +245,9 @@ void CudaSolverCNADI::update_laplacian_operator()
 {
     try
     {
+        if (!cb->is_orthogonal())
+            throw_with_line_number("CN-ADI requires an orthogonal computation box.");
+
         const int M = this->cb->get_total_grid();
         const int DIM = this->cb->get_dim();
         std::vector<int> nx(DIM);
@@ -305,6 +308,9 @@ void CudaSolverCNADI::update_laplacian_operator()
 void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const double*> w_input)
 {
     try{
+        if (!cb->is_orthogonal())
+            throw_with_line_number("CN-ADI requires an orthogonal computation box.");
+
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 

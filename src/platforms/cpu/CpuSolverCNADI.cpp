@@ -130,6 +130,9 @@ void CpuSolverCNADI::update_laplacian_operator()
 {
     try
     {
+        if (!cb->is_orthogonal())
+            throw_with_line_number("CN-ADI requires an orthogonal computation box.");
+
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
@@ -163,6 +166,9 @@ void CpuSolverCNADI::update_laplacian_operator()
 }
 void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
 {
+    if (!cb->is_orthogonal())
+        throw_with_line_number("CN-ADI requires an orthogonal computation box.");
+
     const int M = this->cb->get_total_grid();
     const bool use_reduced_basis = (this->space_group_ != nullptr);
 

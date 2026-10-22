@@ -1055,6 +1055,18 @@ class SCFT:
         angle_stress_map = {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
         angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
         stress_array = None
+        stress_indices = list(range(dim)) + angle_stress_indices
+
+        def current_stress(w, phi):
+            self.prop_solver.compute_stress()
+            stress = np.array(self.prop_solver.get_stress())
+            if self.smearing.enabled:
+                # Include the box dependence of the smearing kernel Γ(k).
+                smearing_stress = self.smearing.stress(w, [phi[m] for m in self.monomer_types])
+                if self.smearing.orthogonal and not angle_stress_indices:
+                    smearing_stress[dim:] = 0.0
+                stress += smearing_stress[:len(stress)]
+            return stress
 
         # Ideal mixing term is constant during a CE run. Define c log(c) = 0 at c = 0.
         self.polymer_lengths = [self.prop_solver.get_polymer(p).get_alpha()
@@ -1131,6 +1143,7 @@ class SCFT:
                 error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i])
                 error_normal += self.prop_solver.inner_product(w[i], w[i])
             error_level = np.sqrt(error_level/error_normal)
+            field_error_level = error_level
             mass_error = self.prop_solver.mean(phi_diff)
 
             if self.box_is_altering:
@@ -1140,21 +1153,17 @@ class SCFT:
                     stress_interval = 1 if error_level > 1e-2 else (2 if error_level > 1e-4 else 4)
                 else:
                     stress_interval = self.stress_interval
-                if (iter == 1) or (iter % stress_interval == 0) or iter == self.max_iter:
-                    self.prop_solver.compute_stress()
-                    stress_array = np.array(self.prop_solver.get_stress())
-                    if self.smearing.enabled:
-                        # H contains -ln Q[Γ*w], so it depends on the box also through Γ(k);
-                        # the solver's stress is the derivative at fixed smeared fields
-                        smearing_stress = self.smearing.stress(w, [phi[m] for m in self.monomer_types])
-                        if self.smearing.orthogonal and not angle_stress_indices:
-                            smearing_stress[dim:] = 0.0  # the solver skips the angle derivatives too
-                        stress_array = stress_array + smearing_stress[:len(stress_array)]
+                stress_is_current = (iter == 1) or (iter % stress_interval == 0) or iter == self.max_iter
+                if stress_is_current:
+                    stress_array = current_stress(w, phi)
                 # The stress components being optimized (box lengths of the existing
                 # dimensions and, if active, the angles) count towards the error
-                relevant_stress = np.concatenate([stress_array[0:dim],
-                                                  stress_array[angle_stress_indices] if angle_stress_indices else np.array([])])
-                error_level += np.sqrt(np.sum(relevant_stress**2))
+                error_level += np.linalg.norm(stress_array[stress_indices])
+                # A cached stress can guide updates, but cannot certify convergence.
+                if not stress_is_current and error_level < self.tolerance:
+                    stress_array = current_stress(w, phi)
+                    stress_is_current = True
+                    error_level = field_error_level + np.linalg.norm(stress_array[stress_indices])
 
             # Print this iteration
             print("%8d %12.3E " % (iter, mass_error), end=" [ ")
@@ -1184,6 +1193,9 @@ class SCFT:
                 )
                 callback_result = on_iteration(info)
                 if callback_result is False:
+                    if self.box_is_altering and not stress_is_current:
+                        stress_array = current_stress(w, phi)
+                        error_level = field_error_level + np.linalg.norm(stress_array[stress_indices])
                     print(f"Iteration stopped by callback at iteration {iter}")
                     break
 

@@ -160,16 +160,18 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
 /**
  * @brief Set space group for reduced basis representation.
  *
- * Allocates internal buffers for full grid field storage when working
- * with reduced basis fields. Also sets space group on ComputationBox
- * so that integral(), inner_product() etc. work with reduced basis.
+ * The basis is fixed when the computation is constructed. Reattaching the same
+ * group to its box is allowed, but changing it would invalidate the backend's
+ * cached sizes and buffers.
  *
- * @param sg Pointer to SpaceGroup, or nullptr to disable reduced basis mode
+ * @param sg The group used at construction (nullptr if none)
  */
 template <typename T>
 void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
 {
-    space_group_ = sg;
+    if (sg != space_group_)
+        throw_with_line_number("The space group of a computation cannot change after construction; "
+            "create a new computation with the requested group.");
 
     // Also set space group on ComputationBox for unified field operations
     this->cb->set_space_group(sg);
@@ -187,7 +189,7 @@ void PropagatorComputation<T>::compute_propagators_reduced(
     std::map<std::string, const T*> q_init)
 {
     if (space_group_ == nullptr) {
-        throw_with_line_number("Space group not set. Call set_space_group() first.");
+        throw_with_line_number("Space group not set. Create a computation with a space group.");
     }
 
     // Call the standard compute_propagators with reduced basis fields

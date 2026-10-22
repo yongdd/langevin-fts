@@ -803,6 +803,8 @@ class PropagatorSolver:
             New lattice angles in degrees [alpha, beta, gamma].
         """
         self._initialize_solver()
+        if self.method == "realspace" and not np.all(np.abs(np.deg2rad(angles) - np.pi/2) < 1e-10):
+            raise ValueError("CN-ADI requires orthogonal lattice angles; use a pseudo-spectral method for non-orthogonal cells.")
         self._computation_box.set_lattice_parameters(lx, angles)
         self.lx = list(lx)
         self.update_laplacian_operator()

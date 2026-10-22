@@ -120,6 +120,60 @@ def test_angles_and_grafting(platform):
         rejects(lambda: mol.add_polymer(1.0, [["A", 0.5, 0, 1], ["A", 0.5, 1, 2]], graft))
 
 
+def test_grafting_conversions(platform, reduced):
+    # The binding must retain dtype/contiguity conversion buffers until both
+    # full-storage and checkpoint computations finish reading the graft input.
+    rng = np.random.default_rng(37)
+    n = 128
+    for field_type, small, wide in (("real", np.float32, np.float64),
+                                   ("complex", np.complex64, np.complex128)):
+        graft = rng.uniform(0.5, 1.5, n).astype(small)
+        if field_type == "complex":
+            graft += 0.1j*rng.normal(size=n).astype(small)
+        reference = graft.astype(wide)
+        strided = np.column_stack((reference, reference))[:, 0]
+        assert not strided.flags.c_contiguous
+        w = rng.normal(0, 5, n).astype(wide)
+        for model in ("continuous", "discrete"):
+            outputs = []
+            for value in (reference, graft, strided):
+                s = PropagatorSolver([n], [4.0], 0.05, {"A": 1.0}, ["periodic"]*2,
+                                     model, platform=platform, reduce_memory=reduced,
+                                     field_type=field_type)
+                s.add_polymer(1.0, [["A", 1.0, 0, 1]], {0: "G"})
+                s.compute_propagators({"A": w}, q_init={"G": value})
+                s.compute_concentrations()
+                assert s.check_total_partition()
+                phi = s.get_concentration("A")
+                assert abs(s.mean(phi) - 1) < 1e-10
+                outputs.append((s.get_partition_function(0), phi))
+            for partition, phi in outputs[1:]:
+                np.testing.assert_allclose(partition, outputs[0][0], rtol=1e-12, atol=1e-12)
+                np.testing.assert_allclose(phi, outputs[0][1], rtol=1e-12, atol=1e-12)
+
+
+def test_cnadi_lattice_update(platform, reduced):
+    s = PropagatorSolver([8, 8], [4.0, 4.0], 0.05, {"A": 1.0}, ["periodic"]*4,
+                         "continuous", numerical_method="cn-adi2", platform=platform,
+                         reduce_memory=reduced)
+    s.add_polymer(1.0, [["A", 1.0, 0, 1]])
+    w = {"A": np.random.default_rng(38).normal(0, 5, 64)}
+    s.compute_propagators(w)
+    partition = s.get_partition_function(0)
+    # Reject before changing either the box or the solver's cached lengths.
+    rejects(lambda: s.set_lattice_parameters([5.0, 6.0], [90, 90, 60]))
+    np.testing.assert_allclose(s.get_lx(), [4.0, 4.0], rtol=0, atol=0)
+    np.testing.assert_allclose(s.lx, [4.0, 4.0], rtol=0, atol=0)
+    np.testing.assert_allclose(s.get_angles_degrees(), [90.0]*3, rtol=0, atol=1e-12)
+    s.compute_propagators(w)
+    np.testing.assert_allclose(s.get_partition_function(0), partition, rtol=1e-12)
+    s.set_lattice_parameters([5.0, 6.0], [90, 90, 90])
+    s.compute_propagators(w)
+    s.compute_concentrations()
+    assert s.check_total_partition()
+    assert abs(s.mean(s.get_concentration("A")) - 1) < 1e-10
+
+
 def test_pmmm_singleton(platform):
     fac = _core.PlatformSelector.create_factory(platform, False, "real")
     nx = [2, 8, 8]
@@ -185,6 +239,8 @@ def main():
         for reduced in (False, True):
             test_basis_lifetime(platform, reduced)
             test_gce(platform, reduced)
+            test_grafting_conversions(platform, reduced)
+            test_cnadi_lattice_update(platform, reduced)
         print("Computation safety:", platform, "OK")
 
 

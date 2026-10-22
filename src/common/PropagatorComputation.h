@@ -382,13 +382,13 @@ public:
     // ==================== Space Group / Reduced Basis Methods ====================
 
     /**
-     * @brief Set space group for reduced basis representation.
+     * @brief Reattach this computation's space group to its box.
      *
-     * When a space group is set, fields can be represented using only irreducible
-     * mesh points, reducing memory usage and speeding up field operations.
-     * The propagator computation still uses the full grid internally (FFT requires it).
+     * The space group is fixed at construction because backend buffers and
+     * solvers use its basis. Passing a different group (including nullptr)
+     * throws before changing either the computation or the box.
      *
-     * @param sg Pointer to SpaceGroup object (nullptr to disable)
+     * @param sg The group used at construction (nullptr if none)
      */
     virtual void set_space_group(SpaceGroup* sg);
 
