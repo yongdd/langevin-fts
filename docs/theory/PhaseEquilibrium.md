@@ -185,4 +185,6 @@ Repeat the calculation for every candidate phase branch at the same target chemi
 
 ## Reference
 
-M. W. Matsen, [New Fast SCFT Algorithm Applied to Binary Diblock Copolymer/Homopolymer Blends](https://doi.org/10.1021/ma0349377), *Macromolecules* **36**, 9647–9657 (2003). Equations (46)–(49) give the CE-to-GCE conversion; p. 9655 describes ordered/disordered coexistence from canonical ordered-phase calculations. [Author's PDF](http://chemeng.uwaterloo.ca/mwmatsen/papers/2003_macro_9647.pdf).
+M. W. Matsen, [New Fast SCFT Algorithm Applied to Binary Diblock Copolymer/Homopolymer Blends](https://doi.org/10.1021/ma0349377), *Macromolecules* **36**, 9647–9657 (2003).
+
+On p. 9650, eq. (47) obtains the blend chemical-potential variable from a canonical solution, and eq. (49) gives the canonical-to-grand-canonical free-energy transform. Page 9655 describes an ordered/disordered coexistence procedure that varies the ordered-phase composition using canonical SCFT calculations, evaluates the chemical potential with eq. (47), and matches the two phases' grand-canonical free energies at that chemical potential.
