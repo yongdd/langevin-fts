@@ -1,718 +1,292 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-> **Note**: Mathematical equations use GitHub's protected math syntax, `` $`...`$ `` inline and `` ```math `` blocks for display (see [Math in Documentation](#math-in-documentation)).
-
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [Critical Rules](#critical-rules)
-- [Requirements](#requirements)
-- [Build System](#build-system)
-- [Testing](#testing)
-- [Code Architecture](#code-architecture)
-- [Running Simulations](#running-simulations)
-- [Troubleshooting](#troubleshooting)
-- [Chain Models](#chain-models)
-- [Numerical Methods](#numerical-methods)
-- [Units and Conventions](#units-and-conventions)
-- [Development Notes](#development-notes)
-- [Documentation and Learning](#documentation-and-learning)
-- [Key References](#key-references)
+Shared project guidance for coding agents. Keep this file in English and focused
+on portable project requirements. Local accounts, machine paths, credentials,
+cluster quotas and personal workload details belong outside the repository guides.
 
 ## Project Overview
 
-This is a polymer field theory simulation library implementing Self-Consistent Field Theory (SCFT) and Langevin Field-Theoretic Simulations (L-FTS). The codebase consists of high-performance C++/CUDA computational kernels exposed through Python interfaces via pybind11, enabling efficient polymer physics simulations with Python's ecosystem.
+`polymerfts` implements self-consistent field theory (SCFT), Langevin
+field-theoretic simulations (LFTS) and complex Langevin simulations (CLFTS).
+Python simulation loops call C++20 computational kernels through pybind11.
+The computational backends are CPU-MKL, CPU-FFTW and CUDA.
 
-## Critical Rules
+Use the current source as the authority for supported capabilities and defaults:
 
-> **These rules are mandatory and must be followed at all times.**
+- [CMakeLists.txt](CMakeLists.txt): native build requirements and backend options.
+- [pyproject.toml](pyproject.toml): Python dependencies and wheel configuration.
+- [Parameter Reference](docs/references/Parameters.md): public simulation options.
+- [Developer Guide](docs/internals/DeveloperGuide.md): implementation architecture.
 
-### Never Commit Without Permission
+## Mandatory Workflow Rules
 
-Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
+### Commits and Existing Work
 
-### Never Modify Test Parameters
+- Run `git commit` only after an explicit user instruction to commit. A request
+  to edit, fix or update code does not authorize a commit.
+- Before committing, run the checks relevant to the change and review the diff
+  in a careful second pass. Preserve unrelated changes in the shared workspace.
+- Leave `devel/` alone: read its contents only when the user explicitly asks,
+  do not audit, modify, stage or commit them, and do not link to it from
+  documentation.
 
-Test files in `tests/` contain carefully calibrated parameters. The following modifications are **strictly forbidden** unless the user explicitly requests them:
+### Preserve Numerical Test Conditions
 
-- NEVER increase tolerance values (e.g., changing 1e-7 to 1e-6 to make a test pass)
-- NEVER decrease field strength or standard deviation values
-- NEVER change grid sizes, box dimensions, or polymer parameters
-- NEVER weaken any test conditions to make tests pass
+Existing tests contain calibrated physical and numerical parameters. Unless the
+user explicitly requests a change, do not alter their tolerances, field strengths,
+grid sizes, box dimensions, polymer parameters or other numerical conditions.
+Never weaken a check to make a test pass. Investigate and report failures.
 
-If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
+### Shared Computing Resources
 
-### Leave `devel/` Alone
+- On a Slurm cluster, submit computations expected to exceed one minute as jobs.
+  Run simulations, convergence studies, benchmarks and parameter sweeps on
+  allocated compute nodes.
+- Submit each parameter configuration as a separate job when running a sweep.
+- Follow the site's resource policy, explicitly request memory and let the
+  scheduler select GPU devices. Preserve its `CUDA_VISIBLE_DEVICES` setting.
+- Keep permitted login-node builds short, use at most four workers and lower
+  their priority with `nice -n 10`. Use compute jobs for longer builds and tests.
+- Check job status at most once per minute. Keep searches inside the project;
+  avoid recursive walks of shared filesystem roots or entire home directories.
 
-`devel/` is the maintainer's private working folder. Do not audit, clean up, reformat or commit anything in it, and never link to it from the documentation. Its files frequently appear as modified in `git status`; that is expected.
+## Build and Environment
 
-### Use SLURM for Long-Running Jobs
+Use [Installation](docs/getting-started/Installation.md) for setup details.
+The native build needs C++20 with `std::source_location`, Python 3.11+, pybind11,
+spglib and LAPACKE. Enable at least one computational backend. MKL and FFTW are
+disabled by default; CUDA defaults to `AUTO`.
 
-For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
+CUDA builds require a compatible host compiler, CUDA toolkit 12.2+ and CMake
+3.25.2+. CPU-only CMake builds support CMake 3.18+. A CUDA runtime package does
+not supply the `nvcc` compiler. Select the toolkit through the local module system,
+`PATH`, `CUDACXX` or `CMAKE_CUDA_COMPILER`; use a compatible host compiler.
 
-```bash
-# Submit multiple jobs in parallel
-for param in 100 200 400 800; do
-    sbatch --job-name="test_$param" --wrap="python script.py --param $param"
-done
-```
-
-### Split Large Computations
-
-For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
-
-## Requirements
-
-### Software Dependencies
-
-Versions that cover both the CPU and the GPU backend:
-
-| Dependency | Version | Notes |
-|------------|---------|-------|
-| spglib | - | Space group symmetry (required) |
-| LAPACKE | - | Anderson mixing SVD solver (required) |
-| CMake | 3.25.2+ | Build system; C++20 for nvcc needs 3.25.2 (a CPU-only build works with 3.18) |
-| C++ Compiler | GCC 11–13, Clang 15+ | C++20 with `std::source_location`; nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it |
-| Python | 3.11+ | With NumPy 2.0+, SciPy 1.14+ |
-| CUDA Toolkit | 12.4+ (12.2 minimum) | GPU backend (device code is C++20); driver R550+ for 12.4, R580+ for 13 |
-| MKL | - | CPU FFT backend (via conda) |
-| FFTW | 3.3+ | Alternative CPU backend (GPL, optional) |
-| pybind11 | 2.13+ | Python bindings |
-
-### Conda Environment
+Example development build with the MKL CPU backend:
 
 ```bash
-# Activate the conda environment
 conda activate polymerfts
+cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+    -DPOLYMERFTS_USE_MKL=ON \
+    -DPOLYMERFTS_USE_CUDA=AUTO \
+    -DPOLYMERFTS_WERROR=ON
+nice -n 10 cmake --build build --parallel 4
 ```
 
-## Build System
+- Enable FFTW with `-DPOLYMERFTS_USE_FFTW=ON` when its dependencies are available.
+  See Installation for distribution and licensing details.
+- Use `-DPOLYMERFTS_USE_CUDA=ON` when CUDA must be built: configuration then fails
+  if the toolchain is unsuitable. `AUTO` can fall back to CPU; inspect the output.
+- Set `POLYMERFTS_CUDA_ARCHITECTURES` for the intended toolkit and target devices.
+  The defaults are defined in CMake; avoid copying a fixed architecture list here.
+- Rebuild after C++/CUDA changes. Python changes also need the staging target:
+  `cmake --build build --target polymerfts_stage --parallel 4`.
+- Tests import the staged package in `build/python/`, not an installed copy.
+  Install only when needed with `cmake --install build`. For an uninstalled
+  example, put `build/python` on `PYTHONPATH` using the appropriate absolute path.
+- Use a separate build directory for a fresh configuration rather than deleting
+  an existing build tree.
+- Use an optimized build with `POLYMERFTS_WERROR=ON` to check host C++ warnings.
+  A syntax-only check misses some optimization-dependent warnings. This option
+  does not cover nvcc-compiled `.cu` files.
 
-### Build Commands
+Where supported by the shell, `ulimit -s unlimited` and `OMP_STACKSIZE=1G` provide
+the stack space used by the examples. Set OpenMP options before importing the
+package. `OMP_NUM_THREADS` controls propagator-level workers; the CUDA backend
+uses up to four streams. `OMP_MAX_ACTIVE_LEVELS=0` serializes that work.
+
+## Testing and Numerical Validation
+
+Discover the tests for the current build instead of relying on fixed test counts
+or hardware-specific runtimes:
 
 ```bash
-# Initial build (from repository root); for the GPU backend a CUDA 12.2+ nvcc must be
-# first on PATH (the conda environment has none; on this cluster /opt/ohpc/pub/cuda/12.4.1/bin)
-mkdir build && cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-make -j8
-
-# Install Python modules to conda environment (for examples/tutorials; tests use the build tree)
-make install
-
-# Run basic tests (installation verification, ~1 min)
-ctest -L basic
-
-# Run full tests (development validation, ~8 min)
-ctest
-
-# Clean build (if needed)
-cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX && make -j8 && make install
+ctest --test-dir build -N
+ctest --test-dir build -L basic --output-on-failure
+ctest --test-dir build -L numerical --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
-### Important Build Notes
+Run long suites through the scheduler. Use `-R` to select tests relevant to the
+change. The available tests depend on the compiled backends. A CUDA build needs
+an allocated, visible GPU to validate its CUDA tests; a CPU-only run does not
+establish GPU correctness. Report failures and skips accurately.
 
-- Requires C++20 standard for host and device code (set in CMakeLists.txt)
-- CUDA Toolkit 12.2+ required for GPU support: nvcc 11.x has no `-std=c++20`, and nvcc 12.0/12.1 cannot evaluate `std::source_location::current()`. `POLYMERFTS_USE_CUDA` is `AUTO` by default (`ON`, `OFF` and `AUTO` accepted; a cache from an older version holds a BOOL whose `ON` is converted to `AUTO`): an nvcc older than 12.2 (the one CMake would compile with: `CMAKE_CUDA_COMPILER`, `CUDACXX` or PATH), CMake older than 3.25.2, an nvcc that cannot compile with its host compiler, or a C++ compiler or nvcc host compiler without `std::source_location` gives a warning and a build without the GPU backend; with `-DPOLYMERFTS_USE_CUDA=ON` it stops the configure step. A too-old or missing nvcc is not kept in the cache, so fixing PATH and re-running CMake is enough. `-DCMAKE_CUDA_HOST_COMPILER` and `CUDAHOSTCXX` select nvcc's host compiler. The cuFFT library is taken from the toolkit of that nvcc, not from a conda environment's CUDA libraries
-- Compute capabilities: empty `POLYMERFTS_CUDA_ARCHITECTURES` (default) compiles 60-90 with CUDA 12.2-12.7, adds 100 and 120 with CUDA 12.8+, and 75-120 with CUDA 13+; pass `-DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"` to compile for other GPUs
-- If encountering "Unsupported gpu architecture" errors, drop the unsupported capabilities from that list
-- Debug builds: Change `CMAKE_BUILD_TYPE` to `Debug` for additional warnings and profiling symbols
-- `-DPOLYMERFTS_WERROR=ON` turns host C++ warnings into errors (CI builds with it); keep new C++ warning-free under GCC 13
-- The build links libraries by absolute path and passes the CUDA directories explicitly; it does not depend on `CPLUS_INCLUDE_PATH` or `LIBRARY_PATH` of the shell. Configure with `-DCMAKE_PREFIX_PATH=$CONDA_PREFIX`
-- **User builds**: CMakeLists.txt defaults are both OFF. Users who only need one backend can build without these flags.
+Constructing `SCFT`, `LFTS` or `CLFTS` writes `polymer_<id>.png` in the current
+directory. Run temporary checks and examples from a scratch directory so generated
+files do not enter the source tree. Some native tests read inputs from `tests/`;
+use CTest to preserve their configured working directory.
 
-### Environment Setup
+For changes to numerical algorithms or propagator kernels:
+
+1. Verify integrated material conservation with the correct normalization for
+   the model and boundary conditions. In the usual incompressible bulk case,
+   the spatial mean of the summed concentrations is one.
+2. Call `check_total_partition()` to check forward/backward propagator consistency.
+3. Use random test fields with standard deviation around five when appropriate;
+   weak fields can conceal numerical errors. Preserve existing calibrated fields.
+4. Check analytical limits, contour/time-step refinement and backend agreement
+   as appropriate to the change. Separate correctness tests from performance runs.
+5. Finish relevant solver changes with `examples/scft/Gyroid.py` using the
+   continuous chain model. Check convergence rather than a fixed execution time.
+
+For FTS changes, also check uninterrupted versus restarted runs, full RNG and
+previous-noise restoration, pending measurements and extension state. Statistical
+validation needs error estimates and effective sample size. Same-backend restart
+checks can require bitwise equality; comparisons across backends need suitable
+numerical or statistical tolerances.
+
+See [Numerical Validation](docs/internals/NumericalValidation.md) for regression
+coverage and sampling studies. Relevant tests include `TestParameterNames`,
+`TestFtsReliability`, `TestCheckpointValidation`, `TestExtensions`,
+`TestPropagatorAnalytic`, `TestConvergenceOrderLite` and `TestSamplingStatistics`.
+The benchmark scripts in `scripts/` measure performance separately.
+
+## Architecture and Extension Points
+
+### Native Computation
+
+- `src/common/PlatformSelector.cpp` and `AbstractFactory.h` select and construct
+  backends. CPU implementations live in `src/platforms/cpu/`; CUDA implementations
+  live in `src/platforms/cuda/`.
+- The computation order is implemented once in `src/common/Computation*.cpp`.
+  Grid operations go through `ComputationBackend`, implemented by
+  `CpuComputationBackend` and `CudaComputationBackend`.
+- `ComputationCommon`, `ComputationContinuous` and `ComputationDiscrete` handle
+  shared and chain-specific work. The `ComputationReduceMemory*` classes add
+  checkpoint-based storage. Full and reduced-memory modes must agree bit for bit
+  on the same backend.
+- Keep each backend operation a physically meaningful step on whole fields.
+  `BackendArray` and `CheckpointArray` are opaque to the common computation layer.
+- Propagator aggregation reuses equivalent calculations for branched and mixed
+  systems. Preserve that optimization rather than adding manual duplicate work.
+- New computational features need CPU and CUDA implementations unless explicitly
+  platform-specific. `src/pybind11/polymerfts_core.cpp` exposes the native API.
+
+### Python Simulation Loops
+
+Researchers should be able to follow and modify the physical sequence directly.
+Keep each simulation class readable from top to bottom:
+
+- Read options directly from the `params` dictionary in the constructor, with
+  defaults next to their use. Avoid introducing parameter dataclass/spec layers.
+- Keep one topic per file. Duplication among `scft.py`, `lfts.py` and `clfts.py`
+  is acceptable when it keeps the loops self-contained.
+- Put shared parameter validation and legacy-name normalization in `validation.py`;
+  keep common mechanical helpers in `utils.py`.
+- `scft.py` owns SCFT iteration and optional cell relaxation; `lfts.py` owns
+  saddle-constrained Langevin sampling and its field compressors; `clfts.py`
+  evolves complex auxiliary fields.
+- `integrators.py` implements built-in LM and Euler steps. Use the existing
+  `integrator=` interface for additional methods and named `callbacks=` for
+  observables. Preserve accepted-step ordering and checkpoint contracts.
+- `propagator_solver.py` wraps the native solver API; `polymer_field_theory.py`
+  handles monomer/auxiliary-field transformations. `smearing.py`, `wtmd.py` and
+  `phase_equilibrium.py` contain their respective physical operations.
+
+Use [Extensions](docs/internals/Extensions.md) and
+[CustomExtensions.py](examples/lfts/CustomExtensions.py) for callback and integrator
+contracts. The additive-noise example is called predictor-corrector; it uses one
+explicit Heun correction with the same noise in both stages.
+
+## Numerical Methods and Parameter Conventions
+
+[NumericalMethods.h](src/common/NumericalMethods.h) is the common method registry.
+`PropagatorSolver.numerical_methods()` exposes its names and capabilities to Python.
+Add a descriptor and the CPU/CUDA backend construction cases when adding a method;
+keep its algorithm in the solver classes.
+
+| Method | Chain model | Key properties |
+|--------|-------------|----------------|
+| `rqm4` | Continuous | Fourth-order contour integration using Richardson extrapolation |
+| `rk2` | Continuous | Second-order Rasmussen-Kalosakas splitting; RK does not mean Runge-Kutta here |
+| `cn-adi2` | Continuous | Second-order finite differences; real fields and orthogonal cells; mixed boundary types supported; stress unavailable |
+| `discrete` | Discrete | Bond convolution for the Chapman-Kolmogorov equation, not continuum MDE integration |
+
+Pseudo-spectral solvers require all directions to be periodic or all directions
+to be non-periodic. Reflecting and absorbing directions can coexist. Mixing
+periodic and non-periodic directions requires `cn-adi2`. Consult the registry and
+[Parameter Reference](docs/references/Parameters.md) for further restrictions.
+
+Cell-centered grids are the default. Hexagonal-axis space-group calculations use
+a hybrid grid convention; preserve their symmetry mapping and reciprocal-space
+alias handling. See [Space Group Theory](docs/theory/SpaceGroup.md).
+
+Current input names include `polymers`, `relax_cell`, `stress_scale`,
+`blocks[].monomer_fractions`, `space_group.hall_number` and the three `recording`
+intervals: `checkpoint_interval`, `sample_interval`, `statistics_save_interval`.
+`numerical_method` selects the continuous-chain propagator method; discrete
+chains always select their dedicated solver. `langevin.integrator` selects the
+stochastic integrator. `langevin.max_step` is the final global step number,
+including restored steps. WTMD retains its separate `recording_period` option.
+
+Constructors copy and normalize legacy input names. Supplying both names of the
+same option raises `ValidationError`. Preserve old-checkpoint compatibility and
+verify stored settings hashes before translating names for comparison.
+
+Lengths use the reference statistical segment length times the square root of
+the reference polymerization index. `segment_lengths` stores the linear relative
+segment lengths, which the solver squares internally. `ds` is the contour step;
+field potentials use the per-reference-chain convention. See
+[Numerical Methods](docs/theory/NumericalMethods.md) and
+[Polymer Field Theory](docs/theory/PolymerFieldTheory.md) for equations and references.
+
+## Memory, FFT and CUDA Rules
+
+- Use owning RAII buffers and smart pointers. Device memory uses
+  `CudaDeviceBuffer`, pinned host memory uses `CudaPinnedBuffer`; host arrays use
+  standard containers. Raw pointers lend access rather than transferring ownership,
+  except where an existing factory or backend allocation interface requires it.
+- Preserve allocation and resource counters used by safety tests. CUDA destruction
+  and release paths must not throw; use the existing release helpers.
+- Share solver mechanics through `CpuSolverPseudoBase` and `CudaSolverPseudoBase`.
+  Put chain-specific evolution and stress factors in the derived solvers.
+- FFT calls can run concurrently across propagators. Keep execution scratch
+  buffers thread-local or otherwise isolated per concurrent operation. Shared
+  planning buffers are not execution scratch buffers.
+- Disable internal FFT threading; parallelism belongs at the propagator level.
+  FFTW execution on thread-local arrays uses its new-array execute functions.
+- Preserve FFT inputs that later computation still needs. FFTW complex-to-real
+  and cuFFT Z2D execution can overwrite their input even out of place. Copy such
+  inputs into execution-local scratch first; do not assume every transform has
+  the same preservation behavior.
+- Keep CUDA allocations, frees and synchronous default-stream copies out of
+  propagator loops. Reuse buffers and enqueue transfers on the operation's stream.
+- Avoid adding OpenMP regions inside the per-iteration CUDA host path; work there
+  stays serial or moves to GPU kernels.
+- CUDA element kernels use grid-stride loops and `grid_blocks` for launch sizing.
+  Line solvers distribute lines across blocks and loop when needed.
+- Wrap runtime/library errors with `CUDA_CHECK`/`CUFFT_CHECK` and check every kernel
+  launch with `CUDA_CHECK_LAUNCH()`. Asynchronous device errors can appear at a later
+  synchronization; use the CUDA debugging tools when diagnosing them.
+
+Use `compute_propagators()` and the public `PropagatorSolver` accessors. Do not use
+the internal `advance_propagator_single_segment` API.
+
+See [FFT Implementation](docs/internals/FFTImplementation.md) and the Developer
+Guide for detailed transform dispatch, ownership and computation hierarchies.
+
+## Documentation
+
+- Use [Parameter Reference](docs/references/Parameters.md) for complete input formats
+  and compatibility rules; avoid copying a second parameter reference into this file.
+- Examples live in `examples/scft/`, `examples/lfts/` and `examples/clfts/`.
+  [Tutorials](tutorials/README.md) provides a learning sequence.
+- Explain physical conventions and derivations under `docs/theory/`. Keep measured
+  performance results with their problem size, backend, hardware and precision.
+- Keep personal paths, accounts, tokens, internal hostnames and local cluster
+  configuration out of these two agent guides.
+
+For GitHub math, use protected inline syntax (`` $`...`$ ``) and unindented fenced
+blocks with the `math` language. Put display blocks outside list indentation.
+Within table math use `\vert` instead of a literal vertical bar. Escape literal
+dollar signs. Check documentation edits with:
 
 ```bash
-# Activate conda environment (required before any work)
-conda activate polymerfts
-
-# Set stack size (important to avoid segfaults)
-ulimit -s unlimited
-export OMP_STACKSIZE=1G
+python scripts/check_latex.py AGENTS.md CLAUDE.md
 ```
 
-### GPU Selection (Important!)
-
-**At the start of each session**, run `nvidia-smi` to check GPU utilization and select an idle GPU:
-
-```bash
-# Check GPU status
-nvidia-smi
-
-# Set CUDA_VISIBLE_DEVICES to an idle GPU before running tests
-export CUDA_VISIBLE_DEVICES=0  # or 1, 2, etc. based on which GPU is idle
-```
-
-This prevents conflicts with other users and ensures consistent test results.
-
-## Testing
-
-### Basic vs Full Tests
-
-Two test modes are available:
-
-| Mode | Command | Tests | Time | Purpose |
-|------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 58 | ~1 min | Installation verification |
-| **Full** | `ctest` | 104 | ~8 min | Development validation |
-
-### Running Tests
-
-**Note:** The Python tests import the package staged in `build/python/` by `make` (target `polymerfts_stage`), so they always test the current build; `make install` is only needed to run examples and tutorials from the installed package.
-
-```bash
-# From build directory
-cd build
-
-# Basic tests (for users, installation verification)
-ctest -L basic
-
-# Full tests (for development)
-ctest
-
-# Run specific test (example)
-./tests/TestPseudoBranchedContinuous3D
-./tests/TestScft3D
-
-# Run tests with verbose output
-ctest -V
-
-# Run specific test pattern
-ctest -R Pseudo  # runs all tests matching "Pseudo"
-```
-
-### Performance and Accuracy Benchmarks
-
-Benchmark scripts are available in `scripts/`:
-- `scripts/benchmark_crysfft_triplet.py`: CrysFFT speedup benchmark
-- `scripts/benchmark_space_group_speed.py`: Space group performance benchmark
-
-**Running benchmarks with SLURM job scheduler:**
-
-Use the provided SLURM template `scripts/slurm_run.sh` (adjust the Python script as needed):
-
-```bash
-sbatch scripts/slurm_run.sh
-```
-
-**What the scripts measure:**
-- `benchmark_crysfft_triplet.py`: times only the propagator computation of a single AB diblock in a BCC (Im-3m) field, once with the space group on (CrysFFT physical basis auto-selected) and once off, and reports the per-iteration time of both runs (`iter_sec`), the `speedup` and `percent` (CPU-FFTW only; the platform is hard-coded). Options: `--nx`, `--lx`, `--ds`, `--fa`, `--iters`, `--warmup`, `--fields`.
-- `benchmark_space_group_speed.py`: runs a fixed number of SCFT iterations for one phase (`--phase BCC|DG|Sigma|HCP`) on one platform (`--platform cpu-fftw|cuda`) with `--space-group on|off` and reports `elapsed_sec`, `iter_sec` and the final `Q`; submit one SLURM job per combination.
-- Both print a JSON summary to stdout and write the same JSON to the file given by `--output` (nothing is written when `--output` is omitted).
-
-**Key metrics to verify:**
-- Space-group on/off speedup (`speedup` in the triplet JSON; ratio of `iter_sec` between matching speed-benchmark runs). Reference timings are tabulated in `docs/internals/FFTImplementation.md` (Performance Benchmarks).
-- Convergence orders are not measured by these scripts; they are guarded by `tests/TestConvergenceOrderLite.py` (RQM4 order > 3.0, 1.5 < RK2 order < 2.5).
-
-### Testing Guidelines for Numerical Methods
-
-When testing propagator solvers or numerical methods, always follow these requirements:
-
-1. **Verify material conservation**: Check that total monomer concentration is conserved (sum of all species concentrations equals 1.0). This catches normalization errors in propagator computations.
-
-2. **Call `check_total_partition()`**: Always verify the total partition function during tests. This validates that forward and backward propagators are consistent and the chain statistics are computed correctly.
-
-3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 5. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
-
-4. **Final validation with Gyroid SCFT**: Run `examples/scft/Gyroid.py` with the **continuous chain model** as the final integration test (should complete within 5.7 seconds on GPU). This complex 3D morphology is sensitive to numerical errors and validates the complete simulation pipeline.
-
-Example test setup:
-
-```python
-# Generate test fields with std ~ 5
-w = np.random.normal(0.0, 5.0, size=nx)
-
-# After computing propagators, verify:
-# 1. Material conservation
-total_phi = sum(phi_species)
-np.mean(total_phi)  # Should be ~1.0
-
-# 2. Partition function consistency
-solver.check_total_partition()  # Should pass without error
-```
-
-## Code Architecture
-
-### Platform Abstraction (Abstract Factory Pattern)
-
-The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with MKL/FFTW, CUDA GPUs). This is a key architectural feature:
-
-- **Factory Selection**: `src/common/PlatformSelector.cpp` determines available platforms and creates appropriate factory instances
-- **Platform Implementations**:
-  - `src/platforms/cpu/`: CPU implementations using MKL or FFTW for FFT and linear algebra
-  - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
-- **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
-- **Computation and backend**: the propagator computations (`src/common/Computation*.cpp`) are written once; every grid operation goes through `ComputationBackend` (`CpuComputationBackend`, `CudaComputationBackend`), which owns the platform's solver
-
-When adding new computational features, you must implement them for both platforms unless explicitly platform-specific: the order of a computation goes into `src/common/Computation*.cpp` once, new grid operations into both backends, numerical methods into both solver families. `docs/internals/DeveloperGuide.md` shows the layers, the classes of each platform, one SCFT iteration and where each kind of change goes.
-
-### Core Components
-
-#### Propagator Computation (`src/common/PropagatorComputation.h`)
-
-The central computational engine. Computes chain propagators using dynamic programming to avoid redundant calculations for branched polymers. The optimization strategy is described in *J. Chem. Theory Comput.* **2025**, 21, 3676.
-
-Key concepts:
-- **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
-- **Continuous chains**: Pseudo-spectral method with RQM4 or RK2 solving the modified diffusion equation
-- **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
-- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order).
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"rk2"` (RK2), or `"cn-adi2"` (CN-ADI2)
-- **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
-
-#### Computation Box (`src/common/ComputationBox.h`)
-
-Manages simulation grid, FFT operations, and boundary conditions. Handles 1D/2D/3D simulations with periodic, reflecting, or absorbing boundary conditions. All numerical methods support all boundary condition types.
-
-#### Polymer and Molecules (`src/common/Polymer.h`, `src/common/Molecules.h`)
-
-Define polymer chain architectures:
-- Supports arbitrary acyclic branched polymers (star, comb, dendritic, bottle-brush, etc.)
-- Handles mixtures of block copolymers, homopolymers, and random copolymers
-- Stores chain topology as directed acyclic graph for propagator computation optimization
-
-#### Anderson Mixing (`src/common/AndersonMixing.h`)
-
-Iterative solver for SCFT equations. Accelerates convergence by mixing field history. Critical for SCFT convergence; parameters in examples show tuned values.
-
-### Python Layer
-
-#### High-Level Simulation Classes
-
-- `src/python/scft.py`: SCFT simulation orchestrator
-  - Handles field initialization, iteration loop, convergence checking
-  - Anderson mixing optimizer
-  - Implements stress calculations for box size optimization
-  - Space group symmetry constraints (beta)
-
-- `src/python/lfts.py`: L-FTS simulation orchestrator
-  - Implements Langevin dynamics with Leimkuhler-Matthews method
-  - Structure function calculations
-  - Field compressors (Anderson Mixing, Linear Response)
-  - PCG64 random number generator
-
-- **Python layer rule**: researchers, not developers, edit `src/python`. Keep it script-like: each simulation class reads its options straight from the `params` dictionary in its constructor (defaults written where they are used), there are few files (one topic per file: `scft.py`, `lfts.py` with its field compressors, `clfts.py`, `propagator_solver.py`, `polymer_field_theory.py`, `smearing.py`, `wtmd.py`, `utils.py`, `validation.py`), and no dataclass/spec layers. Duplication between `scft.py`, `lfts.py` and `clfts.py` is acceptable when it keeps each file self-contained; shared mechanics (chi N parsing, block processing, random copolymers, parameter-file loading, VTK output) live in `utils.py`.
-
-- `src/python/polymer_field_theory.py`: Multi-monomer field theory transformations
-  - Converts between monomer potential fields and auxiliary fields
-  - Eigenvalue decomposition of interaction matrices
-  - Hamiltonian coefficient calculations for arbitrary χN parameters
-
-#### Python-C++ Binding (`src/pybind11/polymerfts_core.cpp`)
-
-Exposes C++ classes to Python as the `_core` module. All C++ computational objects are accessible through this interface.
-
-### CUDA Implementation Details
-
-CUDA code uses:
-- **Multiple streams** (up to 4): Parallel propagator computations on GPU. One OpenMP thread drives each stream, so the stream count is `OMP_NUM_THREADS` (at most 4), and `OMP_MAX_ACTIVE_LEVELS=0` serializes them (on an A10 an iteration then took 1.5x as long at 32³ and 6-9% longer at 64³-128³ than with `1`)
-- **cuFFT**: GPU-accelerated Fast Fourier Transforms
-- **Shared memory**: Tridiagonal solvers for real-space methods use shared memory for performance
-- **Pinned memory**: Host-device transfers use pinned circular buffers for efficiency
-- **Kernels loop over their index range**: every element-wise kernel uses a grid-stride loop (`while (i < M) { ...; i += blockDim.x * gridDim.x; }`), so it is correct for any launch configuration; kernels that give one block a row or a whole 1D transform loop over rows with `gridDim.x` and over the row with `blockDim.x`. Write new kernels the same way. The default launch is 1024 blocks of 256 threads (`LFTS_GPU_NUM_BLOCKS`, `LFTS_GPU_NUM_THREADS` override it); line solvers (CN-ADI) size their launch to the number of grid lines
-- **No new OpenMP regions in per-iteration host code of the CUDA path**: a `#pragma omp parallel for` in the box-change table update made the Gyroid example 3x slower (its threads competed with spinning threads elsewhere in the process; `OMP_WAIT_POLICY=PASSIVE` hid it) and was removed. Host work there stays serial or moves to the GPU
-- **Launch shape**: element kernels launched to cover an array use `grid_blocks(n, block_size)` (`CudaCommon.h`), which caps the grid at `MAX_GRID_THREADS` = 2^20 threads so the stride loop cannot overflow `int`
-- **Error checks (CUDA C++ Best Practices Guide 2.3)**: every call that returns an error code is wrapped (`CUDA_CHECK(...)` for runtime and CUB calls, `CUFFT_CHECK(...)` for cuFFT), and every kernel launch is followed by `CUDA_CHECK_LAUNCH();` (one check after an unbraced `if/else` launch pair). The check is a host-side read that does not synchronize, and `cudaGetLastError()` clears the slot, so a launch error is reported at its own launch and never again by a later, unrelated check. Errors of a running kernel are not seen by the launch check: they surface at the first CUDA call made after the fault, at the latest at the next synchronizing call; run with `CUDA_LAUNCH_BLOCKING=1` or under `compute-sanitizer` to locate them. Release calls run in destructors and `release()` paths and must not throw: wrap `cudaFree`/`cudaFreeHost` in `ignore_release_error(...)`, which clears the error a failed release leaves in the slot and counts it. cuFFT plans, streams and events are created through `count_cufft_plan(...)`, `count_cuda_stream(...)`, `count_cuda_event(...)` and destroyed with `release_cufft_plan`, `release_cuda_stream`, `release_cuda_event`, which keep live counts for the tests
-- **No allocation or default-stream copies inside the propagator loop**: `cudaMalloc`/`cudaFree` and synchronous `cudaMemcpy` serialize all streams. Tables rebuilt after a box change reuse their device buffers and are uploaded with `cudaMemcpyAsync` on the object's own stream
-
-The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
-
-**cuFFT Input Corruption Warning**: cuFFT overwrites the input buffer of complex-to-real transforms (Z2D) even when they are out-of-place. The cuFFT User's Guide (section "Data Layout") states: "Out-of-place complex-to-real FFT will always overwrite input buffer." **Always copy the input to a work buffer before a Z2D transform if the input must be preserved.** Several solvers rely on this pattern after IFFT operations. The guide says nothing about real-to-complex transforms (D2Z); measured with CUDA 11.8 and again with 12.4.1 on an A10 (1D/2D/3D, batch 1 and 2), D2Z left its input unchanged while Z2D overwrote it in 2D and 3D. The shared stress routine feeds the propagator pair straight into a batched D2Z and the caller reuses the pair afterwards.
-
-## Running Simulations
-
-### SCFT Examples
-
-Located in `examples/scft/`:
-- `Lamella3D.py`: Lamellar phase of AB diblock
-- `Gyroid.py`: Gyroid phase with box relaxation
-- `ABC_Triblock_Sphere3D.py`: Spherical phase of ABC triblock
-- `phases/`: **Space group symmetry examples** - BCC, FCC, Gyroid, Double Diamond, Sigma, A15, and other complex phases with space group constraints for reduced memory usage and faster field operations
-
-Run from repository root:
-
-```bash
-cd examples/scft
-python Lamella3D.py
-```
-
-### Space Group Symmetry (Beta Feature)
-
-The `examples/scft/phases/` directory contains examples using space group symmetry to exploit crystallographic periodicity. Key features:
-
-- **Reduced basis representation**: Fields stored only at irreducible mesh points (e.g., 48-192x reduction for cubic space groups)
-- **Memory savings**: Proportional to grid reduction ratio
-- **Speedup**: when the group allows it, the propagator itself is computed on the reduced physical sub-grid through the crystallographic FFT (CrysFFT) fast path — Pmmm DCT (mirror planes in x/y/z), recursive 3m (3m translations) or ObliqueZ (z-mirror, any cell with α = β = 90°, e.g. hexagonal) — instead of the full-grid FFT; otherwise only the field operations shrink. Measured speedups (e.g. 3-5x for Im-3m through the 3m path, 1.1-1.4x for hexagonal groups through ObliqueZ) are tabulated in `docs/internals/FFTImplementation.md` (CrysFFT and Performance Benchmarks sections)
-
-**Hexagonal/trigonal support**: Hexagonal and trigonal space groups (e.g., P6₃/mmc) are fully supported. Under hexagonal rotations cell-centered grid points `(i+0.5)/N` would map to cell boundaries (a row sum of 0 annihilates the 0.5 offset), which shows up as X-shaped artifacts and a ~10⁻³ free-energy bias. Two mechanisms prevent this: (1) a hybrid orbit convention for hexagonal-axes settings — node-centered in-plane coordinates `i/N` with cell-centered z — makes every symmetry map an exact integer operation, and (2) a group-invariant (first-Brillouin-zone, minimal-metric-form) alias representative for the k-space diffusion and stress operators keeps the exact point-group symmetry of the discretized operators on oblique cells. Space-group on/off results agree to machine precision for all supported crystal systems. Rhombohedral-axes R settings require `nx = ny = nz` (violations are rejected with an explicit error). Details: `docs/theory/SpaceGroup.md` (How Hexagonal/Trigonal Groups Are Handled).
-
-Example usage in params:
-
-```python
-"space_group": {
-    "symbol": "Im-3m",   # Hermann-Mauguin symbol (BCC)
-    "hall_number": 529,       # Hall number (optional)
-}
-```
-
-See `examples/scft/phases/README.md` for available space groups and reduction factors.
-
-### L-FTS Examples
-
-Located in `examples/lfts/`:
-- `Lamella.py`: Langevin dynamics of lamellar phase
-- `Gyroid.py`: Fluctuating gyroid phase
-- `MixtureBlockRandom.py`: Block/random copolymer mixture
-
-### Parameter Files
-
-Simulations are configured via Python dictionaries with keys:
-- `nx`, `lx`: Grid points and box size
-- `chain_model`: "discrete" or "continuous"
-- `ds`: Contour discretization (typically 1/N_Ref)
-- `segment_lengths`: Relative statistical segment lengths
-- `chi_n`: Flory-Huggins interaction parameters × N_Ref
-- `polymers`: Polymer architectures and volume fractions
-- `platform`: Platform selection (see below)
-- `numerical_method`: Algorithm for propagator computation
-  - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
-  - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting
-  - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
-
-#### Platform Auto-Selection
-
-The `platform` parameter controls which computational backend is used:
-- `"cuda"`: NVIDIA GPU with cuFFT (requires CUDA)
-- `"cpu-mkl"`: CPU with Intel MKL library
-- `"cpu-fftw"`: CPU with FFTW library (GPL license)
-
-**Auto-selection logic** (when `platform` is not specified):
-- **1D simulations**: Uses CPU (GPU overhead outweighs benefits for small problems)
-- **2D/3D simulations**: Uses `cuda` if available, otherwise falls back to CPU
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-| Problem | Solution |
-|---------|----------|
-| **Segmentation fault** | Set `ulimit -s unlimited` and `export OMP_STACKSIZE=1G` |
-| **GPU architecture errors** | Configure with `-DPOLYMERFTS_CUDA_ARCHITECTURES=...` listing only supported compute capabilities |
-| **Memory issues** | Set `"reduce_memory": True` in parameters |
-| **Run on one CPU core** | Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports. This disables OpenMP; on CUDA it also runs the propagator streams one after another, so GPU runs keep `"1"` |
-| **GPU or CPU underused** | Set `OMP_NUM_THREADS` before imports: it is the number of propagators computed concurrently (CPU threads, or CUDA streams up to 4; one at a time with `reduce_memory`). The Python classes default it to 1 when unset; the examples use 2 with `OMP_MAX_ACTIVE_LEVELS="1"` |
-
-### SCFT Not Converging
-
-Reduce mixing parameters:
-
-```python
-"optimizer": {
-    "name": "am",
-    "max_hist": 20,
-    "mix_min": 0.01,    # reduce from 0.1
-    "mix_init": 0.01,   # reduce from 0.1
-    "start_error": 1e-2
-}
-```
-
-### Debugging Test Failures
-
-1. **Run with verbose output**: `ctest -V -R <test_name>`
-2. **Check for NaN/Inf**: Add `np.isnan(result).any()` checks
-3. **Verify partition function**: Call `solver.check_total_partition()` - should return `True` (every forward/backward propagator pair yields the same Q)
-4. **Compare platforms**: Run same test on both `cuda` and CPU to isolate platform-specific issues
-5. **Check material conservation**: Verify `np.mean(sum(phi_species))` ≈ 1.0
-
-### Interpreting Error Messages
-
-| Error Message | Likely Cause | Solution |
-|---------------|--------------|----------|
-| `Material conservation failed: mean(sum(phi) - 1) = ...` (`ValidationError`, L-FTS/CL-FTS) | Total monomer concentration drifted from 1: field too strong, `ds` too coarse, or a propagator/FFT bug | Reduce the field amplitude or `ds`; compare CPU vs CUDA results |
-| `Partition consistency check failed (forward/backward mismatch).` (`ValidationError`, from `check_total_partition()`) | Forward and backward propagators give different Q, i.e. the solver violates material conservation | Check the FFT implementation and boundary conditions; run the same case on the other platform |
-| `cuFFT error code ...`, `Failed to create cuFFT D2Z plan` | GPU memory exhausted or invalid transform size | Check GPU memory with `nvidia-smi`, reduce the grid size or set `reduce_memory=True` |
-| `FFTW plan creation failed`, `FFTW memory allocation failed` | Host memory allocation failure | Reduce the grid size or increase available RAM |
-| `No available platform` / `Could not find platform '...'` | The build has no backend (or a CUDA-only build runs on a node without a visible GPU), or `platform` is not one of `cuda`, `cpu-mkl`, `cpu-fftw` (`auto` is resolved in Python before reaching C++) | Rebuild with a backend enabled; check the `platform` parameter |
-| `Size of input w[...] (...) and 'n_grid' (...) must match.` | A field array does not have one value per grid point (or per reduced-basis point with a space group) | Flatten the field to `n_grid` (or `n_reduced_basis`) entries |
-
-### Where to Look When Things Go Wrong
-
-1. **Propagator issues**: the computation order in `src/common/Computation*.cpp`, the grid operations in `src/platforms/*/C*ComputationBackend.*`, the solvers in `src/platforms/*/`
-2. **FFT problems**: `src/platforms/cpu/FftwFFT.cpp` or `src/platforms/cuda/CudaFFT.cu`
-3. **SCFT convergence**: `src/python/scft.py`, check Anderson mixing parameters
-4. **Memory errors**: Check `reduce_memory` option, verify GPU memory availability
-5. **Platform differences**: Compare CPU vs CUDA outputs - should match to ~10⁻¹³
-
-## Chain Models
-
-This library supports two chain models with different mathematical formulations:
-
-### Continuous Chain Model (Gaussian Chain)
-
-Solves the **modified diffusion equation**:
-
-```math
-\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)
-```
-
-where $`q(\mathbf{r}, s)`$ is the chain propagator, $`b`$ is the statistical segment length, and $`w(\mathbf{r})`$ is the potential field.
-
-**Pseudo-spectral solution** (operator splitting):
-
-```math
-q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]
-```
-
-The term $`e^{-b^2 |\mathbf{k}|^2 \Delta s/6}`$ is the **diffusion propagator** in Fourier space.
-
-### Discrete Chain Model (Chapman-Kolmogorov Equation)
-
-Solves the **Chapman-Kolmogorov integral equation** (NOT the modified diffusion equation):
-
-```math
-q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'
-```
-
-where $`g(\mathbf{r})`$ is the **bond function** representing the probability distribution of bond vectors.
-
-**Bead-spring (Gaussian) bond function**:
-
-```math
-g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)
-```
-
-**Fourier transform of bond function**:
-
-```math
-\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)
-```
-
-With the convention $`a^2 = b^2 \Delta s`$ (where $`\Delta s = 1/N`$), this becomes:
-
-```math
-\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)
-```
-
-**Key distinction**: The formula $`\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)`$ appears in both models but has different physical meanings:
-- **Continuous**: Diffusion propagator from solving the modified diffusion equation
-- **Discrete**: Bond function (Fourier transform of Gaussian bond distribution)
-
-**Reference**: Park et al., *J. Chem. Phys.* **2019**, 150, 234901
-
-## Numerical Methods
-
-This library provides multiple numerical methods for solving the modified diffusion equation, each with different accuracy-performance tradeoffs.
-
-### Pseudo-Spectral Methods (Fourier Space)
-
-Pseudo-spectral methods use spectral transforms to solve the diffusion operator efficiently. The transform type depends on boundary conditions:
-- **Periodic BC**: Fast Fourier Transform (FFT)
-- **Reflecting BC**: Discrete Cosine Transform (DCT-II)
-- **Absorbing BC**: Discrete Sine Transform (DST-II)
-
-All pseudo-spectral methods use **cell-centered grids** where grid points are at $`x_i = (i + 0.5) \cdot dx`$ for $`i = 0, 1, ..., N-1`$, with boundaries at cell faces (not grid points).
-
-#### RQM4 (4th-order Richardson Extrapolation)
-
-The default method combining operator splitting with Richardson extrapolation:
-1. Split the operator: diffusion (Fourier space) + reaction (real space)
-2. Apply Strang splitting with half-steps
-3. Richardson extrapolation: $`q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}`$ for 4th-order accuracy
-
-**Order of accuracy**: 4th-order in ds (convergence order ≈ 4.0)
-
-**Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
-
-#### RK2 (2nd-order Rasmussen-Kalosakas)
-
-Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen-Kalosakas, not Runge-Kutta):
-1. Split the operator: diffusion (Fourier space) + reaction (real space)
-2. Apply Strang splitting: $`q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]`$
-
-**Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
-
-**Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
-
-**Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains (Park et al. 2019). Both use the same Boltzmann factor $`e^{-b^2 k^2 \Delta s / 6}`$ in Fourier space.
-
-**Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
-
-### Real-Space Methods (Finite Difference)
-
-Real-space methods use **cell-centered grids** (same as pseudo-spectral methods) for consistent boundary condition handling:
-- **Reflecting BC**: Symmetric ghost cell ($`q_{-1} = q_0`$)
-- **Absorbing BC**: Antisymmetric ghost cell ($`q_{-1} = -q_0`$)
-
-#### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
-
-Alternating Direction Implicit method with Crank-Nicolson time stepping:
-1. Split 2D/3D problem into sequence of 1D problems
-2. Each direction solved implicitly with tridiagonal system
-3. 2nd-order accurate in space and time
-
-**Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
-
-### Method Selection Guidelines
-
-| Method | Order | Material Conservation | Best For | Limitations |
-|--------|-------|----------------------|----------|-------------|
-| RQM4 | 4th | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | General use, default choice | None |
-| RK2 | 2nd | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | Fast iterations | Lower accuracy |
-| CN-ADI2 | 2nd | Exact (10⁻¹⁶–10⁻¹⁴, round-off) | Periodic mixed with non-periodic boundaries (e.g. thin films) | Lower accuracy, continuous chains only |
-
-All methods support periodic, reflecting, and absorbing boundary conditions.
-
-**Note on Material Conservation**: Methods with "Exact" conservation satisfy (VU)†=VU where V is the volume matrix and U is the evolution operator. This ensures forward and backward partition functions are equal to machine precision. See Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312 for the theoretical foundation.
-
-## Units and Conventions
-
-- Length unit: $`b N^{1/2}`$ where $`b`$ is reference statistical segment length, $`N`$ is reference polymerization index
-- Fields: Defined as "per reference chain" potential (multiply by `ds` to get "per segment" potential)
-- This follows notation in *Macromolecules* **2013**, 46, 8037
-
-## Development Notes
-
-### When Modifying C++ Code
-
-1. Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:
-
-   ```bash
-   cd build && make -j8 && make install
-   ```
-
-2. Platform-specific features must be implemented in both `cpu/` and `cuda/` unless truly platform-dependent. The order of a computation goes into `src/common/Computation*.cpp` once; new grid operations go into both `ComputationBackend` implementations
-
-3. Memory management: allocations are owned by objects that release them. Device memory lives in `CudaDeviceBuffer<T>` and page-locked host memory in `CudaPinnedBuffer<T>` (`src/platforms/cuda/CudaCommon.h`), host arrays in `std::vector`, owned objects in `std::unique_ptr`, so destructors and constructors that throw need no cleanup code. Raw pointers are only lent (`.get()`, kernel and cuFFT arguments; test a buffer for null with `.empty()`); the exceptions are the factory functions, which hand ownership to the caller, the backends' `allocate()`/`deallocate()` and `allocate_checkpoint()`/`deallocate_checkpoint()` pairs, which are the allocators of the propagator handles and checkpoints, and the `CudaCommon` singleton; FFTW/MKL plans and descriptors and the `fftw_malloc` buffers of `FftwFFT`/`FftwCrysFFT*` are freed by those classes' `release()`. Every owned CUDA allocation goes through `counted_cuda_allocate()`, and every cuFFT plan, stream and event through the `count_*`/`release_*` helpers, so the live counters and the failure hook used by `tests/TestCudaDeviceBuffer.cu` see them
-
-4. The propagator computation optimizer (`PropagatorComputationOptimizer`) automatically detects redundant calculations using hash tables of `PropagatorCode` objects - avoid manual optimization
-
-### Design Decisions
-
-**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4`, `CpuSolverPseudoRK2`, and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
-- FFT object management (`init_shared`; the FFT and `Pseudo` objects are owning members)
-- Transform dispatch (`transform_forward`/`transform_backward`)
-- Laplacian operator updates (`update_laplacian_operator`)
-- Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
-
-The CUDA side mirrors this: `CudaSolverPseudoRQM4`, `CudaSolverPseudoRK2` and `CudaSolverPseudoDiscrete` derive from `CudaSolverPseudoBase`, which owns the cuFFT plans and DCT/DST objects (`fft_forward`/`fft_backward`/`fft_`), the space-group/CrysFFT setup (index maps from the platform-independent `CrysFFTBasisMapping.h`), `update_laplacian_operator`, the shared `update_dw_impl`, and `compute_single_segment_stress` itself (the derived classes only supply `stress_scratch`, the workspaces they lend; the discrete solver also overrides `get_stress_boltz_bond`). Mechanical real/complex differences (D2Z vs Z2Z cuFFT calls, CUB sum vs reduce) go through the overloads in `CudaTypeDispatch.h`; a remaining `if constexpr` on the field type marks a genuine algorithmic difference and is commented as such.
-
-**Computation Class Hierarchy**: the propagator computations are platform neutral and live in `src/common/`: `ComputationCommon<T>` (backend, scheduler, block/solvent concentrations, getters, stress conversion) with `ComputationContinuous<T>`, `ComputationDiscrete<T>` (full storage) and `ComputationReduceMemoryBase<T>` -> `ComputationReduceMemoryContinuous<T>`, `ComputationReduceMemoryDiscrete<T>` (checkpoints). They decide what is computed and in which order, and their loops read top to bottom in that order. Every grid operation goes through `ComputationBackend<T>` (`src/common/ComputationBackend.h`), implemented by `CpuComputationBackend<T>` (host arrays, OpenMP threads, CPU solvers) and `CudaComputationBackend<T>` (device arrays, CUDA streams, CUDA solvers, checkpoints in pinned host memory). The factories (`MklFactory`, `FftwFactory`, `CudaFactory`) create the computations with their backend; there are no platform-specific computation classes, and the C++ tests obtain computations through `tests/TestComputationFactory.h`. Backend rules: one operation is one physically meaningful step on whole fields (no array-level scale/add helpers); `BackendArray<T>` and `CheckpointArray<T>` are incomplete types, so common code cannot dereference them; reduce-memory mode reproduces full storage bit for bit (same segment pairs, weights and summation order).
-
-Derived solver classes implement chain-model-specific behavior:
-- `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
-- `advance_propagator`: Different algorithms (RQM4 vs simple step)
-- `advance_propagator_half_bond_step`: Discrete-specific implementation
-- `get_stress_boltz_bond`: the base returns nullptr (continuous chains); the discrete solver overrides it with boltz_bond
-
-**Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
-
-```text
-      FFT<T>              (abstract base - double* and complex* interfaces)
-        ↑
-   FftwFFT<T, DIM>        (CPU: FFTW for FFT, DCT, DST)
-   MklFFT<T, DIM>         (CPU: MKL for FFT, DCT, DST)
-   CudaFFTBase<T>         (GPU abstract base, src/platforms/cuda/CudaFFT.h: adds pure virtual
-        ↑                  forward_stream/backward_stream(..., cudaStream_t) overloads)
-   CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST; forward()/backward()
-                           call the stream versions on stream 0)
-```
-
-**FFT Implementation Rules** (CRITICAL - frequently violated, causes subtle bugs):
-
-FFT functions are called from multiple OpenMP threads simultaneously (propagator-level parallelism). This requires careful implementation to avoid race conditions and data corruption.
-
-1. **DO NOT multi-thread inside FFT**: Disable internal threading in FFTW and cuFFT. Parallelism happens at the propagator level, not inside FFT calls.
-
-2. **DO NOT share buffers between threads**: Internal work buffers MUST be `thread_local`. The class member `work_buffer_` and `complex_buffer_` can only be used for plan creation, not execution. Example pattern:
-
-   ```cpp
-   void forward(T* rdata, double* cdata) {
-       thread_local std::vector<double> work_local;  // Thread-safe
-       // NOT: std::memcpy(work_buffer_, rdata, ...);  // Race condition!
-   }
-   ```
-
-3. **ALWAYS preserve input arrays after transforms**: FFTW c2r and cuFFT c2r/z2d **destroy the input array** even for "out-of-place" transforms. Always copy input to a local buffer before executing when the input must be preserved across stages.
-
-4. **Use new-array execute functions**: In FFTW, use `fftw_execute_dft_r2c`, `fftw_execute_dft_c2r`, `fftw_execute_dft` (not plain `fftw_execute`) when operating on thread-local buffers.
-
-Violating these rules causes tests to fail with garbage values (e.g., partition function = -10^7 instead of ~1) or intermittent failures that are hard to debug.
-
-`FFT<T>` provides both interfaces:
-- `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
-- `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only
-
-`CudaFFT` additionally provides stream-aware methods for async execution:
-- `forward_stream(T*, double*, cudaStream_t)` / `backward_stream(double*, T*, cudaStream_t)`
-- `forward_stream(T*, complex<double>*, cudaStream_t)` / `backward_stream(complex<double>*, T*, cudaStream_t)`
-
-CPU solvers hold `std::unique_ptr<FFT<T>> fft_` and call `fft_->forward()` directly without dimension-specific casting; the CUDA solvers hold their DCT/DST objects as `std::unique_ptr<CudaFFTBase<T>>` and call `forward_stream()`/`backward_stream()` with the propagator's stream.
-
-### When Modifying Python Code
-
-Changes to `src/python/*.py` are picked up by the tests after `make` (they are staged into `build/python/`) and by the installed package after `make install`. No recompilation needed.
-
-### Deprecated/Internal Methods
-
-**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
-
-### Adding New Monomer Types or Interactions
-
-Modify only the parameter dictionary - the code supports arbitrary numbers of monomer types. The `SymmetricPolymerTheory` class handles interaction matrix eigendecomposition automatically.
-
-### Validation
-
-Results must match:
-- **PSCF** (https://github.com/dmorse/pscfpp) for continuous chains with even contour steps
-- **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
-- Results should be **identical across platforms** (CUDA vs CPU) within machine precision - verify by running same parameters on both platforms
-
-## Documentation and Learning
-
-- **Tutorials**: `tutorials/` contains Jupyter notebooks explaining theory and usage (see `tutorials/README.md` for recommended order)
-- **Examples**: `examples/scft/`, `examples/lfts/` and `examples/clfts/` contain runnable simulation scripts
-- **Architecture**: `docs/internals/DeveloperGuide.md` (layers, class hierarchies, ownership, one SCFT iteration, where to change what)
-- **API Documentation**: Can be generated with Doxygen using `Doxyfile` in root directory
-- **Deep Learning Extension**: For DL-boosted L-FTS, see https://github.com/yongdd/deep-langevin-fts
-
-### Math in Documentation
-
-GitHub renders math with MathJax only after its Markdown parser has gone over the text. Inside `$...$` and `$$...$$` a pair of `*` or `_` becomes emphasis, `[a](b)` becomes a link, and a backslash before punctuation is dropped (`\,` → `,`, `\{` → `{`, `\\` → `\`), so MathJax reports "Extra close brace or missing open brace" or shows a different formula. Write math only in the two forms whose content GitHub passes through unchanged:
-
-- Inline: `` $`a^{*} \, b`$ ``
-- Display: a fenced block with the info string `math`, at the top level or in a blockquote, never indented inside a list item (GitHub shows it as code when the list also contains inline math). End the list item before the block; a numbered list continues with `2.`.
-
-  ````markdown
-  ```math
-  a^{*} \, b
-  ```
-  ````
-
-- Inside math in a table row write `\vert` (and `\Vert`) instead of `|` (and `\|`): GitHub ends the cell at a `|` even inside the code span.
-- A literal dollar sign outside code is written `\$`.
-
-Check before pushing documentation changes (the CI lint job runs the same check):
-
-```bash
-npm install -g katex   # optional: without it the TeX syntax is not checked
-python scripts/check_latex.py
-```
-
-It reads every tracked `*.md` outside `devel/` and reports math in the `$...$`/`$$...$$` form, stray `$`, math blocks inside lists, `|` in table math, and formulas KaTeX cannot parse. VS Code's built-in preview renders the `math` blocks but shows inline `` $`...`$ `` with quote marks around it; GitHub is the reference.
-
-## Key References
-
-The implementation is based on these publications:
-- Chain propagator optimization: *J. Chem. Theory Comput.* **2025**, 21, 3676
-- Discrete chain model: *J. Chem. Phys.* **2019**, 150, 234901 (Park et al.)
-- Multi-monomer theory: *Macromolecules* **2025**, 58, 816
-- L-FTS algorithm: *Polymers* **2021**, 13, 2437
-- Field update methods: *J. Chem. Phys.* **2023**, 158, 114117
-- CUDA implementation: *Eur. Phys. J. E* **2020**, 43, 15
-- RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
-- RK2 method: *J. Polym. Sci. B* **2002**, 40, 1777 (Rasmussen, Kalosakas)
-- Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
-- Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)
+The checker validates TeX syntax only when the optional KaTeX CLI is available.
+For broader documentation changes, run it without file arguments.

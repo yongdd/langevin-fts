@@ -1,62 +1,17 @@
 # AGENTS.md
 
-**All project guidance for coding agents lives in [CLAUDE.md](CLAUDE.md). Read it in
-full before doing anything in this repository**: build commands, testing rules, code
-architecture, numerical methods, and the mandatory workflow rules (never commit without
-permission, never modify test parameters, leave `devel/` alone, use SLURM for long jobs).
+Read [CLAUDE.md](CLAUDE.md) in full before working in this repository. It contains
+the shared workflow rules, build commands, validation requirements and architecture
+guidance for all coding agents.
 
-This file only holds what CLAUDE.md does not: Codex-specific notes and notes about this
-cluster.
+## Codex Notes
 
-## Codex-specific notes
+- Follow the active environment's sandbox and approval policy. GPU access errors
+  do not imply that permission escalation is available or required.
+- Use the scheduler's allocated GPU devices on shared systems. Follow the local
+  resource policy rather than assuming a particular GPU index or cluster setup.
+- State material assumptions, consider numerical edge cases and check conclusions
+  against the current source and relevant tests.
 
-### Sandbox / Escalation (Important!)
-
-In this environment, GPU/NVML access from Codex often fails inside the sandbox
-(e.g., `nvidia-smi` -> NVML Unknown Error, CUDA tests -> `cudaErrorOperatingSystem`).
-When running any GPU-related command or CUDA test from Codex, request escalated
-permissions and set the GPU inline:
-
-```bash
-# Example: run CUDA tests on an idle GPU with escalation
-CUDA_VISIBLE_DEVICES=1 ctest -L basic -R TestCudaFFT --output-on-failure
-```
-
-Assume GPU commands require `require_escalated` unless proven otherwise.
-
-### Additional workflow rules
-
-- **Default to extra-high reasoning**: State assumptions explicitly, check edge cases and
-  plausible failure modes, and validate conclusions against repository constraints before
-  giving the final answer.
-- **로그인 노드에서 빌드/설치/테스트 허용**: 로그인 노드에서 `make`, `make install`, `ctest`
-  실행을 허용한다. 단 `nice -n 10 make -j4`까지만(로그인 노드는 공용, 8코어 cgroup 제한).
-- **Review before asking to commit**: run the tests that cover the change and have the
-  diff reviewed (a second agent or a careful second pass) first.
-
-## Notes for any agent on this cluster
-
-- **CUDA toolkit**: `conda activate polymerfts` does not provide `nvcc`; put a 12.2+
-  toolkit on PATH (`/opt/ohpc/pub/cuda/12.4.1/bin`, or `module load cuda/12.4.1`) before
-  configuring. The device code is C++20, so with CUDA 11.x (still the default in some shell
-  profiles) the configure step warns and builds without the GPU backend
-  (`POLYMERFTS_USE_CUDA=AUTO`), or stops with `-DPOLYMERFTS_USE_CUDA=ON`. The `polymerfts` conda environment
-  carries CUDA 11.8 runtime libraries (`cudatoolkit`); the build links the toolkit's own
-  cuFFT regardless.
-- **Warning check for new host C++** (CI builds with `POLYMERFTS_WERROR`, see CLAUDE.md):
-  `g++ -O3 -DNDEBUG -Wall -Werror -c file.cpp` (a `-fsyntax-only` pass misses
-  `-Wmaybe-uninitialized`). nvcc-compiled `.cu` files are not covered by the option.
-- **GPU quota**: the QOS allows 8 GPUs per user and the maintainer's own training jobs
-  often hold them all, so a `--gres=gpu:1` test job can pend for hours
-  (`QOSMaxGRESPerUser`). Fallback accepted by the maintainer: CPU-only SLURM jobs
-  (no `--gres`). Without a visible GPU, `avail_platforms()` omits `cuda`, so the Python
-  tests pass there; the C++ tests with a CUDA part (TestCuda*, TestPseudo*,
-  TestCrankNicolson*, TestCrysFFT* and others) fail on purpose, so that a CUDA build
-  tested without a GPU never looks like a pass. That is expected on such a node, not a
-  regression.
-- **Constructing `SCFT`/`LFTS`/`CLFTS` writes `polymer_<id>.png`** into the current
-  directory (chain-architecture drawings). Run throwaway checks from a scratch directory,
-  not from the repository root.
-- **Several versions side by side**: `scripts/install_versioned.sh` builds a wheel into
-  `~/wheels` and installs it into `~/venvs/polymerfts-<version>` (see
-  docs/getting-started/Installation.md).
+Keep these project guides in English and independent of personal accounts,
+machine-specific paths, credentials and private infrastructure details.
