@@ -40,7 +40,8 @@ class SCFTResult:
     converged : bool
         Whether the simulation converged within tolerance.
     free_energy : float
-        Final free energy per unit volume (dimensionless).
+        Final free energy per chain unit relative to the homogeneous state
+        (0 for the disordered phase).
     error_level : float
         Final convergence error (L2 norm of field residuals).
     iterations : int
@@ -64,6 +65,12 @@ class SCFTResult:
         List of monomer type labels.
     params : dict
         Original simulation parameters.
+    free_energy_homogeneous : float
+        Free energy of the homogeneous state, (1/2) φ̄ᵀ χN φ̄ with the mean
+        concentrations φ̄, from which free_energy is measured;
+        free_energy + free_energy_homogeneous is the mean-field free energy and the
+        field-theoretic Hamiltonian with its constant at the saddle point (as
+        recorded by L-FTS).
     """
     converged: bool
     free_energy: float
@@ -78,6 +85,7 @@ class SCFTResult:
     params: Dict[str, Any]
     stress: Optional[np.ndarray] = None
     angles: Optional[List[float]] = None
+    free_energy_homogeneous: Optional[float] = None
 
     def get_concentration(self, monomer_type: str) -> np.ndarray:
         """Get concentration field for a monomer type.
@@ -292,23 +300,12 @@ class SCFT:
                     matrix_chi[j,i] = self.chi_n[key]
         
         self.matrix_chi = matrix_chi
-        if self.zeta_n is None:
-            # Incompressible: at least two monomer types. A singular χN (a zero pair in a
-            # three-monomer system, chemically identical monomers) is fine. A zero eigenvalue of
-            # the projected χN whose auxiliary field has a linear coefficient S (for an invertible
-            # χN: 1ᵀ(χN)⁻¹1 = 0, e.g. χ_AB = χ_AC = 10, χ_BC = 40) acts only as a uniform field
-            # and leaves the default free energy unchanged, but the constant of the field theory,
-            # which fts_consistent_energy includes, holds -S²/(2λM) and has no value there
-            if M < 2:
-                raise ValidationError("Incompressible SCFT needs at least two monomer types.")
-            dropped = [k for k, role in enumerate(self.mpt._roles) if role == "dropped"]
-            scale = max(np.max(np.abs(matrix_chi)), 1.0)
-            if params.get("fts_consistent_energy", False) and \
-                    any(abs(self.mpt._vector_large_s[k]) > 1e-8 * scale for k in dropped):
-                raise ValidationError("fts_consistent_energy needs 1ᵀ(χN)⁻¹1 != 0 (the sum of all entries of the inverse "
-                                      "chi N matrix): for this chi N matrix a zero eigenvalue of the projected chi N "
-                                      "matrix has a linear term, and the constant of the field-theoretic free energy "
-                                      "is undefined.")
+        # Incompressible SCFT needs at least two monomer types. A singular χN (a zero pair in a
+        # three-monomer system, chemically identical monomers) is fine, and so is 1ᵀ(χN)⁻¹1 = 0,
+        # where the auxiliary field of a zero eigenvalue of the projected χN has a linear term:
+        # it acts as a uniform field, and the free energy is computed from the monomer fields
+        if self.zeta_n is None and M < 2:
+            raise ValidationError("Incompressible SCFT needs at least two monomer types.")
 
         # Field residual (see the run loop): the composition part is projected with
         # P⊥ = I - eeᵀ/M, and the pressure part is scaled by κ = max(max|λ|, 1)/2 with λ
@@ -990,34 +987,47 @@ class SCFT:
         angle_stress_map = {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
         angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
         stress_array = None
+
+        # Free energy of the homogeneous state of the same composition, (1/2) φ̄ᵀ χN φ̄: for uniform
+        # fields -Σ_p (φ̄_p/α_p) ln Q_p = Σ_i w_i φ̄_i, so the free energy below is that value plus
+        # zero; the reported free energy is measured from it (0 for the disordered phase)
+        phi_mean = self.mean_concentrations()
+        self.free_energy_homogeneous = 0.5*float(phi_mean @ self.matrix_chi @ phi_mean)
+
         time_iter_start = time.time()
         for iter in range(1, self.max_iter+1):
 
             # Concentrations for the current fields
             phi, runtime_info = self.compute_concentrations(w, q_init=q_init)
 
-            # Total energy from the auxiliary fields and the partition functions
-            w_aux = self.mpt.to_aux_fields(w)
-            total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-            if self.sg is not None and self.sg.physical_basis_name() != "irreducible":
-                w_aux_energy = self.sg.irreducible_to_reduced(w_aux)
-            else:
-                w_aux_energy = w_aux
-            energy_total = self.mpt.compute_hamiltonian(
-                self.prop_solver.molecules,
-                w_aux_energy,
-                total_partitions,
-                self.cb,
-                include_const_term=False
-            )
-
             # Deviation of the total density from 1
             phi_total = sum(phi[m] for m in self.monomer_types)
             phi_diff = phi_total - 1.0
 
-            # Self-consistency residual, phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
+            # Concentrations the fields couple to (smeared with smearing), phi_array[i] =
+            # phi[monomer_types[i]], shape (M, n_grid)
             phi_smeared = self.smearing.apply_to_dict(phi)
             phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
+
+            # Mean-field free energy per chain unit from the monomer fields,
+            # F = -Σ_p (φ̄_p/α_p) ln Q_p + <½ φᵀ χN φ - w·φ> (+ <(ζN/2)(Σφ - 1)²>), measured from the
+            # homogeneous state. It does not change under uniform shifts of the fields (the volume
+            # averages of φ are fixed by the chains), so it is the same for any convention of the
+            # field means; F + free_energy_homogeneous at the saddle point is the field-theoretic
+            # Hamiltonian with its constant (as in L-FTS)
+            total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
+            energy_total = -self.free_energy_homogeneous
+            for p in range(self.prop_solver.get_n_polymer_types()):
+                polymer = self.prop_solver.get_polymer(p)
+                energy_total -= polymer.get_volume_fraction()/polymer.get_alpha()*np.log(total_partitions[p])
+            for i in range(M):
+                for j in range(i+1, M):
+                    if self.matrix_chi[i, j] != 0.0:
+                        energy_total += self.matrix_chi[i, j]*self.prop_solver.mean(phi_array[i]*phi_array[j])
+                energy_total -= self.prop_solver.mean(w[i]*phi_array[i])
+            if self.zeta_n is not None:
+                energy_total += 0.5*self.zeta_n*self.prop_solver.mean((np.sum(phi_array, axis=0) - 1.0)**2)
+
             # The SCFT equations are w = χφ + ξe with Σφ = 1 (incompressible), or w = χφ + ζ(Σφ - 1)e
             # (compressible), e = (1, ..., 1). Composition part: P⊥(χφ - w), the residual of the
             # exchange fields of the symmetric theory. Pressure part along e: κ(Σφ - 1), which raises
@@ -1136,6 +1146,7 @@ class SCFT:
             energy_total_per_chain = energy_total*self.prop_solver.get_polymer(p).get_alpha()/ \
                                                   self.prop_solver.get_polymer(p).get_volume_fraction()
             print("\tβF/n_%d : %12.7f" % (p, energy_total_per_chain))
+        print("Measured from the homogeneous state, (1/2) φ̄ᵀ χN φ̄ = %.7f per chain unit" % self.free_energy_homogeneous)
 
         # Final partition consistency check (only once at the end)
         if not self.prop_solver.check_total_partition():
@@ -1167,6 +1178,7 @@ class SCFT:
                 stress=stress_array if self.box_is_altering else None,
                 angles=list(self.prop_solver.get_angles_degrees()) if (
                     len(self.angles_reduced_indices) > 0
-                ) else None
+                ) else None,
+                free_energy_homogeneous=self.free_energy_homogeneous
             )
         return None

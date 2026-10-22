@@ -67,7 +67,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `segment_lengths` | dict | Relative statistical segment lengths $`b/b_{ref}`$ (linear ratio; the code squares this internally) | `{"A": 1.0, "B": 1.0}` |
-| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). A singular χN matrix (e.g. a zero pair in a three-monomer system, or chemically identical monomers) is accepted. Incompressible SCFT rejects a single monomer type, and with `fts_consistent_energy` a χN matrix for which a zero eigenvalue of the projected χN has a linear coefficient (for an invertible χN: $`\mathbf{1}^T (\chi N)^{-1} \mathbf{1} = 0`$), where the constant of the field-theoretic free energy has no value | `{"A,B": 20.0}` |
+| `chi_n` | dict | Flory-Huggins parameters × $`N_{ref}`$; pairs that are omitted do not interact (χN = 0). A singular χN matrix (e.g. a zero pair in a three-monomer system, or chemically identical monomers) is accepted. Incompressible SCFT rejects a single monomer type | `{"A,B": 20.0}` |
 | `zeta_n` | float | (Optional) Compressibility parameter $`\zeta N \geq 0`$ of the compressible model. Omitted: incompressible ($`\sum_i \phi_i = 1`$) in SCFT and L-FTS; CL-FTS needs a finite value and defaults to `100.0` | `100.0` |
 
 ### Polymer Definition
@@ -217,7 +217,7 @@ All keys are **required** (omitting one raises `KeyError`). The values above are
 | `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
 | `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
 | `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
-| `fts_consistent_energy` | bool | Pin the field means to the saddle point so that the SCFT free energy matches the field-theoretic Hamiltonian of L-FTS/CL-FTS (disordered phase: $`F = -\chi N (f - 1/2)^2`$ instead of 0). No effect on compressible runs (`zeta_n`), whose field means are fixed by the saddle point | `False` |
+| `fts_consistent_energy` | bool | Pin the field means to the saddle point, so that the fields are those of the field theory of L-FTS/CL-FTS (otherwise the incompressible fields have zero means). The free energy does not depend on it. No effect on compressible runs (`zeta_n`), whose field means are fixed by the saddle point | `False` |
 
 Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
 

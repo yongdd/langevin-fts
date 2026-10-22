@@ -12,9 +12,11 @@ fts_consistent_energy residual 2.18, F = 1.886 and -0.060).
 
 Checks (1D lamellae of AB diblocks and an ABC triblock):
 1. The compressible residual is below 1e-6 and sum phi is not uniform.
-2. The reported free energy plus the constant h_const equals the mean-field free
-   energy -ln Q + <(1/2) phi.chi.phi + (zeta/2)(sum phi - 1)^2 - w.phi> computed
-   from the fields (AB; 1e-9).
+2. The reported free energy plus free_energy_homogeneous equals the mean-field
+   free energy -ln Q + <(1/2) phi.chi.phi + (zeta/2)(sum phi - 1)^2 - w.phi>
+   computed from the fields (AB; 1e-9). Until 2026-10 the reported free energy
+   was this value minus the constant h_const of the field theory, which has poles
+   in chi N, instead of minus the free energy of the homogeneous state.
 3. zeta -> infinity: the free energy and phi approach the incompressible solution
    as 1/zeta (the ratio of the differences at zeta N = 100 and 1000 is near 10).
 4. fts_consistent_energy does not change a compressible run (no gauge freedom).
@@ -96,7 +98,7 @@ def main():
         check(calc.error_level < 1e-9 and r["residual"] < 1e-6 and r["std_total"] > 1e-2,
               f"{name}, zetaN 5: compressible residual {r['residual']:.1e}, std(sum phi) {r['std_total']:.1e}, "
               f"{calc.iter} iterations")
-        F_code = calc.free_energy + calc.mpt.h_const
+        F_code = calc.free_energy + calc.free_energy_homogeneous
         check(abs(F_code - r["F"]) < 1e-9,
               f"{name}, zetaN 5: free energy {F_code:.12f} = mean-field value {r['F']:.12f}")
 

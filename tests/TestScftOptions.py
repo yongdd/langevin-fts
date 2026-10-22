@@ -12,11 +12,16 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    order ["b", "a"] reproduces the run in the standard order (results are in the
    standard order). Until 2026-10 the initial fields and the boundary conditions
    were not reordered (walls on the wrong axis: dF 9e-2 here).
-3. 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10, chi_BC = 40): the auxiliary field
-   of the zero eigenvalue of the projected chi N has a linear term and acts as a
-   uniform field. The default free energy and the box are the limit of
-   chi_BC N = 40 -+ 1e-4 (their mean, to 1e-9); with fts_consistent_energy, whose
-   constant holds -S^2/(2 lambda M) and has no value there, the run is rejected.
+3. Free energy: the mean-field free energy from the monomer fields, measured from
+   the homogeneous state (1/2) phibar^T chi N phibar, does not depend on the
+   convention of the field means (fts_consistent_energy on or off, 1e-10), is 0 in
+   the disordered phase at any composition, and plus free_energy_homogeneous equals
+   at the saddle point the field-theoretic Hamiltonian with its constant (as
+   recorded by L-FTS). Until 2026-10 the free energy depended on the convention:
+   with fts_consistent_energy it was -chi N (f - 1/2)^2 in the disordered phase. At 1^T (chi N)^-1 1 = 0 (chi_AB = chi_AC = 10, chi_BC = 40) the auxiliary
+   field of the zero eigenvalue of the projected chi N has a linear term and acts as
+   a uniform field: F and the box are the limit of chi_BC N = 40 -+ 1e-4 (their
+   mean, to 1e-9), also with fts_consistent_energy.
 4. Field residual: the incompressible and compressible SCFT converge for chi N
    matrices with c = 1^T (chi N)^-1 1 < 0 (AB with chi N = -5; ABC with chi_AB N =
    chi_BC N = 10, chi_AC N = 60, and with chi_AB N = chi_AC N = 10, chi_BC N = 50),
@@ -129,30 +134,46 @@ def test_axis_ordering():
           f"(dF {abs(standard.free_energy - reordered.free_energy):.1e}, dphi {d_phi:.1e})")
 
 
-def test_singular_projector():
+def test_free_energy():
     x = (np.arange(64) + 0.5) / 64
-    wave = 4.0 * np.cos(2 * np.pi * x)
-    fields = {"A": wave, "B": np.zeros(64), "C": -wave}
-    results = []
-    for chi_bc in (40.0, 40.0 + 1e-4, 40.0 - 1e-4):
-        params = base([64], [1.3], {"A,B": 10.0, "A,C": 10.0, "B,C": chi_bc}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], True)
+    wave = 3.0 * np.cos(2 * np.pi * x)
+    blocks = [("A", 0.3), ("B", 0.7)]
+    runs = {}
+    for fts in (False, True):
+        params = base([64], [1.6], {"A,B": 20.0}, blocks, False)
         params["tolerance"] = 1e-10
-        results.append(run(params, fields))
-    F = [r.free_energy for r in results]
-    L = [r.prop_solver.get_lx()[0] for r in results]
-    dF, dL = abs(F[0] - 0.5 * (F[1] + F[2])), abs(L[0] - 0.5 * (L[1] + L[2]))
-    check(results[0].error_level < 1e-10 and dF < 1e-9 and dL < 1e-8,
-          f"1^T (chi N)^-1 1 = 0: F and the box are the limit of the neighbors (dF {dF:.1e}, dL {dL:.1e})")
+        params["fts_consistent_energy"] = fts
+        runs[fts] = run(params, {"A": wave, "B": -wave})
+    dF = abs(runs[False].free_energy - runs[True].free_energy)
+    calc = runs[True]
+    w_aux = calc.mpt.to_aux_fields(np.array(calc.w))
+    total_partitions = [calc.prop_solver.get_partition_function(p) for p in range(calc.prop_solver.get_n_polymer_types())]
+    H = calc.mpt.compute_hamiltonian(calc.prop_solver.molecules, w_aux, total_partitions, calc.cb, include_const_term=True)
+    dH = abs(H - calc.free_energy - calc.free_energy_homogeneous)
+    check(dF < 1e-10 and dH < 1e-8, f"AB f = 0.3, chi N = 20: F with zero field means = F with saddle means ({dF:.1e}); "
+                                     f"F + free_energy_homogeneous = field-theoretic H with its constant ({dH:.1e})")
+    for fts in (False, True):
+        params = base([16], [1.6], {"A,B": 8.0}, blocks, False)
+        params["fts_consistent_energy"] = fts
+        disordered = run(params, {"A": np.zeros(16), "B": np.zeros(16)})
+        check(abs(disordered.free_energy) < 1e-12 and abs(disordered.free_energy_homogeneous - 8.0 * 0.3 * 0.7) < 1e-12,
+              f"disordered AB f = 0.3, chi N = 8{', fts_consistent_energy' if fts else ''}: F = 0 "
+              f"({disordered.free_energy:.1e}), free_energy_homogeneous = chi N f(1 - f)")
 
-    params = base([16], [2.0], {"A,B": 10.0, "A,C": 10.0, "B,C": 40.0}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], False)
-    params["fts_consistent_energy"] = True
-    try:
-        with contextlib.redirect_stdout(io.StringIO()):
-            scft.SCFT(params=params)
-        rejected = False
-    except ValidationError as e:
-        rejected = "1ᵀ(χN)⁻¹1" in str(e)
-    check(rejected, "1^T (chi N)^-1 1 = 0 with fts_consistent_energy is rejected")
+    fields = {"A": 4.0 * np.cos(2 * np.pi * x), "B": np.zeros(64), "C": -4.0 * np.cos(2 * np.pi * x)}
+    for fts in (False, True):
+        results = []
+        for chi_bc in (40.0, 40.0 + 1e-4, 40.0 - 1e-4):
+            params = base([64], [1.3], {"A,B": 10.0, "A,C": 10.0, "B,C": chi_bc}, [("A", 0.3), ("B", 0.4), ("C", 0.3)], True)
+            params["tolerance"] = 1e-10
+            params["fts_consistent_energy"] = fts
+            results.append(run(params, fields))
+        F = [r.free_energy for r in results]
+        L = [r.prop_solver.get_lx()[0] for r in results]
+        dF, dL = abs(F[0] - 0.5 * (F[1] + F[2])), abs(L[0] - 0.5 * (L[1] + L[2]))
+        check(results[0].error_level < 1e-10 and dF < 1e-9 and dL < 1e-8,
+              f"1^T (chi N)^-1 1 = 0{' with fts_consistent_energy' if fts else ''}: F and the box are the limit of "
+              f"the neighbors (dF {dF:.1e}, dL {dL:.1e})")
 
 
 def test_field_residual():
@@ -207,10 +228,7 @@ def test_singular_chi():
             if zeta_n is not None:
                 p["zeta_n"] = zeta_n
             results.append(run(p, {"A": wave, "B": -wave, "C": 0.5 * wave}))
-        # The compressible free energy leaves out the constant h_const, which depends on chi N
-        # (here by about -20 chi_AC N), so the mean-field free energies F + h_const are compared
-        energy = [r.free_energy + (0.0 if zeta_n is None else r.mpt.h_const) for r in results]
-        dF = abs(energy[0] - energy[1])
+        dF = abs(results[0].free_energy - results[1].free_energy)
         dL = abs(results[0].prop_solver.get_lx()[0] - results[1].prop_solver.get_lx()[0])
         check(all(r.error_level < 1e-10 for r in results) and dF < 1e-6 and dL < 1e-6,
               f"ABC with chi_AC N = 0, {model}: the limit chi_AC N -> 0 (dF {dF:.1e} and dL {dL:.1e} to chi_AC N = 1e-6)")
@@ -219,7 +237,7 @@ def test_singular_chi():
 def main():
     test_angle_relaxation()
     test_axis_ordering()
-    test_singular_projector()
+    test_free_energy()
     test_field_residual()
     test_singular_chi()
     print(f"\n{n_pass} passed, {n_fail} failed")

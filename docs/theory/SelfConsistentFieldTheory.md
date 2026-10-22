@@ -343,7 +343,8 @@ for iteration in range(1000):
 | Property | Access | Description |
 |----------|--------|-------------|
 | Concentration | `calculation.phi["A"]` | Monomer density field |
-| Free energy | `calculation.free_energy` | Helmholtz free energy per chain |
+| Free energy | `calculation.free_energy` | Helmholtz free energy per chain from the monomer fields ([PolymerFieldTheory.md](PolymerFieldTheory.md), Section 1.1), relative to the homogeneous state of the same composition (0 for the disordered phase); independent of the convention of the field means |
+| Homogeneous state | `calculation.free_energy_homogeneous` | $`\frac{1}{2} \bar{\boldsymbol{\phi}}^T X \bar{\boldsymbol{\phi}}`$, the free energy of the homogeneous state; `free_energy` plus this value is the field-theoretic Hamiltonian with its constant at the saddle point (as recorded by L-FTS) |
 | Partition function | `solver.get_partition_function(p)` | Single-chain partition function |
 | Box size | `calculation.cb.get_lx()` | Final box dimensions |
 | Stress | `result.stress` | Stress components; available via `result = calculation.run(..., return_result=True)` (set only when `box_is_altering=True`), or via `solver.compute_stress()` / `solver.get_stress()` |
