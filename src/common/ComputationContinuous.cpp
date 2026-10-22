@@ -193,13 +193,12 @@ void ComputationContinuous<T>::compute_concentrations()
         // Concentration of each block (several blocks when propagators are aggregated)
         ParallelErrors errors;
         #pragma omp parallel for num_threads(this->n_streams)
-        for (size_t b = 0; b < this->phi_block.size(); b++)
+        for (size_t b = 0; b < this->phi_block_iterators.size(); b++)
         {
             errors.run([&]
             {
                 const int STREAM = omp_get_thread_num();
-                auto it = this->phi_block.begin();
-                std::advance(it, b);
+                const auto it = this->phi_block_iterators[b];
                 const auto& [p, key_left, key_right] = it->first;
                 const auto& block = this->propagator_computation_optimizer->get_computation_block(it->first);
                 const int N_LEFT  = block.n_segment_left;
@@ -244,13 +243,12 @@ void ComputationContinuous<T>::compute_stress()
         std::vector<std::array<T, 6>> stress_of_block(this->phi_block.size());
         ParallelErrors errors;
         #pragma omp parallel for num_threads(this->n_streams)
-        for (size_t b = 0; b < this->phi_block.size(); b++)
+        for (size_t b = 0; b < this->phi_block_iterators.size(); b++)
         {
             errors.run([&]
             {
                 const int STREAM = omp_get_thread_num();
-                auto it = this->phi_block.begin();
-                std::advance(it, b);
+                const auto it = this->phi_block_iterators[b];
                 const auto& [p, key_left, key_right] = it->first;
                 const auto& block = this->propagator_computation_optimizer->get_computation_block(it->first);
                 const int N_LEFT  = block.n_segment_left;

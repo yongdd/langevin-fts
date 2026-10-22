@@ -35,6 +35,11 @@ ComputationCommon<T>::ComputationCommon(
 
         for (const auto& item : propagator_computation_optimizer->get_computation_blocks())
             phi_block[item.first] = backend->allocate();
+
+        phi_block_iterators.reserve(phi_block.size());
+        for (auto it = phi_block.cbegin(); it != phi_block.cend(); ++it)
+            phi_block_iterators.push_back(it);
+
         for (int s = 0; s < molecules->get_n_solvent_types(); s++)
             phi_solvent.push_back(backend->allocate());
 
@@ -58,6 +63,7 @@ template <typename T>
 void ComputationCommon<T>::release()
 {
     sc.reset();
+    phi_block_iterators.clear();
     if (backend != nullptr)
     {
         for (const auto& item : phi_block)

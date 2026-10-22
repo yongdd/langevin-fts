@@ -79,6 +79,10 @@ protected:
     /// Unnormalized segment-product integral of each block; getters apply the
     /// canonical or fugacity normalization, including when volume fraction is zero.
     std::map<std::tuple<int, std::string, std::string>, BackendArray<T>*> phi_block;
+
+    /// Indexed access in map order. The block map is fixed after construction.
+    std::vector<typename decltype(phi_block)::const_iterator> phi_block_iterators;
+
     std::vector<BackendArray<T>*> phi_solvent;     ///< Concentration of each solvent
     std::map<std::string, BackendArray<T>*> w;     ///< Fields of the last compute_propagators()
 
