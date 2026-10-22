@@ -217,7 +217,6 @@ All keys are **required** (omitting one raises `KeyError`). The values above are
 | `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
 | `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
 | `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
-| `fts_consistent_energy` | bool | Pin the field means to the saddle point, so that the fields are those of the field theory of L-FTS/CL-FTS (otherwise the incompressible fields have zero means). The free energy does not depend on it. No effect on compressible runs (`zeta_n`), whose field means are fixed by the saddle point | `False` |
 
 Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
 

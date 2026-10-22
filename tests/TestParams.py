@@ -80,7 +80,6 @@ def main():
         "tolerance": calc.tolerance == 1e-8,
         "stress_interval": calc.stress_interval == 1,
         "scale_stress": calc.scale_stress == 1,
-        "fts_consistent_energy": calc.fts_consistent_energy is False,
         "zeta_n": calc.zeta_n is None,
         "space_group": calc.sg is None,
         "monomer_types": calc.monomer_types == ["A", "B"],
@@ -98,11 +97,11 @@ def main():
     # ---- explicit options reach the solver
     params = base_params()
     params.update({"max_iter": 10, "tolerance": 1e-5, "stress_interval": "adaptive", "scale_stress": 2.0,
-                   "fts_consistent_energy": True, "zeta_n": 100.0, "numerical_method": "rk2",
+                   "zeta_n": 100.0, "numerical_method": "rk2",
                    "crystal_system": "Cubic", "box_is_altering": True})
     calc = build(SCFT, params)
     if not (calc.max_iter == 10 and calc.tolerance == 1e-5 and calc.stress_interval == "adaptive"
-            and calc.scale_stress == 2.0 and calc.fts_consistent_energy is True and calc.zeta_n == 100.0
+            and calc.scale_stress == 2.0 and calc.zeta_n == 100.0
             and calc.prop_solver.numerical_method == "rk2"
             and calc.lx_reduced_indices == [0] and calc.lx_full_indices == [0, 0, 0]):
         print("FAILED: SCFT explicit options")

@@ -19,7 +19,6 @@ Checks (1D lamellae of AB diblocks and an ABC triblock):
    in chi N, instead of minus the free energy of the homogeneous state.
 3. zeta -> infinity: the free energy and phi approach the incompressible solution
    as 1/zeta (the ratio of the differences at zeta N = 100 and 1000 is near 10).
-4. fts_consistent_energy does not change a compressible run (no gauge freedom).
 """
 
 import os
@@ -114,12 +113,6 @@ def main():
     check(5 < ratio_F < 20 and 5 < ratio_phi < 20 and diffs[1000.0][1] < 1e-2,
           f"zetaN 100 -> 1000: |F - F_inc| {diffs[100.0][0]:.2e} -> {diffs[1000.0][0]:.2e}, "
           f"max|phi - phi_inc| {diffs[100.0][1]:.2e} -> {diffs[1000.0][1]:.2e} (1/zeta)")
-
-    # fts_consistent_energy has nothing to pin in a compressible model
-    r1 = run(chi_n, blocks, lx, 50.0, ab_init)
-    r2 = run(chi_n, blocks, lx, 50.0, ab_init, {"fts_consistent_energy": True})
-    check(abs(r1["calc"].free_energy - r2["calc"].free_energy) < 1e-12 and np.max(np.abs(r1["phi"] - r2["phi"])) < 1e-12,
-          "zetaN 50: fts_consistent_energy True and False give the same run")
 
     # ABC triblock (three fields, the projector residual with M = 3)
     abc_init = {"A": 3 * np.cos(2 * np.pi * x / NX), "B": np.zeros(NX), "C": -3 * np.cos(2 * np.pi * x / NX)}

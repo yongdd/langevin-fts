@@ -108,7 +108,7 @@ The field means have no gauge freedom in the compressible model; they are set di
 \langle w_i \rangle \leftarrow \sum_j X_{ij} \langle \phi_j \rangle + \xi
 ```
 
-where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$ and $`\langle \phi_j \rangle`$ is fixed by the chain compositions. This pinning runs for every compressible run, whatever `fts_consistent_energy` is.
+where $`\xi = \zeta N \left( \langle \sum_j \phi_j \rangle - 1 \right)`$ and $`\langle \phi_j \rangle`$ is fixed by the chain compositions. This pinning runs for every compressible run.
 
 #### Example: AB Diblock (Compressible)
 

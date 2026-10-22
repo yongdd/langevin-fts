@@ -556,11 +556,12 @@ class SCFT:
             raise ValidationError(f"'max_iter' must be at least 1, got {self.max_iter}")
         self.tolerance = params.get("tolerance", 1e-8)     # stop when the self-consistency error is below this
 
-        # FTS-consistent energy convention: pin the field means to the saddle point
-        # so the SCFT free energy matches the field-theoretic Hamiltonian used in
-        # L-FTS/CL-FTS (F_dis = -chi_N*(f-1/2)^2 for the disordered phase).
-        # Off: mean = 0 convention (F_dis = 0 for the disordered phase).
-        self.fts_consistent_energy = params.get("fts_consistent_energy", False)
+        # The fields of an incompressible run have zero means (the free energy, computed from
+        # the monomer fields, does not depend on them); fts_consistent_energy, which pinned
+        # them to the saddle point, has no effect any more
+        if "fts_consistent_energy" in params:
+            print("Warning: 'fts_consistent_energy' has no effect: the free energy does not depend on the "
+                  "field means, and incompressible fields have zero means.")
 
     # =========================================================================
     # Class Methods
@@ -789,21 +790,13 @@ class SCFT:
         Compressible systems have no gauge freedom: the means are always pinned to the
         saddle point, mean(w_i) = sum_j chi_ij mean(phi_j) + xi with
         xi = zeta (mean(sum_j phi_j) - 1) (the residual leaves the means out).
-        Incompressible systems with fts_consistent_energy: only the composition part of the
-        means (P⊥ = I - eeᵀ/M) is pinned; the uniform pressure mean(W+) is a gauge freedom.
-        Otherwise (mean = 0 convention) incompressible fields are shifted to zero mean.
+        Incompressible fields are shifted to zero mean (the uniform modes do not change the
+        concentrations, and the free energy does not depend on them).
         """
         M = len(self.monomer_types)
         if self.zeta_n is not None:
             for i in range(M):
                 w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
-        elif self.fts_consistent_energy:
-            p_target = self.matrix_q_perp @ chi_phi_mean
-            w_mean = np.array([self.prop_solver.mean(w[i]) for i in range(M)])
-            p_current = self.matrix_q_perp @ w_mean
-            shift = p_target - p_current
-            for i in range(M):
-                w[i] += shift[i]
         else:
             for i in range(M):
                 w[i] -= self.prop_solver.mean(w[i])
@@ -966,10 +959,9 @@ class SCFT:
             for i in range(M):
                 w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
-        # Normalize the initial field means. With fts_consistent_energy or a compressible
-        # model the target is chi N . mean(phi) (+ xi) from the chain compositions
-        # (see mean_concentrations)
-        if self.fts_consistent_energy or self.zeta_n is not None:
+        # Normalize the initial field means. In a compressible model the target is
+        # chi N . mean(phi) + xi from the chain compositions (see mean_concentrations)
+        if self.zeta_n is not None:
             phi_mean = self.mean_concentrations()
             xi = 0.0 if self.zeta_n is None else self.zeta_n * (np.sum(phi_mean) - 1.0)
             self._pin_field_means(w, self.matrix_chi @ phi_mean, xi)
@@ -1126,7 +1118,7 @@ class SCFT:
                 w = np.reshape(w, (M, -1))
 
             # Normalize field means
-            if self.fts_consistent_energy or self.zeta_n is not None:
+            if self.zeta_n is not None:
                 # mean(φ_i) = f_i exactly by chain normalization, so the target is constant
                 chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
                 xi = 0.0 if self.zeta_n is None else self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)

@@ -291,8 +291,8 @@ commits are omitted.
   three-monomer system (det χN = 2 χ_AB χ_AC χ_BC) and chemically identical monomers, nor
   1ᵀ(χN)⁻¹1 = 0. There the auxiliary field of a zero eigenvalue of the projected χN has a
   linear term and acts as a uniform field: free energy and box are the limit of the
-  neighbors (χ_AB N = χ_AC N = 10, χ_BC N = 40: the mean of χ_BC N = 40 -+ 10⁻⁴ to 10⁻¹¹),
-  also with `fts_consistent_energy`. A single monomer type is still rejected in the
+  neighbors (χ_AB N = χ_AC N = 10, χ_BC N = 40: the mean of χ_BC N = 40 -+ 10⁻⁴ to 10⁻¹¹).
+  A single monomer type is still rejected in the
   incompressible model. An ABC triblock whose B and C are identical gives the free energy of
   the AB diblock to 10⁻¹³, and a zero pair (χ_AC N = 0) the limit χ_AC N → 0
   (tests/TestScftOptions.py).
@@ -300,14 +300,17 @@ commits are omitted.
   F = -Σ_p (φ̄_p/α_p) ln Q_p + <½ φᵀ χN φ - w·φ> (+ <(ζN/2)(Σφ - 1)²>), and reports it
   relative to the homogeneous state of the same composition, ½ φ̄ᵀ χN φ̄, which is stored as
   `free_energy_homogeneous` (also in SCFTResult) and printed. The disordered phase has
-  F = 0 at any composition, the value does not depend on the convention of the field means
-  (`fts_consistent_energy` now only sets the means of the returned fields), and
+  F = 0 at any composition, the value does not depend on the field means, and
   F + free_energy_homogeneous is the field-theoretic Hamiltonian with its constant at the
   saddle point, as recorded by L-FTS and CL-FTS (tests/TestScftOptions.py). Incompressible
-  runs with zero field means give the same values as before; with `fts_consistent_energy`
-  F was lower by χN(f - 1/2)² for an AB diblock (-χN(f - 1/2)² for the disordered phase),
-  and compressible runs reported the mean-field value minus the constant h_const of the
-  field theory, which has poles where an eigenvalue of χN + ζN eeᵀ crosses zero.
+  runs with zero field means give the same values as before. With `fts_consistent_energy`
+  F was lower by χN(f - 1/2)² for an AB diblock (-χN(f - 1/2)² for the disordered phase);
+  compressible runs reported the mean-field value minus the constant h_const of the field
+  theory, which has poles where an eigenvalue of χN + ζN eeᵀ crosses zero.
+- `fts_consistent_energy` is removed (2026-10-22). It pinned the field means of an
+  incompressible run to the saddle point so that the free energy matched the field-theoretic
+  Hamiltonian; the free energy no longer depends on the field means, and incompressible
+  fields have zero means. A parameter file that sets it gets a warning.
 
 - **CUDA 11 is no longer supported** (2026-10-21): the GPU backend needs CUDA 12.2 or
   newer, because the device code is C++20 (nvcc 11.x has no `-std=c++20`; nvcc 12.0/12.1
