@@ -32,10 +32,10 @@ def params(nx, lx, **extra):
         "chain_model": "continuous", "ds": 1/50,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20.0},
-        "distinct_polymers": [{"volume_fraction": 1.0,
+        "polymers": [{"volume_fraction": 1.0,
                                "blocks": [{"type": "A", "length": 0.3}, {"type": "B", "length": 0.7}]}],
         "platform": cpu_platform(),
-        "box_is_altering": False,
+        "relax_cell": False,
         "max_iter": 300, "tolerance": 1e-8,
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
     }
@@ -54,7 +54,7 @@ def main():
     x_short = (np.arange(32) + 0.5)/32
     for altering in (False, True):
         p = params([np.int64(32)], [1.7], max_iter=5, tolerance=1e-11,
-                   box_is_altering=altering, stress_interval=2)
+                   relax_cell=altering, stress_interval=2)
         with contextlib.redirect_stdout(io.StringIO()):
             short = SCFT(p)
             r = short.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short),
@@ -81,7 +81,7 @@ def main():
     # including its smearing contribution, and report the corresponding error.
     for smearing in (None, {"type": "gaussian", "a_int": 0.1}):
         p = params([32], [1.7], max_iter=10, tolerance=1e-11,
-                   box_is_altering=True, stress_interval=4, smearing=smearing)
+                   relax_cell=True, stress_interval=4, smearing=smearing)
         with contextlib.redirect_stdout(io.StringIO()):
             short = SCFT(p)
             r = short.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short),
@@ -135,7 +135,7 @@ def main():
     w_a = sum(np.cos(2*np.pi*(s*u + t*v)) for u, v in ((X, Y), (Y, Z), (Z, X)) for s, t in ((1, 1), (1, -1)))
     w_a = SpaceGroup([n]*3, "Im-3m", 529).symmetrize(np.reshape(w_a, (1, -1)))[0]
     results = {}
-    for name, sg in (("on", {"space_group": {"symbol": "Im-3m", "number": 529}}), ("off", {})):
+    for name, sg in (("on", {"space_group": {"symbol": "Im-3m", "hall_number": 529}}), ("off", {})):
         with contextlib.redirect_stdout(io.StringIO()):
             calc = SCFT(params([n]*3, [1.9]*3, max_iter=1, **sg))
             results[name] = calc.run(initial_fields={"A": w_a, "B": -w_a}, return_result=True)

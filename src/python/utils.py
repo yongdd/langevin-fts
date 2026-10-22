@@ -23,7 +23,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 import numpy as np
 import yaml
 
-from .validation import ValidationError
+from .validation import normalize_params, ValidationError
 
 
 def json_ready(value):
@@ -154,11 +154,11 @@ def checkpoint_settings(sim):
         "nx": solver.nx, "lx": solver.get_lx(), "angles": solver.get_angles_degrees(),
         "bc": solver.bc, "ds": sim.ds, "chain_model": sim.chain_model,
         "numerical_method": solver.numerical_method, "segment_lengths": sim.segment_lengths,
-        "polymers": sim.distinct_polymers, "chi_n": sim.chi_n, "zeta_n": sim.zeta_n,
+        "polymers": sim.polymers, "chi_n": sim.chi_n, "zeta_n": sim.zeta_n,
         "dt": sim.langevin["dt"], "nbar": sim.langevin["nbar"], "dt_scaling": sim.dt_scaling,
         "smearing": {"type": sim.smearing.type, "params": sim.smearing.params},
-        "sf_computing_period": sim.recording["sf_computing_period"],
-        "sf_recording_period": sim.recording["sf_recording_period"],
+        "sample_interval": sim.recording["sample_interval"],
+        "statistics_save_interval": sim.recording["statistics_save_interval"],
         "extensions": extension_settings(sim),
     }
     if hasattr(sim, "saddle"):
@@ -219,6 +219,15 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
         stored = json.loads(str(data["checkpoint_settings_json"]))
         if input_hash(stored) != str(data["checkpoint_settings_hash"]):
             raise ValidationError("Checkpoint settings hash does not match its contents")
+        # Verify the original settings hash before translating names. Earlier
+        # checkpoints have legacy block keys and flat recording-period keys.
+        stored = normalize_params(stored)
+        for old, new in (("sf_computing_period", "sample_interval"),
+                         ("sf_recording_period", "statistics_save_interval")):
+            if old in stored:
+                if new in stored:
+                    raise ValidationError(f"Checkpoint specifies both '{old}' and '{new}'")
+                stored[new] = stored.pop(old)
         current = checkpoint_settings(sim)
         # Version 1 predates extensions and always used LM without callbacks.
         if version == 1:
@@ -472,7 +481,7 @@ def create_monomer_color_dict(
 def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer"):
     """Draw every polymer of a simulation to ``<prefix>_<id>.png`` in the current directory.
 
-    Example: ``draw_polymer_architectures(calc.distinct_polymers, calc.ds, calc.segment_lengths)``
+    Example: ``draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths)``
     after ``calc = SCFT(params)`` (or LFTS / CLFTS).
     """
     dict_color = create_monomer_color_dict(segment_lengths)
@@ -682,7 +691,7 @@ def process_random_copolymer(
         If random copolymer definition is invalid.
     """
     # Check if this is a random copolymer
-    is_random = any("fraction" in block for block in polymer["blocks"])
+    is_random = any("monomer_fractions" in block for block in polymer["blocks"])
     if not is_random:
         return None
 
@@ -691,11 +700,11 @@ def process_random_copolymer(
 
     statistical_segment_length = 0
     total_random_fraction = 0
-    for monomer_type in polymer["blocks"][0]["fraction"]:
+    for monomer_type in polymer["blocks"][0]["monomer_fractions"]:
         statistical_segment_length += (
-            segment_lengths[monomer_type] ** 2 * polymer["blocks"][0]["fraction"][monomer_type]
+            segment_lengths[monomer_type] ** 2 * polymer["blocks"][0]["monomer_fractions"][monomer_type]
         )
-        total_random_fraction += polymer["blocks"][0]["fraction"][monomer_type]
+        total_random_fraction += polymer["blocks"][0]["monomer_fractions"][monomer_type]
     statistical_segment_length = np.sqrt(statistical_segment_length)
 
     if not np.isclose(total_random_fraction, 1.0):
@@ -708,7 +717,7 @@ def process_random_copolymer(
             "in 'segment_lengths' or other random copolymer"
         )
 
-    return (random_type_string, statistical_segment_length, polymer["blocks"][0]["fraction"])
+    return (random_type_string, statistical_segment_length, polymer["blocks"][0]["monomer_fractions"])
 
 
 # =============================================================================

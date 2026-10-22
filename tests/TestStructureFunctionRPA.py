@@ -86,11 +86,11 @@ def rpa(zeta_n, a_int=None):
 def params(work_dir, dt):
     return {"nx": [NX], "lx": [LX], "chain_model": "continuous", "ds": 1 / 50,
             "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": CHI_N},
-            "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": F},
+            "polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": F},
                                                                       {"type": "B", "length": 1 - F}]}],
             "platform": cpu_platform(), "langevin": {"nbar": NBAR, "dt": dt, "max_step": STEPS},
-            "recording": {"dir": work_dir, "recording_period": STEPS, "sf_computing_period": 1,
-                          "sf_recording_period": STEPS},
+            "recording": {"dir": work_dir, "checkpoint_interval": STEPS, "sample_interval": 1,
+                          "statistics_save_interval": STEPS},
             "verbose_level": 1}
 
 

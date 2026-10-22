@@ -46,12 +46,12 @@ def get_params(use_space_group=False):
         "nx": [32, 32, 32],
         "lx": [1.9, 1.9, 1.9],
         "reduce_memory": False,
-        "box_is_altering": False,
+        "relax_cell": False,
         "chain_model": "continuous",
         "ds": 1/90,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 18.1},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f, "v": 0, "u": 1},
@@ -72,7 +72,7 @@ def get_params(use_space_group=False):
     }
 
     if use_space_group:
-        params["space_group"] = {"symbol": "Im-3m", "number": 529}
+        params["space_group"] = {"symbol": "Im-3m", "hall_number": 529}
 
     return params
 

@@ -431,7 +431,7 @@ For the 32³ grid used in these benchmarks, the finite-difference spatial error 
 
 ² Mixing periodic with reflecting/absorbing boundary conditions in different directions raises an error for pseudo-spectral methods on all platforms; such periodic/non-periodic mixes require `numerical_method="cn-adi2"` (continuous chains only). Purely non-periodic mixes (reflecting with absorbing) and uniform all-reflecting or all-absorbing configurations work with RQM4/RK2.
 
-³ `compute_stress()` supports periodic, reflecting, and absorbing boundary conditions for real fields (per-mode DCT/DST Parseval weights are folded into the spectral stress tables); complex fields with non-periodic boundaries are rejected. Box optimization (`box_is_altering=True`) works with non-periodic boundaries for the box lengths (angles stay at 90°).
+³ `compute_stress()` supports periodic, reflecting, and absorbing boundary conditions for real fields (per-mode DCT/DST Parseval weights are folded into the spectral stress tables); complex fields with non-periodic boundaries are rejected. Box optimization (`relax_cell=True`) works with non-periodic boundaries for the box lengths (angles stay at 90°).
 
 ---
 

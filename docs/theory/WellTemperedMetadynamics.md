@@ -408,7 +408,7 @@ P = np.exp(-F)  # Unnormalized probability
 
 ```python
 # The WTMD state (U, U', I0, I1 and the samples stored since the last update) is
-# stored in the fields_*.mat checkpoints, written every recording["recording_period"]
+# stored in the fields_*.mat checkpoints, written every recording["checkpoint_interval"]
 # steps, and continue_run() restores it from there, so a resumed run continues the
 # statistics of an uninterrupted one. The wtmd_statistics_*.mat files are output only.
 

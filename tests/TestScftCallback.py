@@ -28,10 +28,10 @@ def lamella_params():
         "chain_model": "continuous", "ds": 1/50,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20.0},
-        "distinct_polymers": [{"volume_fraction": 1.0,
+        "polymers": [{"volume_fraction": 1.0,
                                "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}],
         "platform": cpu_platform(),
-        "box_is_altering": True,
+        "relax_cell": True,
         "max_iter": 300, "tolerance": 1e-8,
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
     }

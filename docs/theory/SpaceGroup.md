@@ -170,7 +170,7 @@ params = {
 
     "space_group": {
         "symbol": "Ia-3d",      # ITA symbol
-        "number": 530           # Hall number (optional if unique)
+        "hall_number": 530           # Hall number (optional if unique)
     },
 }
 

@@ -12,7 +12,7 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .integrators import checked_fields
 from . import _core
-from .validation import validate_lfts_params, ValidationError, SaddlePointError
+from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError
 from .utils import (
     parse_chi_n,
     process_polymer_blocks,
@@ -230,13 +230,14 @@ class LFTS:
         Reads the file with utils.load_config, applies the keyword overrides
         and calls the constructor, as SCFT.from_file does.
         """
-        params = load_config(path)
-        params.update(overrides)
+        params = normalize_params(load_config(path))
+        params.update(normalize_params(overrides))
         return cls(params, random_seed=random_seed, integrator=integrator, callbacks=callbacks)
 
     def __init__(self, params, random_seed=None, *, integrator=None, callbacks=None):
 
         # Validate input parameters
+        params = normalize_params(params)
         validate_lfts_params(params)
         for key in ("compressor", "saddle", "recording", "verbose_level"):
             if key not in params:
@@ -247,7 +248,7 @@ class LFTS:
         # Monomer types and statistical segment lengths
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
+        self.polymers = copy.deepcopy(params["polymers"])
 
         # Flory-Huggins parameters chi N; pairs the user did not give do not interact
         self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
@@ -260,10 +261,10 @@ class LFTS:
         self.zeta_n = params.get("zeta_n", None)
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             polymer["blocks_input"] = process_polymer_blocks(polymer)
         self.random_fraction = {}
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             result = process_random_copolymer(polymer, self.segment_lengths)
             if result is not None:
                 random_type, effective_segment_length, fraction = result
@@ -272,7 +273,7 @@ class LFTS:
                 self.random_fraction[random_type] = fraction
 
         # Draw the chain architectures (polymer_<id>.png in the current directory)
-        draw_polymer_architectures(self.distinct_polymers, params["ds"], self.segment_lengths)
+        draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths)
 
         # Boundary conditions (default: periodic)
         bc = params.get("bc", None)
@@ -296,7 +297,7 @@ class LFTS:
             angles=params.get("angles", None),
             aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
         )
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
                                          polymer.get("initial_conditions", None))
 
@@ -629,10 +630,10 @@ class LFTS:
             self.metadata["initial_fields_hash"] = previous_metadata.get("initial_fields_hash", "unknown")
             self.metadata["parent_checkpoint"] = str(file_name)
         
-        # Check if load_data["langevin_step"] is a multiple of self.recording["sf_recording_period"]
-        if "record_sample_count" not in load_data and load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
-            print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'sf_recording_period'.")
-            next_sf_langevin_step = (load_data["langevin_step"]//self.recording["sf_recording_period"] + 1)*self.recording["sf_recording_period"]
+        # Check if load_data["langevin_step"] is a multiple of self.recording["statistics_save_interval"]
+        if "record_sample_count" not in load_data and load_data["langevin_step"] % self.recording["statistics_save_interval"] != 0:
+            print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'statistics_save_interval'.")
+            next_sf_langevin_step = (load_data["langevin_step"]//self.recording["statistics_save_interval"] + 1)*self.recording["statistics_save_interval"]
             print(f"The structure function will be correctly recorded after {next_sf_langevin_step}th langevin_step." )
 
         # Versioned checkpoints carry the complete PCG64 state; legacy scalar
@@ -921,7 +922,7 @@ class LFTS:
                     self.wtmd.write_data(os.path.join(self.recording["dir"], "wtmd_statistics_%06d.mat" % (langevin_step)))
 
             # Compute H and dH/dχN
-            if langevin_step % self.recording["sf_computing_period"] == 0:
+            if langevin_step % self.recording["sample_interval"] == 0:
                 H_history.append(hamiltonian)
                 drift_history.append(drift_max)
                 sf_sample_count += 1
@@ -930,7 +931,7 @@ class LFTS:
                     dH_history[key].append(dH[key])
 
             # Save H and dH/dχN
-            if langevin_step % self.recording["sf_recording_period"] == 0:
+            if langevin_step % self.recording["statistics_save_interval"] == 0:
                 H_history = np.array(H_history)
                 mdic = {"H_history": H_history, "sample_count": sf_sample_count, "drift_max_history": np.asarray(drift_history),
                         "simulation_metadata_json": json.dumps(self.metadata)}
@@ -946,7 +947,7 @@ class LFTS:
                     dH_history[key] = []
                     
             # Calculate structure function
-            if langevin_step % self.recording["sf_computing_period"] == 0:
+            if langevin_step % self.recording["sample_interval"] == 0:
                 # Perform Fourier transforms.
                 # Shifting the Gaussian integral over Ω_k gives <Ω_k φ_j> = (λ_k/M) Σ_l A_lk <φ_l φ_j>,
                 # and A Aᵀ = M I, so μ_i = Σ_k A_ik Ω_k/λ_k gives <μ_i φ_j> = <δφ_i δφ_j>
@@ -966,7 +967,7 @@ class LFTS:
                     sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
 
             # Save structure function
-            if langevin_step % self.recording["sf_recording_period"] == 0:
+            if langevin_step % self.recording["statistics_save_interval"] == 0:
                 # Make a dictionary for chi_n
                 chi_n_mat = {}
                 for key in self.chi_n:
@@ -1001,7 +1002,7 @@ class LFTS:
                              error_level, time.perf_counter() - step_start)
 
             # Save simulation data
-            if langevin_step % self.recording["recording_period"] == 0:
+            if langevin_step % self.recording["checkpoint_interval"] == 0:
                 self._recording_state = {"H_history": H_history, "dH_history": dH_history,
                                          "sf_average": sf_average, "sample_count": sf_sample_count, "drift_history": drift_history}
                 w = self.mpt.to_monomer_fields(w_aux)
@@ -1165,7 +1166,7 @@ class LFTS:
         which is what the C++ normalization of the concentrations gives.
         """
         phi_mean = np.zeros(len(self.monomer_types))
-        for p, polymer in enumerate(self.distinct_polymers):
+        for p, polymer in enumerate(self.polymers):
             alpha = self.prop_solver.get_polymer(p).get_alpha()
             for block in polymer["blocks"]:
                 weight = polymer["volume_fraction"] * block["length"] / alpha

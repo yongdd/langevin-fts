@@ -36,13 +36,13 @@ def params_for(work_dir, max_step, compressor="am", verbose_level=1):
         "ds": 1/20,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}],
         }],
         "platform": cpu_platform(),
         "langevin": {"nbar": 10000, "dt": 8.0, "max_step": max_step},
-        "recording": {"dir": work_dir, "recording_period": 2, "sf_computing_period": 1, "sf_recording_period": 2},
+        "recording": {"dir": work_dir, "checkpoint_interval": 2, "sample_interval": 1, "statistics_save_interval": 2},
         "saddle": {"max_iter": 200, "tolerance": 1e-4},
         "compressor": {"name": compressor, "max_hist": 20, "start_error": 5e-1, "mix_min": 0.01, "mix_init": 0.01},
         "verbose_level": verbose_level,

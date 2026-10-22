@@ -32,7 +32,7 @@ params = {
 
     "platform": "cuda",       # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # ABC triblock Copolymer
             {"type":"A", "length":0.47},       # A-block
@@ -48,9 +48,9 @@ params = {
     
     "recording":{                       # Recording Simulation Data
         "dir":"data_simulation",        # Directory name
-        "recording_period":200,        # Period for recording concentrations and fields
-        "sf_computing_period":10,       # Period for computing structure function
-        "sf_recording_period":10000,    # Period for recording structure function
+        "checkpoint_interval":200,        # Steps between full-state checkpoints
+        "sample_interval":10,       # Steps between observable samples
+        "statistics_save_interval":10000,    # Steps between statistics saves
     },
 
     "saddle":{                # Iteration for the pressure field 

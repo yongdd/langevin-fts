@@ -52,19 +52,19 @@ def generate_bcc():
 
     params = {
         "nx": nx, "lx": lx,
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/90,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 18.1},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "Im-3m", "number": 529},
+        "space_group": {"symbol": "Im-3m", "hall_number": 529},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -88,19 +88,19 @@ def generate_fcc():
 
     params = {
         "nx": nx, "lx": lx,
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/90,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 18.1},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "Fm-3m", "number": 523},
+        "space_group": {"symbol": "Fm-3m", "hall_number": 523},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -124,20 +124,20 @@ def generate_sc():
 
     params = {
         "nx": nx, "lx": lx,
-        "box_is_altering": True,
+        "relax_cell": True,
         "stress_interval": 1,
         "chain_model": "continuous",
         "ds": 1/100,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 25},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "Pm-3m", "number": 517},
+        "space_group": {"symbol": "Pm-3m", "hall_number": 517},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -162,7 +162,7 @@ def generate_a15():
 
     params = {
         "nx": nx, "lx": lx,
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/100,
         "segment_lengths": {
@@ -170,14 +170,14 @@ def generate_a15():
             "B": np.sqrt(1.0/(eps*eps*f + (1-f))),
         },
         "chi_n": {"A,B": 25},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "Pm-3n", "number": 520},
+        "space_group": {"symbol": "Pm-3n", "hall_number": 520},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -203,7 +203,7 @@ def generate_sigma():
 
     params = {
         "nx": nx, "lx": lx,
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/100,
         "segment_lengths": {
@@ -211,14 +211,14 @@ def generate_sigma():
             "B": np.sqrt(1.0/(eps*eps*f + (1-f))),
         },
         "chi_n": {"A,B": 25},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "B", "length": 1-f},
                 {"type": "A", "length": f},
             ],
         }],
-        "space_group": {"symbol": "P4_2/mnm", "number": 419},
+        "space_group": {"symbol": "P4_2/mnm", "hall_number": 419},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -252,19 +252,19 @@ def generate_hcp():
     params = {
         "nx": nx, "lx": lx,
         "angles": [90.0, 90.0, 120.0],
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/100,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "P6_3/mmc", "number": 488},
+        "space_group": {"symbol": "P6_3/mmc", "hall_number": 488},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }
@@ -289,19 +289,19 @@ def generate_pl():
     params = {
         "nx": nx, "lx": lx,
         "angles": [90.0, 90.0, 120.0],
-        "box_is_altering": True,
+        "relax_cell": True,
         "chain_model": "continuous",
         "ds": 1/100,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 15},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": f},
                 {"type": "B", "length": 1-f},
             ],
         }],
-        "space_group": {"symbol": "P6/mmm", "number": 485},
+        "space_group": {"symbol": "P6/mmm", "hall_number": 485},
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
         "max_iter": 2000, "tolerance": 1e-8,
     }

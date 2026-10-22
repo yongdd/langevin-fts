@@ -354,7 +354,7 @@ Example usage in params:
 ```python
 "space_group": {
     "symbol": "Im-3m",   # Hermann-Mauguin symbol (BCC)
-    "number": 529,       # Hall number (optional)
+    "hall_number": 529,       # Hall number (optional)
 }
 ```
 
@@ -375,7 +375,7 @@ Simulations are configured via Python dictionaries with keys:
 - `ds`: Contour discretization (typically 1/N_Ref)
 - `segment_lengths`: Relative statistical segment lengths
 - `chi_n`: Flory-Huggins interaction parameters × N_Ref
-- `distinct_polymers`: Polymer architectures and volume fractions
+- `polymers`: Polymer architectures and volume fractions
 - `platform`: Platform selection (see below)
 - `numerical_method`: Algorithm for propagator computation
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)

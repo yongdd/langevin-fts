@@ -55,9 +55,9 @@ def cpu_platform():
 
 def run(chi_n, blocks, lx, zeta_n, initial, extra=None):
     types = sorted({b[0] for b in blocks})
-    params = {"nx": [NX], "lx": [lx], "box_is_altering": False, "chain_model": "continuous", "ds": 1 / 50,
+    params = {"nx": [NX], "lx": [lx], "relax_cell": False, "chain_model": "continuous", "ds": 1 / 50,
               "segment_lengths": {t: 1.0 for t in types}, "chi_n": chi_n, "platform": cpu_platform(),
-              "distinct_polymers": [{"volume_fraction": 1.0,
+              "polymers": [{"volume_fraction": 1.0,
                                      "blocks": [{"type": t, "length": length} for t, length in blocks]}],
               "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
               "max_iter": 3000, "tolerance": 1e-9}

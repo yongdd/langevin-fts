@@ -27,7 +27,7 @@ params = {
 
     "chi_n": {"A,B":12.0},      # Bare interaction parameter, Flory-Huggins params * N_Ref
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # Volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer
             {"type":"A", "length":f, }, # A-block
@@ -42,9 +42,9 @@ params = {
 
     "recording":{                       # Recording Simulation Data
         "dir":"data_simulation",        # Directory name
-        "recording_period":1000,        # Period for recording concentrations and fields
-        "sf_computing_period":10,       # Period for computing structure function
-        "sf_recording_period":10000,    # Period for recording structure function
+        "checkpoint_interval":1000,        # Steps between full-state checkpoints
+        "sample_interval":10,       # Steps between observable samples
+        "statistics_save_interval":10000,    # Steps between statistics saves
     },
 
     # Compressibility parameter (zeta_n = kappa * N_Ref)

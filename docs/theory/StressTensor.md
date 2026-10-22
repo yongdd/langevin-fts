@@ -206,13 +206,13 @@ Note that the absorbing (DST) wavenumbers are shifted by one mode relative to th
 
 ## 5. Box Optimization
 
-During SCFT iteration with `box_is_altering=True`, the scaled negative stress components are appended to the potential-field residuals, and the combined vector is passed to the field optimizer (Anderson mixing), which updates the fields and lattice parameters together:
+During SCFT iteration with `relax_cell=True`, the scaled negative stress components are appended to the potential-field residuals, and the combined vector is passed to the field optimizer (Anderson mixing), which updates the fields and lattice parameters together:
 
 ```math
 \Delta\theta_i = \eta \cdot (-\sigma_i)
 ```
 
-where $`\eta`$ is the `scale_stress` parameter and $`\theta_i`$ runs over the optimized lengths and angles (the negative sign applies to both: `get_stress()` returns $`+\partial H/\partial\theta_i`$ for lengths *and* angles). In the simple-mixing limit this reduces to gradient descent:
+where $`\eta`$ is the `stress_scale` parameter and $`\theta_i`$ runs over the optimized lengths and angles (the negative sign applies to both: `get_stress()` returns $`+\partial H/\partial\theta_i`$ for lengths *and* angles). In the simple-mixing limit this reduces to gradient descent:
 
 ```math
 L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \sigma_a, \quad L_b^{(n+1)} = L_b^{(n)} - \eta \cdot \sigma_b, \quad L_c^{(n+1)} = L_c^{(n)} - \eta \cdot \sigma_c

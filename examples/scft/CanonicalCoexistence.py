@@ -13,7 +13,7 @@ from polymerfts import SCFT, find_binary_coexistence, homogeneous_thermodynamics
 params = {
     "nx": [16], "lx": [1.0], "chain_model": "continuous", "ds": 0.02,
     "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 2.0},
-    "box_is_altering": False, "max_iter": 100, "tolerance": 1e-10,
+    "relax_cell": False, "max_iter": 100, "tolerance": 1e-10,
     "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
 }
 previous = None
@@ -27,7 +27,7 @@ def canonical_phase(x):
     ]
     fields = previous.w if previous is not None else {"A": np.zeros(16), "B": np.zeros(16)}
     with contextlib.redirect_stdout(io.StringIO()):
-        calculation = SCFT(dict(params, distinct_polymers=polymers))
+        calculation = SCFT(dict(params, polymers=polymers))
         previous = calculation.run(fields, return_result=True)
     return previous
 

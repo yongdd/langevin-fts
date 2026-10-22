@@ -36,12 +36,12 @@ def main() -> None:
         "platform": get_platform(),
         "nx": [16, 16, 16],
         "lx": [2.0, 2.0, 2.0],
-        "box_is_altering": False,
+        "relax_cell": False,
         "chain_model": "continuous",
         "ds": 1 / 50,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [
+        "polymers": [
             {
                 "volume_fraction": 1.0,
                 "blocks": [
@@ -50,7 +50,7 @@ def main() -> None:
                 ],
             }
         ],
-        "space_group": {"symbol": "Im-3m", "number": 529},
+        "space_group": {"symbol": "Im-3m", "hall_number": 529},
         "reduce_memory": True,
         "optimizer": {
             "name": "am",

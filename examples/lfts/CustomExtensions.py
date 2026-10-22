@@ -65,13 +65,13 @@ def main():
     params = {
         "nx": [16], "lx": [3.0], "ds": 0.05, "chain_model": "continuous",
         "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [
+        "polymers": [{"volume_fraction": 1.0, "blocks": [
             {"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}],
         "langevin": {"nbar": 10000, "dt": 0.1, "max_step": 10},
         "compressor": {"name": "am", "max_hist": 20, "start_error": 0.5, "mix_min": 0.01, "mix_init": 0.01},
         "saddle": {"max_iter": 200, "tolerance": 1e-6},
-        "recording": {"dir": "custom_extensions", "recording_period": 5,
-                      "sf_computing_period": 1, "sf_recording_period": 5},
+        "recording": {"dir": "custom_extensions", "checkpoint_interval": 5,
+                      "sample_interval": 1, "statistics_save_interval": 5},
         "verbose_level": 0,
     }
     observable = CompositionVariance(every=2)

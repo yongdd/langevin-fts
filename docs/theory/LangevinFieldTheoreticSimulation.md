@@ -198,7 +198,7 @@ params = {
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 17.0},
 
-    "distinct_polymers": [{
+    "polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
             {"type": "A", "length": 0.4},
@@ -214,9 +214,9 @@ params = {
 
     "recording": {
         "dir": "data_simulation",
-        "recording_period": 1000,     # Save fields every N steps
-        "sf_computing_period": 10,    # Compute S(k) every N steps
-        "sf_recording_period": 1000,  # Save S(k) every N steps
+        "checkpoint_interval": 1000,     # Save fields every N steps
+        "sample_interval": 10,    # Compute S(k) every N steps
+        "statistics_save_interval": 1000,  # Save S(k) every N steps
     },
 
     "saddle": {

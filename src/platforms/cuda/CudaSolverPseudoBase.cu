@@ -919,7 +919,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         // are not computed: angle optimization is inactive for orthogonal crystal
         // systems, so those slots are never consumed. This optimization
         // reduces the number of GPU kernel calls from 6 to 3 for 3D boxes,
-        // providing ~10% speedup when box_is_altering=True.
+        // providing ~10% speedup when relax_cell=True.
         //
         // DO NOT REMOVE THIS OPTIMIZATION without benchmarking! We have experienced
         // performance regressions before when this check was accidentally removed.

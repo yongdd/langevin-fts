@@ -33,16 +33,16 @@ chain_model: continuous
 ds: 0.1
 segment_lengths: {A: 1.0, B: 1.0}
 chi_n: {"A,B": 15.0}
-distinct_polymers:
+polymers:
   - volume_fraction: 1.0
     blocks: [{type: A, length: 0.5}, {type: B, length: 0.5}]
 platform: PLATFORM
-box_is_altering: false
+relax_cell: false
 optimizer: {name: am, max_hist: 20, start_error: 0.01, mix_min: 0.1, mix_init: 0.1}
 langevin: {nbar: 10000, dt: 8.0, max_step: 10}
 compressor: {name: am, max_hist: 20, start_error: 0.1, mix_min: 0.1, mix_init: 0.1}
 saddle: {max_iter: 100, tolerance: 1.0e-4}
-recording: {dir: data, recording_period: 10, sf_computing_period: 1, sf_recording_period: 10}
+recording: {dir: data, checkpoint_interval: 10, sample_interval: 1, statistics_save_interval: 10}
 verbose_level: 1
 note: "np.sqrt(4) + np.save('INJECTED', 0)"
 complex: "(-8)**0.5*np.pi"

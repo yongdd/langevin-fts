@@ -58,13 +58,13 @@ def phase_bcc():
         "nx": [32, 32, 32],
         "lx": [1.9, 1.9, 1.9],
         "reduce_memory": False,
-        "box_is_altering": True,
+        "relax_cell": True,
         "stress_interval": 1,
         "chain_model": "continuous",
         "ds": 1 / 90,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 18.1},
-        "distinct_polymers": [
+        "polymers": [
             {
                 "volume_fraction": 1.0,
                 "blocks": [
@@ -73,7 +73,7 @@ def phase_bcc():
                 ],
             }
         ],
-        "space_group": {"symbol": "Im-3m", "number": 529},
+        "space_group": {"symbol": "Im-3m", "hall_number": 529},
         "optimizer": {
             "name": "am",
             "max_hist": 20,
@@ -100,13 +100,13 @@ def phase_dg():
         "nx": [32, 32, 32],
         "lx": input_data["lx"].tolist(),
         "reduce_memory": False,
-        "box_is_altering": True,
+        "relax_cell": True,
         "stress_interval": 1,
         "chain_model": "continuous",
         "ds": 1 / 100,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [
+        "polymers": [
             {
                 "volume_fraction": 1.0,
                 "blocks": [
@@ -115,7 +115,7 @@ def phase_dg():
                 ],
             }
         ],
-        "space_group": {"symbol": "Ia-3d", "number": 530},
+        "space_group": {"symbol": "Ia-3d", "hall_number": 530},
         "optimizer": {
             "name": "am",
             "max_hist": 20,
@@ -146,7 +146,7 @@ def phase_sigma():
         "nx": [64, 64, 32],
         "lx": [7.0, 7.0, 4.0],
         "reduce_memory": False,
-        "box_is_altering": True,
+        "relax_cell": True,
         "stress_interval": 1,
         "chain_model": "continuous",
         "ds": 1 / 100,
@@ -155,7 +155,7 @@ def phase_sigma():
             "B": np.sqrt(1.0 / (eps * eps * f + (1 - f))),
         },
         "chi_n": {"A,B": 25},
-        "distinct_polymers": [
+        "polymers": [
             {
                 "volume_fraction": 1.0,
                 "blocks": [
@@ -164,7 +164,7 @@ def phase_sigma():
                 ],
             }
         ],
-        "space_group": {"symbol": "P4_2/mnm", "number": 419},
+        "space_group": {"symbol": "P4_2/mnm", "hall_number": 419},
         "optimizer": {
             "name": "am",
             "max_hist": 20,
@@ -196,13 +196,13 @@ def phase_hcp_hexagonal():
         "angles": [90.0, 90.0, 120.0],
         "crystal_system": "Hexagonal",
         "reduce_memory": False,
-        "box_is_altering": True,
+        "relax_cell": True,
         "stress_interval": 1,
         "chain_model": "continuous",
         "ds": 1 / 100,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20},
-        "distinct_polymers": [
+        "polymers": [
             {
                 "volume_fraction": 1.0,
                 "blocks": [
@@ -211,7 +211,7 @@ def phase_hcp_hexagonal():
                 ],
             }
         ],
-        "space_group": {"symbol": "P6_3/mmc", "number": 488},
+        "space_group": {"symbol": "P6_3/mmc", "hall_number": 488},
         "optimizer": {
             "name": "am",
             "max_hist": 20,

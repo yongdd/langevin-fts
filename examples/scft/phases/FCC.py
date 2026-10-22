@@ -18,8 +18,8 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_memory":False,     # Reduce memory usage by storing only check points.
-    "box_is_altering":True,
-    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Find box size that minimizes the free energy during saddle point iteration.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Relax cell lengths and allowed angles during SCFT iteration.
     "chain_model":"continuous",      # "discrete" or "continuous" chain model
     "ds":1/90,                       # Contour step interval, which is equal to 1/N_Ref.
 
@@ -29,7 +29,7 @@ params = {
 
     "chi_n": {"A,B": 18.1},     # Interaction parameter, Flory-Huggins params * N_Ref
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer
             {"type":"A", "length":f, }, # A-block
@@ -38,7 +38,7 @@ params = {
     
     "space_group" :{
         "symbol":"Fm-3m",   # IT symbol of the space group
-        "number": 523,      # (optional) Hall number of the space group
+        "hall_number": 523,      # (optional) Hall number of the space group
     },
 
     "optimizer":{

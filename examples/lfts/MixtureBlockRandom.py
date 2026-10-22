@@ -25,7 +25,7 @@ params = {
 
     "platform": "cuda",       # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":0.7,  # Volume fraction of polymer chain
         "blocks":[              # AB homopolymer
             {"type":"A", "length":f, },     # A-block
@@ -34,7 +34,7 @@ params = {
         {
         "volume_fraction":0.3,  
         "blocks":[              # Random Copolymer. Currently, Only single block random copolymer is supported.
-            {"type":"R", "length":0.5, "fraction":{"A":0.5, "B":0.5},},
+            {"type":"R", "length":0.5, "monomer_fractions":{"A":0.5, "B":0.5},},
         ],}],
 
     "langevin":{                # Langevin Dynamics
@@ -45,9 +45,9 @@ params = {
     
     "recording":{                       # Recording Simulation Data
         "dir":"data_simulation",        # Directory name
-        "recording_period":1000,        # Period for recording concentrations and fields
-        "sf_computing_period":10,       # Period for computing structure function
-        "sf_recording_period":10000,    # Period for recording structure function
+        "checkpoint_interval":1000,        # Steps between full-state checkpoints
+        "sample_interval":10,       # Steps between observable samples
+        "statistics_save_interval":10000,    # Steps between statistics saves
     },
 
     "saddle":{                # Iteration for the pressure field 

@@ -264,7 +264,7 @@ def test_scft_with_space_group():
         "ds": 0.01,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20.0},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": 0.2},
@@ -280,10 +280,10 @@ def test_scft_with_space_group():
         },
         "max_iter": 20,
         "tolerance": 1e-8,
-        "box_is_altering": False,
+        "relax_cell": False,
         "space_group": {
             "symbol": "Im-3m",
-            "number": 529
+            "hall_number": 529
         }
     }
 
@@ -343,7 +343,7 @@ def test_save_results_full_grid():
         "ds": 0.01,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20.0},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": 0.2},
@@ -359,10 +359,10 @@ def test_save_results_full_grid():
         },
         "max_iter": 5,
         "tolerance": 1e-8,
-        "box_is_altering": False,
+        "relax_cell": False,
         "space_group": {
             "symbol": "Im-3m",
-            "number": 529
+            "hall_number": 529
         }
     }
 
@@ -424,7 +424,7 @@ def test_save_results_m3_same_size():
         "ds": 0.01,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 20.0},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [
                 {"type": "A", "length": 0.4},
@@ -440,7 +440,7 @@ def test_save_results_m3_same_size():
         },
         "max_iter": 5,
         "tolerance": 1e-8,
-        "box_is_altering": False,
+        "relax_cell": False,
         "space_group": {"symbol": "Pmmm"}
     }
     total_grid = int(np.prod(params["nx"]))

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import validate_system_params, ValidationError
+from .validation import normalize_params, validate_system_params, ValidationError
 from .utils import (
     load_config,
     parse_chi_n,
@@ -57,7 +57,7 @@ class SCFTResult:
     partition_functions : list
         Single-chain partition functions for each polymer type.
     stress : np.ndarray or None
-        Stress tensor components (if box_is_altering was True).
+        Stress tensor components (if relax_cell was True).
     lx : list
         Final box dimensions.
     nx : list
@@ -148,7 +148,7 @@ class IterationInfo:
     partition_functions : list
         Partition functions for each polymer.
     lx : list or None
-        Current box dimensions (if box_is_altering).
+        Current box dimensions (if relax_cell).
     angles : list or None
         Current lattice angles (if non-orthogonal).
     """
@@ -161,7 +161,7 @@ class IterationInfo:
     angles: Optional[List[float]] = None
 
 
-# Which lattice parameters may vary during box relaxation (box_is_altering=True):
+# Which lattice parameters may vary during box relaxation (relax_cell=True):
 #   lx_reduced : indices of the independent box lengths among [a, b, c]
 #   lx_full    : for each of a, b, c, the independent length it follows
 #   angles     : indices of the free angles among [alpha, beta, gamma]
@@ -193,7 +193,7 @@ class SCFT:
     params : dict
         Simulation parameters; every key is documented in
         docs/references/Parameters.md. Required: nx, lx, chain_model, ds,
-        segment_lengths, chi_n, distinct_polymers, optimizer, box_is_altering.
+        segment_lengths, chi_n, polymers, optimizer, relax_cell.
 
     Attributes
     ----------
@@ -256,11 +256,11 @@ class SCFT:
     def __init__(self, params):
 
         # Validate input parameters
+        params = normalize_params(params)
         validate_system_params(params)
-        for key in ("optimizer", "box_is_altering"):
+        for key in ("optimizer", "relax_cell"):
             if key not in params:
                 raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
-        params = copy.deepcopy(params)
 
         # Handle axis ordering (convert user ordering to standard [a, b, c]); this
         # rewrites nx/lx/bc/angles in `params`, so the key is dropped from the copy that
@@ -271,7 +271,7 @@ class SCFT:
         # Monomer types and statistical segment lengths
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
+        self.polymers = copy.deepcopy(params["polymers"])
 
         # Flory-Huggins parameters chi N; pairs the user did not give do not interact
         self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
@@ -286,10 +286,10 @@ class SCFT:
             raise ValidationError(f"zeta_n must not be negative, got {self.zeta_n}.")
 
         # Polymer chains: block connectivity, then random copolymers (one effective monomer type each)
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             polymer["blocks_input"] = process_polymer_blocks(polymer)
         self.random_fraction = {}
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             result = process_random_copolymer(polymer, self.segment_lengths)
             if result is not None:
                 random_type, effective_segment_length, fraction = result
@@ -298,7 +298,7 @@ class SCFT:
                 self.random_fraction[random_type] = fraction
 
         # Draw the chain architectures (polymer_<id>.png in the current directory)
-        draw_polymer_architectures(self.distinct_polymers, params["ds"], self.segment_lengths)
+        draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths)
 
         # Boundary conditions (default: periodic) and lattice angles [alpha, beta, gamma] in degrees
         bc = params.get("bc", None)
@@ -347,8 +347,8 @@ class SCFT:
 
         # Create space group object early (before PropagatorSolver) if specified
         if params.get("space_group", None) is not None:
-            if "number" in params["space_group"]:
-                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
+            if "hall_number" in params["space_group"]:
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["hall_number"])
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
             # Auto-enable physical basis when possible (m3 → pmmm → z-mirror).
@@ -421,7 +421,7 @@ class SCFT:
                     cell_ok = (same(lx_sg[0], lx_sg[1]) and same(lx_sg[0], lx_sg[2])
                                and same(angles_sg[0], angles_sg[1]) and same(angles_sg[0], angles_sg[2]))
                     need = "lx[0] = lx[1] = lx[2] and alpha = beta = gamma (rhombohedral-axes setting)"
-                    if cell_ok and params.get("box_is_altering", False):
+                    if cell_ok and params.get("relax_cell", False):
                         # a = b = c and alpha = beta = gamma would have to vary together
                         raise ValidationError("Box relaxation is not supported for rhombohedral-axes settings; "
                                               "use the hexagonal-axes setting of the space group.")
@@ -445,7 +445,7 @@ class SCFT:
             angles=angles,
             aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
         )
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
                                          polymer.get("initial_conditions", None))
 
@@ -472,7 +472,7 @@ class SCFT:
         )
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
-        self.scale_stress = params.get("scale_stress", 1)
+        self.stress_scale = params.get("stress_scale", 1)
 
         # Which lattice parameters may vary during box relaxation (table CRYSTAL_SYSTEMS)
         dim = len(params["nx"])
@@ -516,7 +516,7 @@ class SCFT:
         self.angles_full_indices = list(self.angles_reduced_indices)
 
         # Number of variables the optimizer adjusts: the fields, plus the free box lengths and angles
-        if params["box_is_altering"]:
+        if params["relax_cell"]:
             n_var = n_field_var + len(self.lx_reduced_indices) + len(self.angles_reduced_indices)
         else:
             n_var = n_field_var
@@ -575,7 +575,7 @@ class SCFT:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.box_is_altering = params["box_is_altering"]
+        self.relax_cell = params["relax_cell"]
 
         # Stress computation interval: an integer (every N iterations) or
         # "adaptive" (more often while the error is high, see run()).
@@ -616,8 +616,8 @@ class SCFT:
         SCFT
             Configured SCFT instance.
         """
-        params = load_config(path)
-        params.update(overrides)
+        params = normalize_params(load_config(path))
+        params.update(normalize_params(overrides))
         return cls(params)
 
     def compute_concentrations(self, w, q_init=None):
@@ -823,7 +823,7 @@ class SCFT:
         which is what the C++ normalization of the concentrations gives.
         """
         phi_mean = np.zeros(len(self.monomer_types))
-        for p, polymer in enumerate(self.distinct_polymers):
+        for p, polymer in enumerate(self.polymers):
             alpha = self.prop_solver.get_polymer(p).get_alpha()
             for block in polymer["blocks"]:
                 weight = polymer["volume_fraction"] * block["length"] / alpha
@@ -869,7 +869,7 @@ class SCFT:
             target += self.zeta_n * (np.sum(phi_mean) - 1.0)
         shift = target - np.array([self.prop_solver.mean(field) for field in w])
         mu = []
-        for p, polymer in enumerate(self.distinct_polymers):
+        for p, polymer in enumerate(self.polymers):
             chain = self.prop_solver.get_polymer(p)
             concentration = chain.get_volume_fraction() / chain.get_alpha()
             if concentration == 0.0:
@@ -919,8 +919,8 @@ class SCFT:
         # Angles enter the optimizer in radians, the unit of their residual -dH/dθ
         am_current = np.concatenate((w.flatten(), current_lx, np.deg2rad(current_angles)))
         am_diff = np.concatenate((w_diff.flatten(),
-                                 self.scale_stress*dlx_reduced,
-                                 self.scale_stress*dangle))
+                                 self.stress_scale*dlx_reduced,
+                                 self.stress_scale*dangle))
         am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
         w = np.reshape(am_new[0:len(w.flatten())], (M, -1))
@@ -966,7 +966,7 @@ class SCFT:
         1. Computes monomer concentrations φ for current fields w
         2. Calculates self-consistency error and free energy
         3. Updates fields using optimizer (Anderson mixing)
-        4. Optionally adjusts box size to minimize stress (if box_is_altering=True)
+        4. Optionally adjusts box size to minimize stress (if relax_cell=True)
 
         The iteration continues until the error_level falls below tolerance or
         max_iter is reached.
@@ -1017,7 +1017,7 @@ class SCFT:
 
         print("---------- Run ----------")
         print("iteration, mass error, total_partitions, energy_total, error_level", end="")
-        print(", box size" if self.box_is_altering else "")
+        print(", box size" if self.relax_cell else "")
 
         # ---- 1. Initial fields -> working array of shape (M, n_grid) ----
         # With axis_ordering the arrays are given in the axis order of nx and lx and are
@@ -1151,7 +1151,7 @@ class SCFT:
             field_error_level = error_level
             mass_error = self.prop_solver.mean(phi_diff)
 
-            if self.box_is_altering:
+            if self.relax_cell:
                 # The stress costs ~30 % of an iteration: compute it every stress_interval
                 # iterations ("adaptive": every 1, 2 or 4 as the error drops) and reuse it in between
                 if self.stress_interval == "adaptive":
@@ -1174,7 +1174,7 @@ class SCFT:
             print("%8d %12.3E " % (iter, mass_error), end=" [ ")
             for Q in total_partitions:
                 print("%13.7E " % (Q), end=" ")
-            if self.box_is_altering:
+            if self.relax_cell:
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("lx=[", ",".join(["%10.7f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
                 if len(self.angles_reduced_indices) > 0:
@@ -1191,14 +1191,14 @@ class SCFT:
                     energy=energy_total,
                     mass_error=mass_error,
                     partition_functions=total_partitions,
-                    lx=list(self.prop_solver.get_lx()) if self.box_is_altering else None,
+                    lx=list(self.prop_solver.get_lx()) if self.relax_cell else None,
                     angles=list(self.prop_solver.get_angles_degrees()) if (
-                        self.box_is_altering and len(self.angles_reduced_indices) > 0
+                        self.relax_cell and len(self.angles_reduced_indices) > 0
                     ) else None
                 )
                 callback_result = on_iteration(info)
                 if callback_result is False:
-                    if self.box_is_altering and not stress_is_current:
+                    if self.relax_cell and not stress_is_current:
                         stress_array = current_stress(w, phi)
                         error_level = field_error_level + np.linalg.norm(stress_array[stress_indices])
                     print(f"Iteration stopped by callback at iteration {iter}")
@@ -1210,7 +1210,7 @@ class SCFT:
 
             # Calculate new fields using simple and Anderson mixing
             # Note: w and w_diff are in irreducible basis when space group is set
-            if self.box_is_altering:
+            if self.relax_cell:
                 w = self._update_fields_and_box(w, w_diff, stress_array, old_error_level, error_level)
             else:
                 w = self.field_optimizer.calculate_new_fields(w.flatten(), w_diff.flatten(), old_error_level, error_level)
@@ -1255,7 +1255,7 @@ class SCFT:
         self.partition_functions = list(total_partitions)
         self.chemical_potentials = None
         self.grand_potential = None
-        if q_init is None and not any(p.get("initial_conditions") for p in self.distinct_polymers):
+        if q_init is None and not any(p.get("initial_conditions") for p in self.polymers):
             self.chemical_potentials = self.compute_chemical_potentials()
             self.grand_potential = float(energy_absolute - np.dot(chain_densities[present],
                                                                  np.array(self.chemical_potentials)[present]))
@@ -1276,7 +1276,7 @@ class SCFT:
                 nx=list(self.prop_solver.nx),
                 monomer_types=self.monomer_types,
                 params=self.params,
-                stress=stress_array if self.box_is_altering else None,
+                stress=stress_array if self.relax_cell else None,
                 angles=list(self.prop_solver.get_angles_degrees()) if (
                     len(self.angles_reduced_indices) > 0
                 ) else None,

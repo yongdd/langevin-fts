@@ -123,7 +123,7 @@ where $`z_\infty`$ is the renormalization factor from the discrete chain model.
 
 ```python
 from polymerfts import draw_polymer_architectures
-draw_polymer_architectures(calc.distinct_polymers, calc.ds, calc.segment_lengths)
+draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths)
 ```
 
 Uses networkx and matplotlib; a graphviz layout is used when pygraphviz is installed.

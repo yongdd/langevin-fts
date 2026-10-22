@@ -86,12 +86,12 @@ def main():
     params = {
         "nx": [args.nx], "lx": [4.0], "chain_model": "continuous", "ds": args.ds,
         "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 6.0},
-        "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [
+        "polymers": [{"volume_fraction": 1.0, "blocks": [
             {"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}],
         "platform": args.platform,
         "langevin": {"nbar": 1e6, "dt": args.dt, "max_step": args.steps},
-        "recording": {"dir": str(work), "recording_period": args.steps,
-                      "sf_computing_period": 1, "sf_recording_period": args.block},
+        "recording": {"dir": str(work), "checkpoint_interval": args.steps,
+                      "sample_interval": 1, "statistics_save_interval": args.block},
         "verbose_level": 0,
     }
     if args.model == "lfts":

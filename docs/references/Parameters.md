@@ -41,7 +41,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 **Restrictions:**
 - Pseudo-spectral methods (RQM4, RK2, and the discrete-chain solver) require every direction to be periodic or every direction to be non-periodic; each non-periodic direction may be reflecting or absorbing independently of the others (e.g. reflecting in x and z, absorbing in y). Mixing periodic with non-periodic directions raises an error on all platforms.
 - Mixing periodic and non-periodic directions (e.g., periodic in x/y, reflecting in z) requires `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot mix periodic and non-periodic directions.
-- Stress computation (and therefore `box_is_altering`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
+- Stress computation (and therefore `relax_cell`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
 - Reflecting or absorbing walls need an orthogonal cell (all angles 90°), and a `space_group` needs periodic boundaries in every direction; both combinations are rejected.
 
 **Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
@@ -74,7 +74,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `distinct_polymers` | list[dict] | List of polymer species |
+| `polymers` | list[dict] | List of polymer species |
 
 **Each polymer dictionary:**
 
@@ -89,10 +89,10 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 - `"length"`: Contour length (float)
 - `"v"`: Start vertex (optional for linear chains)
 - `"u"`: End vertex (optional for linear chains)
-- `"fraction"`: (Optional) Random copolymer, see below
+- `"monomer_fractions"`: (Optional) Random copolymer, see below
 
 ```python
-"distinct_polymers": [{
+"polymers": [{
     "volume_fraction": 1.0,
     "blocks": [
         {"type": "A", "length": 0.5},  # A block, 50% of chain
@@ -101,7 +101,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 }]
 ```
 
-**Random copolymer:** a polymer with a single block that has a `"fraction"` dictionary, e.g. `{"type": "R", "length": 1.0, "fraction": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/lfts/MixtureBlockRandom.py`).
+**Random copolymer:** a polymer with a single block that has a `"monomer_fractions"` dictionary, e.g. `{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/lfts/MixtureBlockRandom.py`).
 
 ### Polymer Architectures
 
@@ -214,8 +214,8 @@ All keys are **required** (omitting one raises `KeyError`). The values above are
 |-----|------|-------------|---------|
 | `max_iter` | int | Maximum number of SCFT iterations | `2000` |
 | `tolerance` | float | Stop when the self-consistency error (plus the stress norm when the box relaxes) is below this value | `1e-8` |
-| `box_is_altering` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
-| `scale_stress` | float | Scaling of the stress entries in the optimizer vector | `1` |
+| `relax_cell` | bool | Relax the box lengths (and, for monoclinic/triclinic/oblique systems, the angles) together with the fields | Required |
+| `stress_scale` | float | Scaling of the stress entries in the optimizer vector | `1` |
 | `stress_interval` | int or `"adaptive"` | Compute the stress every N iterations; `"adaptive"` uses 1, 2 or 4 as the error drops below 1e-2 and 1e-4 | `1` |
 
 Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimization](#box-optimization) for the restrictions). Each iteration changes every box length by at most 10 % and every angle by at most 5°.
@@ -259,7 +259,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 |-----|------|-------------|---------|
 | `dt` | float | Langevin time step $`\Delta\tau \cdot N_{ref}`$ | Required |
 | `nbar` | float | Invariant polymerization index $`\bar{n}`$ | Required |
-| `max_step` | int | Maximum Langevin steps | Required |
+| `max_step` | int | Final Langevin step number, including steps restored from a checkpoint | Required |
 | `integrator` | str | Built-in Langevin method: `"lm"` or `"euler"`; an `integrator=` constructor argument takes precedence | `"lm"` |
 
 ### Saddle Point
@@ -288,11 +288,11 @@ The optional `"resample"` policy reproduces the earlier noise-selection behavior
 | Key | Type | Description |
 |-----|------|-------------|
 | `dir` | str | Output directory name |
-| `recording_period` | int | Period for saving fields |
-| `sf_computing_period` | int | Period for computing structure function |
-| `sf_recording_period` | int | Period for saving structure function |
+| `checkpoint_interval` | int | Interval for saving complete restart checkpoints |
+| `sample_interval` | int | Collect H, dH/dχN, drift and structure-function samples every N Langevin steps |
+| `statistics_save_interval` | int | Save the collected histories and averaged structure functions, then reset the accumulators, every N Langevin steps |
 
-All periods must be positive integers. Structure functions are normalized by the actual sample count, including when the two structure-function periods are not multiples of one another. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS.
+All intervals are positive integer counts of Langevin steps. Structure functions are normalized by the actual sample count, including when `statistics_save_interval` is not a multiple of `sample_interval`. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS. Custom callbacks use their own `interval` independently of these built-in measurements.
 
 Field checkpoints use format version 2 and are replaced atomically. They store the full PCG64 state, previous noise, auxiliary fields, concentrations, pending measurement sums/histories, WTMD state, and custom integrator/callback settings and states. Version-1 files continue with default LM and no callbacks. `continue_run(path)` validates the effective physical and numerical settings before restoring the RNG. The output directory, checkpoint interval, maximum final step, verbosity and backend may change; sampling periods, model, integrator settings, named callbacks and WTMD bias settings must match. On a different backend only numerical/statistical equivalence is expected. Old unversioned files require `continue_run(path, allow_legacy=True)` and emit a warning because compatibility and pending measurements cannot be verified.
 
@@ -382,7 +382,7 @@ When `True`:
 ```python
 "space_group": {
     "symbol": "Im-3m",   # Hermann-Mauguin symbol
-    "number": 529        # Hall number (optional)
+    "hall_number": 529        # Hall number (optional)
 }
 ```
 
@@ -408,9 +408,9 @@ $`k`$ is the physical wavenumber of the cell, including the cell angles. Along a
 
 ### Box Optimization
 
-`box_is_altering`, `scale_stress`, `stress_interval` and `crystal_system` are listed under [SCFT Parameters](#scft-parameters).
+`relax_cell`, `stress_scale`, `stress_interval` and `crystal_system` are listed under [SCFT Parameters](#scft-parameters).
 
-**Restrictions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions for pseudo-spectral methods with real fields (complex fields with non-periodic boundaries are rejected), but is not implemented for the real-space `"cn-adi2"` method. Therefore `box_is_altering=True` requires a pseudo-spectral method. With non-periodic boundaries only box lengths can be optimized (angles stay at 90°); discrete-chain stress is exact against d(-lnQ)/dL, continuous-chain stress carries the contour-quadrature error (see docs/theory/StressTensor.md).
+**Restrictions:** Stress computation supports periodic, reflecting, and absorbing boundary conditions for pseudo-spectral methods with real fields (complex fields with non-periodic boundaries are rejected), but is not implemented for the real-space `"cn-adi2"` method. Therefore `relax_cell=True` requires a pseudo-spectral method. With non-periodic boundaries only box lengths can be optimized (angles stay at 90°); discrete-chain stress is exact against d(-lnQ)/dL, continuous-chain stress carries the contour-quadrature error (see docs/theory/StressTensor.md).
 
 ### Lattice Angles (Non-orthogonal)
 
@@ -446,6 +446,30 @@ The format follows the extension (`.yaml`, `.yml` or `.json`). A string value th
 
 ## Example Configurations
 
+### Compatibility with Earlier Parameter Names
+
+SCFT, LFTS and CLFTS accept the following legacy input names. Constructors copy
+and normalize the input; `sim.params` and newly saved parameters use the names
+documented above. The caller's dictionary is unchanged. Specify one name per
+option: supplying both a current name and its alias raises `ValidationError`,
+even when their values are equal.
+
+| Earlier name | Current name |
+|--------------|--------------|
+| `distinct_polymers` | `polymers` |
+| `box_is_altering` | `relax_cell` |
+| `scale_stress` | `stress_scale` |
+| `blocks[].fraction` | `blocks[].monomer_fractions` |
+| `space_group.number` | `space_group.hall_number` |
+| `recording.recording_period` | `recording.checkpoint_interval` |
+| `recording.sf_computing_period` | `recording.sample_interval` |
+| `recording.sf_recording_period` | `recording.statistics_save_interval` |
+
+Version-1 and version-2 checkpoints written with earlier names can be resumed
+using current parameter names. The stored settings hash is verified before
+translating aliases for the compatibility comparison. WTMD's separate
+`wtmd.recording_period` option keeps its existing name and meaning.
+
 ### SCFT Lamellar Phase
 
 ```python
@@ -456,7 +480,7 @@ params = {
     "ds": 0.01,
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 20.0},
-    "distinct_polymers": [{
+    "polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
             {"type": "A", "length": 0.5},
@@ -464,7 +488,7 @@ params = {
         ]
     }],
     "numerical_method": "rqm4",
-    "box_is_altering": False,
+    "relax_cell": False,
     "optimizer": {
         "name": "am",
         "max_hist": 20,
@@ -485,7 +509,7 @@ params = {
     "ds": 0.01,
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 18.0},
-    "distinct_polymers": [{
+    "polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
             {"type": "A", "length": 0.375},
@@ -493,11 +517,11 @@ params = {
         ]
     }],
     "numerical_method": "rqm4",
-    "box_is_altering": True,
-    "scale_stress": 0.5,
+    "relax_cell": True,
+    "stress_scale": 0.5,
     "space_group": {
         "symbol": "Ia-3d",
-        "number": 530
+        "hall_number": 530
     },
     "optimizer": {
         "name": "am",

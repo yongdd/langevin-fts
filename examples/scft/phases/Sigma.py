@@ -21,8 +21,8 @@ params = {
                                 # Standard tetragonal setting: a = b ≠ c (4-fold axis along z)
 
     "reduce_memory":False,     # Reduce memory usage by storing only check points.
-    "box_is_altering":True,
-    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Find box size that minimizes the free energy during saddle point iteration.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Relax cell lengths and allowed angles during SCFT iteration.
     "chain_model":"continuous",      # "discrete" or "continuous" chain model
     "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
@@ -34,10 +34,10 @@ params = {
 
     "space_group":{
         "symbol":"P4_2/mnm",   # IT symbol of the space group (No. 136)
-        "number": 419,         # Hall number of the space group
+        "hall_number": 419,         # Hall number of the space group
     },
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer
             {"type":"B", "length":1-f}, # B-block

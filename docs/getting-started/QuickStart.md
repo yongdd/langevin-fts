@@ -46,7 +46,7 @@ params = {
     # Polymer
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 20.0},        # χN parameter
-    "distinct_polymers": [{
+    "polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
             {"type": "A", "length": 0.5},  # For linear chains, v/u are optional
@@ -58,7 +58,7 @@ params = {
     "numerical_method": "rqm4",    # "rqm4", "rk2", or "cn-adi2"
 
     # Box relaxation (required by SCFT; True relaxes lx with the stress)
-    "box_is_altering": False,
+    "relax_cell": False,
 
     # Optimizer
     "optimizer": {

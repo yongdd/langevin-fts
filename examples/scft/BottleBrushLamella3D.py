@@ -65,8 +65,8 @@ params = {
     "aggregate_propagator_computation":True,   # Aggregate multiple propagators when solving diffusion equations for speedup. 
                                                # To obtain concentration of each block, disable this option.
     "reduce_memory":False,     # Reduce memory usage by storing only check points.
-    "box_is_altering":True,
-    "stress_interval":1,     # Compute stress every iteration (for reproducibility)       # Find box size that minimizes the free energy during saddle point iteration.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)       # Relax cell lengths and allowed angles during SCFT iteration.
     "chain_model":"discrete",     # "discrete" or "continuous" chain model
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
 
@@ -76,7 +76,7 @@ params = {
 
     "chi_n": {"A,B": chi_n/total_alpha},   # Interaction parameter, Flory-Huggins params * N_Ref
 
-    "distinct_polymers":[{      # Distinct Polymers
+    "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks": blocks,
         },],

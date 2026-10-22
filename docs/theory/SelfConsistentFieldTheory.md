@@ -179,7 +179,7 @@ The self-consistency error is defined as:
 
 The constant 1 in the denominator prevents divergence when the field magnitudes are small.
 
-Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `box_is_altering=True`, the Euclidean norm of the stress components (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test.
+Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `relax_cell=True`, the Euclidean norm of the stress components (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test.
 
 ---
 
@@ -197,7 +197,7 @@ where $`\boldsymbol{\theta} = [L_a, L_b, L_c, \gamma, \beta, \alpha]^T`$ contain
 
 ### 4.2 Box Update
 
-During SCFT iteration with `box_is_altering=True`:
+During SCFT iteration with `relax_cell=True`:
 
 ```math
 L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}
@@ -207,14 +207,14 @@ L_a^{(n+1)} = L_a^{(n)} - \eta \cdot \frac{\partial H}{\partial L_a}
 \alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \frac{\partial H}{\partial \alpha}
 ```
 
-where $`\eta`$ is the `scale_stress` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing); the plain gradient-descent update above corresponds to the simple-mixing limit.
+where $`\eta`$ is the `stress_scale` parameter. At equilibrium, all stress components vanish. In the implementation, the scaled stress residuals are concatenated with the field residuals and passed through the field optimizer (Anderson mixing); the plain gradient-descent update above corresponds to the simple-mixing limit.
 
 **Implementation details:**
 - Box size changes are limited to 10% per iteration
 - Angle changes are limited to 5° per iteration
 - Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 1)
 - Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
-- Stress computation supports periodic, reflecting, and absorbing boundary conditions with pseudo-spectral methods (real fields); the real-space CN-ADI2 solver does not support stress. `box_is_altering=True` therefore requires a pseudo-spectral method; with non-periodic boundaries only box lengths are optimized (angles stay at 90°).
+- Stress computation supports periodic, reflecting, and absorbing boundary conditions with pseudo-spectral methods (real fields); the real-space CN-ADI2 solver does not support stress. `relax_cell=True` therefore requires a pseudo-spectral method; with non-periodic boundaries only box lengths are optimized (angles stay at 90°).
 
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.
 
@@ -238,7 +238,7 @@ params = {
     "segment_lengths": {"A": 1.0, "B": 1.0},
     "chi_n": {"A,B": 20.0},
 
-    "distinct_polymers": [{
+    "polymers": [{
         "volume_fraction": 1.0,
         "blocks": [
             {"type": "A", "length": 0.5},
@@ -254,8 +254,8 @@ params = {
         "mix_init": 0.1,
     },
 
-    "box_is_altering": True,         # Enable box optimization
-    "scale_stress": 0.5,             # Stress scaling factor
+    "relax_cell": True,         # Enable box optimization
+    "stress_scale": 0.5,             # Stress scaling factor
 
     "max_iter": 2000,
     "tolerance": 1e-8,
@@ -352,7 +352,7 @@ for iteration in range(1000):
 | Chain composition | `result.polymer_lengths`, `result.polymer_volume_fractions` | Relative chain lengths $`\alpha_p`$ and polymer volume fractions $`\bar\phi_p`$ |
 | Partition function | `solver.get_partition_function(p)` | Single-chain partition function |
 | Box size | `calculation.cb.get_lx()` | Final box dimensions |
-| Stress | `result.stress` | Stress components; available via `result = calculation.run(..., return_result=True)` (set only when `box_is_altering=True`), or via `solver.compute_stress()` / `solver.get_stress()` |
+| Stress | `result.stress` | Stress components; available via `result = calculation.run(..., return_result=True)` (set only when `relax_cell=True`), or via `solver.compute_stress()` / `solver.get_stress()` |
 
 The final summary prints both relative and full free energies. For phase comparisons at different compositions, use `free_energy_absolute` and the reference-species quantities described in [Phase Equilibrium from Canonical SCFT](PhaseEquilibrium.md), which also explains evaluation at prescribed chemical potentials using CE calculations. `SCFTResult` is obtained with `run(..., return_result=True)`; the thermodynamic values are also stored on the `SCFT` object and by `save_results()`. Chemical potentials are unavailable for grafted chains or supplied initial propagators. Bulk coexistence requires converged, incompressible, periodic states.
 
@@ -364,7 +364,7 @@ The SCFT class supports several advanced features not covered in the basic examp
 |---------|-----------|-------------|
 | Space group symmetry | `"space_group": {"symbol": "Ia-3d"}` | Exploit crystallographic symmetry (beta) |
 | Smearing | `"smearing": {...}` | Finite-range interactions |
-| Random copolymers | `{"fraction": {"A": 0.3, "B": 0.7}}` | Statistical copolymer blocks |
+| Random copolymers | `{"monomer_fractions": {"A": 0.3, "B": 0.7}}` | Statistical copolymer blocks |
 | Non-orthogonal cells | `"angles": [90, 90, 120]` | Monoclinic/triclinic unit cells |
 | Memory saving | `"reduce_memory": True` | Checkpoint-based propagator storage |
 | Stress interval | `"stress_interval": 3` or `"adaptive"` | Control stress computation frequency |

@@ -249,10 +249,10 @@ def test_walls():
 
 def test_scft_box_relaxation():
     def params(lx, box):
-        return {"nx": [32], "lx": [lx], "box_is_altering": box, "stress_interval": 1,
+        return {"nx": [32], "lx": [lx], "relax_cell": box, "stress_interval": 1,
                 "chain_model": "discrete", "ds": 1 / 50, "segment_lengths": {"A": 1.0, "B": 1.0},
                 "chi_n": {"A,B": 20.0}, "platform": cpu_platform(),
-                "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5},
+                "polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5},
                                                                           {"type": "B", "length": 0.5}]}],
                 "smearing": {"type": "gaussian", "a_int": 0.1},
                 "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
@@ -282,10 +282,10 @@ def test_noise_volume():
     try:
         base = {"nx": [16, 16], "lx": [3.0, 3.0], "chain_model": "continuous", "ds": 1 / 20,
                 "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 15.0},
-                "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5},
+                "polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5},
                                                                           {"type": "B", "length": 0.5}]}],
                 "platform": cpu_platform(), "langevin": {"nbar": 10000, "dt": 8.0, "max_step": 2},
-                "recording": {"dir": root, "recording_period": 2, "sf_computing_period": 1, "sf_recording_period": 2},
+                "recording": {"dir": root, "checkpoint_interval": 2, "sample_interval": 1, "statistics_save_interval": 2},
                 "saddle": {"max_iter": 200, "tolerance": 1e-4},
                 "compressor": {"name": "am", "max_hist": 20, "start_error": 5e-1, "mix_min": 0.01, "mix_init": 0.01},
                 "smearing": {"type": "gaussian", "a_int": 0.2}, "verbose_level": 1}

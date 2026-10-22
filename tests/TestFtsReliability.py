@@ -22,13 +22,13 @@ def parameters(directory, steps=4):
     return {
         "nx": [16], "lx": [3.0], "ds": 0.05, "chain_model": "continuous",
         "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [{"volume_fraction": 1.0, "blocks": [
+        "polymers": [{"volume_fraction": 1.0, "blocks": [
             {"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}],
         "platform": next(p for p in PlatformSelector.avail_platforms() if p.startswith("cpu")),
         "langevin": {"nbar": 10000, "dt": 1.0, "max_step": steps},
         "compressor": {"name": "am", "max_hist": 20, "start_error": 0.5, "mix_min": 0.01, "mix_init": 0.01},
         "saddle": {"max_iter": 200, "tolerance": 1e-6},
-        "recording": {"dir": str(directory), "recording_period": 1, "sf_computing_period": 1, "sf_recording_period": 2},
+        "recording": {"dir": str(directory), "checkpoint_interval": 1, "sample_interval": 1, "statistics_save_interval": 2},
         "verbose_level": 0,
     }
 
@@ -146,7 +146,7 @@ def main():
                     params = parameters(root / (cls.__name__ + "_homopolymer"), 1)
                     params["segment_lengths"] = {"A": 1.0}
                     params["chi_n"] = {}
-                    params["distinct_polymers"] = [{"volume_fraction": 1.0,
+                    params["polymers"] = [{"volume_fraction": 1.0,
                                                        "blocks": [{"type": "A", "length": 1.0}]}]
                     homogeneous = cls(params, random_seed=5)
                     homogeneous.run({"A": fields()["A"]})
@@ -158,7 +158,7 @@ def main():
             for complex_fields in (False, True):
                 for section, key, value in ((None, "ds", np.nan), ("langevin", "dt", np.inf),
                                             ("langevin", "nbar", -1), ("langevin", "max_step", True),
-                                            ("recording", "sf_computing_period", 0)):
+                                            ("recording", "sample_interval", 0)):
                     params = parameters(root)
                     (params if section is None else params[section])[key] = value
                     expect_error(lambda: validate_lfts_params(params, complex_fields=complex_fields), ValidationError)

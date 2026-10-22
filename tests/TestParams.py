@@ -30,12 +30,12 @@ def base_params():
         "ds": 1/10,
         "segment_lengths": {"A": 1.0, "B": 1.0},
         "chi_n": {"A,B": 15.0},
-        "distinct_polymers": [{
+        "polymers": [{
             "volume_fraction": 1.0,
             "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}],
         }],
         "platform": cpu_platform(),
-        "box_is_altering": False,
+        "relax_cell": False,
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
     }
 
@@ -46,7 +46,7 @@ def lfts_params():
         "langevin": {"nbar": 10000, "dt": 8.0, "max_step": 10},
         "compressor": {"name": "am", "max_hist": 20, "start_error": 1e-1, "mix_min": 0.1, "mix_init": 0.1},
         "saddle": {"max_iter": 100, "tolerance": 1e-4},
-        "recording": {"dir": "data", "recording_period": 10, "sf_computing_period": 1, "sf_recording_period": 10},
+        "recording": {"dir": "data", "checkpoint_interval": 10, "sample_interval": 1, "statistics_save_interval": 10},
         "verbose_level": 1,
     })
     return params
@@ -146,12 +146,12 @@ def main():
         "max_iter": calc.max_iter == 2000,
         "tolerance": calc.tolerance == 1e-8,
         "stress_interval": calc.stress_interval == 1,
-        "scale_stress": calc.scale_stress == 1,
+        "stress_scale": calc.stress_scale == 1,
         "zeta_n": calc.zeta_n is None,
         "space_group": calc.sg is None,
         "monomer_types": calc.monomer_types == ["A", "B"],
         "chi_n": calc.chi_n == {"A,B": 15.0},
-        "blocks_input": calc.distinct_polymers[0]["blocks_input"] == [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]],
+        "blocks_input": calc.polymers[0]["blocks_input"] == [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]],
         "platform": calc.prop_solver.platform == cpu_platform(),
         "numerical_method": calc.prop_solver.numerical_method == "rqm4",
         "crystal_system": calc.crystal_system == "Orthorhombic" and calc.lx_reduced_indices == [0, 1, 2],
@@ -163,12 +163,12 @@ def main():
 
     # ---- explicit options reach the solver
     params = base_params()
-    params.update({"max_iter": 10, "tolerance": 1e-5, "stress_interval": "adaptive", "scale_stress": 2.0,
+    params.update({"max_iter": 10, "tolerance": 1e-5, "stress_interval": "adaptive", "stress_scale": 2.0,
                    "zeta_n": 100.0, "numerical_method": "rk2",
-                   "crystal_system": "Cubic", "box_is_altering": True})
+                   "crystal_system": "Cubic", "relax_cell": True})
     calc = build(SCFT, params)
     if not (calc.max_iter == 10 and calc.tolerance == 1e-5 and calc.stress_interval == "adaptive"
-            and calc.scale_stress == 2.0 and calc.zeta_n == 100.0
+            and calc.stress_scale == 2.0 and calc.zeta_n == 100.0
             and calc.prop_solver.numerical_method == "rk2"
             and calc.lx_reduced_indices == [0] and calc.lx_full_indices == [0, 0, 0]):
         print("FAILED: SCFT explicit options")
@@ -187,9 +187,9 @@ def main():
     # ---- random copolymer: effective segment length and fractions
     params = base_params()
     params["segment_lengths"] = {"A": 1.0, "B": 2.0}
-    params["distinct_polymers"] = [{
+    params["polymers"] = [{
         "volume_fraction": 1.0,
-        "blocks": [{"type": "R", "length": 1.0, "fraction": {"A": 0.5, "B": 0.5}}],
+        "blocks": [{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}],
     }]
     calc = build(SCFT, params)
     if not (np.isclose(calc.segment_lengths["R"], np.sqrt(0.5 * 1.0 + 0.5 * 4.0))
@@ -225,7 +225,7 @@ def main():
         ok = False
 
     # ---- invalid input raises ValidationError
-    params = base_params(); params["distinct_polymers"][0]["volume_fraction"] = 0.5
+    params = base_params(); params["polymers"][0]["volume_fraction"] = 0.5
     ok &= expect_error(SCFT, params, "volume fractions not summing to 1")
     params = base_params(); params["chi_n"] = {"A,Z": 1.0}
     ok &= expect_error(SCFT, params, "chi_n with unknown monomer")
@@ -272,14 +272,14 @@ def main():
     ok &= expect_error(SCFT, params, "cubic space group with unequal box lengths")
     params = base_params(); params["space_group"] = {"symbol": "Im-3m"}; params["angles"] = [90.0, 90.0, 120.0]
     ok &= expect_error(SCFT, params, "cubic space group with a 120-degree angle")
-    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "hall_number": 488}
     ok &= expect_error(SCFT, params, "hexagonal space group without a 120-degree angle")
-    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "hall_number": 488}
     params["angles"] = [90.0, 90.0, 120.0]
     if build(SCFT, params).crystal_system != "Hexagonal":
         print("FAILED: SCFT hexagonal space group with a hexagonal cell")
         ok = False
-    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "number": 488}; params["angles"] = [120.0]
+    params = base_params(); params["space_group"] = {"symbol": "P6_3/mmc", "hall_number": 488}; params["angles"] = [120.0]
     ok &= expect_error(SCFT, params, "3D box with a single angle")
     # trigonal groups: the axes setting of the group decides which cell is valid
     params = base_params(); params["space_group"] = {"symbol": "P-3m1"}
@@ -288,14 +288,14 @@ def main():
     if build(SCFT, params).crystal_system != "Trigonal":
         print("FAILED: SCFT hexagonal-axes trigonal group with a hexagonal cell")
         ok = False
-    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [90.0, 90.0, 120.0]
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "hall_number": 459}; params["angles"] = [90.0, 90.0, 120.0]
     ok &= expect_error(SCFT, params, "rhombohedral-axes group on a hexagonal cell")
-    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [80.0, 80.0, 80.0]
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "hall_number": 459}; params["angles"] = [80.0, 80.0, 80.0]
     if build(SCFT, params).crystal_system != "Trigonal":
         print("FAILED: SCFT rhombohedral-axes group on a rhombohedral cell")
         ok = False
-    params = base_params(); params["space_group"] = {"symbol": "R-3m", "number": 459}; params["angles"] = [80.0, 80.0, 80.0]
-    params["box_is_altering"] = True
+    params = base_params(); params["space_group"] = {"symbol": "R-3m", "hall_number": 459}; params["angles"] = [80.0, 80.0, 80.0]
+    params["relax_cell"] = True
     ok &= expect_error(SCFT, params, "box relaxation with a rhombohedral-axes setting")
 
     # ---- changing the user's dictionary after construction does not affect the object
@@ -303,9 +303,9 @@ def main():
     calc = build(SCFT, params)
     params["max_iter"] = 1
     params["chi_n"]["A,B"] = 0.0
-    params["distinct_polymers"][0]["volume_fraction"] = 0.2
+    params["polymers"][0]["volume_fraction"] = 0.2
     if not (calc.max_iter == 2000 and calc.chi_n == {"A,B": 15.0}
-            and calc.distinct_polymers[0]["volume_fraction"] == 1.0):
+            and calc.polymers[0]["volume_fraction"] == 1.0):
         print("FAILED: SCFT shares the user's dictionary")
         ok = False
 
@@ -328,14 +328,14 @@ def main():
     params = base_params()
     params["segment_lengths"] = {"A": 1.0}
     params["chi_n"] = {}
-    params["distinct_polymers"] = [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 1.0}]}]
+    params["polymers"] = [{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 1.0}]}]
     ok &= expect_error(SCFT, params, "SCFT with a single monomer type")
 
     # ---- mean concentrations from the chain compositions (random copolymer, alpha != 1)
     params = base_params()
-    params["distinct_polymers"] = [
+    params["polymers"] = [
         {"volume_fraction": 0.3, "blocks": [{"type": "A", "length": 0.7}]},
-        {"volume_fraction": 0.7, "blocks": [{"type": "R", "length": 1.0, "fraction": {"A": 0.5, "B": 0.5}}]},
+        {"volume_fraction": 0.7, "blocks": [{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}]},
     ]
     calc = build(SCFT, params)
     if not np.allclose(calc.mean_concentrations(), [0.3 + 0.35, 0.35]):
@@ -351,7 +351,7 @@ def main():
     except ValueError:
         pass
     params = base_params(); params["nx"] = [8, 8]; params["lx"] = [4.0, 4.0]; params["angles"] = [90.0, 90.0, 120.0]
-    params["box_is_altering"] = True
+    params["relax_cell"] = True
     calc = build(SCFT, params)
     if not (calc.crystal_system == "Hexagonal2D" and calc.lx_reduced_indices == [0]):
         print("FAILED: Hexagonal2D classification", calc.crystal_system, calc.lx_reduced_indices)
@@ -361,8 +361,8 @@ def main():
     for key in ("compressor", "recording", "verbose_level"):
         params = lfts_params(); del params[key]
         ok &= expect_error(LFTS, params, f"LFTS without {key}")
-    params = base_params(); del params["box_is_altering"]
-    ok &= expect_error(SCFT, params, "SCFT without box_is_altering")
+    params = base_params(); del params["relax_cell"]
+    ok &= expect_error(SCFT, params, "SCFT without relax_cell")
     params = lfts_params(); del params["langevin"]
     ok &= expect_error(CLFTS, params, "CLFTS without langevin")
     if build(CLFTS, lfts_params()).alpha_ds != 0.0:

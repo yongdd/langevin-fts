@@ -91,12 +91,12 @@ def test_scft():
     base = {
         "nx": [32], "lx": [2.0], "chain_model": "continuous", "ds": 0.02,
         "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 20.0},
-        "platform": cpu[0], "box_is_altering": False, "max_iter": 1500, "tolerance": 1e-11,
+        "platform": cpu[0], "relax_cell": False, "max_iter": 1500, "tolerance": 1e-11,
         "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
     }
 
     def run(polymers, fields, chi=20.0):
-        params = dict(base, distinct_polymers=polymers, chi_n={"A,B": chi})
+        params = dict(base, polymers=polymers, chi_n={"A,B": chi})
         progress = []
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
@@ -128,7 +128,7 @@ def test_scft():
     # The molecular entropy is per polymer species; random blocks enter the
     # monomer composition and field-mean correction with their fractions.
     polymers = [{"volume_fraction": 0.4, "blocks": [{"type": "A", "length": 0.3}, {"type": "B", "length": 0.7}]},
-                {"volume_fraction": 0.6, "blocks": [{"type": "R", "length": 0.5, "fraction": {"A": 0.2, "B": 0.8}}]}]
+                {"volume_fraction": 0.6, "blocks": [{"type": "R", "length": 0.5, "monomer_fractions": {"A": 0.2, "B": 0.8}}]}]
     _, random = run(polymers, zeros, chi=8.0)
     expected = homogeneous_thermodynamics([0.4, 0.6], [1.0, 0.5], [[0.3, 0.7], [0.2, 0.8]], [[0, 8], [8, 0]])
     np.testing.assert_allclose(random.free_energy, expected["free_energy"], rtol=0, atol=1e-12)
@@ -186,12 +186,12 @@ def test_scft():
     field = np.cos(4*np.pi*x)+np.cos(4*np.pi*y)+np.cos(4*np.pi*z)
     field *= 5/np.std(field)
     p = dict(base, nx=[8, 8, 8], lx=[2.0, 2.0, 2.0], max_iter=1,
-             distinct_polymers=[{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.3}, {"type": "B", "length": 0.7}]}])
+             polymers=[{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.3}, {"type": "B", "length": 0.7}]}])
     states = []
     for symmetry in (False, True):
         options = dict(p)
         if symmetry:
-            options["space_group"] = {"symbol": "Im-3m", "number": 529}
+            options["space_group"] = {"symbol": "Im-3m", "hall_number": 529}
         with contextlib.redirect_stdout(io.StringIO()):
             calc = SCFT(options)
             states.append(calc.run({"A": field, "B": -field}, return_result=True))

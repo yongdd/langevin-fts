@@ -71,9 +71,9 @@ def cpu_platform():
 
 
 def base(nx, lx, chi_n, blocks, box):
-    return {"nx": nx, "lx": lx, "box_is_altering": box, "chain_model": "continuous", "ds": 1 / 50,
+    return {"nx": nx, "lx": lx, "relax_cell": box, "chain_model": "continuous", "ds": 1 / 50,
             "segment_lengths": {t: 1.0 for t, _ in blocks}, "chi_n": chi_n, "platform": cpu_platform(),
-            "distinct_polymers": [{"volume_fraction": 1.0,
+            "polymers": [{"volume_fraction": 1.0,
                                    "blocks": [{"type": t, "length": length} for t, length in blocks]}],
             "optimizer": {"name": "am", "max_hist": 20, "start_error": 1e-2, "mix_min": 0.1, "mix_init": 0.1},
             "max_iter": 3000, "tolerance": 1e-8}

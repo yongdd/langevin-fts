@@ -44,7 +44,7 @@ params = {
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: gamma=120 (between a,b)
 
     "reduce_memory": False,         # Reduce memory usage by storing only check points
-    "box_is_altering": True,        # Find box size that minimizes the free energy
+    "relax_cell": True,        # Find box size that minimizes the free energy
     "stress_interval": 1,           # Compute stress every iteration
     "chain_model": "continuous",    # "discrete" or "continuous" chain model
     "ds": 1/100,                    # Contour step interval = 1/N_Ref
@@ -56,7 +56,7 @@ params = {
 
     "chi_n": {"A,B": 15},           # Flory-Huggins parameter * N_Ref
 
-    "distinct_polymers": [{         # Polymer species
+    "polymers": [{         # Polymer species
         "volume_fraction": 1.0,     # Volume fraction
         "blocks": [                 # AB diblock copolymer
             {"type": "A", "length": f},       # A-block
@@ -68,7 +68,7 @@ params = {
 
     "space_group": {
         "symbol": "P6_3/mmc",       # International symbol for HPL space group (No. 194)
-        "number": 488,              # Hall number
+        "hall_number": 488,              # Hall number
     },
 
     "optimizer": {

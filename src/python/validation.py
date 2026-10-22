@@ -4,6 +4,7 @@ The checks raise ValidationError (never assert, which disappears under
 ``python -O``) before any expensive C++ object is created.
 """
 
+import copy
 from typing import Any, Dict
 from os import PathLike
 
@@ -17,6 +18,45 @@ class ValidationError(Exception):
 
 class SaddlePointError(RuntimeError):
     """A Langevin run stopped before accepting a step; see ``sim.run_status``."""
+
+
+def _rename_parameter(mapping, old, new, path=""):
+    if old in mapping:
+        if new in mapping:
+            raise ValidationError(f"Specify only one of '{path}{old}' and '{path}{new}'")
+        mapping[new] = mapping.pop(old)
+
+
+def normalize_params(params):
+    """Copy input parameters and translate supported legacy names.
+
+    Normalization stays at the input boundary so the simulation loops use only
+    the documented names. Supplying both names is an error, even if equal.
+    """
+    if not isinstance(params, dict):
+        raise ValidationError("Simulation parameters must be a dict")
+    params = copy.deepcopy(params)
+    for old, new in (("distinct_polymers", "polymers"),
+                     ("box_is_altering", "relax_cell"),
+                     ("scale_stress", "stress_scale")):
+        _rename_parameter(params, old, new)
+    polymers = params.get("polymers")
+    if isinstance(polymers, list):
+        for i, polymer in enumerate(polymers):
+            if isinstance(polymer, dict) and isinstance(polymer.get("blocks"), list):
+                for j, block in enumerate(polymer["blocks"]):
+                    if isinstance(block, dict):
+                        _rename_parameter(block, "fraction", "monomer_fractions", f"polymers[{i}].blocks[{j}].")
+    group = params.get("space_group")
+    if isinstance(group, dict):
+        _rename_parameter(group, "number", "hall_number", "space_group.")
+    recording = params.get("recording")
+    if isinstance(recording, dict):
+        for old, new in (("recording_period", "checkpoint_interval"),
+                         ("sf_computing_period", "sample_interval"),
+                         ("sf_recording_period", "statistics_save_interval")):
+            _rename_parameter(recording, old, new, "recording.")
+    return params
 
 
 def _finite_number(value, name, *, positive=False, nonnegative=False):
@@ -35,12 +75,11 @@ def _integer(value, name, minimum=1):
 def validate_system_params(params: Dict[str, Any]) -> None:
     """Check the parameters shared by SCFT, L-FTS and CL-FTS.
 
-    Required: nx, lx, ds, chain_model, segment_lengths, chi_n, distinct_polymers.
+    Required: nx, lx, ds, chain_model, segment_lengths, chi_n, polymers.
     The first problem found raises ValidationError with a message naming the key.
     """
-    if not isinstance(params, dict):
-        raise ValidationError("Simulation parameters must be a dict")
-    for key in ("nx", "lx", "ds", "chain_model", "segment_lengths", "chi_n", "distinct_polymers"):
+    params = normalize_params(params)
+    for key in ("nx", "lx", "ds", "chain_model", "segment_lengths", "chi_n", "polymers"):
         if key not in params:
             raise ValidationError(f"Missing required parameter: '{key}'")
 
@@ -76,36 +115,36 @@ def validate_system_params(params: Dict[str, Any]) -> None:
     for pair, value in params["chi_n"].items():
         _finite_number(value, f"chi_n.{pair}")
 
-    polymers = params["distinct_polymers"]
+    polymers = params["polymers"]
     if not isinstance(polymers, list) or len(polymers) == 0:
-        raise ValidationError("'distinct_polymers' must be a non-empty list")
+        raise ValidationError("'polymers' must be a non-empty list")
     total_volume_fraction = 0.0
     for i, polymer in enumerate(polymers):
         if not isinstance(polymer, dict) or "volume_fraction" not in polymer or "blocks" not in polymer:
-            raise ValidationError(f"distinct_polymers[{i}] must be a dict with 'volume_fraction' and 'blocks'")
+            raise ValidationError(f"polymers[{i}] must be a dict with 'volume_fraction' and 'blocks'")
         vf = polymer["volume_fraction"]
-        _finite_number(vf, f"distinct_polymers[{i}].volume_fraction", nonnegative=True)
+        _finite_number(vf, f"polymers[{i}].volume_fraction", nonnegative=True)
         if vf > 1:
-            raise ValidationError(f"distinct_polymers[{i}]['volume_fraction'] must be in [0, 1], got {vf}")
+            raise ValidationError(f"polymers[{i}]['volume_fraction'] must be in [0, 1], got {vf}")
         total_volume_fraction += vf
         if not isinstance(polymer["blocks"], list) or len(polymer["blocks"]) == 0:
-            raise ValidationError(f"distinct_polymers[{i}]['blocks'] must be a non-empty list")
+            raise ValidationError(f"polymers[{i}]['blocks'] must be a non-empty list")
         for j, block in enumerate(polymer["blocks"]):
-            name = f"distinct_polymers[{i}].blocks[{j}]"
+            name = f"polymers[{i}].blocks[{j}]"
             if not isinstance(block, dict) or not isinstance(block.get("type"), str) or "length" not in block:
                 raise ValidationError(f"'{name}' needs 'type' and 'length'")
             _finite_number(block["length"], name + ".length", positive=True)
             for vertex in ("v", "u"):
                 if vertex in block:
                     _integer(block[vertex], name + "." + vertex, minimum=0)
-            if "fraction" in block:
-                fractions = block["fraction"]
+            if "monomer_fractions" in block:
+                fractions = block["monomer_fractions"]
                 if not isinstance(fractions, dict) or not fractions:
-                    raise ValidationError(f"'{name}.fraction' must be a non-empty dict")
+                    raise ValidationError(f"'{name}.monomer_fractions' must be a non-empty dict")
                 for monomer, fraction in fractions.items():
                     if monomer not in segment_lengths:
-                        raise ValidationError(f"Unknown monomer '{monomer}' in '{name}.fraction'")
-                    _finite_number(fraction, name + ".fraction." + monomer, nonnegative=True)
+                        raise ValidationError(f"Unknown monomer '{monomer}' in '{name}.monomer_fractions'")
+                    _finite_number(fraction, name + ".monomer_fractions." + monomer, nonnegative=True)
     if abs(total_volume_fraction - 1.0) > 1e-10:
         raise ValidationError(f"Sum of volume fractions must be 1.0, got {total_volume_fraction}")
 
@@ -117,6 +156,7 @@ def validate_system_params(params: Dict[str, Any]) -> None:
 
 def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> None:
     """Validate the shared Langevin options before constructing numerical objects."""
+    params = normalize_params(params)
     validate_system_params(params)
     langevin = params.get("langevin", None)
     if not isinstance(langevin, dict):
@@ -127,7 +167,7 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
     recording = params.get("recording")
     if not isinstance(recording, dict) or not isinstance(recording.get("dir"), (str, PathLike)):
         raise ValidationError("'recording' needs a 'dir' path")
-    for key in ("recording_period", "sf_computing_period", "sf_recording_period"):
+    for key in ("checkpoint_interval", "sample_interval", "statistics_save_interval"):
         _integer(recording.get(key), "recording." + key)
     _integer(params.get("verbose_level"), "verbose_level", minimum=0)
     if params["verbose_level"] > 2:
