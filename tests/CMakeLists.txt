@@ -60,6 +60,7 @@ SET(BASIC_TESTS
     TestAggregationDendritic
     TestAggregationDiscreteCpu
     TestAggregationSideChains
+    TestAggregationSlicedSideChains
 
     # Branched polymer tests
     TestPseudoBranchedContinuous3D

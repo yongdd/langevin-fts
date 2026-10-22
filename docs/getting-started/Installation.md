@@ -216,15 +216,15 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 57 | ~1 min | Installation verification |
-| **Full** | `ctest` | 103 | ~8 min | Development validation |
+| **Basic** | `ctest -L basic` | 58 | ~1 min | Installation verification |
+| **Full** | `ctest` | 104 | ~8 min | Development validation |
 
 **Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
 
 The counts are for a build with the GPU backend and both CPU backends; the tests of a
 backend that is not built are left out.
 
-**Basic tests** (57 tests):
+**Basic tests** (58 tests):
 - FFT: CPU/CUDA, DCT, DST, mixed boundary conditions
 - Propagator: linear, branched, mixture polymers
 - Numerical methods: pseudo-spectral (RQM4, RK2), real-space (CN-ADI)

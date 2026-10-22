@@ -196,11 +196,23 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
             // Replace the second map of computation_blocks_new_polymer with 'set_I'
             computation_blocks_new_polymer[left_key] = set_I;
 
+            // Keys whose downstream blocks must be re-keyed: the new aggregated keys and the
+            // keys substituted here earlier, as long as they still cover the whole block. A
+            // substituted key that this aggregation sliced is computed only up to the slice;
+            // the aggregated key that took over the rest carries its downstream instead.
+            std::vector<std::string> full_length_keys;
+            for(const auto& key : aggregated_blocks[left_key])
+            {
+                auto it = set_I.find(key);
+                if(it != set_I.end() && it->second.n_segment_right == it->second.n_segment_left)
+                    full_length_keys.push_back(key);
+            }
             for(auto& item : set_I)
             {
                 if(item.first[0] == '[' && item.second.n_segment_right == item.second.n_segment_left)
-                    aggregated_blocks[left_key].push_back(item.first);
+                    full_length_keys.push_back(item.first);
             }
+            aggregated_blocks[left_key] = full_length_keys;
 
             // Remove right keys from other left keys related to aggregated keys, and create new right keys
             substitute_right_keys(
@@ -257,10 +269,14 @@ bool PropagatorComputationOptimizer::use_aggregation() const
  * be updated to reference the new aggregated key.
  *
  * @param pc                              Polymer graph
- * @param v_u_to_right_key               Map from (v,u) to right key
+ * @param v_u_to_right_key               Map from (v,u) to its initial right key; the entry is
+ *                                       removed when the block is substituted
  * @param computation_blocks_new_polymer Block map to update
- * @param aggregated_blocks              Newly aggregated keys
+ * @param aggregated_blocks              Keys per left key whose downstream blocks are re-keyed:
+ *                                       full-length aggregated keys and substituted keys
  * @param left_key                       Left key being processed
+ *
+ * @throws Exception if the right key of a block would be substituted twice
  */
 void PropagatorComputationOptimizer::substitute_right_keys(
     Polymer& pc, 
@@ -343,8 +359,16 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 int ds_index = contour_length_mapping->get_ds_index(pc.get_block(j,v).contour_length);
                 new_u_key += ")" + pc.get_block(j,v).monomer_type + "+" + std::to_string(ds_index);
 
-                // Remove 'v_u' from 'computation_blocks_new_polymer'
-                computation_blocks_new_polymer[dep_j].erase(v_u_to_right_key[std::make_tuple(j,v)]);
+                // Remove the initial right key of block (j,v). A block is substituted at most
+                // once; a second substitution would leave both of its right keys in the table
+                // and count its concentration twice, so it stops with an error instead.
+                auto initial_right_key = v_u_to_right_key.find(std::make_tuple(j,v));
+                if (initial_right_key == v_u_to_right_key.end())
+                    throw_with_line_number("Propagator aggregation would substitute the right key of block ("
+                        + std::to_string(j) + ", " + std::to_string(v) + ") twice. "
+                        + "Set aggregate_propagator_computation to False and report this polymer as a bug.");
+                computation_blocks_new_polymer[dep_j].erase(initial_right_key->second);
+                v_u_to_right_key.erase(initial_right_key);
 
                 // Add new key
                 if (computation_blocks_new_polymer[dep_j].find(new_u_key) == computation_blocks_new_polymer[dep_j].end())
