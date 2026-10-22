@@ -130,7 +130,9 @@ Code/source hashes in simulation metadata help identify changed implementations;
 they do not replace the extension author's versioned compatibility contract.
 Version-1 checkpoints continue with default LM and no callbacks. Unversioned
 checkpoints require the existing explicit legacy opt-in and cannot restore custom
-extensions. Older releases cannot read version-2 checkpoints.
+extensions. v0.9.1 checkpoints are unversioned; format version 1 was introduced
+during development after that release. v0.9.1 does not restore the complete state
+in version-2 checkpoints; resume them with v0.10.0.
 
 `TestExtensions` checks exact linear stochastic moments, observer isolation,
 multistage force calls, failed-proposal handling, and uninterrupted/split-run

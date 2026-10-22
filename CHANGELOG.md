@@ -6,14 +6,57 @@ fixes that leave converged results unchanged.
 
 Commit hashes refer to the `main`/`devel` history on GitHub.
 
-## [0.10.0] - Unreleased
+## [0.10.0] - 2026-10-23
 
-The first release since v0.9.1 (May 2025). It bundles a year of development; the entries
-below list the changes that alter simulation results or the user-facing interface, so that
-old inputs and reference numbers can be re-checked. Pure refactoring and documentation
-commits are omitted.
+The first release since v0.9.1 (May 2025). The
+[release notes](.github/release-notes/v0.10.0.md) summarize changes relative to that
+release. The dated development history below also records features introduced,
+corrected or removed between releases; those entries do not all describe v0.9.1.
 
-### Results-affecting fixes
+### Release highlights
+
+- CPU-MKL, CPU-FFTW and CUDA backends share the propagator computation layer;
+  continuous and discrete chains support space-group reduced bases and CrysFFT paths.
+- Canonical SCFT exposes full and relative free energies, molecular chemical potentials,
+  grand potentials and reference-species phase-coexistence calculations.
+- L-FTS and CL-FTS support custom integrators and named observable callbacks, with
+  checkpointed extension state. CL-FTS and the browser script builder remain beta.
+- Numerical corrections cover structure functions, compressible SCFT, non-orthogonal
+  stress and smearing, propagator aggregation, memory ownership and checkpoint restart.
+- User tools include a browser simulation script builder and bidirectional PSCF
+  conversion; see [Simulation GUI](docs/getting-started/SimulationGUI.md) and
+  [PSCF conversion](docs/getting-started/PscfConversion.md).
+
+### Installation and input migration
+
+- Build and install Python wheels with `python -m pip wheel` and `python -m pip install`;
+  remove them with `python -m pip uninstall polymerfts`. Direct CMake installation is no
+  longer the documented Python installation path. See
+  [Installation](docs/getting-started/Installation.md).
+- Unvalidated Docker image definitions have been removed.
+- The supplied environment uses Anaconda `defaults` and Python 3.14. MKL and FFTW are
+  installed separately and enabled explicitly; CUDA detection defaults to `AUTO`.
+  At least one backend is required. Python 3.11+, NumPy 2+, C++20, spglib and LAPACKE
+  are required; CUDA builds require toolkit 12.2+ and CMake 3.25.2+.
+- Public parameter names are now `polymers`, `relax_cell`, `stress_scale`,
+  `blocks[].monomer_fractions`, `space_group.hall_number` and
+  `recording.checkpoint_interval`, `sample_interval`, `statistics_save_interval`.
+  The previous names remain accepted at the input boundary; supplying both names for
+  one option is an error. See [Parameters](docs/references/Parameters.md).
+- Replace v0.9.1's `reduce_gpu_memory_usage` with `reduce_memory` explicitly; it is
+  not an alias. Memory saving now uses contour checkpoints and recomputation.
+- `numerical_method` selects the propagator method;
+  `langevin.integrator` selects `lm` (the default) or `euler`. Custom methods and
+  callbacks use the contracts in [Extensions](docs/internals/Extensions.md).
+- Simulation metadata records source/build information, backend, numerical method,
+  input hashes and execution status. Version-2 checkpoints retain custom integrator
+  and callback state. v0.9.1 checkpoints are unversioned and require
+  `continue_run(path, allow_legacy=True)`; settings and pending measurements cannot
+  be verified or fully restored. Version-1 checkpoints from development builds
+  support default LM without extensions. v0.9.1 does not restore the complete state
+  in version-2 checkpoints; resume them with v0.10.0.
+
+### Detailed numerical and development history
 
 - Stress for non-orthogonal crystal systems (2026-01-18, 9c93e0c1, 68293424), and the
   CrysFFT stress path units and axis components (2026-07-30, a6baa345).
@@ -344,8 +387,8 @@ commits are omitted.
   version, and the default compute capabilities follow the toolkit (60-90 with CUDA 12.2,
   plus 100 and 120 from 12.8, 75-120 with CUDA 13). pip builds (`pyproject.toml`) and the
   conda recipe require CMake 3.25.2+; the conda recipe now declares spglib and LAPACKE and
-  builds the MKL backend (FFTW would make the Apache-2.0 package GPL-bound), and the Docker
-  images (`nvidia/cuda:12.4.1`) build MKL as well. `POLYMERFTS_INSTALL_HEADERS` now also
+  builds the MKL backend (FFTW would make the Apache-2.0 package GPL-bound).
+  `POLYMERFTS_INSTALL_HEADERS` now also
   installs the static libraries and exports `polymerfts::polymerfts_backends`, so a
   downstream project can `find_package(polymerfts)`.
 - CUDA error checks follow the CUDA C++ Best Practices Guide (2026-10-21): every kernel launch
@@ -490,9 +533,8 @@ commits are omitted.
 - The CPU stress of an orthogonal 2D box no longer computes the shear term (index 2) that
   the CUDA side and the 3D path skip unless `set_force_off_diagonal_stress(True)` is set
   (SCFT sets it when angles are optimized); the platforms now return identical vectors.
-- Parameter checks (2026-10-19): SCFT rejects a singular chi N matrix (a single monomer
-  type, or a zero pair in a three-monomer system) with a clear message, crystal systems
-  are checked against the box dimension, `max_iter` must be positive; L-FTS/CL-FTS accept
+- Parameter checks (2026-10-19): crystal systems are checked against the box dimension,
+  `max_iter` must be positive; L-FTS/CL-FTS accept
   `verbose_level` 0 and reject other values than 0-2, reject unknown compressor names and
   WTMD on non-3D grids; `"platform": "auto"` may be given explicitly.
   `PlatformSelector.avail_platforms()` lists `cuda` only when a GPU is visible, so CUDA
@@ -546,8 +588,8 @@ commits are omitted.
   the installed `_core.so` carries an RPATH to the libraries it was linked against; the
   staged package in `build/python` drops modules that no longer exist in the sources. The generated build no longer depends on `LIBRARY_PATH` or
   `CPLUS_INCLUDE_PATH` of the configuring shell: libraries are linked by absolute path and
-  the CUDA toolkit directories are always passed explicitly. Packaging with pip (`pyproject.toml`), conda (`conda-recipe/`) and
-  Docker (`docker/`) was added (2026-01-09, fe3a54df).
+  the CUDA toolkit directories are always passed explicitly. Packaging with pip
+  (`pyproject.toml`) and conda (`conda-recipe/`) was added (2026-01-09, fe3a54df).
 
 ### Performance
 
@@ -577,12 +619,10 @@ commits are omitted.
 - Space-group reduced basis with CrysFFT fast paths (Pmmm DCT, Recursive 3m, ObliqueZ) and
   physical bases (m3, pmmm, z-mirror) for 3D periodic real fields.
 - Crystal systems with angle optimization (monoclinic, triclinic, 2D oblique/hexagonal).
-- `TestSpaceGroupPhases` with 14 converged phase fixtures and
-  `scripts/reconverge_phase_fixtures.py` to regenerate them.
+- `TestSpaceGroupPhases` with 14 converged phase fixtures.
 - Well-tempered metadynamics (`WTMD`) for L-FTS, `Smearing`, `SCFTResult`/`IterationInfo`,
   YAML/JSON parameter files (`load_config`, `SCFT.from_file`).
-- `scripts/install_versioned.sh`: wheel per version plus a per-version virtual environment,
-  for keeping several releases side by side (documented in Installation.md).
+- Wheel installation records let pip manage package upgrades and removal.
 - `TestStressNonPeriodic` (2026-10-20): the absorbing-wall tolerance of the continuous
   chain is 1e-5 instead of 1.5e-2 (the measured finite-difference mismatch is 3e-7 since
   the chain-end stress fix; it was 5e-3), and the 3D mixed reflecting/absorbing case also

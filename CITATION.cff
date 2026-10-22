@@ -8,6 +8,7 @@ authors:
 repository-code: "https://github.com/yongdd/langevin-fts"
 license: Apache-2.0
 version: 0.10.0
+date-released: 2026-10-23
 preferred-citation:
   type: article
   title: "Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations"

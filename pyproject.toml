@@ -10,7 +10,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "polymerfts"
 version = "0.10.0"
-description = "Polymer field theory simulation library for SCFT and L-FTS"
+description = "Polymer field theory simulation library for SCFT, L-FTS, and CL-FTS"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
@@ -86,6 +86,9 @@ cmake.build-type = "Release"
 # the package under the directory basename, i.e. as a top-level package
 # named "python" instead of "polymerfts".
 wheel.packages = []
+
+# Local research projects and reference papers are not release source files.
+sdist.exclude = ["devel/**", "references/**", ".claude/**"]
 
 # Build directory
 build-dir = "build/{wheel_tag}"
