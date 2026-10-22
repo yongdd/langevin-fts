@@ -251,6 +251,17 @@ commits are omitted.
   keys that contain an aggregated propagator took the ds index of the outer block for
   every dependency. Grafting labels with digits ("G1") failed the same way (the digits were
   read as segment numbers); labels may now contain letters, digits and underscores only.
+- Aggregation counted some blocks twice (2026-10-22, ef957694). When identical side chains
+  of two or more blocks are attached at different positions of a polymer (for example on
+  backbone blocks of different lengths), the right key rewritten for the blocks next to the
+  aggregated side chains can itself be merged at its own left key; it then still rewrote the
+  blocks beyond it, and so did the merged key, so these blocks stayed under two right keys
+  and their concentrations were counted twice (Σφ ≠ 1, `check_total_partition()` false; Σφ =
+  1.12 for a bottlebrush with B2-A1 side chains on backbone blocks of 1, 2, 3 and 1 segments
+  in a random field). Continuous chains were affected since 59ca6db2 (2024-06, so v0.9.1
+  too) and, from 0dea94bf (2026-10-21) on, failed with "Contour length 0.000000 not found"
+  instead; discrete chains since b9e0d487 (2025-12). Runs with
+  `aggregate_propagator_computation` set to False were correct.
 - `set_lattice_parameters` with angles that form no cell (2026-10-21) raised the error after
   it had stored the new lengths and angles, so a caught error left the box inconsistent;
   the cell is now checked before anything changes.

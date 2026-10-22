@@ -8,6 +8,8 @@ If you use this software in your research, please cite:
 
 > D. Yong and J. U. Kim, "Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations", *J. Chem. Theory Comput.* **2025**, 21, 3676
 
+Corrections to Scheme 3 and Scheme S3 of this paper are listed in [Errata.md](Errata.md).
+
 ## Theory
 
 ### Standard Gaussian Model
