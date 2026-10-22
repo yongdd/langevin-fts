@@ -15,11 +15,12 @@ from ._core import *
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .smearing import Smearing
+from .integrators import LeimkuhlerMatthews, EulerMaruyama
 from .scft import SCFT
 from .lfts import LFTS
 from .clfts import CLFTS
 from .wtmd import WTMD
-from .validation import ValidationError
+from .validation import ValidationError, SaddlePointError
 from .scft import SCFTResult, IterationInfo
 from .phase_equilibrium import coexistence_quantities, homogeneous_thermodynamics, find_binary_coexistence
 from .lfts import LR, LRAM

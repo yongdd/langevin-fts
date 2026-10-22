@@ -16,6 +16,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 from polymerfts import PropagatorSolver, SpaceGroup
+from polymerfts.utils import simulation_metadata, fields_hash
+from types import SimpleNamespace
 
 
 def load_bcc_fields(path: Path, nx):
@@ -102,6 +104,10 @@ def run_case(use_space_group, nx, lx, ds, f_a, iters, warmup, fields_path, sg, w
         "Q": float(q),
         "n_grid": solver.n_grid,
         "total_grid": solver.total_grid,
+        "nx": nx, "lx": lx, "ds": ds, "f_a": f_a, "warmup": warmup,
+        "metadata": simulation_metadata(SimpleNamespace(prop_solver=solver, params={"nx": nx, "lx": lx, "ds": ds, "f_a": f_a})),
+        "fields_hash": fields_hash(w_fields),
+        "timing_scope": "compute_propagators only",
     }
 
 

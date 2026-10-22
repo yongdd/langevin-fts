@@ -61,9 +61,10 @@ class PropagatorSolver:
     >>> Q = solver.get_partition_function(polymer=0)
     """
 
-    # Map numerical methods to solver types
-    _PSEUDO_METHODS = {"rqm4", "rk2"}
-    _REALSPACE_METHODS = {"cn-adi2"}
+    @staticmethod
+    def numerical_methods():
+        """Names/capabilities from the same registry used by native factories."""
+        return _core.numerical_methods()
 
     def __init__(
         self,
@@ -131,6 +132,12 @@ class PropagatorSolver:
         if self.field_type not in ("real", "complex"):
             raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
 
+        info = self.numerical_methods()[self.numerical_method]
+        if self.field_type == "complex" and not info["supports_complex"]:
+            raise ValueError(f"{self.numerical_method} does not support complex fields")
+        if self.angles is not None and info["requires_orthogonal_cell"] and not np.allclose(self.angles, 90, rtol=0, atol=1e-10):
+            raise ValueError(f"{self.numerical_method} requires an orthogonal computation box")
+
         # Store and validate mask.
         # Compare against the full grid size: the n_grid property cannot be
         # used here because it touches _propagator_computation, which is not
@@ -185,16 +192,13 @@ class PropagatorSolver:
         if chain_model == "discrete":
             if numerical_method is not None:
                 print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
-            return "pseudospectral", "discrete"
+            return cls.numerical_methods()["discrete"]["solver_type"], "discrete"
         numerical_method = "rqm4" if numerical_method is None else numerical_method.lower()
-        if numerical_method in cls._PSEUDO_METHODS:
-            return "pseudospectral", numerical_method
-        if numerical_method in cls._REALSPACE_METHODS:
-            return "realspace", numerical_method
-        raise ValueError(
-            f"Unknown numerical_method '{numerical_method}'. "
-            f"Valid options: {cls._PSEUDO_METHODS | cls._REALSPACE_METHODS}"
-        )
+        methods = cls.numerical_methods()
+        if numerical_method in methods and methods[numerical_method]["chain_model"] == chain_model:
+            return methods[numerical_method]["solver_type"], numerical_method
+        valid = [name for name, info in methods.items() if info["chain_model"] == chain_model]
+        raise ValueError(f"Unknown numerical_method '{numerical_method}'. Valid options: {valid}")
 
     @staticmethod
     def _auto_platform(dim):
@@ -224,7 +228,7 @@ class PropagatorSolver:
         bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(b in ["reflecting", "absorbing"] for b in bc_lower)
         has_periodic = any(b == "periodic" for b in bc_lower)
-        if self.method == "pseudospectral" and has_periodic and self._has_non_periodic_bc:
+        if not self.numerical_methods()[self.numerical_method]["supports_mixed_boundaries"] and has_periodic and self._has_non_periodic_bc:
             if self.chain_model == "discrete":
                 raise NotImplementedError(
                     "Mixing periodic and non-periodic boundary conditions is not "
@@ -803,8 +807,8 @@ class PropagatorSolver:
             New lattice angles in degrees [alpha, beta, gamma].
         """
         self._initialize_solver()
-        if self.method == "realspace" and not np.all(np.abs(np.deg2rad(angles) - np.pi/2) < 1e-10):
-            raise ValueError("CN-ADI requires orthogonal lattice angles; use a pseudo-spectral method for non-orthogonal cells.")
+        if self.numerical_methods()[self.numerical_method]["requires_orthogonal_cell"] and not np.all(np.abs(np.deg2rad(angles) - np.pi/2) < 1e-10):
+            raise ValueError(f"{self.numerical_method} requires orthogonal lattice angles.")
         self._computation_box.set_lattice_parameters(lx, angles)
         self.lx = list(lx)
         self.update_laplacian_operator()

@@ -8,6 +8,7 @@
 #include <complex>
 
 #include "CpuComputationBackend.h"
+#include "NumericalMethods.h"
 #include "CpuSolverCNADI.h"
 #include "CpuSolverPseudoDiscrete.h"
 #include "CpuSolverPseudoRK2.h"
@@ -23,30 +24,26 @@ CpuComputationBackend<T>::CpuComputationBackend(
     n_basis = cb->get_n_basis();
     n_streams = std::min(this->n_streams_from_env(/*default_n_streams=*/4), max_n_streams);
 
-    if (chain_model == "discrete")
+    const auto& method_info = resolve_numerical_method(chain_model, numerical_method, method);
+    validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
+    if (method != method_info.solver_type)
+        throw_with_line_number("Solver type does not match the registered numerical method.");
+    switch (method_info.id)
+    {
+    case NumericalMethodId::Discrete:
         solver = std::make_unique<CpuSolverPseudoDiscrete<T>>(cb, molecules, fft_backend);
-    else if (method == "pseudospectral")
-    {
-        if (numerical_method == "" || numerical_method == "rqm4")
-            solver = std::make_unique<CpuSolverPseudoRQM4<T>>(cb, molecules, fft_backend);
-        else if (numerical_method == "rk2")
-            solver = std::make_unique<CpuSolverPseudoRK2<T>>(cb, molecules, fft_backend);
-        else
-            throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
-    }
-    else if (method == "realspace")
-    {
-        if constexpr (std::is_same<T, double>::value)
-        {
-            if (numerical_method != "" && numerical_method != "cn-adi2")
-                throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
+        break;
+    case NumericalMethodId::RQM4:
+        solver = std::make_unique<CpuSolverPseudoRQM4<T>>(cb, molecules, fft_backend);
+        break;
+    case NumericalMethodId::RK2:
+        solver = std::make_unique<CpuSolverPseudoRK2<T>>(cb, molecules, fft_backend);
+        break;
+    case NumericalMethodId::CNADI2:
+        if constexpr (std::is_same_v<T, double>)
             solver = std::make_unique<CpuSolverCNADI>(cb, molecules);
-        }
-        else
-            throw_with_line_number("Currently, the realspace method is only available for double precision.");
+        break;
     }
-    else
-        throw_with_line_number("Unknown method: '" + method + "'. Use 'pseudospectral' or 'realspace'.");
 
     // The solver expands/reduces around its FFTs when a space group is set
     // (the owning member releases the solver if this throws)

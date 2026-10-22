@@ -564,6 +564,28 @@ ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
 SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
 TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE polymerfts_backends)
 
+# Embed the provenance of this extension, including builds from source archives.
+SET(POLYMERFTS_GIT_COMMIT "unknown")
+SET(POLYMERFTS_SOURCE_MODIFIED "unknown")
+FIND_PACKAGE(Git QUIET)
+IF(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE POLYMERFTS_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} diff --quiet HEAD -- CMakeLists.txt cmake src
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE _source_diff)
+    IF(_source_diff EQUAL 0)
+        SET(POLYMERFTS_SOURCE_MODIFIED "false")
+    ELSE()
+        SET(POLYMERFTS_SOURCE_MODIFIED "true")
+    ENDIF()
+ENDIF()
+STRING(TOUPPER "${CMAKE_BUILD_TYPE}" _build_config)
+SET(POLYMERFTS_HOST_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_build_config}}")
+SET(POLYMERFTS_DEVICE_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${_build_config}}")
+CONFIGURE_FILE(cmake/BuildInfo.h.in generated/BuildInfo.h @ONLY)
+TARGET_INCLUDE_DIRECTORIES(_core PRIVATE ${CMAKE_BINARY_DIR}/generated)
+
 # Stage an importable 'polymerfts' package inside the build tree on every
 # build. The Python tests put this directory on PYTHONPATH so they always
 # exercise the code that was just built, never a stale site-packages install.

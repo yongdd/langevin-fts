@@ -8,6 +8,10 @@ SET(BASIC_TESTS
     # Parameter handling of the simulation classes and array handling of the
     # bindings (CPU, a few seconds)
     TestParams
+    TestFtsReliability
+    TestCheckpointValidation
+    TestExtensions
+    TestPropagatorAnalytic
     TestComplexMask
     TestComputationSafety
     TestComputationState
@@ -105,6 +109,11 @@ FOREACH(FILE_NAME ${FILE_LIST})
                                                  SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
+
+SET_PROPERTY(TEST TestFtsReliability TestCheckpointValidation TestExtensions TestPropagatorAnalytic TestConvergenceOrderLite TestSamplingStatistics
+    TestStructureFunctionRPA TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence
+    TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
+    APPEND PROPERTY LABELS numerical)
 
 # Generate files named "Test*.cpp"
 FILE(GLOB FILE_LIST "Test*.cpp")

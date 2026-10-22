@@ -12,7 +12,9 @@ import os
 import time
 import pathlib
 import copy
+import json
 import numpy as np
+from .integrators import checked_fields
 import itertools
 
 from scipy.io import savemat, loadmat
@@ -20,7 +22,7 @@ from scipy.io import savemat, loadmat
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 from .propagator_solver import PropagatorSolver
-from .validation import validate_system_params, ValidationError
+from .validation import validate_lfts_params, ValidationError
 from .utils import (
     parse_chi_n,
     process_polymer_blocks,
@@ -28,6 +30,16 @@ from .utils import (
     draw_polymer_architectures,
     calculate_sigma,
     load_config,
+    atomic_savemat,
+    simulation_metadata,
+    checkpoint_data,
+    validate_checkpoint,
+    restore_recording_state,
+    write_run_status,
+    fields_hash,
+    initialize_extensions,
+    restore_extensions,
+    notify_callbacks,
 )
 
 # OpenMP environment variables
@@ -46,6 +58,11 @@ class CLFTS:
         verbose_level. zeta_n defaults to 100.
     random_seed : int, optional
         Seed of the PCG64 noise generator (None: non-reproducible).
+    integrator : object, optional
+        Langevin step implementation; otherwise langevin.integrator (default "lm").
+        See docs/internals/Extensions.md for the step and checkpoint contracts.
+    callbacks : dict, optional
+        Stable names to callable observers of accepted, read-only step snapshots.
 
     Attributes
     ----------
@@ -65,7 +82,7 @@ class CLFTS:
     """
 
     @classmethod
-    def from_file(cls, path, random_seed=None, **overrides):
+    def from_file(cls, path, random_seed=None, *, integrator=None, callbacks=None, **overrides):
         """Create a simulation from a YAML or JSON parameter file.
 
         Reads the file with utils.load_config, applies the keyword overrides
@@ -73,13 +90,13 @@ class CLFTS:
         """
         params = load_config(path)
         params.update(overrides)
-        return cls(params, random_seed=random_seed)
+        return cls(params, random_seed=random_seed, integrator=integrator, callbacks=callbacks)
 
-    def __init__(self, params, random_seed=None):
+    def __init__(self, params, random_seed=None, *, integrator=None, callbacks=None):
         """Initialize the Complex Langevin FTS simulation."""
 
         # Validate input parameters (same checks as SCFT and LFTS)
-        validate_system_params(params)
+        validate_lfts_params(params, complex_fields=True)
         for key in ("langevin", "recording", "verbose_level"):
             if key not in params:
                 raise ValidationError(f"Missing required parameter for CLFTS: '{key}'")
@@ -217,7 +234,7 @@ class CLFTS:
         self.prop_solver.display_statistics()
 
         # Save internal variables
-        self.params = params
+        self.params = copy.deepcopy(params)
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
         self.langevin = params["langevin"].copy()
@@ -239,6 +256,9 @@ class CLFTS:
             angles=self.prop_solver.get_angles_degrees(),
             bc=self.prop_solver.bc
         )
+        self.metadata = simulation_metadata(self, random_seed)
+        initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -308,7 +328,21 @@ class CLFTS:
 
         return phi, elapsed_time
 
-    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
+    def evaluate_force(self, fields):
+        """Intermediate complex dH/dw, including smearing and stabilization."""
+        fields = np.asarray(fields, dtype=np.complex128)
+        if fields.shape != (len(self.monomer_types), self.prop_solver.n_grid) or not np.all(np.isfinite(fields)):
+            raise ValidationError("Intermediate CLFTS fields have an invalid shape or non-finite values")
+        phi, _ = self.compute_concentrations(fields)
+        force = self.mpt.compute_func_deriv(fields, self.smearing.apply_to_dict(phi), range(len(self.monomer_types)))
+        if self.alpha_ds > 0:
+            for i in self.mpt.aux_fields_real_idx:
+                force[i] += 1j * self.alpha_ds * np.imag(fields[i])
+        if not np.all(np.isfinite(force)):
+            raise ValidationError("Non-finite intermediate CLFTS force")
+        return force
+
+    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev, w_aux=None):
         """Save CL-FTS simulation checkpoint data to MATLAB file.
 
         Parameters
@@ -349,6 +383,9 @@ class CLFTS:
             "normal_noise_prev": normal_noise_prev,
         }
 
+        mdic.update(checkpoint_data(self))
+        mdic["w_aux"] = self.mpt.to_aux_fields(w) if w_aux is None else w_aux
+
         # Add w fields to the dictionary (complex values)
         for i, name in enumerate(self.monomer_types):
             mdic["w_" + name + "_real"] = np.real(w[i])
@@ -360,9 +397,9 @@ class CLFTS:
             mdic["phi_" + name + "_imag"] = np.imag(phi[name])
 
         # Save data with matlab format
-        savemat(path, mdic, long_field_names=True, do_compression=True)
+        atomic_savemat(path, mdic, long_field_names=True, do_compression=True)
 
-    def continue_run(self, file_name):
+    def continue_run(self, file_name, *, allow_legacy=False):
         """Continue simulation from a saved checkpoint.
 
         Parameters
@@ -372,23 +409,30 @@ class CLFTS:
         """
         # Load data
         load_data = loadmat(file_name, squeeze_me=True)
+        validate_checkpoint(self, load_data, allow_legacy=allow_legacy)
+        restore_extensions(self, load_data)
+        if "simulation_metadata_json" in load_data:
+            previous_metadata = json.loads(str(load_data["simulation_metadata_json"]))
+            self.metadata["random_seed"] = previous_metadata.get("random_seed")
+            self.metadata["initial_fields_hash"] = previous_metadata.get("initial_fields_hash", "unknown")
+            self.metadata["parent_checkpoint"] = str(file_name)
 
         # Check if load_data["langevin_step"] is a multiple of sf_recording_period
-        if load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
+        if "record_sample_count" not in load_data and load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
             print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'sf_recording_period'.")
             next_sf_langevin_step = (load_data["langevin_step"] // self.recording["sf_recording_period"] + 1) * self.recording["sf_recording_period"]
             print(f"The structure function will be correctly recorded after {next_sf_langevin_step}th langevin_step.")
 
-        # Restore random state
-        self.random_bg.state = {
-            'bit_generator': 'PCG64',
-            'state': {
-                'state': int(load_data["random_state_state"]),
-                'inc': int(load_data["random_state_inc"])
-            },
-            'has_uint32': 0,
-            'uinteger': 0
-        }
+        # Versioned checkpoints carry the complete PCG64 state; legacy scalar
+        # fields are only needed for explicitly accepted unversioned files.
+        if "rng_state_json" in load_data:
+            self.random_bg.state = json.loads(str(load_data["rng_state_json"]))
+        else:
+            self.random_bg.state = {
+                "bit_generator": "PCG64",
+                "state": {"state": int(load_data["random_state_state"]),
+                          "inc": int(load_data["random_state_inc"])},
+                "has_uint32": 0, "uinteger": 0}
         print("Restored Random Number Generator:", self.random_bg.state)
 
         # Make initial_fields (complex)
@@ -399,13 +443,43 @@ class CLFTS:
             initial_fields[name] = w_real + 1j * w_imag
 
         # Run
-        self.run(
+        return self.run(
             initial_fields=initial_fields,
             normal_noise_prev=load_data["normal_noise_prev"],
-            start_langevin_step=load_data["langevin_step"] + 1
+            start_langevin_step=load_data["langevin_step"] + 1, _restart_data=load_data
         )
 
-    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
+    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
+        """Run complex Langevin dynamics and return a status dict; errors are persisted and raised."""
+        first_step = 1 if start_langevin_step is None else start_langevin_step
+        if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
+            raise ValidationError("start_langevin_step must be a positive integer")
+        self.run_status = {"status": "running", "last_completed_step": first_step - 1,
+                           "requested_last_step": self.langevin["max_step"]}
+        self.metadata["initial_fields_hash" if _restart_data is None else "restart_fields_hash"] = fields_hash(initial_fields)
+        if _restart_data is not None and "run_status_json" in _restart_data:
+            previous_status = json.loads(str(_restart_data["run_status_json"]))
+            for key in ("saddle_failures", "noise_resamples"):
+                if key in self.run_status:
+                    self.run_status[key] = previous_status.get(key, 0)
+        self.metadata["initial_rng_state"] = self.random_bg.state
+        write_run_status(self)
+        try:
+            if _restart_data is None:
+                restore_extensions(self)
+            self._run(initial_fields, normal_noise_prev, start_langevin_step, _restart_data=_restart_data)
+            self.run_status["status"] = "completed"
+        except (KeyboardInterrupt, SystemExit):
+            self.run_status.update(status="interrupted", reason="Run interrupted")
+            raise
+        except Exception as exc:
+            self.run_status.update(status="failed", reason=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            write_run_status(self)
+        return dict(self.run_status)
+
+    def _run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
         """Run the Complex Langevin FTS simulation.
 
         Parameters
@@ -440,9 +514,14 @@ class CLFTS:
         # Convert monomer chemical potential fields into auxiliary fields
         w_aux = self.mpt.to_aux_fields(w)
         self.mpt.pin_dropped_fields(w_aux)
+        if _restart_data is not None and "w_aux" in _restart_data:
+            w_aux = np.asarray(_restart_data["w_aux"], dtype=np.complex128).reshape(M, self.prop_solver.n_grid).copy()
+        if not np.all(np.isfinite(w_aux)):
+            raise ValidationError("Initial fields must be finite")
 
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
+        drift_history = []
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
@@ -455,6 +534,7 @@ class CLFTS:
             sf_average[type_pair] = np.zeros_like(
                 np.fft.fftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128
             )
+        sf_sample_count = restore_recording_state(_restart_data, H_history, dH_history, sf_average, drift_history)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -477,10 +557,16 @@ class CLFTS:
         # the forces of the next step use the concentrations of the same fields.
         # Smearing implements finite-range interactions: φ_Γ = FFT⁻¹[FFT[φ]·Γ(k)]
         # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        phi, _ = self.compute_concentrations(w_aux=w_aux)
+        if _restart_data is not None and "w_aux" in _restart_data:
+            phi = {m: (np.asarray(_restart_data["phi_" + m + "_real"]) +
+                       1j * np.asarray(_restart_data["phi_" + m + "_imag"])).reshape(self.prop_solver.n_grid)
+                   for m in self.monomer_types}
+        else:
+            phi, _ = self.compute_concentrations(w_aux=w_aux)
         phi_for_force = self.smearing.apply_to_dict(phi)
 
         for langevin_step in range(start_langevin_step, self.langevin["max_step"] + 1):
+            step_start = time.perf_counter()
 
             # Compute functional derivatives of Hamiltonian w.r.t. all fields
             # For an AB diblock, compute_func_deriv transforms per-monomer concentrations as:
@@ -499,21 +585,22 @@ class CLFTS:
                     if i in self.mpt.aux_fields_real_idx:
                         w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
 
-            # Update w_aux using Leimkuhler-Matthews method
+            drift_max = float(np.max(np.abs(w_lambda * self.dt_scaling[:, None])))
+
+            # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
                 0.0, self.langevin["sigma"], [M, self.prop_solver.n_grid]
             )
-            for i in range(M):
-                if i in self.mpt.aux_fields_dropped_idx:
-                    continue
-                scaling = self.dt_scaling[i]
-                # Determine noise direction based on field type
-                if i in self.mpt.aux_fields_real_idx:
-                    noise_factor = 1.0  # Real noise for exchange fields
-                else:
-                    noise_factor = 1j  # Imaginary noise for pressure field
-                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
-                            0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
+            noise_direction = np.array([1.0 if i in self.mpt.aux_fields_real_idx else 1j for i in range(M)])
+            proposed = self.integrator.step(
+                w_aux.copy(), w_lambda.copy(), dt=self.langevin["dt"], mobility=self.dt_scaling.copy(),
+                noise=normal_noise_current.copy(), previous_noise=normal_noise_prev.copy(),
+                noise_direction=noise_direction,
+                evaluate_force=lambda fields: self.evaluate_force(fields))
+            proposed = checked_fields(proposed, w_aux)
+            if not np.array_equal(proposed[self.dt_scaling == 0], w_aux[self.dt_scaling == 0]):
+                raise ValidationError("An integrator must preserve fields with zero mobility")
+            w_aux = proposed.copy()
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
@@ -521,6 +608,8 @@ class CLFTS:
             # Concentrations and partition functions of the updated fields
             phi, _ = self.compute_concentrations(w_aux=w_aux)
             phi_for_force = self.smearing.apply_to_dict(phi)
+            if not np.all(np.isfinite(w_aux)) or not all(np.all(np.isfinite(v)) for v in phi.values()):
+                raise ValidationError(f"Non-finite complex fields or concentrations at step {langevin_step}")
 
             # Compute functional derivatives for error monitoring (use smeared phi for consistency)
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
@@ -532,6 +621,9 @@ class CLFTS:
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
             hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb,
                                                       include_const_term=True, phi=phi_for_force)
+            if not np.isfinite(hamiltonian):
+                raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
+            self.run_status["last_completed_step"] = langevin_step
 
             # Print progress
             if self.verbose_level >= 1:
@@ -547,6 +639,8 @@ class CLFTS:
             # Compute H and dH/dchi_n
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 H_history.append(hamiltonian)
+                drift_history.append(drift_max)
+                sf_sample_count += 1
                 dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, phi_for_force)
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
@@ -554,7 +648,9 @@ class CLFTS:
             # Save H and dH/dchi_n
             if langevin_step % self.recording["sf_recording_period"] == 0:
                 H_history_array = np.array(H_history)
-                mdic = {"H_history_real": np.real(H_history_array), "H_history_imag": np.imag(H_history_array)}
+                mdic = {"H_history_real": np.real(H_history_array), "H_history_imag": np.imag(H_history_array),
+                        "sample_count": sf_sample_count, "drift_max_history": np.asarray(drift_history),
+                        "simulation_metadata_json": json.dumps(self.metadata)}
                 for key in self.chi_n:
                     dH_array = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
@@ -566,6 +662,7 @@ class CLFTS:
                 )
                 # Reset dictionary
                 H_history = []
+                drift_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
 
@@ -619,7 +716,7 @@ class CLFTS:
                 for key in sf_average:
                     sf_scaled = (
                         sf_average[key] *
-                        self.recording["sf_computing_period"] / self.recording["sf_recording_period"] *
+                        1.0 / max(sf_sample_count, 1) *
                         self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     )
                     # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
@@ -632,6 +729,8 @@ class CLFTS:
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(sf_scaled)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(sf_scaled)
+                mdic["sample_count"] = sf_sample_count
+                mdic["simulation_metadata_json"] = json.dumps(self.metadata)
                 savemat(
                     os.path.join(self.recording["dir"], "structure_function_%06d.mat" % langevin_step),
                     mdic, long_field_names=True, do_compression=True
@@ -639,13 +738,20 @@ class CLFTS:
                 # Reset arrays
                 for key in sf_average:
                     sf_average[key][:] = 0.0
+                sf_sample_count = 0
+
+            # Observe an accepted state before saving its callback/integrator state.
+            notify_callbacks(self, langevin_step, w_aux, phi, hamiltonian, drift_max,
+                             error_level_array, time.perf_counter() - step_start)
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
+                self._recording_state = {"H_history": H_history, "dH_history": dH_history,
+                                         "sf_average": sf_average, "sample_count": sf_sample_count, "drift_history": drift_history}
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
-                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev
+                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev, w_aux=w_aux
                 )
 
         # Estimate execution time

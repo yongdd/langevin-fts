@@ -83,6 +83,10 @@ Reduce-memory mode runs the same steps one propagator at a time, keeping q only 
 
 ## 2. Abstract Factory Pattern
 
+For adding observables, Langevin integrators or propagator methods, see
+[Extensions.md](Extensions.md) and the runnable
+[CustomExtensions.py](../../examples/lfts/CustomExtensions.py).
+
 **Location**: `src/common/AbstractFactory.h`
 
 The abstract factory provides a unified interface for creating platform-specific objects without exposing implementation details.

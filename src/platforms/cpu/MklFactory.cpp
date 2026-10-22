@@ -33,6 +33,7 @@
 #include <vector>
 #include <string>
 
+#include "NumericalMethods.h"
 #include <climits>
 #include <type_traits>
 #include "mkl.h"
@@ -89,13 +90,10 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
 
         // The solver: discrete chains have their own; continuous chains take the numerical method
         const bool discrete = (molecules->get_model_name() == "discrete");
-        std::string solver_type = "pseudospectral";
-        if (discrete)
-            numerical_method = "";
-        else if (numerical_method == "cn-adi2")
-            solver_type = "realspace";
-        else if (numerical_method != "rqm4" && numerical_method != "rk2")
-            throw_with_line_number("Unknown numerical method: " + numerical_method);
+        const auto& method_info = resolve_numerical_method(molecules->get_model_name(), numerical_method);
+        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
+        const std::string solver_type = method_info.solver_type;
+        numerical_method = method_info.name;
 
         // Reduce-memory mode computes one propagator at a time
         const int max_n_streams = this->reduce_memory ? 1 : INT_MAX;

@@ -1,0 +1,21 @@
+#pragma once
+
+// Raw literals preserve quotes and backslashes in compiler flags.
+inline pybind11::dict polymerfts_build_info()
+{
+    pybind11::dict info;
+    info["code_version"] = R"meta(@POLYMERFTS_VERSION@)meta";
+    info["git_commit"] = R"meta(@POLYMERFTS_GIT_COMMIT@)meta";
+    info["source_modified"] = R"meta(@POLYMERFTS_SOURCE_MODIFIED@)meta";
+    info["compiler"] = R"meta(@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@)meta";
+    info["build_type"] = R"meta(@CMAKE_BUILD_TYPE@)meta";
+    info["host_flags"] = R"meta(@POLYMERFTS_HOST_FLAGS@)meta";
+    info["cuda_compiler"] = R"meta(@CMAKE_CUDA_COMPILER_VERSION@)meta";
+    info["cuda_toolkit"] = R"meta(@CUDAToolkit_VERSION@)meta";
+    info["cuda_flags"] = R"meta(@POLYMERFTS_DEVICE_FLAGS@)meta";
+    info["cuda_architectures"] = R"meta(@POLYMERFTS_CUDA_ARCHITECTURES@)meta";
+    info["mkl"] = R"meta(@BUILD_CPU_MKL_LIB@)meta";
+    info["fftw"] = R"meta(@BUILD_CPU_FFTW_LIB@)meta";
+    info["cuda"] = R"meta(@POLYMERFTS_BUILD_CUDA@)meta";
+    return info;
+}

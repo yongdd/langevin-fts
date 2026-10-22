@@ -8,7 +8,7 @@ L-FTS details that change recorded results.
    was underestimated after a restart.
 2. WTMD in a non-orthogonal cell uses the cell volume and |k| from the cell
    metric (the minimal alias, as the propagator solvers).
-3. A step whose saddle point fails is repeated with new noise, so every
+3. A step whose saddle point fails is retried, so every
    recording period holds its samples (until 2026-10 the step was skipped:
    no dH file at a recording step, two periods in the next one).
 4. Compressible L-FTS: the uniform mode of the pressure-like field sits at its

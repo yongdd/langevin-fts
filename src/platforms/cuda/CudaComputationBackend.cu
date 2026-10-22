@@ -9,6 +9,7 @@
 #include <cuComplex.h>
 
 #include "CudaComputationBackend.h"
+#include "NumericalMethods.h"
 #include "CudaSolverCNADI.h"
 #include "CudaSolverPseudoDiscrete.h"
 #include "CudaSolverPseudoRK2.h"
@@ -123,34 +124,30 @@ CudaComputationBackend<T>::CudaComputationBackend(
             CUDA_CHECK(count_cuda_event(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming)));
         }
 
-        if (chain_model == "discrete")
+        const auto& method_info = resolve_numerical_method(chain_model, numerical_method, method);
+        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
+        if (method != method_info.solver_type)
+            throw_with_line_number("Solver type does not match the registered numerical method.");
+        switch (method_info.id)
+        {
+        case NumericalMethodId::Discrete:
         {
             auto discrete = std::make_unique<CudaSolverPseudoDiscrete<T>>(cb, molecules, n_streams, streams, false);
             solver_discrete = discrete.get();
             solver = std::move(discrete);
+            break;
         }
-        else if (method == "pseudospectral")
-        {
-            if (numerical_method == "" || numerical_method == "rqm4")
-                solver = std::make_unique<CudaSolverPseudoRQM4<T>>(cb, molecules, n_streams, streams, false);
-            else if (numerical_method == "rk2")
-                solver = std::make_unique<CudaSolverPseudoRK2<T>>(cb, molecules, n_streams, streams, false);
-            else
-                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'rk2'.");
-        }
-        else if (method == "realspace")
-        {
-            if constexpr (std::is_same<T, double>::value)
-            {
-                if (numerical_method != "" && numerical_method != "cn-adi2")
-                    throw_with_line_number("Unknown realspace method: '" + numerical_method + "'. Use 'cn-adi2'.");
+        case NumericalMethodId::RQM4:
+            solver = std::make_unique<CudaSolverPseudoRQM4<T>>(cb, molecules, n_streams, streams, false);
+            break;
+        case NumericalMethodId::RK2:
+            solver = std::make_unique<CudaSolverPseudoRK2<T>>(cb, molecules, n_streams, streams, false);
+            break;
+        case NumericalMethodId::CNADI2:
+            if constexpr (std::is_same_v<T, double>)
                 solver = std::make_unique<CudaSolverCNADI>(cb, molecules, n_streams, streams, false);
-            }
-            else
-                throw_with_line_number("Currently, the realspace method is only available for double precision.");
+            break;
         }
-        else
-            throw_with_line_number("Unknown method: '" + method + "'. Use 'pseudospectral' or 'realspace'.");
 
         // Ones for free chain ends
         std::vector<T> unity(M, T(1.0));

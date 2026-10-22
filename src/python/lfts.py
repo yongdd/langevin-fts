@@ -2,14 +2,17 @@ import os
 import time
 import pathlib
 import copy
+import json
+import warnings
 import numpy as np
 import itertools
 from scipy.io import savemat, loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
+from .integrators import checked_fields
 from . import _core
-from .validation import validate_lfts_params, ValidationError
+from .validation import validate_lfts_params, ValidationError, SaddlePointError
 from .utils import (
     parse_chi_n,
     process_polymer_blocks,
@@ -17,6 +20,17 @@ from .utils import (
     draw_polymer_architectures,
     calculate_sigma,
     load_config,
+    atomic_savemat,
+    simulation_metadata,
+    checkpoint_data,
+    validate_checkpoint,
+    restore_recording_state,
+    write_run_status,
+    fields_hash,
+    initialize_extensions,
+    restore_extensions,
+    notify_callbacks,
+    extension_object_state,
 )
 from .smearing import Smearing
 from .wtmd import WTMD
@@ -184,6 +198,11 @@ class LFTS:
         langevin, compressor, saddle, recording, verbose_level.
     random_seed : int, optional
         Seed of the PCG64 noise generator (None: non-reproducible).
+    integrator : object, optional
+        Langevin step implementation; otherwise langevin.integrator (default "lm").
+        See docs/internals/Extensions.md for the step and checkpoint contracts.
+    callbacks : dict, optional
+        Stable names to callable observers of accepted, read-only step snapshots.
 
     Attributes
     ----------
@@ -205,7 +224,7 @@ class LFTS:
     Complete scripts: examples/lfts/ (Lamella.py, Gyroid.py, MixtureBlockRandom.py).
     """
     @classmethod
-    def from_file(cls, path, random_seed=None, **overrides):
+    def from_file(cls, path, random_seed=None, *, integrator=None, callbacks=None, **overrides):
         """Create a simulation from a YAML or JSON parameter file.
 
         Reads the file with utils.load_config, applies the keyword overrides
@@ -213,9 +232,9 @@ class LFTS:
         """
         params = load_config(path)
         params.update(overrides)
-        return cls(params, random_seed=random_seed)
+        return cls(params, random_seed=random_seed, integrator=integrator, callbacks=callbacks)
 
-    def __init__(self, params, random_seed=None):
+    def __init__(self, params, random_seed=None, *, integrator=None, callbacks=None):
 
         # Validate input parameters
         validate_lfts_params(params)
@@ -420,7 +439,7 @@ class LFTS:
         self.prop_solver.display_statistics()
 
         #  Save internal variables
-        self.params = params
+        self.params = copy.deepcopy(params)
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
         self.langevin = params["langevin"].copy()
@@ -429,6 +448,9 @@ class LFTS:
         self.verbose_level = params["verbose_level"]
         self.saddle = params["saddle"].copy()
         self.recording = params["recording"].copy()
+        self.metadata = simulation_metadata(self, random_seed)
+        initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -506,7 +528,7 @@ class LFTS:
 
         return phi, elapsed_time
 
-    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
+    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev, w_aux=None):
         """Save L-FTS simulation checkpoint data to MATLAB file.
 
         Saves the current state of the simulation including fields, concentrations,
@@ -542,6 +564,9 @@ class LFTS:
             "random_state_state":str(self.random_bg.state["state"]["state"]),
             "random_state_inc":str(self.random_bg.state["state"]["inc"]),
             "normal_noise_prev":normal_noise_prev}
+
+        mdic.update(checkpoint_data(self))
+        mdic["w_aux"] = self.mpt.to_aux_fields(w) if w_aux is None else w_aux
 
         # Add w fields to the dictionary
         for i, name in enumerate(self.monomer_types):
@@ -579,9 +604,9 @@ class LFTS:
             }
 
         # Save data with matlab format
-        savemat(path, mdic, long_field_names=True, do_compression=True)
+        atomic_savemat(path, mdic, long_field_names=True, do_compression=True)
 
-    def continue_run(self, file_name):
+    def continue_run(self, file_name, *, allow_legacy=False):
         """Continue L-FTS simulation from a saved checkpoint file.
 
         Loads simulation state from a MATLAB .mat file (created by save_simulation_data)
@@ -596,18 +621,30 @@ class LFTS:
 
         # Load_data
         load_data = loadmat(file_name, squeeze_me=True)
+        validate_checkpoint(self, load_data, allow_legacy=allow_legacy)
+        restore_extensions(self, load_data)
+        if "simulation_metadata_json" in load_data:
+            previous_metadata = json.loads(str(load_data["simulation_metadata_json"]))
+            self.metadata["random_seed"] = previous_metadata.get("random_seed")
+            self.metadata["initial_fields_hash"] = previous_metadata.get("initial_fields_hash", "unknown")
+            self.metadata["parent_checkpoint"] = str(file_name)
         
         # Check if load_data["langevin_step"] is a multiple of self.recording["sf_recording_period"]
-        if load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
+        if "record_sample_count" not in load_data and load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
             print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'sf_recording_period'.")
             next_sf_langevin_step = (load_data["langevin_step"]//self.recording["sf_recording_period"] + 1)*self.recording["sf_recording_period"]
             print(f"The structure function will be correctly recorded after {next_sf_langevin_step}th langevin_step." )
 
-        # Restore random state
-        self.random_bg.state ={'bit_generator': 'PCG64',
-            'state': {'state': int(load_data["random_state_state"]),
-                      'inc':   int(load_data["random_state_inc"])},
-                      'has_uint32': 0, 'uinteger': 0}
+        # Versioned checkpoints carry the complete PCG64 state; legacy scalar
+        # fields are only needed for explicitly accepted unversioned files.
+        if "rng_state_json" in load_data:
+            self.random_bg.state = json.loads(str(load_data["rng_state_json"]))
+        else:
+            self.random_bg.state = {
+                "bit_generator": "PCG64",
+                "state": {"state": int(load_data["random_state_state"]),
+                          "inc": int(load_data["random_state_inc"])},
+                "has_uint32": 0, "uinteger": 0}
         print("Restored Random Number Generator: ", self.random_bg.state)
 
         # Restore WTMD state if available (normalize by CV as in deep-langevin-fts)
@@ -618,6 +655,7 @@ class LFTS:
                 self.wtmd.I0 = np.array(load_data["wtmd_I0"])
             n_pending = np.atleast_1d(load_data.get("wtmd_order_parameter_history", np.zeros(0))).size
             self.wtmd.order_parameter_history = list(np.atleast_1d(load_data["wtmd_order_parameter_history"])) if n_pending > 0 else []
+            self.wtmd.I1 = {}
             self.wtmd.dH_history = {}
             for key in self.chi_n:
                 monomer_pair = sorted(key.split(","))
@@ -634,11 +672,51 @@ class LFTS:
             initial_fields[name] = np.array(load_data["w_" + name])
 
         # Run
-        self.run(initial_fields=initial_fields,
+        return self.run(initial_fields=initial_fields,
             normal_noise_prev=load_data["normal_noise_prev"],
-            start_langevin_step=load_data["langevin_step"]+1)
+            start_langevin_step=load_data["langevin_step"]+1, _restart_data=load_data)
 
-    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
+    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
+        """Run Langevin dynamics, returning a status dict; failures raise and persist run_status.json.
+
+        ``saddle.failure_policy='retry'`` (default) retains the proposed real fields
+        and noise while continuing the saddle solve. ``'abort'`` stops immediately;
+        ``'resample'`` explicitly opts into the former noise-selection policy.
+        ``saddle.max_retries`` defaults to five. Failed steps are never recorded.
+        """
+        first_step = 1 if start_langevin_step is None else start_langevin_step
+        if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
+            raise ValidationError("start_langevin_step must be a positive integer")
+        self.run_status = {"status": "running", "last_completed_step": first_step - 1,
+                           "requested_last_step": self.langevin["max_step"],
+                           "saddle_failures": 0, "noise_resamples": 0}
+        self.metadata["initial_fields_hash" if _restart_data is None else "restart_fields_hash"] = fields_hash(initial_fields)
+        if _restart_data is not None and "run_status_json" in _restart_data:
+            previous_status = json.loads(str(_restart_data["run_status_json"]))
+            for key in ("saddle_failures", "noise_resamples"):
+                if key in self.run_status:
+                    self.run_status[key] = previous_status.get(key, 0)
+        self.metadata["initial_rng_state"] = self.random_bg.state
+        write_run_status(self)
+        try:
+            if _restart_data is None:
+                restore_extensions(self)
+            self._run(initial_fields, normal_noise_prev, start_langevin_step, _restart_data=_restart_data)
+            self.run_status["status"] = "completed"
+        except SaddlePointError as exc:
+            self.run_status.update(status="aborted_saddle_failure", reason=str(exc))
+            raise
+        except (KeyboardInterrupt, SystemExit):
+            self.run_status.update(status="interrupted", reason="Run interrupted")
+            raise
+        except Exception as exc:
+            self.run_status.update(status="failed", reason=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            write_run_status(self)
+        return dict(self.run_status)
+
+    def _run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
         """Run Langevin Field-Theoretic Simulation (L-FTS).
 
         Performs Langevin dynamics to sample compositional fluctuations in the
@@ -692,6 +770,10 @@ class LFTS:
         # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
         self.mpt.pin_dropped_fields(w_aux)
+        if _restart_data is not None and "w_aux" in _restart_data:
+            w_aux = np.asarray(_restart_data["w_aux"], dtype=np.float64).reshape(M, self.prop_solver.n_grid).copy()
+        if not np.all(np.isfinite(w_aux)):
+            raise ValidationError("Initial fields must be finite")
 
         if start_langevin_step is None:
             start_langevin_step = 1
@@ -701,12 +783,26 @@ class LFTS:
         # trajectory slightly, so the loop's own solve is the first one then.
         print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
         if start_langevin_step == 1:
-            phi, _, _, _, = self.find_saddle_point(w_aux=w_aux)
+            for attempt in range(self.saddle.get("max_retries", 5) + 1):
+                phi, initial_hamiltonian, _, error_level = self.find_saddle_point(w_aux=w_aux)
+                if not np.isfinite(initial_hamiltonian):
+                    raise ValidationError("Non-finite initial Hamiltonian")
+                if np.isfinite(error_level) and error_level < self.saddle["tolerance"]:
+                    break
+                self.run_status["saddle_failures"] += 1
+                if self.saddle.get("failure_policy", "retry") == "abort":
+                    break
+            if not np.isfinite(error_level) or error_level >= self.saddle["tolerance"]:
+                raise SaddlePointError(f"Initial saddle point failed after {attempt + 1} attempts (error={error_level})")
+        elif _restart_data is not None and "w_aux" in _restart_data:
+            phi = {m: np.asarray(_restart_data["phi_" + m]).reshape(self.prop_solver.n_grid).copy()
+                   for m in self.monomer_types}
         else:
             phi, _ = self.compute_concentrations(w_aux)
 
         # Dictionary to record history of H and dH/dχN
         H_history = []
+        drift_history = []
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
@@ -717,6 +813,7 @@ class LFTS:
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
             sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128)
+        sf_sample_count = restore_recording_state(_restart_data, H_history, dH_history, sf_average, drift_history)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when R == 1)
@@ -726,17 +823,16 @@ class LFTS:
             normal_noise_prev = np.reshape(np.asarray(normal_noise_prev, dtype=np.float64), [R, self.prop_solver.n_grid])
 
 
-        # The number of times that 'find_saddle_point' has failed to find a saddle point
-        saddle_fail_count = 0
-
         # Init timers
         total_saddle_iter = 0
+        self._intermediate_saddle_iterations = 0
         total_error_level = 0
         time_start = time.time()
 
         # Langevin iteration begins here
         langevin_step = start_langevin_step - 1   # stays when max_step < start_langevin_step
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
+            step_start = time.perf_counter()
             if self.verbose_level >= 1:
                 print("Langevin step: ", langevin_step)
 
@@ -756,35 +852,58 @@ class LFTS:
                 # Add bias to w_lambda
                 self.wtmd.add_bias_to_langevin(psi, w_lambda)
 
-            # Update w_aux using Leimkuhler-Matthews method. If the saddle point of the
-            # imaginary fields is not found, the step is repeated from the same fields with
-            # new noise (the previous noise of the Leimkuhler-Matthews pair is kept), up to
-            # five times, so that every Langevin step yields one sample
-            for attempt in range(6):
-                w_aux = w_aux_copy.copy()
-                normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
-                for count, i in enumerate(self.mpt.aux_fields_real_idx):
-                    scaling = self.dt_scaling[i]
-                    w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+            drift_max = float(np.max(np.abs(w_lambda * self.dt_scaling[self.mpt.aux_fields_real_idx, None]))) if R else 0.0
+
+            # Retrying the solver must not select the Langevin noise by convergence.
+            policy = self.saddle.get("failure_policy", "retry")
+            integrator_state = extension_object_state(self.integrator)
+            for attempt in range(self.saddle.get("max_retries", 5) + 1):
+                if attempt == 0 or policy == "resample":
+                    w_aux = w_aux_copy.copy()
+                    normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
+                    if attempt:
+                        self.run_status["noise_resamples"] += 1
+                        warnings.warn("Saddle failure: resampling noise can change the sampled distribution", RuntimeWarning)
+                    if hasattr(self.integrator, "load_state_dict"):
+                        self.integrator.load_state_dict(copy.deepcopy(integrator_state))
+                    active = w_aux[self.mpt.aux_fields_real_idx]
+                    try:
+                        proposed = self.integrator.step(
+                            active.copy(), w_lambda.copy(), dt=self.langevin["dt"],
+                            mobility=self.dt_scaling[self.mpt.aux_fields_real_idx].copy(),
+                            noise=normal_noise_current.copy(), previous_noise=normal_noise_prev.copy(),
+                            noise_direction=np.ones(R),
+                            evaluate_force=lambda fields: self.evaluate_force(fields, w_aux=w_aux_copy, step=langevin_step))
+                    except SaddlePointError:
+                        if hasattr(self.integrator, "load_state_dict"):
+                            self.integrator.load_state_dict(copy.deepcopy(integrator_state))
+                        if policy == "resample" and attempt < self.saddle.get("max_retries", 5):
+                            continue
+                        raise
+                    w_aux[self.mpt.aux_fields_real_idx] = checked_fields(proposed, active)
 
                 # Find saddle point of the pressure field
                 phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
+                if not np.isfinite(hamiltonian):
+                    raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
                 total_saddle_iter += saddle_iter
                 total_error_level += error_level
-                saddle_failed = np.isnan(error_level) or error_level >= self.saddle["tolerance"]
+                saddle_failed = not np.isfinite(error_level) or error_level >= self.saddle["tolerance"]
                 if not saddle_failed:
                     break
-                saddle_fail_count += 1
-                if attempt < 5:
-                    print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
+                self.run_status["saddle_failures"] += 1
+                if policy == "abort" or not np.all(np.isfinite(w_aux)):
+                    break
             if saddle_failed:
-                print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (attempt + 1))
+                if hasattr(self.integrator, "load_state_dict"):
+                    self.integrator.load_state_dict(copy.deepcopy(integrator_state))
                 w_aux = w_aux_copy
                 phi = phi_copy
-                break
+                raise SaddlePointError(f"Saddle point failed at step {langevin_step} after {attempt + 1} attempts (error={error_level})")
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+            self.run_status["last_completed_step"] = langevin_step
 
             # WTMD: store order parameter and update statistics (same as deep-langevin-fts)
             if self.wtmd is not None:
@@ -804,6 +923,8 @@ class LFTS:
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 H_history.append(hamiltonian)
+                drift_history.append(drift_max)
+                sf_sample_count += 1
                 dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, self.smearing.apply_to_dict(phi))
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
@@ -811,7 +932,8 @@ class LFTS:
             # Save H and dH/dχN
             if langevin_step % self.recording["sf_recording_period"] == 0:
                 H_history = np.array(H_history)
-                mdic = {"H_history": H_history}
+                mdic = {"H_history": H_history, "sample_count": sf_sample_count, "drift_max_history": np.asarray(drift_history),
+                        "simulation_metadata_json": json.dumps(self.metadata)}
                 for key in self.chi_n:
                     dH_history[key] = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
@@ -819,6 +941,7 @@ class LFTS:
                 savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset dictionary
                 H_history = []
+                drift_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
                     
@@ -854,7 +977,7 @@ class LFTS:
                         "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
                 # Add structure functions to the dictionary
                 for key in sf_average:
-                    sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                    sf_average[key] *= 1.0/max(sf_sample_count, 1)* \
                             self.prop_solver.get_volume()*np.sqrt(self.langevin["nbar"])
                     # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
                     # divide by Γ to record S(k) of the densities (modes the smeared interaction
@@ -865,28 +988,68 @@ class LFTS:
                         sf_average[key] = np.divide(sf_average[key], gamma, out=np.zeros_like(sf_average[key]), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
+                mdic["sample_count"] = sf_sample_count
+                mdic["simulation_metadata_json"] = json.dumps(self.metadata)
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
                     sf_average[key][:] = 0.0
+                sf_sample_count = 0
+
+            # Observe an accepted state before saving its callback/integrator state.
+            notify_callbacks(self, langevin_step, w_aux, phi, hamiltonian, drift_max,
+                             error_level, time.perf_counter() - step_start)
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
+                self._recording_state = {"H_history": H_history, "dH_history": dH_history,
+                                         "sf_average": sf_average, "sample_count": sf_sample_count, "drift_history": drift_history}
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
-                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
+                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev, w_aux=w_aux)
 
-        print( "The number of times that tolerance of saddle point was not met and Langevin random noise was regenerated: %d times" % 
-            (saddle_fail_count))
+        print("Cumulative failed saddle-point solves: %d times" % self.run_status["saddle_failures"])
 
         # Estimate execution time
         time_duration = time.time() - time_start
 
         n_steps = max(langevin_step + 1 - start_langevin_step, 1)
         print("total time: %f, time per step: %f" % (time_duration, time_duration/n_steps))
+        total_saddle_iter += self._intermediate_saddle_iterations
         print("Total iterations for saddle points: %d, Iterations per Langevin step: %f" %
             (total_saddle_iter, total_saddle_iter/n_steps))
+
+    def evaluate_force(self, fields, *, w_aux, step):
+        """dH/dw at intermediate active fields, with a saddle solve and fixed bias.
+
+        No noise is drawn and no observations or WTMD statistics are recorded.
+        ``w_aux`` supplies the imaginary-field warm start of this proposal.
+        """
+        trial = w_aux.copy()
+        indices = self.mpt.aux_fields_real_idx
+        trial[indices] = checked_fields(fields, trial[indices])
+        for attempt in range(self.saddle.get("max_retries", 5) + 1):
+            phi, hamiltonian, iterations, error = self.find_saddle_point(trial)
+            self._intermediate_saddle_iterations += iterations
+            if not np.isfinite(hamiltonian) or not np.all(np.isfinite(trial)):
+                raise ValidationError("Non-finite intermediate LFTS state")
+            if np.isfinite(error) and error < self.saddle["tolerance"]:
+                break
+            self.run_status["saddle_failures"] += 1
+            if self.saddle.get("failure_policy", "retry") == "abort":
+                break
+        else:
+            raise SaddlePointError(f"Intermediate saddle failed at step {step} (error={error})")
+        if not np.isfinite(error) or error >= self.saddle["tolerance"]:
+            raise SaddlePointError(f"Intermediate saddle failed at step {step} (error={error})")
+        force = self.mpt.compute_func_deriv(trial, self.smearing.apply_to_dict(phi), indices)
+        if self.wtmd is not None:
+            psi = self.wtmd.compute_order_parameter(step, trial)
+            self.wtmd.add_bias_to_langevin(psi, force)
+        if not np.all(np.isfinite(force)):
+            raise ValidationError("Non-finite intermediate LFTS force")
+        return force
 
     def find_saddle_point(self, w_aux):
         """Find saddle point of imaginary auxiliary fields.

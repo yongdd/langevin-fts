@@ -5,9 +5,18 @@ the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
 import ast
+import copy
 import json
 import operator
+import itertools
 import warnings
+import hashlib
+import os
+import platform
+import tempfile
+import subprocess
+from functools import lru_cache
+from types import MappingProxyType
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Union
 
@@ -15,6 +24,409 @@ import numpy as np
 import yaml
 
 from .validation import ValidationError
+
+
+def json_ready(value):
+    """Convert parameter dictionaries to portable JSON values."""
+    if isinstance(value, np.ndarray):
+        return json_ready(value.tolist())
+    if isinstance(value, np.generic):
+        return json_ready(value.item())
+    if isinstance(value, float) and not np.isfinite(value):
+        return {"nonfinite_float": str(value)}
+    if isinstance(value, dict):
+        return {str(k): json_ready(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_ready(v) for v in value]
+    if isinstance(value, complex):
+        return {"real": value.real, "imag": value.imag}
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    return value
+
+
+def settings_json(settings):
+    return json.dumps(json_ready(settings), sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def input_hash(value):
+    return hashlib.sha256(settings_json(value).encode()).hexdigest()
+
+
+def fields_hash(fields):
+    digest = hashlib.sha256()
+    for name in sorted(fields):
+        array = np.ascontiguousarray(fields[name])
+        digest.update(settings_json([name, array.shape, array.dtype.str]).encode())
+        digest.update(array.tobytes())
+    return digest.hexdigest()
+
+
+@lru_cache(maxsize=1)
+def _package_hashes():
+    from . import _core
+    source = hashlib.sha256()
+    for path in sorted(Path(__file__).parent.glob("*.py")):
+        source.update(path.name.encode())
+        source.update(path.read_bytes())
+    native = hashlib.sha256()
+    with open(_core.__file__, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            native.update(chunk)
+    return {"python_source_sha256": source.hexdigest(), "native_binary_sha256": native.hexdigest()}
+
+
+def atomic_savemat(path, data, **kwargs):
+    """Replace a MAT file only after a complete write in the same directory."""
+    from scipy.io import savemat
+    path = Path(path)
+    fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".mat", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            savemat(stream, data, **kwargs)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def write_run_status(sim):
+    """Persist completion/failure separately from periodic field checkpoints."""
+    path = Path(sim.recording["dir"])
+    path.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".run_status.", dir=path)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(json_ready({**sim.run_status, "metadata": sim.metadata}), stream, indent=2, allow_nan=False)
+            stream.write("\n")
+        os.replace(temporary, path / "run_status.json")
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def simulation_metadata(sim, random_seed=None):
+    """Build provenance comes from the loaded extension, never the current cwd."""
+    import scipy
+    from . import _core
+    solver = sim.prop_solver
+    metadata = {
+        "schema_version": 1, "build": dict(getattr(_core, "build_info", {})),
+        "python": platform.python_version(), "numpy": np.__version__, "scipy": scipy.__version__,
+        "system": platform.platform(), "machine": platform.machine(),
+        "backend": solver.platform, "numerical_method": solver.numerical_method,
+        "chain_model": solver.chain_model, "precision": "complex128" if solver.field_type == "complex" else "float64",
+        "reduce_memory": solver.reduce_memory,
+        "threads": {key: os.environ.get(key, "") for key in
+                    ("OMP_NUM_THREADS", "OMP_MAX_ACTIVE_LEVELS", "OMP_WAIT_POLICY", "MKL_NUM_THREADS")},
+        "random_seed": random_seed, "input_hash": input_hash(sim.params),
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES", ""),
+        **_package_hashes(),
+    }
+    try:
+        metadata["cpu"] = next(line.split(":", 1)[1].strip() for line in
+                               Path("/proc/cpuinfo").read_text().splitlines() if line.startswith("model name"))
+    except (OSError, StopIteration):
+        metadata["cpu"] = platform.processor()
+    if solver.platform == "cuda":
+        command = ["nvidia-smi", "--query-gpu=uuid,name,driver_version", "--format=csv,noheader"]
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+        if visible:
+            command.append("--id=" + visible)
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3, check=False)
+            metadata["gpu"] = result.stdout.strip() if result.returncode == 0 else "unavailable"
+        except (OSError, subprocess.TimeoutExpired):
+            metadata["gpu"] = "unavailable"
+    if hasattr(_core, "runtime_info"):
+        metadata["libraries"] = _core.runtime_info(solver.platform == "cuda")
+    return json_ready(metadata)
+
+
+def checkpoint_settings(sim):
+    """Effective settings that define a continuation; output paths/max_step may change."""
+    solver = sim.prop_solver
+    result = {
+        "simulation": type(sim).__name__ if type(sim).__name__ in ("LFTS", "CLFTS") else
+                      ("CLFTS" if solver.field_type == "complex" else "LFTS"),
+        "nx": solver.nx, "lx": solver.get_lx(), "angles": solver.get_angles_degrees(),
+        "bc": solver.bc, "ds": sim.ds, "chain_model": sim.chain_model,
+        "numerical_method": solver.numerical_method, "segment_lengths": sim.segment_lengths,
+        "polymers": sim.distinct_polymers, "chi_n": sim.chi_n, "zeta_n": sim.zeta_n,
+        "dt": sim.langevin["dt"], "nbar": sim.langevin["nbar"], "dt_scaling": sim.dt_scaling,
+        "smearing": {"type": sim.smearing.type, "params": sim.smearing.params},
+        "sf_computing_period": sim.recording["sf_computing_period"],
+        "sf_recording_period": sim.recording["sf_recording_period"],
+        "extensions": extension_settings(sim),
+    }
+    if hasattr(sim, "saddle"):
+        result["saddle"] = {**sim.saddle, "failure_policy": sim.saddle.get("failure_policy", "retry"),
+                            "max_retries": sim.saddle.get("max_retries", 5)}
+        result["compressor"] = sim.params["compressor"]
+        wtmd = sim.wtmd
+        result["wtmd"] = None if wtmd is None else {
+            key: getattr(wtmd, key) for key in
+            ("l", "kc", "dT", "sigma_psi", "psi_min", "psi_max", "dpsi", "bins", "update_freq")}
+    else:
+        result["dynamic_stabilization"] = sim.alpha_ds
+    return json_ready(result)
+
+
+def checkpoint_data(sim):
+    """Version, compatibility settings and complete RNG/measurement state."""
+    settings = checkpoint_settings(sim)
+    data = {"checkpoint_format_version": 2, "checkpoint_settings_json": settings_json(settings),
+            "checkpoint_settings_hash": input_hash(settings),
+            "rng_state_json": json.dumps(sim.random_bg.state),
+            "simulation_metadata_json": json.dumps(json_ready(sim.metadata)),
+            "run_status_json": json.dumps(json_ready(sim.run_status))}
+    data["extension_state_json"] = json.dumps(extension_state(sim), allow_nan=False)
+    state = getattr(sim, "_recording_state", None)
+    if state is None:
+        raise ValidationError("Checkpointing requires the recording state of an accepted run step")
+    if state is not None:
+        data["record_H_history"] = np.asarray(state["H_history"])
+        data["record_drift_history"] = np.asarray(state.get("drift_history", []))
+        data["record_sample_count"] = state["sample_count"]
+        for key, values in state["dH_history"].items():
+            data[_measurement_key("dH", key)] = np.asarray(values)
+        for key, values in state["sf_average"].items():
+            data[_measurement_key("sf", key)] = values
+    return data
+
+
+def _measurement_key(kind, pair):
+    # Monomer names may contain underscores; joining names with '_' is ambiguous.
+    return "record_" + kind + "_" + hashlib.sha256(pair.encode()).hexdigest()[:32]
+
+
+def validate_checkpoint(sim, data, *, allow_legacy=False):
+    version = data.get("checkpoint_format_version", 0)
+    if isinstance(version, (bool, np.bool_)) or not isinstance(version, (int, np.integer)):
+        raise ValidationError("Checkpoint format version must be an integer")
+    if version == 0:
+        if not allow_legacy:
+            raise ValidationError("Unversioned checkpoint: use allow_legacy=True to accept an unverified continuation")
+        if sim.integrator.name != "lm" or sim.callbacks or getattr(sim.integrator, "settings", {}):
+            raise ValidationError("Legacy checkpoints cannot restore custom integrators or callbacks")
+        warnings.warn("Legacy checkpoint: settings are unverified and pending measurements cannot be recovered", RuntimeWarning)
+        return
+    if version not in (1, 2):
+        raise ValidationError(f"Unsupported checkpoint format version {version}")
+    try:
+        stored = json.loads(str(data["checkpoint_settings_json"]))
+        if input_hash(stored) != str(data["checkpoint_settings_hash"]):
+            raise ValidationError("Checkpoint settings hash does not match its contents")
+        current = checkpoint_settings(sim)
+        # Version 1 predates extensions and always used LM without callbacks.
+        if version == 1:
+            stored.setdefault("extensions", {"integrator": {"name": "lm", "settings": {}}, "callbacks": {}})
+        # JSON distinguishes 15 from 15.0; effective numerical settings do not.
+        different = [key for key in current if current[key] != stored.get(key)]
+        if different:
+            raise ValidationError("Incompatible checkpoint settings: " + ", ".join(different))
+        if version == 2:
+            state = json.loads(str(data["extension_state_json"]))
+            if not isinstance(state, dict) or set(state) != {"integrator", "callbacks"} or not isinstance(state["callbacks"], dict):
+                raise ValidationError("Invalid extension checkpoint state")
+            if set(state["callbacks"]) != set(sim.callbacks):
+                raise ValidationError("Checkpoint callback state does not match registered callbacks")
+            if not isinstance(state["integrator"], dict) or not all(isinstance(value, dict) for value in state["callbacks"].values()):
+                raise ValidationError("Each extension checkpoint state must be a dictionary")
+            json.dumps(state, allow_nan=False)
+        stored_basis = np.asarray(data["matrix_a"])
+        if stored_basis.size != sim.mpt.matrix_a.size or not np.allclose(
+                stored_basis.reshape(sim.mpt.matrix_a.shape), sim.mpt.matrix_a, rtol=1e-12, atol=1e-12):
+            raise ValidationError("Incompatible checkpoint auxiliary-field basis")
+        step = data["langevin_step"]
+        if isinstance(step, (bool, np.bool_)) or not isinstance(step, (int, np.integer)) or step < 0:
+            raise ValidationError("Checkpoint step must be a nonnegative integer")
+        if step > sim.langevin["max_step"]:
+            raise ValidationError("Checkpoint step exceeds langevin.max_step or is negative")
+        for key in ("simulation_metadata_json", "run_status_json"):
+            if key in data:
+                value = json.loads(str(data[key]))
+                if not isinstance(value, dict):
+                    raise ValidationError(f"Checkpoint '{key}' must describe a dictionary")
+                if key == "run_status_json":
+                    if value.get("last_completed_step") != step:
+                        raise ValidationError("Checkpoint run status does not match its step")
+                    for counter in ("saddle_failures", "noise_resamples"):
+                        count = value.get(counter, 0)
+                        if type(count) is not int or count < 0:
+                            raise ValidationError(f"Invalid checkpoint run counter '{counter}'")
+        n_fields = len(sim.monomer_types)
+        for key in ("w_aux", "normal_noise_prev"):
+            if key not in data or not np.all(np.isfinite(data[key])):
+                raise ValidationError(f"Checkpoint has missing or non-finite '{key}'")
+            if np.iscomplexobj(data[key]) and (key == "normal_noise_prev" or sim.prop_solver.field_type == "real"):
+                raise ValidationError(f"Checkpoint '{key}' must be real")
+        if np.size(data["w_aux"]) != n_fields * sim.prop_solver.n_grid:
+            raise ValidationError("Checkpoint auxiliary field shape is incompatible")
+        if "record_sample_count" not in data or "rng_state_json" not in data:
+            raise ValidationError("Checkpoint is missing measurement or RNG state")
+        n_noise = n_fields if sim.prop_solver.field_type == "complex" else len(sim.mpt.aux_fields_real_idx)
+        if np.size(data["normal_noise_prev"]) != n_noise * sim.prop_solver.n_grid:
+            raise ValidationError("Checkpoint noise shape is incompatible")
+        rng = np.random.PCG64(0)
+        rng.state = json.loads(str(data["rng_state_json"]))
+        count = data["record_sample_count"]
+        if isinstance(count, (bool, np.bool_)) or not isinstance(count, (int, np.integer)) or count < 0:
+            raise ValidationError("Invalid checkpoint sample count")
+        for key in ["record_H_history", "record_drift_history"] + [_measurement_key("dH", key) for key in sim.chi_n]:
+            if np.size(data[key]) != count or not np.all(np.isfinite(data[key])):
+                raise ValidationError(f"Invalid checkpoint measurement '{key}'")
+        if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
+            raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
+        for monomer in sim.monomer_types:
+            names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
+                     (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
+            for name in names:
+                if np.size(data[name]) != sim.prop_solver.n_grid or not np.all(np.isfinite(data[name])) or np.iscomplexobj(data[name]):
+                    raise ValidationError(f"Invalid checkpoint field '{name}'")
+        sf_size = int(np.prod(sim.prop_solver.nx)) if sim.prop_solver.field_type == "complex" else int(
+            np.prod(sim.prop_solver.nx[:-1])) * (sim.prop_solver.nx[-1] // 2 + 1)
+        for pair in itertools.combinations_with_replacement(sim.monomer_types, 2):
+            name = _measurement_key("sf", ",".join(pair))
+            if np.size(data[name]) != sf_size or not np.all(np.isfinite(data[name])):
+                raise ValidationError(f"Invalid checkpoint structure function '{name}'")
+        wtmd = getattr(sim, "wtmd", None)
+        if wtmd is not None:
+            for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
+                if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
+                    raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+            pending = np.size(data["wtmd_order_parameter_history"])
+            if (pending >= wtmd.update_freq or not np.all(np.isfinite(data["wtmd_order_parameter_history"])) or
+                    np.iscomplexobj(data["wtmd_order_parameter_history"])):
+                raise ValidationError("Invalid checkpoint pending WTMD samples")
+            for pair in sim.chi_n:
+                suffix = "_".join(sorted(pair.split(",")))
+                key = "wtmd_I1_" + suffix
+                if np.any(data["wtmd_I0"]) or key in data:
+                    if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
+                        raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+                key = "wtmd_dH_history_" + suffix
+                if pending and (np.size(data[key]) != pending or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key])):
+                    raise ValidationError(f"Invalid checkpoint WTMD history '{key}'")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValidationError(f"Invalid checkpoint: {exc}") from exc
+
+
+def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None):
+    """Restore pending samples without MATLAB's squeeze changing their shape."""
+    if data is None or "record_sample_count" not in data:
+        return 0
+    H_history.extend(np.atleast_1d(data["record_H_history"]).tolist())
+    if drift_history is not None and "record_drift_history" in data:
+        drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())
+    for key in dH_history:
+        dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
+    for key, array in sf_average.items():
+        array[:] = np.asarray(data[_measurement_key("sf", key)]).reshape(array.shape)
+    return int(data["record_sample_count"])
+
+
+# Small extension mechanics; the physical order of calls stays in each run loop.
+def initialize_extensions(sim, integrator, callbacks):
+    from .integrators import make_integrator
+    sim.integrator = make_integrator(integrator)
+    if callbacks is not None and not isinstance(callbacks, dict):
+        raise ValidationError("callbacks must be a dictionary of stable names to callables")
+    sim.callbacks = dict(callbacks or {})
+    for name, callback in sim.callbacks.items():
+        if not isinstance(name, str) or not name or not callable(callback):
+            raise ValidationError("Each callback needs a nonempty string name and must be callable")
+        interval = getattr(callback, "interval", 1)
+        if type(interval) is not int or interval < 1:
+            raise ValidationError("Callback interval must be a positive integer")
+    for obj in [sim.integrator, *sim.callbacks.values()]:
+        for method in ("state_dict", "load_state_dict"):
+            if hasattr(obj, method) and not callable(getattr(obj, method)):
+                raise ValidationError(f"Extension {method} must be callable")
+        save = callable(getattr(obj, "state_dict", None))
+        load = callable(getattr(obj, "load_state_dict", None))
+        if save != load:
+            raise ValidationError("Extensions must implement both state_dict and load_state_dict, or neither")
+    # Fail at construction, rather than at the first scheduled checkpoint.
+    sim._initial_extension_state = copy.deepcopy(extension_state(sim))
+    sim.metadata["extensions"] = extension_settings(sim)
+
+
+def extension_settings(sim):
+    def settings(obj):
+        value = getattr(obj, "settings", {})
+        if not isinstance(value, dict):
+            raise ValidationError("Extension settings must be a JSON dictionary")
+        return value
+    result = {"integrator": {"name": sim.integrator.name, "settings": settings(sim.integrator)},
+              "callbacks": {name: {"callable": f"{getattr(cb, '__module__', type(cb).__module__)}."
+                                              f"{getattr(cb, '__qualname__', type(cb).__qualname__)}",
+                                   "interval": getattr(cb, "interval", 1),
+                                   "settings": settings(cb)} for name, cb in sim.callbacks.items()}}
+    try:
+        return json.loads(json.dumps(result, allow_nan=False))
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Extension settings must contain finite JSON values") from exc
+
+
+def extension_state(sim):
+    return {"integrator": extension_object_state(sim.integrator),
+            "callbacks": {name: extension_object_state(cb) for name, cb in sim.callbacks.items()}}
+
+
+def extension_object_state(obj):
+    value = obj.state_dict() if callable(getattr(obj, "state_dict", None)) else {}
+    if not isinstance(value, dict):
+        raise ValidationError("Extension state_dict must return a JSON dictionary")
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Extension state must contain finite JSON values") from exc
+
+
+def restore_extensions(sim, data=None):
+    """Load before the RNG is changed; roll back extension objects on a bad state."""
+    state = (json.loads(str(data["extension_state_json"]))
+             if data is not None and "extension_state_json" in data else sim._initial_extension_state)
+    previous = extension_state(sim)
+
+    def load(values):
+        objects = [(sim.integrator, values["integrator"])]
+        objects.extend((obj, values["callbacks"][name]) for name, obj in sim.callbacks.items())
+        for obj, value in objects:
+            if callable(getattr(obj, "load_state_dict", None)):
+                obj.load_state_dict(copy.deepcopy(value))
+            elif value != {}:
+                raise ValidationError("A stateless extension cannot load nonempty state")
+    try:
+        load(state)
+    except Exception as exc:
+        load(previous)
+        raise ValidationError(f"Cannot restore extension state: {exc}") from exc
+
+
+def notify_callbacks(sim, step, w_aux, phi, hamiltonian, drift_max, error_level, step_seconds):
+    """Observers receive detached, read-only snapshots of accepted steps only."""
+    callbacks = [cb for cb in sim.callbacks.values() if step % getattr(cb, "interval", 1) == 0]
+    if not callbacks:
+        return
+
+    def frozen(array):
+        # A bytes-backed array cannot be made writeable, even with setflags.
+        array = np.asarray(array)
+        return np.frombuffer(array.tobytes(), dtype=array.dtype).reshape(array.shape)
+
+    sample = MappingProxyType({"step": step, "dt": sim.langevin["dt"],
+                               "time": step * sim.langevin["dt"],
+                               "w_aux": frozen(w_aux), "w": frozen(sim.mpt.to_monomer_fields(w_aux)),
+                               "phi": MappingProxyType({m: frozen(v) for m, v in phi.items()}),
+                               "hamiltonian": hamiltonian, "drift_max": drift_max,
+                               "error_level": frozen(error_level), "step_seconds": step_seconds,
+                               "status": MappingProxyType(dict(sim.run_status))})
+    for callback in callbacks:
+        callback(sample)
 
 
 # =============================================================================

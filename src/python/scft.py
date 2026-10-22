@@ -21,6 +21,7 @@ from .utils import (
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
+    simulation_metadata,
 )
 from .smearing import Smearing
 
@@ -751,6 +752,10 @@ class SCFT:
             "angles":list(self.prop_solver.get_angles_degrees()),
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
+        metadata = simulation_metadata(self)
+        metadata.update(execution_status="converged" if self.error_level < self.tolerance else "not_converged",
+                        iterations=self.iter)
+        m_dic["simulation_metadata_json"] = json.dumps(metadata)
 
         m_dic.update(free_energy=self.free_energy,
                      free_energy_absolute=self.free_energy_absolute,

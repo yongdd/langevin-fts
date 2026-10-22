@@ -53,6 +53,19 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/numpy.h>
+#include "BuildInfo.h"
+#include "NumericalMethods.h"
+#ifdef USE_CPU_FFTW
+#include <fftw3.h>
+#endif
+#ifdef USE_CPU_MKL
+#include <mkl.h>
+#endif
+#ifdef USE_CUDA
+#include "CudaCommon.h"
+#include <cuda_runtime_api.h>
+#include <cufft.h>
+#endif
 
 #include "GridLimits.h"
 #include "Polymer.h"
@@ -653,6 +666,74 @@ static std::vector<BlockInput> to_block_inputs(const std::vector<std::vector<py:
 
 PYBIND11_MODULE(_core, m)
 {
+    m.attr("build_info") = polymerfts_build_info();
+    m.def("numerical_methods", []() {
+        py::dict result;
+        for (const auto& info : numerical_methods)
+        {
+            py::dict entry;
+            entry["chain_model"] = info.chain_model;
+            entry["solver_type"] = info.solver_type;
+            entry["contour_order"] = info.contour_order;
+            entry["supports_complex"] = info.supports_complex;
+            entry["requires_orthogonal_cell"] = info.requires_orthogonal_cell;
+            entry["supports_mixed_boundaries"] = info.supports_mixed_boundaries;
+            py::list backends;
+#ifdef USE_CPU_MKL
+            backends.append("cpu-mkl");
+#endif
+#ifdef USE_CPU_FFTW
+            backends.append("cpu-fftw");
+#endif
+#ifdef USE_CUDA
+            backends.append("cuda");
+#endif
+            entry["compiled_backends"] = backends;
+            result[py::str(info.name)] = entry;
+        }
+        return result;
+    }, "Registered propagator methods and their compiled capabilities.");
+    m.def("runtime_info", [](bool include_cuda) {
+        py::dict info;
+#ifdef USE_CPU_FFTW
+        info["fftw"] = std::string(fftw_version);
+#endif
+#ifdef USE_CPU_MKL
+        char mkl_version[256] = {};
+        MKL_Get_Version_String(mkl_version, sizeof(mkl_version));
+        info["mkl"] = std::string(mkl_version);
+#endif
+#ifdef USE_CUDA
+        if (include_cuda)
+        {
+            int version = 0;
+            CUDA_CHECK(cudaRuntimeGetVersion(&version));
+            info["cuda_runtime"] = version;
+            CUDA_CHECK(cudaDriverGetVersion(&version));
+            info["cuda_driver_api"] = version;
+            CUFFT_CHECK(cufftGetVersion(&version));
+            info["cufft"] = version;
+            int device = 0;
+            cudaDeviceProp properties{};
+            CUDA_CHECK(cudaGetDevice(&device));
+            CUDA_CHECK(cudaGetDeviceProperties(&properties, device));
+            info["cuda_device_name"] = std::string(properties.name);
+            info["cuda_compute_capability"] = std::to_string(properties.major) + "." + std::to_string(properties.minor);
+            info["cuda_device_memory"] = properties.totalGlobalMem;
+            std::string uuid;
+            constexpr char hex[] = "0123456789abcdef";
+            for (unsigned char byte : properties.uuid.bytes)
+            {
+                uuid.push_back(hex[byte >> 4]);
+                uuid.push_back(hex[byte & 15]);
+            }
+            info["cuda_device_uuid"] = uuid;
+        }
+#else
+        (void)include_cuda;
+#endif
+        return info;
+    }, py::arg("include_cuda") = false);
     // Grid-size limits of the 32-bit grid indices (GridLimits.h)
     m.attr("MAX_GRID_POINTS") = MAX_GRID_POINTS;
     m.attr("MAX_GRID_ARRAY") = MAX_GRID_ARRAY;

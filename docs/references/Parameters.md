@@ -260,6 +260,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 | `dt` | float | Langevin time step $`\Delta\tau \cdot N_{ref}`$ | Required |
 | `nbar` | float | Invariant polymerization index $`\bar{n}`$ | Required |
 | `max_step` | int | Maximum Langevin steps | Required |
+| `integrator` | str | Built-in Langevin method: `"lm"` or `"euler"`; an `integrator=` constructor argument takes precedence | `"lm"` |
 
 ### Saddle Point
 
@@ -271,8 +272,12 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 |-----|------|-------------|---------|
 | `max_iter` | int | Maximum iterations for saddle point | Required |
 | `tolerance` | float | Convergence tolerance | Required |
+| `failure_policy` | str | `"retry"`: continue the saddle solve with the same proposed real fields and noise; `"abort"`: stop on the first failure; `"resample"`: explicitly opt into selecting fresh noise | `"retry"` |
+| `max_retries` | int | Additional saddle solves after the first failed attempt | `5` |
 
-If the saddle point is not found within `max_iter` iterations (or the error is NaN), the Langevin step is repeated from the same fields with new noise, up to five times; after the sixth failure in a row the run stops.
+The initial saddle must converge before drawing Langevin noise. By default a failed step keeps its proposed real fields and noise and continues from the last imaginary-field iterate with a reset compressor history. After exhausting the retries, `SaddlePointError` is raised. The failed step contributes no measurements. `run()` and `continue_run()` return a status dictionary on success; `sim.run_status` and `recording.dir/run_status.json` identify completion or failure and the last accepted step. Other numerical errors propagate and are recorded as `failed`.
+
+The optional `"resample"` policy reproduces the earlier noise-selection behavior. Each redraw emits a warning and increments `noise_resamples`; convergence-dependent selection can alter the sampled distribution. Initial-saddle retries never draw noise, regardless of the policy.
 
 ### Recording
 
@@ -286,6 +291,12 @@ If the saddle point is not found within `max_iter` iterations (or the error is N
 | `recording_period` | int | Period for saving fields |
 | `sf_computing_period` | int | Period for computing structure function |
 | `sf_recording_period` | int | Period for saving structure function |
+
+All periods must be positive integers. Structure functions are normalized by the actual sample count, including when the two structure-function periods are not multiples of one another. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS.
+
+Field checkpoints use format version 2 and are replaced atomically. They store the full PCG64 state, previous noise, auxiliary fields, concentrations, pending measurement sums/histories, WTMD state, and custom integrator/callback settings and states. Version-1 files continue with default LM and no callbacks. `continue_run(path)` validates the effective physical and numerical settings before restoring the RNG. The output directory, checkpoint interval, maximum final step, verbosity and backend may change; sampling periods, model, integrator settings, named callbacks and WTMD bias settings must match. On a different backend only numerical/statistical equivalence is expected. Old unversioned files require `continue_run(path, allow_legacy=True)` and emit a warning because compatibility and pending measurements cannot be verified.
+
+See [Numerical Validation](../internals/NumericalValidation.md) for regression coverage, provenance and statistical validation jobs. Both `LFTS` and `CLFTS` accept keyword arguments `integrator=` and `callbacks=`; see [Extensions](../internals/Extensions.md) for their contracts and a runnable example.
 
 ### Compressor
 

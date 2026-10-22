@@ -26,6 +26,7 @@ os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1" if _on_cuda else "0")
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 from polymerfts import scft
+from polymerfts.utils import simulation_metadata, fields_hash
 
 
 def _set_common_params(params: Dict, platform: str, max_iter: int) -> Dict:
@@ -265,6 +266,11 @@ def run_benchmark(phase: str, platform: str, use_space_group: bool, max_iter: in
         "elapsed_sec": elapsed,
         "iter_sec": elapsed / max_iter,
         "Q": float(q),
+        "metadata": simulation_metadata(calc),
+        "initial_fields_hash": fields_hash(w_init),
+        "nx": params["nx"], "lx": params["lx"], "ds": params["ds"],
+        "warmup": warmup,
+        "timing_scope": "SCFT.run with a fixed iteration count",
     }
 
 
