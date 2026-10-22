@@ -22,28 +22,43 @@ The Python sampling/restart tests do not replace long statistical checks. Existi
 
 After building, `ctest --test-dir build -L numerical --output-on-failure` runs the selected numerical regressions. Basic and full test selections remain available. Missing CPU backends can skip CPU-specific tests. The GitHub-hosted workflow builds without CUDA; its class-name consistency check does not execute GPU numerics.
 
-On the KIAS cluster, run the selected tests and the unmodified continuous-chain Gyroid example with an allocated GPU:
+Run the selected tests and the unmodified continuous-chain Gyroid example on
+allocated compute resources. Set up the environment and GPU allocation using
+your site's scheduler, and set `PYTHONPATH` to the staged build package when
+validating uninstalled changes. For example, inside the allocation:
 
 ```bash
-sbatch --output=/gpfs/$USER/validation-%j.log scripts/slurm_validate.sh \
-    build /gpfs/$USER/polymerfts-validation
+ctest --test-dir /path/to/polymerfts/build -L numerical --output-on-failure \
+    --output-junit /path/to/report/numerical.xml
+cd /path/to/report
+python /path/to/polymerfts/examples/scft/Gyroid.py > gyroid.log 2>&1
 ```
 
-The job requires both a CPU backend and visible CUDA, and fails before testing when either is absent. It records JUnit results, the CMake cache, explicit conda packages, GPU information, and the Gyroid convergence result. Use a distinct report directory per validation job. A CPU-only job can run the same CTest selection, but does not certify GPU agreement. Long jobs and parameter sweeps run through SLURM, one configuration per job.
+For CPU/GPU agreement, the build must include both backends and the job must
+have a visible GPU. Preserve JUnit results, the CMake cache, environment details,
+GPU information and the Gyroid convergence result in a distinct report directory
+per job. A CPU-only job can run the same CTest selection, but does not certify
+GPU agreement. Submit long checks and parameter sweeps through the scheduler,
+one configuration per job. Keep cluster-specific launchers, paths and module
+settings outside the repository.
 
-Pass `full` as the third argument to build all targets with `nice -n 10 make -j4` and run the full suite before the Gyroid check.
+To run the full suite, omit `-L numerical` from the CTest command after building
+the required targets.
 
 ## Statistical refinement
 
-`scripts/validate_fts_sampling.py` runs one configuration and writes post-equilibration Hamiltonian estimates, Monte Carlo standard errors, effective sample sizes, block structure factors and continuum RPA references. CL-FTS also reports imaginary observables. Scaled drift maxima are summarized by quantiles, including the maximum. The full histories and run status remain in the adjacent `_data` directory. Existing output directories are rejected to prevent mixing independent runs.
+The test harness `tests/validation/validate_fts_sampling.py` runs one configuration and writes post-equilibration Hamiltonian estimates, Monte Carlo standard errors, effective sample sizes, block structure factors and continuum RPA references. CL-FTS also reports imaginary observables. Scaled drift maxima are summarized by quantiles, including the maximum. The full histories and run status remain in the adjacent `_data` directory. Existing output directories are rejected to prevent mixing independent runs.
 
 ```bash
-sbatch scripts/slurm_sampling.sh --model lfts --dt 0.5 \
+python tests/validation/validate_fts_sampling.py --model lfts --dt 0.5 \
     --seed 7 --steps 20000 --burn-in 4000 --block 1000 \
-    --output /gpfs/$USER/validation/lfts-dt05-seed7.json
+    --output /path/to/report/lfts-dt05-seed7.json
 ```
 
-The supplied sampling job requests one CPU, 4 GB and no GPU. For GPU sampling, run `validate_fts_sampling.py --platform cuda ...` inside a separately allocated GPU job. The script draws chain diagrams inside its output directory. It never changes the calibrated tests. Set `PYTHONPATH` to the staged build package when validating uninstalled changes.
+Run this command inside an allocated compute job with resources appropriate to
+the selected backend. For GPU sampling, add `--platform cuda` and request a GPU
+through the scheduler. The script draws chain diagrams inside its output
+directory. It never changes the calibrated tests.
 
 Compare separate jobs along these axes:
 
@@ -67,6 +82,8 @@ Versioned checkpoints compare effective model and sampling settings before mutat
 
 ## Performance measurements
 
-Accuracy tests and benchmark executables remain separate. `benchmark_crysfft_triplet.py` and `benchmark_space_group_speed.py` now include provenance and input hashes with timings. The former measures propagator execution; the latter fixes the SCFT iteration count. Neither alone measures time to convergence.
+Keep accuracy tests and performance measurements separate. Propagator timings
+and fixed-iteration SCFT timings measure different work; neither alone measures
+time to convergence. Record provenance and input hashes with timing results.
 
 Report problem geometry, architecture, contour discretization, field input, hardware, selected backend/method, precision, compilation options, threads/streams, reduced basis and memory mode. State warm-up, repetitions, timing boundaries and variability. Compare total SCFT time at matched residual/accuracy, and sampling efficiency at matched bias and Monte Carlo error. Cross-project comparisons also match physical units, ensemble, bead/bond conventions, free-energy offsets and Fourier normalization.

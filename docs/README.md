@@ -7,6 +7,7 @@
 | [Installation.md](getting-started/Installation.md) | Installing the library |
 | [QuickStart.md](getting-started/QuickStart.md) | Running your first simulation |
 | [SimulationGUI.md](getting-started/SimulationGUI.md) | Browser editor for preparing simulation scripts over SSH (beta) |
+| [PscfConversion.md](getting-started/PscfConversion.md) | Export periodic PSCF input, import fields and generate polymerfts SCFT scripts |
 | [Features.md](getting-started/Features.md) | Overview of library capabilities |
 
 ## Theory

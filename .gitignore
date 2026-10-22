@@ -1,13 +1,20 @@
 __pycache__
 .vscode
+/.claude/settings.local.json
 build
 doc
 temp*
-# Ad-hoc shell scripts (personal SLURM launchers etc.) are not tracked.
-# Scripts intended for the repository go under scripts/ (exempted below);
-# note this blanket rule hides any new .sh elsewhere from git status.
+# Local shell scripts and scheduler launchers are not tracked.
 *.sh
-!scripts/*.sh
+*.sbatch
+*.slurm
+/scripts/slurm/
+# scripts/ is reserved for tools used by library users.
+/scripts/dev/
+/scripts/benchmarks/
+/scripts/phases/
+/scripts/validation/
+/scripts/gui/generate_gui_space_groups.py
 *.dat
 *.out
 *.png
@@ -16,7 +23,7 @@ temp*
 !docs/grafted_brush_validation.png
 !docs/convergence_plot.png
 *.html
-!scripts/simulation_gui/index.html
+!scripts/gui/assets/index.html
 *.qdrep
 *.sqlite
 data_simulation*

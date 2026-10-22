@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 
-BUILDER = runpy.run_path(str(Path(__file__).resolve().parents[2] / "scripts" / "simulation_gui.py"))
+BUILDER = runpy.run_path(str(Path(__file__).resolve().parents[2] / "scripts" / "gui" / "simulation_gui.py"))
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +61,7 @@ def test_editor_assets_are_not_git_ignored():
         pytest.skip("Source archive has no Git ignore metadata")
     assets = ["index.html", "app.js", "model-editor.js", "style.css", "icon.svg", "space-groups.json"]
     result = subprocess.run(["git", "check-ignore", "--no-index", "--",
-                             *["scripts/simulation_gui/" + name for name in assets]],
+                             *["scripts/gui/assets/" + name for name in assets]],
                             cwd=root, capture_output=True, text=True, timeout=5)
     assert result.returncode == 1, result.stdout + result.stderr
 

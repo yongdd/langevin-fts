@@ -15,11 +15,11 @@ run simulations or submit jobs.
 From the repository root:
 
 ```bash
-python3 scripts/simulation_gui.py
+python3 scripts/gui/simulation_gui.py
 ```
 
 Open `http://127.0.0.1:8765` in a browser on the same computer. The editor uses only
-the Python standard library. Keep the `scripts/simulation_gui/` asset directory
+the Python standard library. Keep the `scripts/gui/assets/` asset directory
 next to `simulation_gui.py`; all browser assets are served locally. Running an
 exported script later requires the installed polymerfts package and its
 dependencies; see [Installation.md](Installation.md).
@@ -36,7 +36,7 @@ In that SSH session, change to the repository and start the editor:
 
 ```bash
 cd /path/to/langevin-fts
-python3 scripts/simulation_gui.py
+python3 scripts/gui/simulation_gui.py
 ```
 
 Open `http://127.0.0.1:8765` in your own computer's browser. Keep the SSH connection
@@ -192,7 +192,7 @@ no `--save-dir` option is needed. To save scripts in a job directory, start ther
 ```bash
 mkdir -p ~/polymer-jobs
 cd ~/polymer-jobs
-python3 /path/to/langevin-fts/scripts/simulation_gui.py
+python3 /path/to/langevin-fts/scripts/gui/simulation_gui.py
 ```
 
 With **Filename** set to `simulation.py` and **Server subfolder** empty, a server
@@ -218,6 +218,6 @@ computational backend:
 python -m pytest tests/scripts -q
 ```
 
-The space group catalog is bundled in `scripts/simulation_gui/space-groups.json`.
-Developers can regenerate it with `python scripts/generate_gui_space_groups.py`
-using Python `spglib`; this dependency is unnecessary for running the editor.
+The space group catalog is bundled in `scripts/gui/assets/space-groups.json`.
+The editor reads it offline; neither Python `spglib` nor a catalog-generation
+tool is needed to use the editor.

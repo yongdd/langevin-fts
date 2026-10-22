@@ -109,7 +109,7 @@ def test_none_keeps_scft_lower_dimensions_available():
 
 
 def test_symmetry_generation_without_site_packages():
-    path = Path(__file__).resolve().parents[2] / "scripts/simulation_gui.py"
+    path = Path(__file__).resolve().parents[2] / "scripts/gui/simulation_gui.py"
     code = (f"import runpy, sys\nb = runpy.run_path({str(path)!r})\n"
             "v = b['preset_settings'](b['PRESETS'][0]); v['space_group'] = '530'\n"
             "compile(b['build_script'](v), 'sg.py', 'exec')\n"

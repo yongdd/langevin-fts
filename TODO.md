@@ -58,9 +58,8 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     complex linearity and forward/backward consistency, density versus d(log Q)/dw,
     long-run CL statistics, and CPU/CUDA performance and memory costs. Distinguish
     the same finite spectral bond operator from a different real-space wall model.
-    Reproducers and historical experiment results:
-    `/home/yongdd/polymer/dh_salt_runs/audit_20260906/audit_strong_field.py` and
-    `/home/yongdd/polymer/dh_salt_runs/fft_repair_20260906/`.
+    Reproducer locations and historical experiment archives are recorded in
+    private research notes; the model parameters and required checks are given above.
 
 30. Resolve charged CL discrepancies against exact finite-lattice particles (2026-09-07).
 

@@ -1,6 +1,6 @@
 # Tools Reference
 
-This document describes the utility scripts in the `tools/` directory for visualization, data conversion, and post-processing of simulation results.
+This document describes the utility scripts in `scripts/analysis/` and `scripts/pscf/` for visualization, data conversion, and post-processing of simulation results.
 
 ## Table of Contents
 
@@ -28,13 +28,13 @@ This document describes the utility scripts in the `tools/` directory for visual
 ```matlab
 % Run in the directory that holds the input file (edit the file name in the script if needed)
 cd /path/to/simulation
-matlab -nodisplay -r "run('/path/to/tools/plot_3d_isodensity.m'); exit"
+matlab -nodisplay -r "run('/path/to/scripts/analysis/plot_3d_isodensity.m'); exit"
 ```
 
 **Usage (Python):**
 ```bash
 cd /path/to/simulation
-jupyter notebook /path/to/tools/plot_2d_density.ipynb
+jupyter notebook /path/to/scripts/analysis/plot_2d_density.ipynb
 ```
 
 **Output:** the MATLAB scripts write PNG image files (`2d_density.png`, `2d_slice_image.png`, `isodensity.png`); the notebooks only display the figures.
@@ -77,13 +77,13 @@ These tools visualize Well-Tempered Metadynamics (WTMD) simulation output, inclu
 ```matlab
 % Run in the directory that holds the wtmd_statistics_*.mat files
 cd /path/to/simulation/data_simulation
-matlab -nodisplay -r "run('/path/to/tools/plot_wtmd_statistics.m'); exit"
+matlab -nodisplay -r "run('/path/to/scripts/analysis/plot_wtmd_statistics.m'); exit"
 ```
 
 **Usage (χN reweighting):**
 ```bash
 cd /path/to/simulation
-jupyter notebook /path/to/tools/plot_wtmd_chib_AB.ipynb
+jupyter notebook /path/to/scripts/analysis/plot_wtmd_chib_AB.ipynb
 # Edit chin (simulation χN), dchiN (shift), and data_dir in the notebook
 ```
 
@@ -148,56 +148,47 @@ save_vtk("phi.vtk", result.phi, calc.prop_solver.get_lx(), nx=calc.prop_solver.n
 
 Tools for converting between langevin-fts and [PSCF](https://github.com/dmorse/pscfpp) formats.
 
-### 2.1 Export to PSCF (`conversion_to_pscf/`)
+### 2.1 Export to PSCF
 
-Convert langevin-fts Python scripts to PSCF input files.
-
-| File | Description |
-|------|-------------|
-| `to_pscf.py` | Main conversion script |
-| `scft_example.py` | Example SCFT script for testing |
-
-**Usage:**
 ```bash
-cd tools/conversion_to_pscf
-python to_pscf.py --file_name /path/to/your_scft_script.py
+python scripts/pscf/pscf_converter.py export fields.mat -o pscf-input
 ```
 
-**Output files:**
-- `param`: PSCF parameter file (system definition, mesh, iteration settings)
-- `in/omega`: PSCF field file (potential fields in PSCF format)
+The converter reads saved SCFT results or a parameter file with separate fields.
+It writes `param`, `command`, `in/omega`, and a monomer-name mapping in
+`metadata.json`. It supports continuous Gaussian chains, mixtures, linear and
+branched polymers, and 1D/2D/3D periodic cells. Python input is read statically;
+conversion never runs a simulation.
 
-**Supported features:**
-- Linear and branched polymer architectures
-- Multi-monomer systems (arbitrary number of species)
-- Automatic vertex re-numbering for branched polymers
-- Orthorhombic lattice (default)
+### 2.2 Import from PSCF
 
-**Limitations:**
-- Non-orthorhombic lattices not yet supported
-- Space group symmetry not transferred
-
-### 2.2 Import from PSCF (`read_pscf_output/`)
-
-Convert PSCF output files to langevin-fts `.mat` format.
-
-| File | Description |
-|------|-------------|
-| `to_matlab.py` | Main conversion script |
-| `omega`, `rho`, `param` | Example PSCF files |
-
-**Usage:**
 ```bash
-cd tools/read_pscf_output
-# Place omega and rho files from PSCF in this directory
-python to_matlab.py
+python scripts/pscf/pscf_converter.py import pscf-input/out/omega \
+    --rho pscf-input/out/rho --metadata pscf-input/metadata.json -o fields.mat
 ```
 
-**Output:**
-- `fields.mat`: MATLAB/Python compatible file with fields and densities
+Use PSCF r-grid fields produced by `WRITE_W_RGRID` and `WRITE_C_RGRID`.
+`--rho` is optional; `--monomers A B ...` supplies column names when export
+metadata is unavailable. Grid order, cell geometry, field counts and finite
+values are checked before writing. Existing outputs are preserved.
 
-**Supported crystal systems:**
-- Orthorhombic, cubic, tetragonal (cell parameters adjusted automatically)
+### 2.3 Generate a polymerfts execution script
+
+```bash
+python scripts/pscf/pscf_converter.py import-script pscf-input/param \
+    --command pscf-input/command --monomers A B -o polymerfts-job
+```
+
+This creates `simulation.py`, bundled `initial.mat` fields and `conversion.json`
+for one `READ_W_RGRID` / `ITERATE` / save / `FINISH` SCFT calculation. Run the
+script separately with polymerfts installed. Results are complete polymerfts
+`.mat` snapshots. Sweeps, basis input, other iterators, partially flexible cells
+and unsupported physical models are rejected; the guide lists the restrictions.
+
+See the [PSCF conversion guide](../getting-started/PscfConversion.md) for dependencies,
+cell conventions, supported models, migration from the old tool paths, and
+examples. The converter uses PSCF's full-grid iterator; it does not impose the
+source space group or convert discrete/complex models by approximation.
 
 ---
 
@@ -228,7 +219,7 @@ where $`P_i`$ are the discrete bond contributions ($`N_{\text{bond}} = 100`$) an
 **Usage:**
 ```matlab
 % Run in directory containing fields_*.mat
-matlab -nodisplay -r "run('/path/to/tools/renormalization_discrete.m'); exit"
+matlab -nodisplay -r "run('/path/to/scripts/analysis/renormalization_discrete.m'); exit"
 ```
 
 **Output:**
@@ -257,7 +248,7 @@ z_\infty = 1 - \frac{1}{\sqrt{\bar{N}}} \frac{1}{8\pi^3 f(1-f)} \int_{-\pi/\Delt
 **Usage:**
 ```matlab
 % Run in directory containing fields_*.mat
-matlab -nodisplay -r "run('/path/to/tools/renormalization_rpa.m'); exit"
+matlab -nodisplay -r "run('/path/to/scripts/analysis/renormalization_rpa.m'); exit"
 ```
 
 **Requirements:**
@@ -282,7 +273,7 @@ Convert monomer potential fields $`(w_A, w_B, \ldots)`$ to auxiliary potential f
 **Usage:**
 ```matlab
 % Run in directory containing fields_*.mat
-matlab -nodisplay -r "run('/path/to/tools/convert_into_auxiliary_fields.m'); exit"
+matlab -nodisplay -r "run('/path/to/scripts/analysis/convert_into_auxiliary_fields.m'); exit"
 ```
 
 **Input:** `fields_*.mat` containing:

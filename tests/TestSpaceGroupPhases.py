@@ -11,8 +11,8 @@ Tests all combinations of:
 
 Uses pre-converged .mat files from tests/data/ for fast iteration (~1-2 iterations).
 The fixtures are converged (tolerance 1e-9, box fixed) under the current cell-centered
-symmetry convention; regenerate them and the expected_fe values below with
-scripts/reconverge_phase_fixtures.py whenever the discretization or convention changes.
+symmetry convention. Changes to the discretization or convention require
+re-convergence and review of the fixtures and expected_fe values below.
 """
 
 import os

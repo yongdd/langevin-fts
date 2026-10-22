@@ -10,8 +10,8 @@ import numpy as np
 
 
 def main():
-    spec = importlib.util.spec_from_file_location("sampling_validation", Path(__file__).resolve().parents[1] /
-                                                 "scripts" / "validate_fts_sampling.py")
+    spec = importlib.util.spec_from_file_location("sampling_validation", Path(__file__).resolve().parent /
+                                                 "validation" / "validate_fts_sampling.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     # Forty post-burn-in steps can span only three complete recorded blocks

@@ -28,8 +28,8 @@ This script reports
      the same TeX and is the stricter of the two.
 
 Usage:
-    python scripts/check_latex.py            # all tracked *.md outside devel/
-    python scripts/check_latex.py FILE...    # only these files
+    python .github/scripts/check_latex.py            # all tracked *.md outside devel/
+    python .github/scripts/check_latex.py FILE...    # only these files
 """
 
 import re
@@ -39,7 +39,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 # A fence line: the container prefix (blockquote markers, list markers,
 # indentation), then ``` or ~~~ and the info string.
 FENCE = re.compile(r'^((?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)])(?=[ \t])))*[ \t]*)(`{3,}|~{3,})(.*)$')

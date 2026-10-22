@@ -139,7 +139,7 @@ jobs:
     - name: Check the math in the Markdown files
       run: |
         npm install -g katex@0.19.0
-        python scripts/check_latex.py
+        python .github/scripts/check_latex.py
 
   check-platform-consistency:
     name: Platform Consistency Check

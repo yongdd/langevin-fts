@@ -14,7 +14,7 @@ from scipy.io import savemat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILDER = runpy.run_path(str(ROOT / "scripts" / "simulation_gui.py"))
+BUILDER = runpy.run_path(str(ROOT / "scripts" / "gui" / "simulation_gui.py"))
 VALIDATION = runpy.run_path(str(ROOT / "src" / "python" / "validation.py"))
 
 
@@ -142,7 +142,7 @@ def test_large_seed_and_blank_seed():
 def test_generation_without_site_packages():
     code = (
         "import runpy, sys\n"
-        f"builder = runpy.run_path({str(ROOT / 'scripts' / 'simulation_gui.py')!r})\n"
+        f"builder = runpy.run_path({str(ROOT / 'scripts' / 'gui' / 'simulation_gui.py')!r})\n"
         "for preset in builder['PRESETS']:\n"
         "    compile(builder['build_script'](builder['preset_settings'](preset)), preset, 'exec')\n"
         "assert 'polymerfts' not in sys.modules\n"

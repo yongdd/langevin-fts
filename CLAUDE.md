@@ -29,6 +29,10 @@ Use the current source as the authority for supported capabilities and defaults:
 - Leave `devel/` alone: read its contents only when the user explicitly asks,
   do not audit, modify, stage or commit them, and do not link to it from
   documentation.
+- Reserve `scripts/` for tools used by library users: preparing simulations,
+  converting inputs/results and analyzing output. Keep personal installation,
+  benchmarking and fixture-maintenance tools outside the checkout. Shared CI
+  utilities belong under `.github/`; regression helpers belong under `tests/`.
 
 ### Preserve Numerical Test Conditions
 
@@ -45,6 +49,8 @@ Never weaken a check to make a test pass. Investigate and report failures.
 - Submit each parameter configuration as a separate job when running a sweep.
 - Follow the site's resource policy, explicitly request memory and let the
   scheduler select GPU devices. Preserve its `CUDA_VISIBLE_DEVICES` setting.
+- Keep site-specific scheduler launchers outside the checkout; do not commit
+  personal paths, partition choices or local module setup in project scripts.
 - Keep permitted login-node builds short, use at most four workers and lower
   their priority with `nice -n 10`. Use compute jobs for longer builds and tests.
 - Check job status at most once per minute. Keep searches inside the project;
@@ -142,7 +148,7 @@ See [Numerical Validation](docs/internals/NumericalValidation.md) for regression
 coverage and sampling studies. Relevant tests include `TestParameterNames`,
 `TestFtsReliability`, `TestCheckpointValidation`, `TestExtensions`,
 `TestPropagatorAnalytic`, `TestConvergenceOrderLite` and `TestSamplingStatistics`.
-The benchmark scripts in `scripts/` measure performance separately.
+Measure performance separately from correctness tests.
 
 ## Architecture and Extension Points
 
@@ -285,7 +291,7 @@ Within table math use `\vert` instead of a literal vertical bar. Escape literal
 dollar signs. Check documentation edits with:
 
 ```bash
-python scripts/check_latex.py AGENTS.md CLAUDE.md
+python .github/scripts/check_latex.py AGENTS.md CLAUDE.md
 ```
 
 The checker validates TeX syntax only when the optional KaTeX CLI is available.

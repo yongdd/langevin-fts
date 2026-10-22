@@ -163,44 +163,41 @@ whose `nvcc` compiles the code; the configure step prints the path it uses (`cuF
 
 ## Keeping several versions side by side
 
-Python installs one version of a package per environment, so two versions of
-`polymerfts` cannot share one `site-packages`. The standard way to keep, say,
-the version a paper was computed with next to the current one is a wheel per
-version plus a small virtual environment per version:
+Python installs one version of a package per environment. Keep a separate wheel
+and virtual environment for each version needed for a calculation.
+
+From the desired source checkout, with the build dependencies installed and the
+conda environment active:
 
 ```bash
-conda activate polymerfts                 # provides CMake, MKL/FFTW, spglib, LAPACKE
-export PATH=/usr/local/cuda-12.4/bin:$PATH  # a CUDA 12.2+ nvcc for the GPU backend (not in conda)
-scripts/install_versioned.sh              # builds ~/wheels/polymerfts-<version>-*.whl and
-                                          # installs it into ~/venvs/polymerfts-<version>
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir /path/to/wheels \
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON
+python -m venv --system-site-packages /path/to/venvs/polymerfts-0.10.0
+/path/to/venvs/polymerfts-0.10.0/bin/python -m pip install --no-deps --force-reinstall \
+    /path/to/wheels/polymerfts-0.10.0-*.whl
 ```
 
-The venv is created with `--system-site-packages`, so NumPy, SciPy and the
-other dependencies are shared with the conda environment and the venv holds
-only `polymerfts` (a few tens of MB). Select a version per job:
+Use the version and compatible wheel for that checkout. The build uses the
+[CMake options](#cmake-options) above; additional options can be passed as
+`-Ccmake.define.OPTION=VALUE`. CUDA defaults to `AUTO`; use
+`-Ccmake.define.POLYMERFTS_USE_CUDA=ON` when the build must include CUDA, or `OFF`
+for a CPU-only build.
+
+The venv's `--system-site-packages` option shares NumPy, SciPy and other
+dependencies with the active environment. Keep that dependency environment
+available. Select the package version before running a job:
 
 ```bash
-source ~/venvs/polymerfts-0.10.0/bin/activate   # in an sbatch script: this line before python
+source /path/to/venvs/polymerfts-0.10.0/bin/activate
 python Gyroid.py
 ```
 
-Options: `--mkl ON|OFF`, `--fftw ON|OFF`, `--cuda AUTO|ON|OFF` (default all ON; with
-`--cuda ON` a missing CUDA 12.2+ toolchain stops the build, `AUTO` builds without it),
-`-j N` build parallelism (default 4), `--wheel-dir`, `--venv-dir`,
-`--skip-build` to reinstall an already built wheel, `--no-build-isolation`
-when working offline (then `scikit-build-core`, `pybind11` and `numpy` must be
-installed in the conda environment). To keep an older release, check it out in
-a separate work tree and run the script from there (releases from 0.10.0 on;
-the older tags ship no `pyproject.toml`, so build them with `make install` from
-their own build directory instead):
-
-```bash
-git worktree add ../langevin-fts-<version> v<version>
-(cd ../langevin-fts-<version> && scripts/install_versioned.sh)
-```
+For an older release, use a separate worktree and repeat the wheel/venv steps
+there. Releases before 0.10.0 have no `pyproject.toml`; build those with their own
+CMake instructions instead.
 
 For quick comparisons during development, the package staged in
-`build/python` after every `make` can be used without installing anything:
+`build/python` can be used without installing anything:
 `PYTHONPATH=/path/to/build/python python script.py`.
 
 ## Uninstallation 😢
