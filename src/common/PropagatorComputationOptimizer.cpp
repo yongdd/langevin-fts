@@ -560,7 +560,7 @@ std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorComputat
 ComputationEdge& PropagatorComputationOptimizer::get_computation_propagator(std::string key)
 {
     validation::require_string_key(computation_propagators, key, "computation_propagators");
-    return computation_propagators[key];
+    return computation_propagators.at(key);
 }
 
 /** @brief Get all computation blocks. */
@@ -575,7 +575,7 @@ ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tup
     validation::require_key(computation_blocks, key,
         "computation_blocks for (" + std::to_string(std::get<0>(key)) + ", " +
         std::get<1>(key) + ", " + std::get<2>(key) + ")");
-    return computation_blocks[key];
+    return computation_blocks.at(key);
 }
 
 /**

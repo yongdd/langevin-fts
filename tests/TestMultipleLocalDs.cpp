@@ -233,9 +233,8 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            // With random fields, concentration may deviate from 1.0
-            // Use 10% tolerance since we're mainly testing that computation works
-            if (!(std::abs(sum_phi - 1.0) <= 0.1))
+            // Contour quadrature conserves the mean density even with random fields.
+            if (!(std::abs(sum_phi - 1.0) <= 1e-10))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi << std::endl;
                 return -1;
@@ -408,7 +407,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (!(std::abs(sum_phi_star - 1.0) <= 0.1))
+            if (!(std::abs(sum_phi_star - 1.0) <= 1e-10))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_star << std::endl;
                 return -1;
@@ -593,7 +592,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (!(std::abs(sum_phi_homo - 1.0) <= 0.1))
+            if (!(std::abs(sum_phi_homo - 1.0) <= 1e-10))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_homo << std::endl;
                 return -1;
@@ -832,7 +831,7 @@ int main()
                 std::cout << "FAILED: Negative concentration detected" << std::endl;
                 return -1;
             }
-            if (!(std::abs(sum_phi_brush - 1.0) <= 0.1))
+            if (!(std::abs(sum_phi_brush - 1.0) <= 1e-10))
             {
                 std::cout << "FAILED: Average concentration should be ~1.0, got " << sum_phi_brush << std::endl;
                 return -1;

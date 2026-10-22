@@ -377,7 +377,9 @@ class LFTS:
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
         for i in range(M-1):
-            self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues[:M-1]))
+            if i not in self.mpt.aux_fields_dropped_idx:
+                self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues[:M-1]))
+        self.dt_scaling[self.mpt.aux_fields_dropped_idx] = 0.0
 
         # Set random generator
         if random_seed is None:         
@@ -493,7 +495,7 @@ class LFTS:
 
         # Material conservation: mean(sum phi) must stay 1 (a numerical blow-up shows up here first)
         mass_error = self.prop_solver.mean(sum(phi[m] for m in self.monomer_types) - 1.0)
-        if abs(mass_error) > 5e-8:
+        if not abs(mass_error) <= 5e-8:
             raise ValidationError(f"Material conservation failed: mean(sum(phi) - 1) = {mass_error:.3e}")
 
         # Partition consistency check (forward vs backward propagators), once per run
@@ -689,6 +691,7 @@ class LFTS:
             
         # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
+        self.mpt.pin_dropped_fields(w_aux)
 
         if start_langevin_step is None:
             start_langevin_step = 1
@@ -734,7 +737,8 @@ class LFTS:
         # Langevin iteration begins here
         langevin_step = start_langevin_step - 1   # stays when max_step < start_langevin_step
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
-            print("Langevin step: ", langevin_step)
+            if self.verbose_level >= 1:
+                print("Langevin step: ", langevin_step)
 
             # Copy data for restoring
             w_aux_copy = w_aux.copy()
@@ -960,7 +964,8 @@ class LFTS:
             is_last = error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"]
             if self.verbose_level == 2 or is_last:
                 total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb,
+                                                          include_const_term=True, phi=self.smearing.apply_to_dict(phi))
 
             # Print iteration # and error levels
             if self.verbose_level == 2 or (self.verbose_level == 1 and is_last):

@@ -35,6 +35,7 @@ enum class PhysicalBasis
  */
 class SpaceGroup
 {
+    template <typename T> friend class ComputationBox;
 private:
     int hall_number_;                          ///< Hall number (1-530)
     int spacegroup_number_;                    ///< ITA space group number (1-230)

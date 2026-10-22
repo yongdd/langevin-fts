@@ -652,7 +652,8 @@ void CpuSolverCNADI::tridiagonal_periodic(
     // xl: a
     // xd: b
     // xh: c
-    // gamma = 1.0
+    // A negative diagonal-sized gamma avoids cancellation when diffusion is small.
+    const double gamma = -xd[0];
 
     thread_local std::vector<double> c_star_buffer;   // reused: no allocation per step, no VLA on the stack
 
@@ -665,10 +666,10 @@ void CpuSolverCNADI::tridiagonal_periodic(
     double temp, value;
 
     // Forward sweep
-    temp = xd[0] - 1.0 ; 
+    temp = xd[0] - gamma;
     c_star[0] = xh[0]/temp;
     x[0] = d[0]/temp;
-    q[0] =  1.0/temp;
+    q[0] = gamma/temp;
 
     for(int i=1; i<M-1; i++)
     {
@@ -678,7 +679,7 @@ void CpuSolverCNADI::tridiagonal_periodic(
         q[i]        =     (-xl[i]*q[i-1])         /temp;
     }
     c_star[M-2] = xh[M-2]/temp;
-    temp = xd[M-1]-xh[M-1]*xl[0] - xl[M-1]*c_star[M-2];
+    temp = xd[M-1]-xh[M-1]*xl[0]/gamma - xl[M-1]*c_star[M-2];
     x[(M-1)*INTERVAL] = ( d[M-1]-xl[M-1]*x[(M-2)*INTERVAL])/temp;
     q[M-1]          = (xh[M-1]-xl[M-1]*q[M-2])         /temp;
 
@@ -689,7 +690,7 @@ void CpuSolverCNADI::tridiagonal_periodic(
         q[i]        = q[i]        - c_star[i]*q[i+1];
     }
 
-    value = (x[0]+xl[0]*x[(M-1)*INTERVAL])/(1.0+q[0]+xl[0]*q[M-1]);
+    value = (x[0]+xl[0]/gamma*x[(M-1)*INTERVAL])/(1.0+q[0]+xl[0]/gamma*q[M-1]);
     for(int i=0; i<M; i++)
         x[i*INTERVAL] = x[i*INTERVAL] - q[i]*value;
 }

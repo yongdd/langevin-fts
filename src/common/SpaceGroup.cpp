@@ -108,6 +108,9 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
     {
         throw_with_line_number("SpaceGroup requires 3D grid dimensions");
     }
+    for (int n : nx_)
+        if (n <= 0)
+            throw_with_line_number("SpaceGroup grid dimensions must be positive.");
 
     if (hall_number_ < 1 || hall_number_ > 530)
     {
@@ -117,11 +120,14 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
 
     // Compute total grid size, in 64 bits: the space group is created before the
     // computation box and must reject the same grids (see GridLimits.h)
-    const long long n_points = static_cast<long long>(nx_[0]) * nx_[1] * nx_[2];
-    if (n_points > MAX_GRID_POINTS)
-        throw_with_line_number("The grid has " + std::to_string(n_points) + " points; at most " +
-            std::to_string(MAX_GRID_POINTS) + " are supported, because grid arrays are indexed "
-            "with 32-bit integers and the largest of them hold two fields.");
+    long long n_points = 1;
+    for (int n : nx_)
+    {
+        n_points *= n;
+        if (n_points > MAX_GRID_POINTS)
+            throw_with_line_number("The grid exceeds " + std::to_string(MAX_GRID_POINTS) +
+                " points, the limit for the 32-bit grid indices.");
+    }
     total_grid_ = static_cast<int>(n_points);
 
     // Get space group info from spglib
@@ -690,9 +696,9 @@ bool SpaceGroup::is_invariant(const double* full_field, double tolerance) const
 
 void SpaceGroup::symmetrize(double* field, int n_fields) const
 {
-    const auto& full_to_reduced = full_to_reduced_map_;
-    const auto& orbit_counts = orbit_counts_;
-    const int n_reduced = n_irreducible_;
+    const auto& full_to_reduced = full_to_reduced_map_full_;
+    const auto& orbit_counts = orbit_counts_full_;
+    const int n_reduced = n_irreducible_full_;
 
     // Temporary buffer for orbit sums
     std::vector<double> orbit_sums(n_reduced);

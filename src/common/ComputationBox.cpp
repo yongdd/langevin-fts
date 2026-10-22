@@ -71,6 +71,8 @@ namespace {
         }
         else if (angles.size() == 1)
         {
+            if (dim == 1 && std::isfinite(angles[0]) && std::abs(angles[0] - 90.0) <= ANGLE_TOLERANCE)
+                return full_angles;
             // Single angle: gamma only (for 2D)
             if (dim != 2)
                 throw_with_line_number("Single-angle specification is only valid for 2D systems")
@@ -79,7 +81,11 @@ namespace {
         }
         else if (angles.size() == 3)
         {
-            // Full specification
+            // Angles involving absent axes must not enter the reciprocal metric.
+            for (int i = 0; i < (dim == 1 ? 3 : dim == 2 ? 2 : 0); ++i)
+                if (!std::isfinite(angles[i]) || std::abs(angles[i] - 90.0) > ANGLE_TOLERANCE)
+                    throw_with_line_number("A 1D box requires all angles to be 90 degrees; "
+                        "a 2D box requires alpha and beta to be 90 degrees.");
             return angles;
         }
         else
@@ -865,6 +871,57 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
     // The sizes and maps above are snapshots: freeze the physical basis
     if (sg != nullptr)
         sg->mark_in_use();
+}
+
+template <typename T>
+ComputationBox<T>::SpaceGroupGuard::SpaceGroupGuard(ComputationBox* box, SpaceGroup* group)
+    : box(box), group(group)
+{
+    if (box == nullptr)
+        throw_with_line_number("Computation box must not be null.");
+    previous_group = box->space_group_;
+    previous_n_basis = box->n_basis_;
+    previously_in_use = group != nullptr && group->in_use_;
+    previous_orbit_counts = std::move(box->orbit_counts_);
+    previous_mask = std::move(box->mask);
+    previous_basis_weights = std::move(box->basis_weights_);
+    try
+    {
+        // Constructors need the host basis size. Defer platform storage (CUDA
+        // integration weights) until commit so rollback never allocates.
+        box->ComputationBox<T>::set_space_group(group);
+    }
+    catch (...)
+    {
+        restore();
+        throw;
+    }
+}
+
+template <typename T>
+void ComputationBox<T>::SpaceGroupGuard::commit()
+{
+    box->set_space_group(group);
+    committed = true;
+}
+
+template <typename T>
+void ComputationBox<T>::SpaceGroupGuard::restore() noexcept
+{
+    box->space_group_ = previous_group;
+    box->n_basis_ = previous_n_basis;
+    box->orbit_counts_ = std::move(previous_orbit_counts);
+    box->mask = std::move(previous_mask);
+    box->basis_weights_ = std::move(previous_basis_weights);
+    if (group != nullptr)
+        group->in_use_ = previously_in_use;
+}
+
+template <typename T>
+ComputationBox<T>::SpaceGroupGuard::~SpaceGroupGuard()
+{
+    if (!committed)
+        restore();
 }
 
 template <typename T>

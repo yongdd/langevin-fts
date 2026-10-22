@@ -34,6 +34,7 @@
 #include <string>
 
 #include <climits>
+#include <type_traits>
 #include "mkl.h"
 
 #include "CpuComputationBox.h"
@@ -82,6 +83,10 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
 {
     try
     {
+        if constexpr (std::is_same_v<T, std::complex<double>>)
+            if (space_group != nullptr)
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
+
         // The solver: discrete chains have their own; continuous chains take the numerical method
         const bool discrete = (molecules->get_model_name() == "discrete");
         std::string solver_type = "pseudospectral";
@@ -98,13 +103,18 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
             return std::make_unique<CpuComputationBackend<T>>(cb, molecules, solver_type, numerical_method, FFTBackend::MKL, space_group, max_n_streams);
         };
 
+        typename ComputationBox<T>::SpaceGroupGuard group_change(cb, space_group);
+        std::unique_ptr<PropagatorComputation<T>> computation;
         if (discrete && !this->reduce_memory)
-            return new ComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
-        if (discrete)
-            return new ComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
-        if (!this->reduce_memory)
-            return new ComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
-        return new ComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
+            computation = std::make_unique<ComputationDiscrete<T>>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
+        else if (discrete)
+            computation = std::make_unique<ComputationReduceMemoryDiscrete<T>>(cb, molecules, propagator_computation_optimizer, space_group, create_backend);
+        else if (!this->reduce_memory)
+            computation = std::make_unique<ComputationContinuous<T>>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
+        else
+            computation = std::make_unique<ComputationReduceMemoryContinuous<T>>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, create_backend);
+        group_change.commit();
+        return computation.release();
     }
     catch(std::exception& exc)
     {

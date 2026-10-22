@@ -185,7 +185,7 @@ class PropagatorSolver:
         if chain_model == "discrete":
             if numerical_method is not None:
                 print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
-            return "pseudospectral", "rqm4"   # placeholder, not used for discrete chains
+            return "pseudospectral", "discrete"
         numerical_method = "rqm4" if numerical_method is None else numerical_method.lower()
         if numerical_method in cls._PSEUDO_METHODS:
             return "pseudospectral", numerical_method
@@ -790,6 +790,7 @@ class PropagatorSolver:
         self._initialize_solver()
         self._computation_box.set_lx(lx)
         self.lx = list(lx)
+        self.update_laplacian_operator()
 
     def set_lattice_parameters(self, lx: List[float], angles: List[float]) -> None:
         """Update the lattice parameters (box dimensions and angles).
@@ -804,6 +805,7 @@ class PropagatorSolver:
         self._initialize_solver()
         self._computation_box.set_lattice_parameters(lx, angles)
         self.lx = list(lx)
+        self.update_laplacian_operator()
 
     def get_lx(self) -> List[float]:
         """Get current box dimensions."""
@@ -854,7 +856,8 @@ class PropagatorSolver:
     def update_laplacian_operator(self) -> None:
         """Update the Laplacian operator after changing box dimensions.
 
-        Must be called after set_lattice_parameters() when using pseudospectral method.
+        The box setters call this automatically; it remains available after
+        changing the underlying C++ computation box directly.
         """
         self._initialize_solver()
         self._propagator_computation.update_laplacian_operator()

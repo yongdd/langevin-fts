@@ -1,40 +1,34 @@
-#include <map>
+#include <vector>
 #include "CudaCommon.h"
 
 int main()
 {
-    try{
-        const int M{32*32*32};
-
-        double *d_progpa_temp;
-        double * propagator;
-        std::string key = "A";
-        int max_n_segment = 10;
-
-        // Allocate gpu memory
-        CUDA_CHECK(cudaMalloc((void**)&d_progpa_temp, sizeof(double)*M));
-        // Allocate pinned host memory
-        CUDA_CHECK(cudaMallocHost((void**)&propagator, sizeof(double)*(max_n_segment+1)*M));
-
-        for(int n=0; n<=max_n_segment; n++)
+    try
+    {
+        const int M = 32*32*32;
+        const int max_n_segment = 10;
+        std::vector<double> input(M);
+        for (int i = 0; i < M; ++i)
+            input[i] = (i % 97) - 48.0;
+        CudaDeviceBuffer<double> device(M);
+        CudaPinnedBuffer<double> pinned((max_n_segment+1)*M);
+        CUDA_CHECK(cudaMemcpy(device.get(), input.data(), sizeof(double)*M, cudaMemcpyHostToDevice));
+        for (int n = 0; n <= max_n_segment; ++n)
         {
-            if(n%20==0)
-            {
-                std::cout << n << ", " << max_n_segment << std::endl;
-            }
-
-            CUDA_CHECK(cudaMemcpy(&propagator[n*M], d_progpa_temp, sizeof(double)*M,
-                cudaMemcpyDeviceToHost));
+            double* slice = pinned.get() + n*M;
+            CUDA_CHECK(cudaMemcpy(slice, device.get(), sizeof(double)*M, cudaMemcpyDeviceToHost));
+            for (int i = 0; i < M; ++i)
+                if (slice[i] != input[i])
+                {
+                    std::cerr << "Pinned copy differs at segment " << n << ", point " << i << std::endl;
+                    return -1;
+                }
         }
-
-        cudaFreeHost(propagator);
-        cudaFree(d_progpa_temp);
-
         return 0;
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
     {
-        std::cout << exc.what() << std::endl;
+        std::cerr << exc.what() << std::endl;
         return -1;
     }
 }

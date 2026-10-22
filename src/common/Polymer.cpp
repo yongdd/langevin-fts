@@ -159,6 +159,14 @@ Polymer::Polymer(
     }
 
 
+    for (const auto& [node, label] : chain_end_to_q_init)
+    {
+        auto it = adjacent_nodes.find(node);
+        if (it == adjacent_nodes.end() || it->second.size() != 1)
+            throw_with_line_number("Initial condition '" + label + "' must refer to a chain-end node, got " +
+                std::to_string(node) + ".");
+    }
+
     // Construct edge nodes
     for (size_t i=0; i<v.size(); i++)
     {

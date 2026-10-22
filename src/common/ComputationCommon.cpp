@@ -27,10 +27,8 @@ ComputationCommon<T>::ComputationCommon(
         if (propagator_computation_optimizer->get_computation_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
 
-        // Give the box this computation's space group (or none) first, so that
-        // get_n_basis() returns the size the backend and the solver work with;
-        // a box reused from an earlier computation may hold another group
-        PropagatorComputation<T>::set_space_group(space_group);
+        // The factory's SpaceGroupGuard attached the group for this construction.
+        this->space_group_ = space_group;
 
         backend = create_backend();
         n_streams = backend->get_n_streams();
@@ -80,12 +78,7 @@ void ComputationCommon<T>::set_fields(
     const std::map<std::string, const T*>& w_input,
     const std::map<std::string, const T*>& q_init)
 {
-    // The arrays of this computation are sized for the box's space group at
-    // construction; a computation built later on the same box may have set another
-    if (this->cb->get_space_group() != this->space_group_)
-        throw_with_line_number("The space group of the computation box changed after this computation "
-            "was created (a later computation on the same box set its own); create a new computation, "
-            "or give each computation its own box.");
+    this->check_box_space_group();
     for (const auto& [key, edge] : this->propagator_computation_optimizer->get_computation_propagators())
     {
         if (!w_input.contains(edge.monomer_type))
@@ -260,6 +253,7 @@ void ComputationCommon<T>::convert_stress_to_lattice_derivatives()
 template <typename T>
 void ComputationCommon<T>::update_laplacian_operator()
 {
+    this->check_box_space_group();
     try
     {
         backend->update_laplacian_operator();
@@ -289,6 +283,7 @@ void ComputationCommon<T>::compute_statistics(
 template <typename T>
 T ComputationCommon<T>::get_total_partition(int polymer)
 {
+    this->check_box_space_group();
     const int P = this->molecules->get_n_polymer_types();
     if (polymer < 0 || polymer > P-1)
         throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -298,6 +293,7 @@ T ComputationCommon<T>::get_total_partition(int polymer)
 template <typename T>
 T ComputationCommon<T>::get_solvent_partition(int s)
 {
+    this->check_box_space_group();
     const int S = this->molecules->get_n_solvent_types();
     if (s < 0 || s > S-1)
         throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
@@ -307,6 +303,7 @@ T ComputationCommon<T>::get_solvent_partition(int s)
 template <typename T>
 void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* phi)
 {
+    this->check_box_space_group();
     try
     {
         std::vector<BackendArray<T>*> arrays;
@@ -318,7 +315,7 @@ void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* 
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 arrays.push_back(phi_b);
-                weights.push_back(1.0);
+                weights.push_back(concentration_norm(key));
             }
         }
         for (int s = 0; s < this->molecules->get_n_solvent_types(); s++)
@@ -340,6 +337,7 @@ void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* 
 template <typename T>
 void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_type, T* phi)
 {
+    this->check_box_space_group();
     try
     {
         const int P = this->molecules->get_n_polymer_types();
@@ -355,7 +353,7 @@ void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_ty
             if (std::get<0>(key) == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 arrays.push_back(phi_b);
-                weights.push_back(1.0);
+                weights.push_back(concentration_norm(key));
             }
         }
         backend->sum_to_host(phi, arrays, weights);
@@ -369,16 +367,12 @@ void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_ty
 template <typename T>
 void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, T* phi)
 {
+    this->check_box_space_group();
     try
     {
         const int P = this->molecules->get_n_polymer_types();
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
-
-        // phi_block is normalized by volume_fraction/(alpha Q); the grand-canonical
-        // concentration is normalized by the fugacity instead
-        Polymer& pc = this->molecules->get_polymer(p);
-        const T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
 
         std::vector<BackendArray<T>*> arrays;
         std::vector<T> weights;
@@ -389,7 +383,8 @@ void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, s
             if (std::get<0>(key) == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 arrays.push_back(phi_b);
-                weights.push_back(norm);
+                const auto& block = this->propagator_computation_optimizer->get_computation_block(key);
+                weights.push_back(fugacity * contour_step(std::get<2>(key)) * block.n_repeated);
             }
         }
         backend->sum_to_host(phi, arrays, weights);
@@ -403,6 +398,7 @@ void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, s
 template <typename T>
 void ComputationCommon<T>::get_block_concentration(int p, T* phi)
 {
+    this->check_box_space_group();
     try
     {
         const int N = this->cb->get_n_basis();
@@ -427,6 +423,9 @@ void ComputationCommon<T>::get_block_concentration(int p, T* phi)
             if (block_it == phi_block.end())
                 throw_with_line_number("Block (" + std::to_string(p) + ", " + key_left + ", " + key_right + ") is not in phi_block.");
             backend->copy_to_host(&phi[b*N], block_it->second);
+            const T norm = concentration_norm(block_key);
+            for (int i = 0; i < N; i++)
+                phi[b*N + i] *= norm;
 
             // Identical blocks (e.g. the equal arms of a star) share one entry, which
             // holds all n_repeated of them; each block gets its share
@@ -445,6 +444,7 @@ void ComputationCommon<T>::get_block_concentration(int p, T* phi)
 template <typename T>
 void ComputationCommon<T>::get_solvent_concentration(int s, T* phi)
 {
+    this->check_box_space_group();
     try
     {
         const int S = this->molecules->get_n_solvent_types();

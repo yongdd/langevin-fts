@@ -73,6 +73,73 @@ def main():
         return 77  # ctest SKIP_RETURN_CODE
     ok = True
 
+    from polymerfts.utils import parse_chi_n
+    for bad in ("A,B,C", "A", "A,,B"):
+        try:
+            parse_chi_n({bad: 10.0}, {"A": 1.0, "B": 1.0, "C": 1.0})
+            raise AssertionError(f"Malformed pair {bad} was accepted")
+        except ValidationError:
+            pass
+    names = {"A_a": 1.0, "B_b": 1.0}
+    for pair in ("A_a,B_b", "B_b/A_a", "A_a_B_b"):
+        assert parse_chi_n({pair: 10.0}, names) == {"A_a,B_b": 10.0}
+    try:
+        parse_chi_n({"A_B_C": 10.0}, dict.fromkeys(("A", "A_B", "B_C", "C"), 1.0))
+        raise AssertionError("Ambiguous underscore pair was accepted")
+    except ValidationError:
+        pass
+    for nx, angles in (([16], [90, 90, 60]), ([8, 8], [120, 90, 90])):
+        p = base_params(); p.update(nx=nx, lx=[4.0]*len(nx), angles=angles)
+        ok &= expect_error(SCFT, p, "angles involving absent dimensions")
+    for angles in (None, []):
+        p = base_params(); p.update(nx=[8, 8], lx=[4.0, 4.0], angles=angles)
+        assert build(SCFT, p).crystal_system == "Orthorhombic"
+
+    # NaN mass errors must raise, rather than pass the comparison to tolerance.
+    for cls in (LFTS, CLFTS):
+        sim = build(cls, lfts_params())
+        sim.prop_solver.mean = lambda value: np.nan
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                sim.compute_concentrations(np.zeros((2, sim.prop_solver.n_grid)))
+            raise AssertionError(f"{cls.__name__} accepted NaN mass error")
+        except ValidationError:
+            pass
+
+    p = lfts_params(); p["verbose_level"] = 0; p["langevin"]["max_step"] = 1
+    sim = build(LFTS, p)
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        sim.run(initial_fields={m: np.zeros(sim.prop_solver.n_grid) for m in ("A", "B")})
+    assert not any(line.startswith("Langevin step:") for line in output.getvalue().splitlines())
+
+    p = base_params(); p["chain_model"] = "discrete"
+    assert build(SCFT, p).prop_solver.numerical_method == "discrete"
+
+    # A fully absent composition mode must have a finite zero step size and
+    # remain fixed through CL-FTS, including when initial fields contain that mode.
+    p = lfts_params(); p["chi_n"] = {"A,B": 0.0}; p["verbose_level"] = 0
+    p["langevin"].update(max_step=2, dt=0.01)
+    lfts = build(LFTS, p)
+    assert np.all(np.isfinite(lfts.dt_scaling))
+    assert np.all(lfts.dt_scaling[lfts.mpt.aux_fields_dropped_idx] == 0)
+    sim = build(CLFTS, p)
+    assert sim.mpt.aux_fields_dropped_idx and np.all(np.isfinite(sim.dt_scaling))
+    assert np.all(sim.dt_scaling[sim.mpt.aux_fields_dropped_idx] == 0)
+    compute = sim.compute_concentrations
+    snapshots = []
+    def capture(w_aux):
+        snapshots.append(w_aux.copy())
+        return compute(w_aux)
+    sim.compute_concentrations = capture
+    rng = np.random.default_rng(51)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim.run(initial_fields={m: rng.normal(0, 5, sim.prop_solver.n_grid) for m in ("A", "B")})
+    assert len(snapshots) == 3
+    for w_aux in snapshots:
+        for i in sim.mpt.aux_fields_dropped_idx:
+            np.testing.assert_allclose(w_aux[i], sim.mpt._vector_large_s[i]/2, rtol=0, atol=1e-12)
+
     # ---- SCFT defaults
     calc = build(SCFT, base_params())
     checks = {

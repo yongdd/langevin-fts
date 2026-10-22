@@ -1033,10 +1033,11 @@ __global__ void tridiagonal_periodic(
         double* _d_q_sparse = &d_q_sparse[start_idx];
 
         // Forward sweep
-        double inv_temp = 1.0 / (FETCH(d_xd, 0) - 1.0);
+        const double gamma = -FETCH(d_xd, 0);
+        double inv_temp = 1.0 / (FETCH(d_xd, 0) - gamma);
         double c_prev = FETCH(d_xh, 0) * inv_temp;
         double x_prev = _d_d[0] * inv_temp;
-        double q_prev = inv_temp;
+        double q_prev = gamma * inv_temp;
 
         _d_c_star[0] = c_prev;
         _d_x[0] = x_prev;
@@ -1058,7 +1059,7 @@ __global__ void tridiagonal_periodic(
 
         // Final element of forward sweep
         double xl_M_1 = FETCH(d_xl, M - 1);
-        inv_temp = 1.0 / (FETCH(d_xd, M - 1) - FETCH(d_xh, M - 1) * FETCH(d_xl, 0) - xl_M_1 * c_prev);
+        inv_temp = 1.0 / (FETCH(d_xd, M - 1) - FETCH(d_xh, M - 1) * FETCH(d_xl, 0) / gamma - xl_M_1 * c_prev);
         x_prev = (_d_d[(M - 1) * INTERVAL] - xl_M_1 * x_prev) * inv_temp;
         q_prev = (FETCH(d_xh, M - 1) - xl_M_1 * q_prev) * inv_temp;
         
@@ -1082,7 +1083,7 @@ __global__ void tridiagonal_periodic(
         double q_0 = _d_q_sparse[0];
         double x_M_1 = _d_x[(M-1)*INTERVAL];
         double q_M_1 = _d_q_sparse[(M-1)*INTERVAL];
-        double xl_0 = FETCH(d_xl, 0);
+        double xl_0 = FETCH(d_xl, 0) / gamma;
 
         double value = (x_0 + xl_0 * x_M_1) / (1.0 + q_0 + xl_0 * q_M_1);
 

@@ -19,6 +19,13 @@ static void applyDCT2Forward1D(
     DFTI_DESCRIPTOR_HANDLE fft_backward,
     const double* cos_tbl, const double* sin_tbl)
 {
+    if (n == 1)
+    {
+        // REDFT10 of a singleton is 2*x; no FFT or neighboring sample is needed.
+        for (int i = 0; i < num_transforms * stride; ++i)
+            data[i] *= 2.0;
+        return;
+    }
     int complex_size = n / 2 + 1;
 
     thread_local std::vector<double> slice;
@@ -103,6 +110,8 @@ static void applyDCT3Backward1D(
     DFTI_DESCRIPTOR_HANDLE fft_forward,
     const double* cos_tbl, const double* sin_tbl)
 {
+    if (n == 1)
+        return;  // REDFT01 of a singleton is the identity.
     int complex_size = n / 2 + 1;
 
     thread_local std::vector<double> slice;

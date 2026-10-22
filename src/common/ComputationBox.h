@@ -259,6 +259,30 @@ protected:
 
 public:
     /**
+     * Attach a computation's group while its constructors run. A failed backend
+     * or propagator allocation restores the old box and the group's freeze flag
+     * without allocating memory. Factories commit only after full construction.
+     */
+    class SpaceGroupGuard
+    {
+        ComputationBox* box;
+        SpaceGroup* group;
+        SpaceGroup* previous_group = nullptr;
+        int previous_n_basis = 0;
+        bool previously_in_use = false;
+        bool committed = false;
+        std::vector<int> previous_orbit_counts;
+        std::vector<double> previous_mask, previous_basis_weights;
+        void restore() noexcept;
+    public:
+        SpaceGroupGuard(ComputationBox* box, SpaceGroup* group);
+        ~SpaceGroupGuard();
+        SpaceGroupGuard(const SpaceGroupGuard&) = delete;
+        SpaceGroupGuard& operator=(const SpaceGroupGuard&) = delete;
+        void commit();
+    };
+
+    /**
      * @brief Construct a ComputationBox with specified grid and box parameters.
      *
      * @param nx   Number of grid points in each direction, e.g., {32, 32, 32}

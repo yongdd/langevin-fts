@@ -604,8 +604,11 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
 // the input: a 1-D input gives a 1-D output, a 2-D input an (n_fields, n_out) array.
 static int sg_field_count(const py::buffer_info& in, int n_in, const char* n_in_name)
 {
-    if (in.ndim < 1)
-        throw_with_line_number("Input must be at least a 1-D array.");
+    if (in.ndim != 1 && in.ndim != 2)
+        throw_with_line_number("Input must be flat (1-D) or shaped (n_fields, n_grid).");
+    if (in.ndim == 2 && in.shape[1] != n_in)
+        throw_with_line_number("The last input axis must equal " + std::string(n_in_name) +
+            " (" + std::to_string(n_in) + ").");
     py::ssize_t total = 1;
     for (py::ssize_t i = 0; i < in.ndim; ++i)
         total *= in.shape[i];
@@ -705,6 +708,7 @@ PYBIND11_MODULE(_core, m)
         })
         .def("get_polymer", &Molecules::get_polymer)
         .def("get_n_solvent_types", &Molecules::get_n_solvent_types)
+        .def("get_solvent", &Molecules::get_solvent)
         .def("add_solvent", &Molecules::add_solvent)
         .def("display_architectures", &Molecules::display_architectures);
         

@@ -86,7 +86,7 @@ def test_propagator_computation_reduced_basis():
     # Test material conservation with weighted mean
     orbit_counts = np.array(sg.get_orbit_counts())
     weighted_mean = np.sum((phi_A + phi_B) * orbit_counts) / np.sum(orbit_counts)
-    assert abs(weighted_mean - 1.0) < 0.01, f"Material not conserved: {weighted_mean}"
+    assert abs(weighted_mean - 1.0) < 1e-10, f"Material not conserved: {weighted_mean}"
     print(f"  Material conservation: weighted_mean(phi) = {weighted_mean:.6f}")
 
     # Test without space group (create separate computation box and propagator)
@@ -324,7 +324,7 @@ def test_scft_with_space_group():
         phi_B = calc.phi["B"]
 
     weighted_mean = np.sum((phi_A + phi_B) * orbit_counts) / np.sum(orbit_counts)
-    assert abs(weighted_mean - 1.0) < 0.01, f"Material not conserved: {weighted_mean}"
+    assert abs(weighted_mean - 1.0) < 1e-10, f"Material not conserved: {weighted_mean}"
     print(f"  Material conservation: {weighted_mean:.6f}")
 
     print("  PASSED\n")
@@ -399,7 +399,7 @@ def test_save_results_full_grid():
 
         # Verify material conservation in saved data
         mean_phi = np.mean(phi_A + phi_B)
-        assert abs(mean_phi - 1.0) < 0.01, f"Material not conserved in saved file: {mean_phi}"
+        assert abs(mean_phi - 1.0) < 1e-10, f"Material not conserved in saved file: {mean_phi}"
         print(f"  Material conservation in saved file: {mean_phi:.6f}")
 
     finally:
@@ -477,7 +477,7 @@ def test_save_results_m3_same_size():
             assert err < 1e-10, f"Saved {name} differs from the full-group expansion by {err:.3e}"
             print(f"  {name}: full grid, max |saved - full-group expansion| = {err:.2e}")
         mean_phi = np.mean(data["phi_A"].flatten() + data["phi_B"].flatten())
-        assert abs(mean_phi - 1.0) < 0.01, f"Material not conserved in saved file: {mean_phi}"
+        assert abs(mean_phi - 1.0) < 1e-10, f"Material not conserved in saved file: {mean_phi}"
         print(f"  Material conservation in saved file: {mean_phi:.6f}")
     finally:
         os.unlink(save_path)

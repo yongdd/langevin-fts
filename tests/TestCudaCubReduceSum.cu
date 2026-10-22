@@ -1,50 +1,36 @@
-#include <thrust/reduce.h>
+#include <cmath>
+#include <vector>
+#include <cub/device/device_reduce.cuh>
 #include "CudaCommon.h"
 
 int main()
 {
-    try{
-        const int M{32*32*32};
-        // const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+    try
+    {
+        const int M = 32*32*32;
+        std::vector<double> input(M);
+        for (int i = 0; i < M; ++i)
+            input[i] = i;
 
-        double array[32*32*32];
-        for (int i=0; i<M; i++)
-            array[i] = i;
-
-        // Variables for cub reduction sum
-        size_t temp_storage_bytes;
-        double *d_temp_storage;
-        double *d_array;
-        double *d_array_sum;
-        double array_sum;
-
-        array_sum = 0.0;
-        CUDA_CHECK(cudaMalloc((void**)&d_array, sizeof(double)*M));
-        CUDA_CHECK(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
-        CUDA_CHECK(cudaMemcpy(d_array, array, sizeof(double)*M, cudaMemcpyHostToDevice));
-
-        // It seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu],
-        // If d_temp_storage[gpu]=nullptr and temp_storage_bytes[gpu]=0.
-        d_temp_storage = nullptr;
-        temp_storage_bytes = 0;
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
-        CUDA_CHECK(cudaMalloc(&d_temp_storage, temp_storage_bytes));
-
-        CUDA_CHECK(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
-        std::cout << "gpu, array_sum 0: " << 0 << ", " << array_sum << std::endl;
-
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
-        CUDA_CHECK(cudaMemcpy(&array_sum, d_array_sum, sizeof(double), cudaMemcpyDeviceToHost));
-        std::cout << "gpu, array_sum 1: " << 0 << ", " << array_sum << std::endl;
-
-        cudaFree(d_array);
-        cudaFree(d_array_sum);
-        cudaFree(d_temp_storage);
+        CudaDeviceBuffer<double> d_input(M), d_sum(1);
+        CUDA_CHECK(cudaMemcpy(d_input.get(), input.data(), sizeof(double)*M, cudaMemcpyHostToDevice));
+        size_t bytes = 0;
+        CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, bytes, d_input.get(), d_sum.get(), M));
+        CudaDeviceBuffer<unsigned char> scratch(bytes);
+        CUDA_CHECK(cub::DeviceReduce::Sum(scratch.get(), bytes, d_input.get(), d_sum.get(), M));
+        double result;
+        CUDA_CHECK(cudaMemcpy(&result, d_sum.get(), sizeof(double), cudaMemcpyDeviceToHost));
+        const double expected = static_cast<double>(M)*(M-1)/2.0;
+        if (!std::isfinite(result) || result != expected)
+        {
+            std::cerr << "Reduction: " << result << ", expected " << expected << std::endl;
+            return -1;
+        }
         return 0;
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
     {
-        std::cout << exc.what() << std::endl;
+        std::cerr << exc.what() << std::endl;
         return -1;
     }
 }

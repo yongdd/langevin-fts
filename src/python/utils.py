@@ -7,7 +7,6 @@ the SCFT and LFTS simulation classes to reduce code duplication.
 import ast
 import json
 import operator
-import re
 import warnings
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Union
@@ -170,7 +169,19 @@ def parse_chi_n(
     """
     chi_n = {}
     for monomer_pair_str, chin_value in chi_n_params.items():
-        monomer_pair = re.split(',| |_|/', monomer_pair_str)
+        if not isinstance(monomer_pair_str, str):
+            raise ValidationError("A chi_n key must name two monomer types, for example 'A,B'.")
+        if ',' in monomer_pair_str:
+            monomer_pair = [name.strip() for name in monomer_pair_str.split(',')]
+            if len(monomer_pair) != 2:
+                raise ValidationError(f"chi_n key '{monomer_pair_str}' must name exactly two monomer types.")
+        else:
+            # Keep legacy pair separators without splitting underscores inside names.
+            pairs = [(a, b) for a in segment_lengths for b in segment_lengths
+                     if any(monomer_pair_str == a + sep + b for sep in (' ', '_', '/'))]
+            if len(pairs) != 1:
+                raise ValidationError(f"chi_n key '{monomer_pair_str}' is invalid or ambiguous; use 'type1,type2'.")
+            monomer_pair = list(pairs[0])
         if monomer_pair[0] not in segment_lengths:
             raise ValidationError(f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'.")
         if monomer_pair[1] not in segment_lengths:

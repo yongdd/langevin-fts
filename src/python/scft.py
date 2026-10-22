@@ -285,6 +285,14 @@ class SCFT:
         angles = params.get("angles", None)
         if angles is not None and len(params["nx"]) == 3 and len(angles) != 3:
             raise ValidationError("angles must be [alpha, beta, gamma] (three entries) for a 3D box.")
+        if angles is not None and len(params["nx"]) < 3:
+            dim = len(params["nx"])
+            if len(angles) not in (0, 1, 3):
+                raise ValidationError("angles must have 0, 1 or 3 entries for a 1D or 2D box.")
+            fixed = angles if dim == 1 else (angles[:2] if len(angles) == 3 else [])
+            if not np.all(np.isclose(fixed, 90.0, rtol=0.0, atol=1e-10)):
+                raise ValidationError("A 1D box requires all angles to be 90 degrees; "
+                                      "a 2D box requires alpha and beta to be 90 degrees.")
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
@@ -455,8 +463,8 @@ class SCFT:
             n_field_var = len(self.monomer_types) * self.sg.get_n_reduced_basis_full()
         else:
             # The user chooses; a 2D cell without "crystal_system" is classified from gamma
-            if params.get("crystal_system", None) is None and dim == 2 and "angles" in params:
-                gamma = params["angles"][0] if len(params["angles"]) == 1 else params["angles"][2]
+            if params.get("crystal_system", None) is None and dim == 2 and angles is not None and len(angles) > 0:
+                gamma = angles[0] if len(angles) == 1 else angles[2]
                 if abs(gamma - 120.0) < 1e-6:
                     crystal_system = "Hexagonal2D"
                 elif abs(gamma - 90.0) > 1e-6:
@@ -735,14 +743,19 @@ class SCFT:
         for name in self.monomer_types:
             m_dic["phi_" + name] = self._to_full_grid(self.phi[name])
 
-        # Convert numpy arrays to lists
-        for data in m_dic:
-            if type(m_dic[data]).__module__ == np.__name__  :
-                m_dic[data] = m_dic[data].tolist()
+        # Convert nested parameters too, without modifying self.params.
+        def plain(value):
+            if isinstance(value, np.ndarray):
+                return plain(value.tolist())
+            if isinstance(value, np.generic):
+                return plain(value.item())
+            if isinstance(value, dict):
+                return {plain(key): plain(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [plain(item) for item in value]
+            return value
 
-        for data in m_dic["initial_params"]:
-            if type(m_dic["initial_params"][data]).__module__ == np.__name__  :
-                m_dic["initial_params"][data] = m_dic["initial_params"][data].tolist()
+        m_dic = plain(m_dic)
 
         # Get input file extension
         _, file_extension = os.path.splitext(path)
@@ -759,7 +772,7 @@ class SCFT:
         # Save data in yaml format
         elif file_extension == ".yaml":
             with open(path, "w") as f:
-                f.write(yaml.dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
+                f.write(yaml.safe_dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
         else:
             raise ValueError("Invalid output file extension. Use .mat, .json, or .yaml.")
 
@@ -864,9 +877,6 @@ class SCFT:
             self.prop_solver.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
         else:
             self.prop_solver.set_lx(list(np.array(new_lx)[self.lx_full_indices]))
-
-        # Update bond parameters using new lx
-        self.prop_solver.update_laplacian_operator()
 
         # The smearing kernel Γ(k) is a function of the physical wavenumber
         self.smearing.set_box(self.prop_solver.get_lx(), self.prop_solver.get_angles_degrees())
@@ -1058,7 +1068,7 @@ class SCFT:
                     stress_interval = 1 if error_level > 1e-2 else (2 if error_level > 1e-4 else 4)
                 else:
                     stress_interval = self.stress_interval
-                if (iter == 1) or (iter % stress_interval == 0):
+                if (iter == 1) or (iter % stress_interval == 0) or iter == self.max_iter:
                     self.prop_solver.compute_stress()
                     stress_array = np.array(self.prop_solver.get_stress())
                     if self.smearing.enabled:
@@ -1106,7 +1116,7 @@ class SCFT:
                     break
 
             # Conditions to end the iteration
-            if error_level < self.tolerance:
+            if error_level < self.tolerance or iter == self.max_iter:
                 break
 
             # Calculate new fields using simple and Anderson mixing

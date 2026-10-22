@@ -9,6 +9,7 @@ SET(BASIC_TESTS
     # bindings (CPU, a few seconds)
     TestParams
     TestComplexMask
+    TestComputationSafety
     # Platform & utilities
     TestDisplayArchitecture
     TestCircularBuffer

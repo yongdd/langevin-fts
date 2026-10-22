@@ -70,7 +70,7 @@ def main():
             break
         w = lram.calculate_new_fields(w, r, old_error, error)
         old_error = error
-    if np.shape(w) != (m,) or np.max(np.abs(w - w_star)) > 1e-8:
+    if np.shape(w) != (m,) or not np.max(np.abs(w - w_star)) <= 1e-8:
         failed.append(f"LRAM did not converge: max |w - w*| = {np.max(np.abs(np.ravel(w) - w_star)):.2e} after {it} steps")
 
     for f in failed:

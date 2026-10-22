@@ -173,7 +173,9 @@ class CLFTS:
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
         for i in range(M - 1):
-            self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i]) / np.max(np.abs(self.mpt.eigenvalues[:M-1]))
+            if i not in self.mpt.aux_fields_dropped_idx:
+                self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i]) / np.max(np.abs(self.mpt.eigenvalues[:M-1]))
+        self.dt_scaling[self.mpt.aux_fields_dropped_idx] = 0.0
 
         # Set random generator
         if random_seed is None:
@@ -295,7 +297,7 @@ class CLFTS:
 
         # Material conservation: mean(sum phi) must stay 1 (a numerical blow-up shows up here first)
         mass_error = self.prop_solver.mean(sum(phi[m] for m in self.monomer_types) - 1.0)
-        if abs(mass_error) > 5e-8:
+        if not abs(mass_error) <= 5e-8:
             raise ValidationError(f"Material conservation failed: mean(sum(phi) - 1) = {mass_error:.3e}")
 
         # Partition consistency check (forward vs backward propagators), once per run
@@ -437,6 +439,7 @@ class CLFTS:
 
         # Convert monomer chemical potential fields into auxiliary fields
         w_aux = self.mpt.to_aux_fields(w)
+        self.mpt.pin_dropped_fields(w_aux)
 
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
@@ -501,6 +504,8 @@ class CLFTS:
                 0.0, self.langevin["sigma"], [M, self.prop_solver.n_grid]
             )
             for i in range(M):
+                if i in self.mpt.aux_fields_dropped_idx:
+                    continue
                 scaling = self.dt_scaling[i]
                 # Determine noise direction based on field type
                 if i in self.mpt.aux_fields_real_idx:
@@ -525,7 +530,8 @@ class CLFTS:
 
             # Calculate Hamiltonian
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+            hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb,
+                                                      include_const_term=True, phi=phi_for_force)
 
             # Print progress
             if self.verbose_level >= 1:

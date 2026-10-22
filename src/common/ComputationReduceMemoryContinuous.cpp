@@ -138,6 +138,7 @@ void ComputationReduceMemoryContinuous<T>::compute_propagators(
 template <typename T>
 void ComputationReduceMemoryContinuous<T>::advance_propagator_single_segment(T* q_init, T* q_out, int p, int v, int u)
 {
+    this->check_box_space_group();
     try
     {
         const Block& block = this->molecules->get_polymer(p).get_block(v, u);
@@ -157,6 +158,7 @@ void ComputationReduceMemoryContinuous<T>::advance_propagator_single_segment(T* 
 template <typename T>
 void ComputationReduceMemoryContinuous<T>::compute_concentrations()
 {
+    this->check_box_space_group();
     try
     {
         // Concentration of each block (several blocks when propagators are aggregated)
@@ -180,8 +182,7 @@ void ComputationReduceMemoryContinuous<T>::compute_concentrations()
                     this->backend->add_segment_products(0, phi, {{q, q_dagger, simpson[n]}});
                 });
 
-            // Normalization: ds * volume_fraction / alpha * n_repeated / Q
-            this->backend->normalize_concentration(0, phi, this->concentration_norm(key), nullptr);
+            // Getters normalize the integral for the requested ensemble.
         }
         this->backend->synchronize();
 
@@ -196,6 +197,7 @@ void ComputationReduceMemoryContinuous<T>::compute_concentrations()
 template <typename T>
 void ComputationReduceMemoryContinuous<T>::compute_stress()
 {
+    this->check_box_space_group();
     // Requires the propagators of the current fields (compute_propagators()).
     try
     {
@@ -240,6 +242,7 @@ void ComputationReduceMemoryContinuous<T>::compute_stress()
 template <typename T>
 void ComputationReduceMemoryContinuous<T>::get_chain_propagator(T* q_out, int polymer, int v, int u, int n)
 {
+    this->check_box_space_group();
     // For debugging and testing: the propagator of one block and direction
     try
     {
@@ -266,6 +269,7 @@ void ComputationReduceMemoryContinuous<T>::get_chain_propagator(T* q_out, int po
 template <typename T>
 bool ComputationReduceMemoryContinuous<T>::check_total_partition()
 {
+    this->check_box_space_group();
     // Q must be the same at every segment of every block
     const int n_polymer_types = this->molecules->get_n_polymer_types();
     std::vector<std::vector<T>> total_partitions(n_polymer_types);

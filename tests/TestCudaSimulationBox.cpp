@@ -18,6 +18,7 @@
 #include <vector>
 #include "CudaComputationBox.h"
 #include "SpaceGroup.h"
+#include "TestNanSafe.h"
 
 // Device reductions of a box against its host ones, for two fields of length n
 // (the full grid, or the reduced basis with a space group); returns the largest
@@ -31,20 +32,20 @@ static double device_host_difference(CudaComputationBox<double>& cb, int n)
         h[i] = std::cos(1.3*i) - 0.2;
     }
     double *d_g, *d_h;
-    cudaMalloc((void**)&d_g, sizeof(double)*2*n);
-    cudaMalloc((void**)&d_h, sizeof(double)*2*n);
-    cudaMemcpy(d_g, g.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_h, h.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMalloc((void**)&d_g, sizeof(double)*2*n));
+    CUDA_CHECK(cudaMalloc((void**)&d_h, sizeof(double)*2*n));
+    CUDA_CHECK(cudaMemcpy(d_g, g.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_h, h.data(), sizeof(double)*2*n, cudaMemcpyHostToDevice));
 
     double diff = std::abs(cb.integral_device(d_g) - cb.integral(g.data()));
-    diff = std::max(diff, std::abs(cb.inner_product_device(d_g, d_h) - cb.inner_product(g.data(), h.data())));
-    diff = std::max(diff, std::abs(cb.multi_inner_product_device(2, d_g, d_h) - cb.multi_inner_product(2, g.data(), h.data())));
+    diff = max_or_nan(diff, std::abs(cb.inner_product_device(d_g, d_h) - cb.inner_product(g.data(), h.data())));
+    diff = max_or_nan(diff, std::abs(cb.multi_inner_product_device(2, d_g, d_h) - cb.multi_inner_product(2, g.data(), h.data())));
 
     cb.zero_mean(g.data());
     cb.zero_mean_device(d_g);
-    cudaMemcpy(g_device.data(), d_g, sizeof(double)*n, cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(g_device.data(), d_g, sizeof(double)*n, cudaMemcpyDeviceToHost));
     for (int i = 0; i < n; i++)
-        diff = std::max(diff, std::abs(g_device[i] - g[i]));
+        diff = max_or_nan(diff, std::abs(g_device[i] - g[i]));
 
     cudaFree(d_g);
     cudaFree(d_h);
@@ -81,11 +82,11 @@ int main()
         std::cout<< "multi inner product: "<< cb.multi_inner_product(2, gm,hm) << std::endl;
         std::cout<< "sum(w): " << sum_w << std::endl;
         
-        if( std::abs(cb.inner_product(g,h)-81.553611) > 1e-5)
+        if( !(std::abs(cb.inner_product(g,h)-81.553611) <= 1e-5))
             return -1;
-        if( std::abs(cb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
+        if( !(std::abs(cb.multi_inner_product(2,gm,hm)+14.391321) <= 1e-5))
             return -1;
-        if( std::abs(sum_w) > 1e-7)
+        if( !(std::abs(sum_w) <= 1e-7))
             return -1;
 
         // Device reductions = host reductions, on the full grid and on the reduced
@@ -95,7 +96,7 @@ int main()
         // zero mean ignored the space group.
         double diff_full = device_host_difference(cb, cb.get_total_grid());
         std::cout<< "device - host reductions, full grid: " << diff_full << std::endl;
-        if( diff_full > 1e-10)
+        if( !(diff_full <= 1e-10))
             return -1;
 
         const int n = 16;
@@ -121,7 +122,7 @@ int main()
         cb_sg.set_space_group(&sg);
         double diff_sg = device_host_difference(cb_sg, cb_sg.get_n_basis());
         std::cout<< "device - host reductions, Im-3m reduced basis with a mask: " << diff_sg << std::endl;
-        if( diff_sg > 1e-10)
+        if( !(diff_sg <= 1e-10))
             return -1;
         return 0;
     }

@@ -10,6 +10,10 @@ give the same full-grid fields as the same iteration without the space group.
 import contextlib
 import io
 import sys
+import json
+import tempfile
+from pathlib import Path
+import yaml
 
 import numpy as np
 
@@ -44,6 +48,34 @@ def main():
         print("SKIP: no CPU platform in this build")
         sys.exit(77)  # ctest SKIP_RETURN_CODE
     failed = []
+
+    # A max_iter exit must return fields, densities, box, Q and stress from the
+    # same iteration, including when the final step is between stress updates.
+    x_short = (np.arange(32) + 0.5)/32
+    for altering in (False, True):
+        p = params([np.int64(32)], [1.7], max_iter=5, tolerance=1e-11,
+                   box_is_altering=altering, stress_interval=2)
+        with contextlib.redirect_stdout(io.StringIO()):
+            short = SCFT(p)
+            r = short.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short),
+                           "B": -np.sqrt(2)*5*np.cos(2*np.pi*x_short)}, return_result=True)
+            phi, _ = short.compute_concentrations(short.w)
+        for m in ("A", "B"):
+            np.testing.assert_allclose(r.phi[m], phi[m], rtol=0, atol=1e-11)
+        np.testing.assert_allclose(r.partition_functions,
+                                   [short.prop_solver.get_partition_function(0)], rtol=1e-12)
+        if altering:
+            short.prop_solver.compute_stress()
+            np.testing.assert_allclose(r.stress, short.prop_solver.get_stress(), rtol=0, atol=1e-11)
+        with tempfile.TemporaryDirectory() as tmp:
+            for extension, load in (("json", json.load), ("yaml", yaml.safe_load)):
+                path = Path(tmp)/("fields." + extension)
+                short.save_results(str(path))
+                with path.open() as stream:
+                    saved = load(stream)
+                assert saved["initial_params"]["nx"] == [32]
+                np.testing.assert_allclose(saved["phi_A"], phi["A"], rtol=0, atol=1e-11)
+            assert isinstance(short.params["nx"][0], np.int64)
 
     # ---- 1D lamella: result = attributes, full-grid fields, restart from result.w
     x = (np.arange(64) + 0.5)/64

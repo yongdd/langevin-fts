@@ -207,6 +207,11 @@ int main()
 
                 // Print iteration # and error levels and check the mass conservation
                 sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                if (!(std::abs(sum) <= 1e-10) || !solver->check_total_partition())
+                    return -1;
+                if (!(std::abs(cb->mean(phi_a) - f) <= 1e-10) ||
+                    !(std::abs(cb->mean(phi_b) - (1.0-f)) <= 1e-10))
+                    return -1;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                 std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
@@ -228,6 +233,12 @@ int main()
             time_duration = chrono_end - chrono_start;
             std::cout<< "total time, time per step: ";
             std::cout<< time_duration.count() << " " << time_duration.count()/max_scft_iter << std::endl;
+
+            // These short-wavelength initial fields relax toward the homogeneous
+            // state, whose free energy in this zero-mean-field convention is zero.
+            // Check the analytic energy as well as the residual of this short run.
+            if (!(std::abs(energy_total) <= 5e-6))
+                return -1;
 
             //------------- Finalize -------------
             delete[] w;

@@ -85,6 +85,14 @@ PropagatorComputation<T>::~PropagatorComputation()
     // Vectors handle memory cleanup automatically
 }
 
+template <typename T>
+void PropagatorComputation<T>::check_box_space_group() const
+{
+    if (cb->get_space_group() != space_group_)
+        throw_with_line_number("The space group of the computation box changed after this computation "
+            "was created; create a new computation or give each computation its own box.");
+}
+
 /**
  * @brief Get lattice-parameter derivatives of the free energy (canonical ensemble).
  *
@@ -99,6 +107,7 @@ PropagatorComputation<T>::~PropagatorComputation()
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 {
+    this->check_box_space_group();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
@@ -130,6 +139,7 @@ std::vector<T> PropagatorComputation<T>::get_stress()
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 {
+    this->check_box_space_group();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 

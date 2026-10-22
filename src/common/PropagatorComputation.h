@@ -117,6 +117,8 @@ template <typename T>
 class PropagatorComputation
 {
 protected:
+    /// Reject use of buffers whose basis no longer matches the shared box.
+    void check_box_space_group() const;
     ComputationBox<T>* cb;                                      ///< Computation box (grid and integration)
     Molecules *molecules;                                       ///< Polymer and solvent definitions
     PropagatorComputationOptimizer *propagator_computation_optimizer;  ///< Computation schedule
@@ -174,7 +176,7 @@ public:
      * @brief Get the computation box.
      * @return Pointer to ComputationBox
      */
-    ComputationBox<T>* get_cb() const { return this->cb; }
+    ComputationBox<T>* get_cb() const { check_box_space_group(); return this->cb; }
 
     /**
      * @brief Get number of blocks in a polymer.

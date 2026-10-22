@@ -76,7 +76,8 @@ protected:
     std::unique_ptr<Scheduler> sc;                   ///< Order in which the propagators are computed
     int n_streams;                   ///< Number of propagators computed concurrently
 
-    /// Concentration of each block, key (polymer, key_left, key_right)
+    /// Unnormalized segment-product integral of each block; getters apply the
+    /// canonical or fugacity normalization, including when volume fraction is zero.
     std::map<std::tuple<int, std::string, std::string>, BackendArray<T>*> phi_block;
     std::vector<BackendArray<T>*> phi_solvent;     ///< Concentration of each solvent
     std::map<std::string, BackendArray<T>*> w;     ///< Fields of the last compute_propagators()

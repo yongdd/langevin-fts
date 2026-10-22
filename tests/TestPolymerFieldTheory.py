@@ -163,6 +163,46 @@ def test_saddle_point_model(chi0):
     check(max(errors) < 1e-6, f"0-D saddle-point model, chi N = {name}: <dH/dchiN> = dF/dchiN (max error {max(errors):.1e})")
 
 
+def test_singular_hamiltonian():
+    """Absolute H is independent of uniform potentials in an absent mode."""
+    from polymerfts import _core
+    platforms = _core.PlatformSelector.avail_platforms()
+    if not platforms:
+        return
+    platform = next((p for p in platforms if p.startswith("cpu")), platforms[0])
+    fac = _core.PlatformSelector.create_factory(platform, False, "real")
+    cases = [(["A", "B", "C"], {"A,B": 10.0, "A,C": ac, "B,C": 40.0}, None, [.3, .4, .3])
+             for ac in (10.0, 10.001)]
+    cases.append((["A", "B"], {"A,B": -200.0}, 100.0, [.3, .7]))
+    for types, chi, zeta, fractions in cases:
+        with contextlib.redirect_stdout(io.StringIO()):
+            mpt = SymmetricPolymerTheory(types, chi, zeta)
+        M, n = len(types), 16
+        phi = np.array(fractions)
+        matrix = np.zeros((M, M))
+        for pair, value in chi.items():
+            a, b = [types.index(t) for t in pair.split(",")]
+            matrix[a, b] = matrix[b, a] = value
+        mol = fac.create_molecules_information("continuous", .05, dict.fromkeys(types, 1.0))
+        mol.add_polymer(1.0, [[name, fractions[i], i, i+1] for i, name in enumerate(types)])
+        cb = fac.create_computation_box([n], [4.0])
+        omega = np.zeros((M, n))
+        for i in range(M):
+            if mpt.h_coef_mu2[i] != 0:
+                omega[i] = -(mpt.h_coef_mu1[i] + mpt.matrix_a[:, i]@phi)/(2*mpt.h_coef_mu2[i])
+        expected = .5*phi@matrix@phi
+        for uniform in (0.0, 3.0):
+            omega[mpt.aux_fields_dropped_idx] = uniform
+            w = mpt.to_monomer_fields(omega)
+            Q = np.exp(-w[:, 0]@phi)
+            value = mpt.compute_hamiltonian(mol, omega, [Q], cb, include_const_term=True)
+            check(abs(value-expected) < 1e-8,
+                  f"singular H, chi={chi}, dropped={uniform}: {value:.12f} = {expected:.12f}")
+        mpt.pin_dropped_fields(omega)
+        for i in mpt.aux_fields_dropped_idx:
+            check(np.all(omega[i] == mpt._vector_large_s[i]/M), "dropped mode pinned to uniform S/M")
+
+
 def main():
     rng = np.random.default_rng(1)
     cases = [
@@ -217,6 +257,7 @@ def main():
                   f"{name} {model}: dH/dchiN = <phi_a phi_b> (max error {max(errors):.1e})")
 
     test_dropped_fields_and_keys()
+    test_singular_hamiltonian()
     test_saddle_point_model({"A,B": 1.0, "A,C": 0.6, "B,C": 1.4})
     test_saddle_point_model({"A,B": 1.0, "A,C": 1.0, "B,C": 1.00001})
     print(f"\n{n_pass} passed, {n_fail} failed")

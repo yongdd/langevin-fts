@@ -129,6 +129,7 @@ class SymmetricPolymerTheory:
                 self._roles.append("dropped")
             else:
                 self._roles.append("imaginary" if eigenvalues[i] > 0 else "real")
+        self.aux_fields_dropped_idx = [i for i, role in enumerate(self._roles) if role == "dropped"]
         self._vector_s = vector_s
         self._vector_large_s = vector_large_s
         if self.R > 1:
@@ -357,7 +358,17 @@ class SymmetricPolymerTheory:
 
         return h_const, h_coef_mu1, h_coef_mu2
 
-    def compute_hamiltonian(self, molecules, w_aux, total_partitions, cb, include_const_term=False):
+    def pin_dropped_fields(self, w_aux):
+        """Fix absent auxiliary modes to their uniform physical potential S/M.
+
+        A zero eigenvalue removes a fluctuating field, but its linear interaction
+        can still supply a uniform monomer potential. Initial fields must not
+        leave an arbitrary spatial potential frozen in such a mode.
+        """
+        for i in self.aux_fields_dropped_idx:
+            w_aux[i] = self._vector_large_s[i] / len(self.monomer_types)
+
+    def compute_hamiltonian(self, molecules, w_aux, total_partitions, cb, include_const_term=False, phi=None):
         """Compute the field-theoretic Hamiltonian.
 
         Calculates the Hamiltonian from auxiliary fields and partition functions.
@@ -378,6 +389,10 @@ class SymmetricPolymerTheory:
         include_const_term : bool, optional
             If True, include reference energy h_const in result (default: False).
             Set to True for L-FTS absolute energy, False for SCFT relative energy.
+        phi : dict, optional
+            Monomer concentrations. Needed for nonuniform dropped modes or
+            random copolymers with a dropped mode. For uniform dropped modes
+            the canonical mean concentrations can be obtained from the chains.
 
         Returns
         -------
@@ -403,7 +418,36 @@ class SymmetricPolymerTheory:
                             np.log(total_partitions[p])
 
         if include_const_term:
-            return hamiltonian_partition + hamiltonian_fields + self.h_const
+            reference = self.h_const
+            dropped = [i for i, role in enumerate(self._roles) if role == "dropped"]
+            if dropped:
+                if phi is None:
+                    phi_mean = np.zeros(M)
+                    for p in range(molecules.get_n_polymer_types()):
+                        polymer = molecules.get_polymer(p)
+                        for block in polymer.get_blocks():
+                            if block.monomer_type not in self.monomer_types:
+                                raise ValueError("Pass phi to compute_hamiltonian for random copolymers with dropped fields.")
+                            phi_mean[self.monomer_types.index(block.monomer_type)] += (
+                                polymer.get_volume_fraction() * block.contour_length / polymer.get_alpha())
+                    for s in range(molecules.get_n_solvent_types()):
+                        fraction, name = molecules.get_solvent(s)
+                        phi_mean[self.monomer_types.index(name)] += fraction
+                for i in dropped:
+                    # Restores the linear interaction lost on dropping lambda=0,
+                    # and removes any uniform potential already included through Q.
+                    offset = self._vector_large_s[i]/M - w_aux[i]
+                    if phi is None:
+                        # Allow the small residual left in a dropped mode by a
+                        # finite-tolerance SCFT solve (default tolerance 1e-8).
+                        if not np.allclose(w_aux[i], cb.mean(w_aux[i]), rtol=0, atol=1e-8):
+                            raise ValueError("Pass phi to compute_hamiltonian for nonuniform dropped fields.")
+                        reference += cb.mean(offset) * np.dot(self.matrix_a[:, i], phi_mean)
+                    else:
+                        projected_phi = sum(self.matrix_a[j, i]*phi[name]
+                                            for j, name in enumerate(self.monomer_types))
+                        reference += cb.mean(offset * projected_phi)
+            return hamiltonian_partition + hamiltonian_fields + reference
         else:
             return hamiltonian_partition + hamiltonian_fields
     

@@ -35,12 +35,12 @@
  *
  * Two backends are available for CPU:
  * - FFTW: FFTW3 library with O(N log N) for all transform types (GPL license)
- * - MKL: Intel MKL with O(N log N) for FFT, O(N^2) for DCT/DST (proprietary)
+ * - MKL: Intel MKL with O(N log N) for FFT and FFT-based DCT/DST (proprietary)
  */
 enum class FFTBackend
 {
     FFTW,  ///< FFTW3 library (O(N log N) for all transform types)
-    MKL    ///< Intel MKL (O(N log N) for FFT, O(N^2) for DCT/DST)
+    MKL    ///< Intel MKL (O(N log N) for all transform types)
 };
 
 /**
