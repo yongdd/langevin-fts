@@ -97,7 +97,7 @@ FUNCTION(SET_TEST_LABELS TEST_NAME)
 ENDFUNCTION()
 
 # Add Python Files. They import the package staged in the build tree
-# (see polymerfts_stage in the top-level CMakeLists.txt), so 'make install'
+# (see polymerfts_stage in the top-level CMakeLists.txt), so installation
 # is not required and an old site-packages install is never tested by mistake.
 # Only the staged package is on PYTHONPATH; the configuring shell's value is
 # not baked in.

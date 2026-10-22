@@ -50,17 +50,9 @@ jobs:
       run: python -m pytest tests/scripts -q
 
   build-cpu:
-    name: Build and Test (CPU, ${{ matrix.name }})
+    name: Build and Test (CPU, MKL + FFTW)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: OpenBLAS + FFTW
-            mkl: "OFF"
-          - name: OpenBLAS + MKL + FFTW
-            mkl: "ON"
 
     steps:
     - name: Checkout repository
@@ -83,12 +75,11 @@ jobs:
         conda-remove-defaults: "false"
         pkgs-dirs: /home/runner/conda_pkgs_dir
 
-    - name: Install the optional MKL backend
-      if: matrix.mkl == 'ON'
+    - name: Install MKL and FFTW
       shell: bash -l {0}
       run: |
         conda install -y --override-channels -c defaults --freeze-installed \
-          mkl=2025.0.0 mkl-include=2025.0.0
+          mkl=2025.0.0 mkl-include=2025.0.0 fftw
 
     - name: Record installed dependencies
       shell: bash -l {0}
@@ -98,64 +89,40 @@ jobs:
         conda list --show-channel-urls
         python -m pip check
 
-    - name: Configure CMake
+    - name: Build wheel and regression tests
       shell: bash -l {0}
       run: |
         set -euo pipefail
-        mkdir -p build
-        cd build
-        export CMAKE_PREFIX_PATH="${CONDA_PREFIX}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-        cmake .. -DCMAKE_BUILD_TYPE=Release \
-          -DPOLYMERFTS_USE_FFTW=ON \
-          -DPOLYMERFTS_USE_MKL=${{ matrix.mkl }} \
-          -DPOLYMERFTS_USE_CUDA=OFF \
-          -DPOLYMERFTS_WERROR=ON \
-          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-          2>&1 | tail -50
+        export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
+        export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
+        python -m pip wheel . --no-deps --wheel-dir dist \
+          -Cbuild-dir=build \
+          -Ccmake.define.POLYMERFTS_USE_FFTW=ON \
+          -Ccmake.define.POLYMERFTS_USE_MKL=ON \
+          -Ccmake.define.POLYMERFTS_USE_CUDA=OFF \
+          -Ccmake.define.POLYMERFTS_BUILD_TESTS=ON \
+          -Ccmake.define.POLYMERFTS_WERROR=ON
 
-    - name: Build
+    - name: Install wheel
       shell: bash -l {0}
       run: |
-        cd build
-        make -j$(nproc)
+        python -m pip install --no-deps --force-reinstall dist/polymerfts-*.whl
 
-    - name: Install Python module
-      shell: bash -l {0}
-      run: |
-        cd build
-        make install
-
-    - name: Check MKL-free environment and module
-      if: matrix.mkl == 'OFF'
+    - name: Check MKL and FFTW linkage
       shell: bash -l {0}
       run: |
         python - <<'PY'
-        import json
-        from pathlib import Path
+        from importlib.metadata import distribution
         import subprocess
-        import sys
+        from polymerfts import _core
 
-        records = (Path(sys.prefix) / "conda-meta").glob("*.json")
-        names = [json.loads(path.read_text())["name"] for path in records]
-        if any(name.startswith("mkl") for name in names):
-            raise RuntimeError("The default environment must not install MKL")
-        libraries = subprocess.check_output(["ldd", "build/_core.so"], text=True)
+        package = distribution("polymerfts")
+        if not package.read_text("RECORD"):
+            raise RuntimeError("The installed wheel must have a pip file record")
+        libraries = subprocess.check_output(["ldd", _core.__file__], text=True)
         print(libraries)
-        if "libmkl" in libraries.lower() or "not found" in libraries:
-            raise RuntimeError("Unexpected MKL dependency or unresolved library")
-        PY
-
-    - name: Check MKL and OpenBLAS linkage
-      if: matrix.mkl == 'ON'
-      shell: bash -l {0}
-      run: |
-        python - <<'PY'
-        import subprocess
-
-        libraries = subprocess.check_output(["ldd", "build/_core.so"], text=True)
-        print(libraries)
-        if "libmkl" not in libraries.lower() or "libopenblas" not in libraries.lower():
-            raise RuntimeError("The MKL backend and OpenBLAS LAPACKE must both be linked")
+        if "libmkl" not in libraries.lower() or "libfftw3" not in libraries.lower():
+            raise RuntimeError("The MKL and FFTW backends must both be linked")
         if "not found" in libraries:
             raise RuntimeError("Unresolved library dependency")
         PY
@@ -167,6 +134,25 @@ jobs:
         ulimit -s unlimited
         export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
         ctest --output-on-failure -j$(nproc) --timeout 900
+
+    - name: Check installed wheel and uninstall
+      shell: bash -l {0}
+      run: |
+        set -euo pipefail
+        python tests/TestPropagatorAnalytic.py
+        python -m pip uninstall -y polymerfts
+        python - <<'PY'
+        from importlib.metadata import distribution, PackageNotFoundError
+        import importlib.util
+        if importlib.util.find_spec("polymerfts") is not None:
+            raise RuntimeError("Uninstall left an importable polymerfts package")
+        try:
+            distribution("polymerfts")
+        except PackageNotFoundError:
+            pass
+        else:
+            raise RuntimeError("Uninstall left package metadata")
+        PY
 
   lint:
     name: Code Quality Checks

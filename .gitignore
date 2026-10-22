@@ -2,6 +2,7 @@ __pycache__
 .vscode
 /.claude/settings.local.json
 build
+/dist/
 doc
 temp*
 # Local shell scripts and scheduler launchers are not tracked.

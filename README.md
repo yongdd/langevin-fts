@@ -22,17 +22,41 @@ git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts
 conda env create -f environment.yml
 conda activate polymerfts
-# Recommended CPU FFT backend
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-make -j8 && make install && ctest -L basic
 ```
 
-> **CPU Backend**: MKL is recommended for normal installation; the quick start installs it from official Anaconda packages. MKL and FFTW remain optional, and both CMake options default to OFF. FFTW is an alternative with GPL distribution requirements. Development and integrated CPU tests enable both backends; CI also checks a separate MKL-free build. OpenBLAS supplies Anderson mixing independently of the FFT backend. See [Installation](docs/getting-started/Installation.md) for details.
+For GPU support, put CUDA 12.2+ `nvcc` on PATH before building the wheel; CUDA is
+detected automatically. The Conda environment does not include the toolkit.
 
-> **GPU Backend**: built automatically when a CUDA 12.2+ `nvcc` is on PATH (the conda environment does not provide one) and CMake is 3.25.2+; otherwise the configure step warns and builds without it. `-DPOLYMERFTS_USE_CUDA=ON` makes a missing GPU backend an error, `OFF` skips it.
+Choose one CPU backend.
+
+**MKL**
+
+```bash
+conda install --override-channels -c defaults --freeze-installed \
+    mkl=2025.0.0 mkl-include=2025.0.0
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
+```
+
+**FFTW**
+
+```bash
+conda install --override-channels -c defaults --freeze-installed fftw
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
+    -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
+```
+
+Install and verify the wheel:
+
+```bash
+python -m pip install --no-deps --force-reinstall dist/polymerfts-0.10.0-*.whl
+python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail_platforms())"
+```
+
+Uninstall with `python -m pip uninstall polymerfts`.
+
+FFTW-enabled binary distributions must comply with its
+[GPL terms](docs/getting-started/Installation.md#gpl-license-warning-fftw).
 
 For detailed instructions, troubleshooting, and dependencies, see [Installation.md](docs/getting-started/Installation.md).
 

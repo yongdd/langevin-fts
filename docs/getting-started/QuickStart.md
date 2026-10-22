@@ -174,8 +174,9 @@ Other options:
 - To change a single method, subclass instead of copying:
   `class MySCFT(scft.SCFT): def compute_concentrations(self, w, q_init=None): ...`
 - To change the whole package, including C++ code, clone the repository,
-  run `make` (no `make install`) and point `PYTHONPATH` at `build/python`;
-  `make` re-stages the Python files in seconds after each edit.
+  build it with CMake and point `PYTHONPATH` at `build/python` for development.
+  The `polymerfts_stage` target updates Python files after each edit.
+  Build and reinstall a wheel to update the installed package.
 - If the change is worth sharing, work on a git branch and open a pull request.
 
 ## Next Steps

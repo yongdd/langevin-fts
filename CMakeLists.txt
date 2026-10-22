@@ -112,14 +112,26 @@ IF(PkgConfig_FOUND)
 ENDIF()
 IF(NOT SPGLIB_FOUND)
     # The upstream Python wheels also ship the native library and headers.
+    # pip's isolated build hides the target environment's Python packages.
+    # Also look in that interpreter's install directories for the native
+    # dependency, just as we search the conda prefix for other libraries.
     FIND_PACKAGE(Python3 3.11 COMPONENTS Interpreter REQUIRED)
     EXECUTE_PROCESS(COMMAND ${Python3_EXECUTABLE} -c
-        "import importlib.util, pathlib; spec = importlib.util.find_spec('spglib'); print(pathlib.Path(spec.origin).parent if spec and spec.origin else '')"
-        OUTPUT_VARIABLE _spglib_python_root OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        [=[
+import importlib.util
+import pathlib
+import sysconfig
+spec = importlib.util.find_spec('spglib')
+roots = [pathlib.Path(sysconfig.get_path(name)) / 'spglib' for name in ('purelib', 'platlib')]
+if spec and spec.origin:
+    roots.insert(0, pathlib.Path(spec.origin).parent)
+print(';'.join(dict.fromkeys(str(root) for root in roots)))
+]=]
+        OUTPUT_VARIABLE _spglib_python_roots OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     FIND_LIBRARY(SPGLIB_LIBRARIES NAMES symspg spglib
-        HINTS ENV SPGLIB_ROOT ${_spglib_python_root} PATH_SUFFIXES lib lib64)
+        HINTS ENV SPGLIB_ROOT ${_spglib_python_roots} PATH_SUFFIXES lib lib64)
     FIND_PATH(SPGLIB_INCLUDE_DIRS spglib.h
-        HINTS ENV SPGLIB_ROOT ${_spglib_python_root} PATH_SUFFIXES include)
+        HINTS ENV SPGLIB_ROOT ${_spglib_python_roots} PATH_SUFFIXES include)
     IF(SPGLIB_LIBRARIES AND SPGLIB_INCLUDE_DIRS)
         SET(SPGLIB_FOUND TRUE)
     ENDIF()

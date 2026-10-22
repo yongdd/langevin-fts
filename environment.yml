@@ -14,7 +14,6 @@ dependencies:
   - blas=1.0=openblas
   - openblas-devel=0.3.31
   - nomkl
-  - fftw
   - make
   - git
   - pip

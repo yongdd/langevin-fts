@@ -520,12 +520,19 @@ INSTANTIATE_FFT_CLASS(FftwFFT);
 Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:
 
 ```bash
-cd build && make -j8 && make install
+cmake --build build --parallel 4
 ```
+
+CTest uses the staged package in `build/python`. To update the installed package,
+build and install a wheel as described in
+[Installation](../getting-started/Installation.md).
 
 #### Python Changes
 
-Changes to `src/python/*.py` are picked up by the tests after a plain `make` from the build directory (the `polymerfts_stage` target copies them into `build/python/polymerfts`, which the tests import). `make install` is only needed to update the installed package used by the examples and tutorials. No recompilation needed.
+Changes to `src/python/*.py` are picked up by the tests after
+`cmake --build build --target polymerfts_stage` copies them into
+`build/python/polymerfts`. Rebuild and reinstall the wheel to update the package
+used by examples and tutorials.
 
 #### Running Tests
 

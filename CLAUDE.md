@@ -69,13 +69,13 @@ not supply the `nvcc` compiler. Select the toolkit through the local module syst
 `PATH`, `CUDACXX` or `CMAKE_CUDA_COMPILER`; use a compatible host compiler.
 
 Development and integrated CPU regression builds enable both MKL and FFTW
-(GPL distribution requirements are described in Installation). The normal user
-quick start recommends MKL with FFTW disabled:
+(GPL distribution requirements are described in Installation). The user
+installation guide provides separate MKL and FFTW setup paths:
 
 ```bash
 conda activate polymerfts
 conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
+    fftw mkl=2025.0.0 mkl-include=2025.0.0
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
@@ -86,9 +86,9 @@ cmake -S . -B build \
 nice -n 10 cmake --build build --parallel 4
 ```
 
-- The default environment supplies LAPACKE through OpenBLAS and does not install
-  MKL. The MKL CPU backend remains optional; install its dependencies separately
-  before enabling `-DPOLYMERFTS_USE_MKL=ON`. See Installation for setup details.
+- The base environment includes LAPACKE but installs neither MKL nor FFTW.
+  Install the libraries separately before enabling their CPU backends.
+  See Installation for setup details.
 - Use `-DPOLYMERFTS_USE_CUDA=ON` when CUDA must be built: configuration then fails
   if the toolchain is unsuitable. `AUTO` can fall back to CPU; inspect the output.
 - Set `POLYMERFTS_CUDA_ARCHITECTURES` for the intended toolkit and target devices.
@@ -96,7 +96,9 @@ nice -n 10 cmake --build build --parallel 4
 - Rebuild after C++/CUDA changes. Python changes also need the staging target:
   `cmake --build build --target polymerfts_stage --parallel 4`.
 - Tests import the staged package in `build/python/`, not an installed copy.
-  Install only when needed with `cmake --install build`. For an uninstalled
+  Install Python packages only through a wheel built with `python -m pip wheel`
+  and installed with `python -m pip install`; remove them with `pip uninstall`.
+  Do not use direct CMake installation for Python packages. For an uninstalled
   example, put `build/python` on `PYTHONPATH` using the appropriate absolute path.
 - Use a separate build directory for a fresh configuration rather than deleting
   an existing build tree.

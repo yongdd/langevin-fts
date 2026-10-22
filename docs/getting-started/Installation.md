@@ -1,289 +1,226 @@
 # Installation
 
+You need Conda and a C++20 compiler. Start by cloning the repository.
+
+## 1. Create the Environment
+
 ```bash
-# Clone repository
 git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts
-
-# Create and activate conda environment
 conda env create -f environment.yml
 conda activate polymerfts
+```
 
-# Install the recommended CPU FFT backend from official Anaconda packages
+The environment uses Anaconda's official channel and Python 3.14; spglib is
+installed from its upstream PyPI wheel.
+
+## 2. Build a Wheel with MKL or FFTW
+
+Run **one** of the following blocks. Neither FFT library is included in the base
+environment.
+
+For GPU support, make CUDA 12.2+ `nvcc` available on PATH **before this step**.
+CUDA is then detected automatically; see [GPU setup](#gpu-setup) for details.
+
+**MKL**
+
+```bash
 conda install --override-channels -c defaults --freeze-installed \
     mkl=2025.0.0 mkl-include=2025.0.0
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
+```
 
-# GPU backend (optional): a CUDA 12.2+ nvcc first on PATH; the conda environment has none
-export PATH=/usr/local/cuda-12.4/bin:$PATH
+**FFTW**
 
-# Build and install with the recommended MKL CPU backend
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
-make -j8
-make install
-ctest -L basic  # Basic installation verification (~1 minute)
+```bash
+conda install --override-channels -c defaults --freeze-installed fftw
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
+    -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
+```
 
-# Platforms that were built (cuda appears only with a usable CUDA toolchain and a GPU)
+FFTW-enabled binary distributions must comply with its
+[GPL terms](#gpl-license-warning-fftw).
+
+## 3. Install and Verify
+
+```bash
+python -m pip install --no-deps --force-reinstall dist/polymerfts-0.10.0-*.whl
 python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail_platforms())"
 ```
 
-The supplied environment uses Anaconda's official `defaults` channel with
-Python 3.14 and OpenBLAS 0.3.31. Other configured conda channels are excluded.
-The exception is spglib 2.8.0, installed from the upstream project's PyPI wheels
-because it is unavailable in `defaults`. These wheels include the C library and
-headers; CMake discovers them from the selected Python interpreter. Both CPU CI
-configurations start from the same `environment.yml`. One verifies an MKL-free
-OpenBLAS/FFTW build; the other installs MKL 2025.0.0 separately and tests both CPU
-FFT backends, including their agreement checks. Anderson mixing uses OpenBLAS
-in both configurations.
+You can now run the [Quick Start](QuickStart.md) examples.
+Rebuild and reinstall the wheel to update the package. Pip tracks its installed
+files, including removal of modules dropped by a newer version.
 
-OpenBLAS supplies the LAPACKE SVD routines used by Anderson mixing; NumPy and
-SciPy also use Anaconda's OpenBLAS builds. `openblas-devel` supplies the C headers.
-The base environment does not require MKL; the quick start adds the optional MKL
-packages for the recommended CPU FFT backend. Freezing existing packages keeps
-NumPy and SciPy on OpenBLAS. FFTW is included for development and tests, but is
-linked only when `POLYMERFTS_USE_FFTW=ON`; its GPL distribution requirements are
-described below. OpenBLAS does not replace an FFT library. A CUDA-only build can
-disable both CPU backends.
-CI sets `OPENBLAS_NUM_THREADS=1` to keep BLAS work serial alongside the existing
-propagator-level threading policy.
+## Optional Settings
 
-For an existing Anaconda environment, install the OpenBLAS development package
-with `conda install --override-channels -c defaults openblas-devel`. Creating a
-fresh environment from `environment.yml` avoids retaining old MKL packages and
-CMake paths. Inspect `conda list --show-channel-urls` and the native module's
-linked libraries when checking that a build has no MKL dependency.
+<details>
+<summary>GPU setup</summary>
 
-The configure step prints `CUDA toolkit ...` when it builds the GPU backend, and a
-`Building without the GPU backend: ...` warning with the reason when it does not
-(see [CUDA Toolkit Too Old](#cuda-toolkit-too-old)).
+### GPU Setup
 
-`make install` overwrites the modules of an existing install but does not delete
-modules that a newer version dropped. When upgrading across versions, remove the old
-`polymerfts` directory from `site-packages` first (or use the versioned install below).
+Install a CUDA 12.2+ toolkit and compatible NVIDIA driver. The Conda environment
+does not include `nvcc`. For example, before building:
 
-
-## Dependencies
-
-Install these versions: they cover both the CPU and the GPU backend, so one setup
-builds either. `environment.yml` provides everything except the CUDA toolkit, the
-C++ compiler and the NVIDIA driver.
-
-| Dependency | Version | Notes |
-|------------|---------|-------|
-| Anaconda | any | https://www.anaconda.com/download |
-| Python | 3.11+ | `environment.yml` installs 3.14, with NumPy 2.3, SciPy 1.16 and pybind11 3.1 |
-| CMake | 3.25.2+ | 3.25.2 is what the GPU backend needs (C++20 for nvcc); a CPU-only build also works with 3.18 |
-| C++ compiler | GCC 11–13 or Clang 15+ | C++20 with `std::source_location`. nvcc compiles its host code with it: nvcc 12.2 rejects GCC 13, nvcc 12.4 accepts it |
-| CUDA Toolkit | 12.4+ (12.2 minimum) | GPU backend (https://developer.nvidia.com/cuda-toolkit); `nvcc` must be first on PATH (the conda environment has none). nvcc 11.x has no C++20 and nvcc 12.0/12.1 cannot compile `std::source_location` |
-| NVIDIA driver | one that supports the toolkit | R550+ for CUDA 12.4, R580+ for CUDA 13. An older CUDA 12 driver (R525+) runs the code only on GPUs whose architecture is in `POLYMERFTS_CUDA_ARCHITECTURES` |
-| spglib | 2.x | Space group symmetry; `environment.yml` installs the upstream PyPI wheel, or use `apt install libsymspg-dev` |
-| LAPACKE | any | Anderson mixing SVD solver; supplied by OpenBLAS 0.3.31 (`openblas-devel`) in the default environment, under BSD-3-Clause. Standalone LAPACKE remains supported (`apt install liblapacke-dev`, or set `LAPACKE_ROOT`); MKL can supply it when its backend is enabled |
-| MKL or FFTW3 | any | MKL is the recommended optional CPU FFT backend (`-DPOLYMERFTS_USE_MKL=ON`). FFTW3 is an alternative (`-DPOLYMERFTS_USE_FFTW=ON`, GPL license), included in `environment.yml` for development and tests. CUDA-only builds need neither CPU backend |
-
-## CMake Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `POLYMERFTS_USE_CUDA` | AUTO | NVIDIA CUDA GPU backend. `AUTO`: build it when a usable toolchain is found (CUDA 12.2+, CMake 3.25.2+, `std::source_location` in the compilers), otherwise warn and build without it; `ON`: require it (configure stops otherwise); `OFF`: never. A build directory configured with an older version holds the former `ON`/`OFF` switch, whose `ON` is converted to `AUTO` |
-| `POLYMERFTS_USE_MKL` | OFF | Enable Intel MKL CPU backend |
-| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
-| `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
-| `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
-| `POLYMERFTS_CUDA_ARCHITECTURES` | empty | CUDA compute capabilities to compile for; empty: `60;61;70;75;80;86;89;90` with CUDA 12.2–12.7, plus `100;120` with CUDA 12.8+, `75;80;86;89;90;100;120` with CUDA 13+ |
-| `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors (CI builds with it) |
-| `POLYMERFTS_INSTALL_HEADERS` | OFF | Install the C++ headers, the static libraries and a CMake package config, so a downstream project can `find_package(polymerfts)` and link `polymerfts::polymerfts_backends` (experimental) |
-
-### CPU Backends
-
-Two CPU backends are available, and **both are OFF by default** — enable at
-least one (or build CUDA-only):
-- **MKL (recommended)**: optional Intel Math Kernel Library — install with `conda install --override-channels -c defaults --freeze-installed mkl=2025.0.0 mkl-include=2025.0.0`, then enable with `-DPOLYMERFTS_USE_MKL=ON`. Anderson mixing selects its LAPACKE provider independently of the FFT backend
-- **FFTW**: enable with `-DPOLYMERFTS_USE_FFTW=ON` (GPL license)
-
-Recommended user build (MKL enabled, FFTW disabled):
-```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF
-```
-
-For development and integrated CPU regression tests, enable both backends after
-installing MKL. This includes the MKL/FFTW agreement checks:
-
-```bash
-cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
-    -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
-    -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON
-```
-
-The separate MKL-free CI configuration uses `POLYMERFTS_USE_MKL=OFF` and
-`POLYMERFTS_USE_FFTW=ON` to verify that MKL stays optional.
-
-## GPL License Warning (FFTW)
-
-> **Important**: FFTW3 is licensed under the **GNU General Public License (GPL)**.
->
-> If you distribute binaries compiled with `POLYMERFTS_USE_FFTW=ON`, you **must** comply with GPL terms:
-> 1. Distribute the complete source code of your application
-> 2. License your application under GPL or a GPL-compatible license
-> 3. Include the full GPL license text with your distribution
->
-> For internal/personal use, no action is required.
->
-> See: https://www.fftw.org/faq/section1.html
-
-## Troubleshooting
-
-### Unsupported GPU Architecture
-
-**Error**: `Unsupported gpu architecture 'compute_60'` (or another capability)
-
-**Cause**: `POLYMERFTS_CUDA_ARCHITECTURES` lists a capability the toolkit does not
-support. The default list follows the toolkit (CUDA 13 dropped sm_60, sm_61 and
-sm_70), but a build directory configured earlier keeps the list it was given.
-
-**Solution**: list only the capabilities your toolkit and GPU support (or set the
-option to an empty string to get the default for the toolkit):
-```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_CUDA_ARCHITECTURES="80;86"
-```
-
-### Segmentation Fault
-
-**Solution**: Set stack size limits:
-```bash
-ulimit -s unlimited       # Add to ~/.bashrc
-export OMP_STACKSIZE=1G   # Stack size for OpenMP
-```
-
-### CUDA Not Detected
-
-**Message**: `Building without the GPU backend: no CUDA compiler (nvcc) was found on PATH,
-in CUDACXX or in CMAKE_CUDA_COMPILER` (a warning with the default
-`POLYMERFTS_USE_CUDA=AUTO`), and `cuda` is missing from `PlatformSelector.avail_platforms()`.
-
-**Solution**: put a CUDA 12.2+ `nvcc` on PATH (or set `CUDACXX`, or pass
-`-DCMAKE_CUDA_COMPILER=...`) and run CMake again in the same build directory; the
-installed module records the library directories itself, so `LD_LIBRARY_PATH` is not
-needed at run time:
 ```bash
 export PATH=/usr/local/cuda-12.4/bin:$PATH
 ```
-`cuda` is also missing at run time on a machine without a visible GPU (for example a CPU
-node of a cluster), even when the GPU backend was built.
 
-### nvcc Rejects the Host Compiler
+The default `POLYMERFTS_USE_CUDA=AUTO` builds CUDA when the toolchain is usable.
+Use `ON` to require CUDA or `OFF` for a CPU-only build. A CUDA-only configuration
+needs neither MKL nor FFTW:
 
-**Message**: `Building without the GPU backend: .../nvcc did not compile a test program,
-usually because its host compiler is not supported (nvcc 12.2 rejects GCC 13): set
-CUDAHOSTCXX or -DCMAKE_CUDA_HOST_COMPILER to a supported compiler`.
-
-**Solution**: use a newer toolkit (CUDA 12.4 accepts GCC 13), or give nvcc a compiler it
-supports; `CMakeFiles/CMakeConfigureLog.yaml` in the build directory has nvcc's output:
 ```bash
-cmake .. -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12   # or: export CUDAHOSTCXX=/usr/bin/g++-12
+CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
+    -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=OFF \
+    -Ccmake.define.POLYMERFTS_USE_CUDA=ON
 ```
 
-### CUDA Toolkit Too Old
+To see the available platforms after installation:
 
-**Message**: `Building without the GPU backend: .../nvcc is CUDA 11.8; the GPU backend needs
-CUDA 12.2 or newer (C++20 device code). Put a 12.2+ nvcc first on PATH (or in CUDACXX, or
-pass -DCMAKE_CUDA_COMPILER=...) and configure again` (a warning with the default
-`POLYMERFTS_USE_CUDA=AUTO`; with `-DPOLYMERFTS_USE_CUDA=ON` the configure step stops with
-`POLYMERFTS_USE_CUDA=ON, but .../nvcc is CUDA 11.8; ...`). CMake older than 3.25.2 and a
-compiler without `std::source_location` (GCC 10, Clang 14) are reported the same way, with
-their own reason.
-
-**Solution**: put a CUDA 12.2+ toolkit first on PATH and run CMake again (the too-old
-compiler is not kept in the cache):
 ```bash
-export PATH=/usr/local/cuda-12.4/bin:$PATH
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=OFF -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-         -DPOLYMERFTS_USE_CUDA=ON
+python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail_platforms())"
 ```
-A conda environment may also hold CUDA runtime libraries of another version (for
-example `cudatoolkit` installed for CuPy). The build links the cuFFT of the toolkit
-whose `nvcc` compiles the code; the configure step prints the path it uses (`cuFFT: ...`).
 
-## Keeping several versions side by side
+`cuda` requires both a compiled CUDA backend and a visible GPU.
 
-Python installs one version of a package per environment. Keep a separate wheel
-and virtual environment for each version needed for a calculation.
+</details>
 
-From the desired source checkout, with the build dependencies installed and the
-conda environment active:
+<details>
+<summary>Dependencies and CMake options</summary>
+
+### Dependencies
+
+`environment.yml` supplies the shared dependencies. Install the selected CPU FFT
+library separately, and provide the compiler and any CUDA toolkit outside Conda.
+
+| Dependency | Requirement |
+|------------|-------------|
+| Python | 3.11+; the supplied environment uses 3.14 |
+| C++ compiler | C++20 with `std::source_location`, such as GCC 11+; CUDA also requires a compatible host compiler |
+| CMake | 3.18+ for CPU-only builds; 3.25.2+ for CUDA |
+| spglib | 2.x; included in the environment |
+| LAPACKE | Included in the environment; manual installs can use `liblapacke-dev` or `LAPACKE_ROOT` |
+| MKL / FFTW | Install either CPU FFT library using step 2 |
+| CUDA toolkit and driver | Optional; CUDA 12.2+ and a compatible driver |
+
+### CMake Options
+
+Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`.
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `POLYMERFTS_USE_MKL` | OFF | MKL CPU backend |
+| `POLYMERFTS_USE_FFTW` | OFF | FFTW CPU backend (GPL) |
+| `POLYMERFTS_USE_CUDA` | AUTO | Detect CUDA; `ON` requires it, `OFF` disables it |
+| `POLYMERFTS_CUDA_ARCHITECTURES` | empty | Semicolon-separated GPU capabilities; empty selects defaults for the toolkit |
+| `POLYMERFTS_BUILD_TESTS` | ON | Build tests |
+| `POLYMERFTS_INSTALL_PYTHON` | ON | Install the Python package |
+| `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors |
+| `POLYMERFTS_INSTALL_HEADERS` | OFF | Install the experimental downstream C++ interface |
+
+CMake defaults to a Release build. For the full configuration, see
+[CMakeLists.txt](../../CMakeLists.txt).
+
+</details>
+
+<details>
+<summary>Keeping several versions side by side</summary>
+
+### Keeping Several Versions Side by Side
+
+Keep the wheel built in step 2 and install each version into its own virtual
+environment. Replace the version below with that checkout's version:
 
 ```bash
-CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir /path/to/wheels \
-    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 python -m venv --system-site-packages /path/to/venvs/polymerfts-0.10.0
 /path/to/venvs/polymerfts-0.10.0/bin/python -m pip install --no-deps --force-reinstall \
-    /path/to/wheels/polymerfts-0.10.0-*.whl
-```
-
-Use the version and compatible wheel for that checkout. The build uses the
-[CMake options](#cmake-options) above; additional options can be passed as
-`-Ccmake.define.OPTION=VALUE`. CUDA defaults to `AUTO`; use
-`-Ccmake.define.POLYMERFTS_USE_CUDA=ON` when the build must include CUDA, or `OFF`
-for a CPU-only build.
-
-The venv's `--system-site-packages` option shares NumPy, SciPy and other
-dependencies with the active environment. Keep that dependency environment
-available. Select the package version before running a job:
-
-```bash
+    dist/polymerfts-0.10.0-*.whl
 source /path/to/venvs/polymerfts-0.10.0/bin/activate
-python Gyroid.py
 ```
 
-For an older release, use a separate worktree and repeat the wheel/venv steps
-there. Releases before 0.10.0 have no `pyproject.toml`; build those with their own
-CMake instructions instead.
+Keep the Conda environment available: `--system-site-packages` shares its
+dependencies. Releases before 0.10.0 use their own CMake installation instructions.
 
-For quick comparisons during development, the package staged in
-`build/python` can be used without installing anything:
-`PYTHONPATH=/path/to/build/python python script.py`.
-
-## Uninstallation 😢
-
-```bash
-conda deactivate
-conda env remove -n polymerfts
-```
+</details>
 
 ## Testing
 
-Two test modes are available:
+| Check | Command |
+|-------|---------|
+| Installed wheel | `python tests/TestPropagatorAnalytic.py` |
+| Native regression suite | `ctest --test-dir build-tests --output-on-failure` |
 
-| Mode | Command | Tests | Time | Purpose |
-|------|---------|-------|------|---------|
-| **Basic** | `ctest -L basic` | 58 | ~1 min | Installation verification |
-| **Full** | `ctest` | 104 | ~8 min | Development validation |
+The native build below stages its package in `build-tests/python` for CTest.
+Available tests depend on the enabled backends. CUDA tests need a visible GPU.
+See [Numerical Validation](../internals/NumericalValidation.md) for coverage.
 
-**Note**: `ctest` runs the Python tests against the package staged in `build/python/` by `make`, so no `make install` is needed for testing; `make install` is what the examples and tutorials use.
+<details>
+<summary>Development: test MKL and FFTW together</summary>
 
-The counts are for a build with the GPU backend and both CPU backends; the tests of a
-backend that is not built are left out.
+CPU CI enables both backends in one job, including their agreement checks.
+To use the same configuration locally:
 
-**Basic tests** (58 tests):
-- FFT: CPU/CUDA, DCT, DST, mixed boundary conditions
-- Propagator: linear, branched, mixture polymers
-- Numerical methods: pseudo-spectral (RQM4, RK2), real-space (CN-ADI)
-- SCFT: 1D, 2D solvers
-- Stress tensor: 1D calculations
-- Space group: reduced basis implementation
-- CrysFFT: crystallographic FFT
-- Aggregation: propagator optimization
-- Scheduler: parallel computation
+```bash
+conda install --override-channels -c defaults --freeze-installed \
+    mkl=2025.0.0 mkl-include=2025.0.0 fftw
+cmake -S . -B build-tests -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+    -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
+    -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON
+cmake --build build-tests --parallel 4
+ctest --test-dir build-tests --output-on-failure
+```
 
-**Full tests** add (46 tests):
-- SCFT: 3D, hexagonal cylinder
-- Stress tensor: 2D, 3D calculations
-- Complex field: CL-FTS propagators
-- Solvent: polymer-solvent systems
-- Space group phases: free energy validation (BCC, Gyroid, etc.)
-- Nanoparticle, absorbing boundary conditions
-- Complex-field stress on every platform, RK2 stress with non-periodic boundaries
-- L-FTS/CL-FTS run loops and checkpoint continuation, convergence orders
-- CUDA memory ownership: every object returns its device and pinned memory, also when an allocation fails or the device runs out of memory
-- Structure functions against RPA (L-FTS, CL-FTS, smearing), compressible SCFT, multi-monomer field theory and dH/dχN, smearing in non-orthogonal cells and with walls, stress at alias ties, propagator keys and masks, block concentrations, L-FTS/WTMD details, SCFT options
+</details>
+
+## Troubleshooting
+
+### CUDA Not Detected
+
+Put CUDA 12.2+ `nvcc` on PATH and rebuild the wheel. The configure warning beginning
+`Building without the GPU backend:` explains why CUDA was disabled. Use
+`-Ccmake.define.POLYMERFTS_USE_CUDA=ON` to make this a configuration error.
+
+### CUDA Toolkit Too Old
+
+Select a CUDA 12.2+ toolkit and rebuild the wheel; CUDA builds also need CMake 3.25.2+.
+The build links the cuFFT library belonging to the selected toolkit.
+
+### nvcc Rejects the Host Compiler
+
+Choose a compatible compiler with `-Ccmake.define.CMAKE_CUDA_HOST_COMPILER=/path/to/g++`.
+For example, nvcc 12.2 rejects GCC 13, while nvcc 12.4 accepts it. Compiler errors
+are recorded in the wheel build directory's `CMakeFiles/CMakeConfigureLog.yaml`.
+
+### Unsupported GPU Architecture
+
+Add `-Ccmake.define.POLYMERFTS_CUDA_ARCHITECTURES="80;86"` to the wheel command,
+using capabilities supported by your toolkit and GPU. When changing toolkits,
+use a fresh build directory with `-Cbuild-dir=build/wheel-new-toolkit`.
+
+### Segmentation Fault
+
+If the failure is caused by insufficient stack space, increase the limits:
+
+```bash
+ulimit -s unlimited
+export OMP_STACKSIZE=1G
+```
+
+## GPL License Warning (FFTW)
+
+FFTW3 is licensed under the GNU General Public License (GPL). Distributing binaries
+compiled with `POLYMERFTS_USE_FFTW=ON` requires compliance with its GPL terms,
+including corresponding source and license notices. Internal/personal use does
+not require publishing your code. See the [FFTW FAQ](https://www.fftw.org/faq/section1.html).
+
+## Uninstallation
+
+```bash
+python -m pip uninstall polymerfts
+```
+
+This removes the Python package while keeping the Conda environment and its
+dependencies. Old direct CMake installs have no pip file record; use a fresh
+environment when migrating one to wheel installation.
