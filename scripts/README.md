@@ -6,6 +6,7 @@ This directory contains development and utility scripts that are not part of the
 
 | Script | Description |
 |--------|-------------|
+| `simulation_gui.py` | Browser editor for SCFT/L-FTS/CL-FTS scripts (beta); see the [GUI guide](../docs/getting-started/SimulationGUI.md) |
 | `check_latex.py` | Check the math in the Markdown files: GitHub-safe syntax (`` $`...`$ ``, `` ```math ``) and, with the KaTeX CLI, the TeX itself |
 | `benchmark_crysfft_triplet.py` | Benchmark CrysFFT triplet algorithm performance |
 | `benchmark_reduced_basis.py` | Benchmark reduced basis space group operations |
@@ -16,6 +17,26 @@ This directory contains development and utility scripts that are not part of the
 | `slurm_run.sh` | SLURM job submission template |
 
 ## Usage
+
+### Simulation Script Builder (beta)
+
+```bash
+python3 scripts/simulation_gui.py
+```
+
+Open `http://127.0.0.1:8765` in a browser. For a remote server, connect with
+`ssh -L 8765:127.0.0.1:8765 user@server` from your computer, then start the editor
+in that SSH session. VS Code Remote-SSH port forwarding also works.
+
+The editor uses only the Python standard library and creates SCFT/L-FTS/CL-FTS
+scripts. **Save on server** writes to the directory where the editor was started
+by default; **Download locally** saves to your browser's download location.
+Phase-specific initial fields currently support **lamella and gyroid**, with
+random and `.mat` inputs also available. More phase templates are planned.
+
+See [Simulation Script Builder (beta)](../docs/getting-started/SimulationGUI.md)
+for SSH setup, box and polymer editing, space groups, CrysFFT, save locations,
+current limitations and development checks.
 
 ### Math Check
 

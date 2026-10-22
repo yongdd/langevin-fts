@@ -48,6 +48,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | Document | Description |
 |----------|-------------|
 | [Getting Started](docs/getting-started/) | Installation, quick start, and features |
+| [Simulation GUI (beta)](docs/getting-started/SimulationGUI.md) | Prepare SCFT/L-FTS/CL-FTS scripts in a browser over SSH |
 | [Theory](docs/theory/) | Chain propagators, field theory, SCFT, L-FTS, numerical methods |
 | [Internals](docs/internals/) | Architecture, FFT implementation, propagator system |
 | [References](docs/references/) | Parameter reference, bibliography, tools |

@@ -10,7 +10,11 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 5. Extend `scft.py` to cover a singular chi matrix.
 6. Option to print a data file in a human-readable text format.
 7. Progress bar.
-8. Graphical user interface.
+8. Extend the simulation script builder with more phase-specific initial-field
+   templates (e.g. hexagonal cylinders, BCC, FCC, SC, A15, Sigma, HCP and perforated
+   lamellae), alongside lamella and gyroid. Add compatible box presets and export
+   initial-field generation in standalone scripts. Keep L-FTS/CL-FTS limited to
+   3D orthogonal boxes.
 9. Operator overloading for device arrays (the old `Array` class was removed in 2026-10; revisit if needed).
 
 ## Numerical methods and performance

@@ -16,6 +16,7 @@ temp*
 !docs/grafted_brush_validation.png
 !docs/convergence_plot.png
 *.html
+!scripts/simulation_gui/index.html
 *.qdrep
 *.sqlite
 data_simulation*

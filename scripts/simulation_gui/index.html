@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Configure SCFT, L-FTS and CL-FTS simulations and generate Python scripts. Release status: beta.">
+  <title>Simulation Script Builder (beta) · polymerfts</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/model-editor.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="polymerfts home">
+        <span class="chain-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        polymerfts
+      </a>
+      <span class="scope-label">Python script builder</span>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">SCFT / L-FTS / CL-FTS <span class="beta-badge" aria-label="Release status: beta">(beta)</span></p>
+      <h1 id="page-title">Build a simulation script</h1>
+      <p>Configure your simulation, review the generated code, and save a Python script. Phase-specific initial fields currently support lamella and gyroid; more phases are planned.</p>
+    </section>
+
+    <main>
+      <section class="template-bar" aria-label="Starting template">
+        <div class="template-picker">
+          <label for="preset">Starting template</label>
+          <select id="preset" disabled><option>Loading templates…</option></select>
+          <button id="load-preset" type="button" class="button secondary" disabled>Load template</button>
+        </div>
+        <p>Linear and branched polymers · Mixtures · Interactive cells</p>
+      </section>
+
+      <div class="workspace">
+        <section class="settings-panel" aria-labelledby="settings-title">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2 id="settings-title">Simulation settings</h2></div>
+            <span id="system-summary" class="summary">SCFT · 3D</span>
+          </div>
+          <form id="settings-form" autocomplete="off">
+            <div id="tabs" class="tabs" role="tablist" aria-label="Settings sections"></div>
+            <div id="panels"></div>
+          </form>
+        </section>
+
+        <div class="preview-column">
+        <section class="visual-panel" aria-labelledby="model-title">
+          <div class="panel-heading">
+            <div><span class="step">02</span><h2 id="model-title">Model preview</h2></div>
+            <button id="reset-view" type="button" class="text-button">Reset view</button>
+          </div>
+          <canvas id="box-canvas" tabindex="0" role="img" aria-label="Interactive simulation cell and illustrative polymer chains. Drag or use arrow keys to rotate."></canvas>
+          <div class="visual-info"><span id="model-summary"></span><span>Drag or use arrow keys to rotate</span></div>
+          <div id="monomer-legend" class="monomer-legend" aria-label="Monomer colors"></div>
+          <p class="visual-note">Architecture preview only. Chain positions are illustrative, not simulation results. Up to 12 chains are shown in the cell.</p>
+        </section>
+        <section class="preview-panel" aria-labelledby="preview-title">
+          <div class="panel-heading">
+            <div><span class="step">03</span><h2 id="preview-title">Script preview</h2></div>
+            <button id="refresh" type="button" class="text-button" disabled>Update preview</button>
+          </div>
+          <div class="code-heading"><span><span class="file-dot" aria-hidden="true"></span>Python</span>
+            <button id="copy" type="button" disabled>Copy code</button>
+          </div>
+          <pre id="code-preview" tabindex="0" aria-label="Generated Python code"><code id="script"># Loading templates.</code></pre>
+          <div class="export-bar">
+            <div class="filename-field">
+              <label for="filename">Filename</label>
+              <input id="filename" type="text" value="simulation.py" spellcheck="false">
+            </div>
+            <div class="filename-field">
+              <label for="server-subdir">Server subfolder (optional)</label>
+              <input id="server-subdir" type="text" value="" placeholder="e.g. gyroid/run01" maxlength="512" spellcheck="false">
+            </div>
+          </div>
+          <p class="server-root">Server base directory: <code id="server-root">Loading…</code></p>
+          <div class="save-actions">
+            <button id="server-save" type="button" class="button primary" disabled>Save on server</button>
+            <button id="download" type="button" class="button secondary" disabled>Download locally <span aria-hidden="true">↓</span></button>
+          </div>
+          <p id="server-save-result" class="feedback" role="status" aria-live="polite" hidden></p>
+          <p id="feedback" class="feedback" role="status" aria-live="polite" data-state="loading">Preparing the editor.</p>
+          <p class="download-note">Save on server writes to the server folder above. Download locally saves to your computer.</p>
+        </section>
+        </div>
+      </div>
+    </main>
+
+    <footer><span>polymer field theory · polymerfts</span><span>Run simulations separately using the saved script.</span></footer>
+  </div>
+  <noscript>Enable JavaScript in your browser to use this editor.</noscript>
+</body>
+</html>
