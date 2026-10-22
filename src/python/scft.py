@@ -40,8 +40,8 @@ class SCFTResult:
     converged : bool
         Whether the simulation converged within tolerance.
     free_energy : float
-        Final free energy per chain unit relative to the homogeneous state
-        (0 for the disordered phase).
+        Free energy relative to the homogeneous state at the same composition,
+        in units of rho_0 V / N. Zero for a disordered bulk state.
     error_level : float
         Final convergence error (L2 norm of field residuals).
     iterations : int
@@ -66,11 +66,18 @@ class SCFTResult:
     params : dict
         Original simulation parameters.
     free_energy_homogeneous : float
-        Free energy of the homogeneous state, (1/2) φ̄ᵀ χN φ̄ with the mean
-        concentrations φ̄, from which free_energy is measured;
-        free_energy + free_energy_homogeneous is the mean-field free energy and the
-        field-theoretic Hamiltonian with its constant at the saddle point (as
-        recorded by L-FTS).
+        Full homogeneous Flory-Huggins value at the same composition.
+    free_energy_absolute : float
+        Total canonical Helmholtz free energy, beta F_total / (rho_0 V / N),
+        including ideal mixing entropy. Equals free_energy + free_energy_homogeneous.
+    chemical_potentials : list or None
+        beta mu_p per polymer molecule, with mean(xi) = 0 for incompressible
+        systems. Not available for grafted chains or supplied initial propagators.
+    grand_potential : float or None
+        free_energy_absolute - sum_p chemical_potentials[p] * phi_p / alpha_p, in the
+        same pressure convention. Use coexistence_quantities() for phase comparisons.
+    polymer_lengths, polymer_volume_fractions : list or None
+        Relative chain lengths alpha_p and polymer volume fractions phi_p.
     """
     converged: bool
     free_energy: float
@@ -86,6 +93,20 @@ class SCFTResult:
     stress: Optional[np.ndarray] = None
     angles: Optional[List[float]] = None
     free_energy_homogeneous: Optional[float] = None
+    chemical_potentials: Optional[List[float]] = None
+    grand_potential: Optional[float] = None
+    polymer_lengths: Optional[List[float]] = None
+    polymer_volume_fractions: Optional[List[float]] = None
+    free_energy_absolute: Optional[float] = None
+
+    def coexistence_quantities(self, reference_polymer=0):
+        """Return exchange chemical potentials and the reduced grand potential.
+
+        Requires a converged, incompressible, periodic bulk solution. The
+        reference polymer's chemical potential is set to zero by a pressure shift.
+        """
+        from .phase_equilibrium import coexistence_quantities
+        return coexistence_quantities(self, reference_polymer)
 
     def get_concentration(self, monomer_type: str) -> np.ndarray:
         """Get concentration field for a monomer type.
@@ -181,9 +202,9 @@ class SCFT:
         Grid, box and integrals (C++).
     mpt : SymmetricPolymerTheory
         Monomer <-> auxiliary field transformations.
-    phi, w, free_energy, error_level, iter
+    phi, w, free_energy, free_energy_absolute, error_level, iter
         Set by run(): concentrations {type: array}, fields (M, n_grid),
-        free energy per volume, final error and iteration count.
+        relative and full CE free energies, final error and iteration count.
 
     Examples
     --------
@@ -731,6 +752,16 @@ class SCFT:
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
+        m_dic.update(free_energy=self.free_energy,
+                     free_energy_absolute=self.free_energy_absolute,
+                     free_energy_homogeneous=self.free_energy_homogeneous,
+                     partition_functions=self.partition_functions,
+                     polymer_lengths=self.polymer_lengths,
+                     polymer_volume_fractions=self.polymer_volume_fractions)
+        if self.chemical_potentials is not None:
+            m_dic["chemical_potentials"] = self.chemical_potentials
+            m_dic["grand_potential"] = self.grand_potential
+
         if self.sg is not None:
             m_dic["space_group_symbol"] = self.sg.get_spacegroup_symbol()
             m_dic["space_group_hall_number"] = self.sg.get_hall_number()
@@ -813,6 +844,39 @@ class SCFT:
         else:
             for i in range(M):
                 w[i] -= self.prop_solver.mean(w[i])
+
+    def compute_chemical_potentials(self, w=None, partition_functions=None):
+        """Restore the saddle-point field means and return beta mu per chain.
+
+        w and partition_functions must describe the same CE state; by default
+        use the final fields and Q saved by run(). No propagators are recomputed.
+        Incompressible: mean(xi) = 0. Compressible: mean(xi) = zeta_n (sum(phi)-1).
+        """
+        if w is None:
+            w = self.w
+        if isinstance(w, dict):
+            w = [w[m] for m in self.monomer_types]
+        if partition_functions is None:
+            partition_functions = self.partition_functions
+        phi_mean = self.mean_concentrations()
+        target = self.matrix_chi @ phi_mean
+        if self.zeta_n is not None:
+            target += self.zeta_n * (np.sum(phi_mean) - 1.0)
+        shift = target - np.array([self.prop_solver.mean(field) for field in w])
+        mu = []
+        for p, polymer in enumerate(self.distinct_polymers):
+            chain = self.prop_solver.get_polymer(p)
+            concentration = chain.get_volume_fraction() / chain.get_alpha()
+            if concentration == 0.0:
+                mu.append(float("-inf"))
+                continue
+            field_shift = 0.0
+            for block in polymer["blocks"]:
+                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+                for monomer, fraction in fractions.items():
+                    field_shift += block["length"] * fraction * shift[self.monomer_types.index(monomer)]
+            mu.append(float(np.log(concentration) - np.log(partition_functions[p]) + field_shift))
+        return mu
 
     def _update_fields_and_box(self, w, w_diff, stress_array, old_error_level, error_level):
         """One optimizer step on the concatenated (fields, box lengths, angles)
@@ -928,7 +992,9 @@ class SCFT:
         w : ndarray
             Final potential fields, shape (M, total_grid).
         free_energy : float
-            Final free energy per unit volume, βF/V.
+            Free energy relative to the homogeneous state at the same composition.
+        free_energy_absolute : float
+            Full canonical free energy, beta F_total / (rho_0 V / N).
         error_level : float
             Final convergence error (L2 norm of field residuals).
         iter : int
@@ -990,11 +1056,16 @@ class SCFT:
         angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
         stress_array = None
 
-        # Free energy of the homogeneous state of the same composition, (1/2) φ̄ᵀ χN φ̄: for uniform
-        # fields -Σ_p (φ̄_p/α_p) ln Q_p = Σ_i w_i φ̄_i, so the free energy below is that value plus
-        # zero; the reported free energy is measured from it (0 for the disordered phase)
+        # Ideal mixing term is constant during a CE run. Define c log(c) = 0 at c = 0.
+        self.polymer_lengths = [self.prop_solver.get_polymer(p).get_alpha()
+                                for p in range(self.prop_solver.get_n_polymer_types())]
+        self.polymer_volume_fractions = [self.prop_solver.get_polymer(p).get_volume_fraction()
+                                         for p in range(self.prop_solver.get_n_polymer_types())]
+        chain_densities = np.array(self.polymer_volume_fractions) / self.polymer_lengths
+        present = chain_densities > 0.0
+        ideal_energy = float(np.sum(chain_densities[present] * (np.log(chain_densities[present]) - 1.0)))
         phi_mean = self.mean_concentrations()
-        self.free_energy_homogeneous = 0.5*float(phi_mean @ self.matrix_chi @ phi_mean)
+        self.free_energy_homogeneous = ideal_energy + 0.5*float(phi_mean @ self.matrix_chi @ phi_mean)
 
         time_iter_start = time.time()
         for iter in range(1, self.max_iter+1):
@@ -1011,17 +1082,14 @@ class SCFT:
             phi_smeared = self.smearing.apply_to_dict(phi)
             phi_array = np.array([phi_smeared[m] for m in self.monomer_types])
 
-            # Mean-field free energy per chain unit from the monomer fields,
-            # F = -Σ_p (φ̄_p/α_p) ln Q_p + <½ φᵀ χN φ - w·φ> (+ <(ζN/2)(Σφ - 1)²>), measured from the
-            # homogeneous state. It does not change under uniform shifts of the fields (the volume
-            # averages of φ are fixed by the chains), so it is the same for any convention of the
-            # field means; F + free_energy_homogeneous at the saddle point is the field-theoretic
-            # Hamiltonian with its constant (as in L-FTS)
+            # Full CE free energy: Σ_p c_p[ln(c_p/Q_p)-1] + <½ φᵀ χN φ - w·φ>
+            # (+ compressibility penalty). Uniform field shifts cancel between ln Q and w·φ.
+            # At the saddle point F - ideal_energy is the Hamiltonian recorded by L-FTS.
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-            energy_total = -self.free_energy_homogeneous
-            for p in range(self.prop_solver.get_n_polymer_types()):
-                polymer = self.prop_solver.get_polymer(p)
-                energy_total -= polymer.get_volume_fraction()/polymer.get_alpha()*np.log(total_partitions[p])
+            energy_total = ideal_energy
+            for p, concentration in enumerate(chain_densities):
+                if concentration > 0.0:
+                    energy_total -= concentration*np.log(total_partitions[p])
             for i in range(M):
                 for j in range(i+1, M):
                     if self.matrix_chi[i, j] != 0.0:
@@ -1029,6 +1097,10 @@ class SCFT:
                 energy_total -= self.prop_solver.mean(w[i]*phi_array[i])
             if self.zeta_n is not None:
                 energy_total += 0.5*self.zeta_n*self.prop_solver.mean((np.sum(phi_array, axis=0) - 1.0)**2)
+            # Keep the reported iteration energy relative to the homogeneous state.
+            # Thermodynamic transforms and comparisons across compositions use the full F.
+            energy_absolute = energy_total
+            energy_total -= self.free_energy_homogeneous
 
             # The SCFT equations are w = χφ + ξe with Σφ = 1 (incompressible), or w = χφ + ζ(Σφ - 1)e
             # (compressible), e = (1, ..., 1). Composition part: P⊥(χφ - w), the residual of the
@@ -1142,13 +1214,13 @@ class SCFT:
         time_iter_total = time.time() - time_iter_start
         print("Iteration time: %.3f seconds (%.4f sec/iter, %d iterations)" % (time_iter_total, time_iter_total/iter, iter))
 
-        # Print free energy as per chain expression
-        print("Free energy per chain (for each chain type):")
-        for p in range(self.prop_solver.get_n_polymer_types()):
-            energy_total_per_chain = energy_total*self.prop_solver.get_polymer(p).get_alpha()/ \
-                                                  self.prop_solver.get_polymer(p).get_volume_fraction()
-            print("\tβF/n_%d : %12.7f" % (p, energy_total_per_chain))
-        print("Measured from the homogeneous state, (1/2) φ̄ᵀ χN φ̄ = %.7f per chain unit" % self.free_energy_homogeneous)
+        print("Free energy relative to the homogeneous state: %.9f" % energy_total)
+        print("Full canonical free energy βF/(ρ₀V/N): %.9f" % energy_absolute)
+        print("Homogeneous Flory-Huggins free energy: %.9f" % self.free_energy_homogeneous)
+        print("Relative free energy divided by the number of chains of each type:")
+        for p, concentration in enumerate(chain_densities):
+            if concentration > 0.0:
+                print("\tβΔF/n_%d : %12.7f" % (p, energy_total / concentration))
 
         # Final partition consistency check (only once at the end)
         if not self.prop_solver.check_total_partition():
@@ -1160,8 +1232,18 @@ class SCFT:
 
         # Store free energy
         self.free_energy = energy_total
+        self.free_energy_absolute = energy_absolute
         self.error_level = error_level
         self.iter = iter
+        self.partition_functions = list(total_partitions)
+        self.chemical_potentials = None
+        self.grand_potential = None
+        if q_init is None and not any(p.get("initial_conditions") for p in self.distinct_polymers):
+            self.chemical_potentials = self.compute_chemical_potentials()
+            self.grand_potential = float(energy_absolute - np.dot(chain_densities[present],
+                                                                 np.array(self.chemical_potentials)[present]))
+            print("Chemical potentials βμ (mean ξ = 0 for incompressible systems):", self.chemical_potentials)
+            print("Grand potential in the same pressure convention: %.9f" % self.grand_potential)
 
         # Return SCFTResult if requested
         if return_result:
@@ -1181,6 +1263,11 @@ class SCFT:
                 angles=list(self.prop_solver.get_angles_degrees()) if (
                     len(self.angles_reduced_indices) > 0
                 ) else None,
-                free_energy_homogeneous=self.free_energy_homogeneous
+                free_energy_homogeneous=self.free_energy_homogeneous,
+                free_energy_absolute=self.free_energy_absolute,
+                chemical_potentials=self.chemical_potentials,
+                grand_potential=self.grand_potential,
+                polymer_lengths=list(self.polymer_lengths),
+                polymer_volume_fractions=list(self.polymer_volume_fractions)
             )
         return None

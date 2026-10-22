@@ -12,11 +12,10 @@ fts_consistent_energy residual 2.18, F = 1.886 and -0.060).
 
 Checks (1D lamellae of AB diblocks and an ABC triblock):
 1. The compressible residual is below 1e-6 and sum phi is not uniform.
-2. The reported free energy plus free_energy_homogeneous equals the mean-field
+2. The full CE free energy minus the ideal mixing term equals the field-dependent
    free energy -ln Q + <(1/2) phi.chi.phi + (zeta/2)(sum phi - 1)^2 - w.phi>
-   computed from the fields (AB; 1e-9). Until 2026-10 the reported free energy
-   was this value minus the constant h_const of the field theory, which has poles
-   in chi N, instead of minus the free energy of the homogeneous state.
+   value computed from the fields (AB; 1e-9). The ideal term is -1 for these
+   pure melts with alpha = 1.
 3. zeta -> infinity: the free energy and phi approach the incompressible solution
    as 1/zeta (the ratio of the differences at zeta N = 100 and 1000 is near 10).
 """
@@ -97,7 +96,7 @@ def main():
         check(calc.error_level < 1e-9 and r["residual"] < 1e-6 and r["std_total"] > 1e-2,
               f"{name}, zetaN 5: compressible residual {r['residual']:.1e}, std(sum phi) {r['std_total']:.1e}, "
               f"{calc.iter} iterations")
-        F_code = calc.free_energy + calc.free_energy_homogeneous
+        F_code = calc.free_energy_absolute + 1.0
         check(abs(F_code - r["F"]) < 1e-9,
               f"{name}, zetaN 5: free energy {F_code:.12f} = mean-field value {r['F']:.12f}")
 

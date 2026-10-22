@@ -4,7 +4,7 @@ Initial configurations of network phases are obtained from the Kevin Dorfman's p
 
 ## Available Phases
 
-| Phase | File | Space Group | Hall # | Free Energy (βF/n_0) | PSCF |
+| Phase | File | Space Group | Hall # | Relative CE Free Energy (βΔF/n_0) | PSCF |
 |-------|------|-------------|--------|---------------------|------|
 | Lamellar | Lamella1D.py | - | - | -0.1429224 | ✓ |
 | Cylinder | Cylinder2D.py | - | - | -0.0891607 | ✓ |
@@ -23,7 +23,7 @@ Initial configurations of network phases are obtained from the Kevin Dorfman's p
 | Fddd | Fddd.py | Fddd | 336 | -0.1606698 | ✓* |
 | PL | PL_Hexagonal.py | P6_3/mmc | 488 | -0.2103856 | ✓ |
 
-✓: checked against [PSCF](https://github.com/dmorse/pscfpp) (pscfpp v1.4.0); density, fields and free energy agree within machine precision.
+✓: checked against [PSCF](https://github.com/dmorse/pscfpp) (pscfpp v1.4.0); density and fields agree within machine precision; free energies are compared after converting the reference-chain units and species standard states.
 
 \*: with half the example's ds (the example's ds gives an odd number of contour steps per block, which PSCF rounds to an even number).
 

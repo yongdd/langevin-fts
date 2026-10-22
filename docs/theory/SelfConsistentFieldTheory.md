@@ -343,11 +343,18 @@ for iteration in range(1000):
 | Property | Access | Description |
 |----------|--------|-------------|
 | Concentration | `calculation.phi["A"]` | Monomer density field |
-| Free energy | `calculation.free_energy` | Helmholtz free energy per chain from the monomer fields ([PolymerFieldTheory.md](PolymerFieldTheory.md), Section 1.1), relative to the homogeneous state of the same composition (0 for the disordered phase); independent of the convention of the field means |
-| Homogeneous state | `calculation.free_energy_homogeneous` | $`\frac{1}{2} \bar{\boldsymbol{\phi}}^T X \bar{\boldsymbol{\phi}}`$, the free energy of the homogeneous state; `free_energy` plus this value is the field-theoretic Hamiltonian with its constant at the saddle point (as recorded by L-FTS) |
+| Relative free energy | `calculation.free_energy` | Difference from the homogeneous state at the same composition; zero for a disordered bulk state; used in the iteration log and progress callbacks |
+| Full CE free energy | `calculation.free_energy_absolute` | Full canonical Helmholtz free energy $`\beta F_{\mathrm{tot}}/(\rho_0V/N)`$, including ideal mixing entropy; equals `free_energy + free_energy_homogeneous` |
+| Homogeneous state | `calculation.free_energy_homogeneous` | Full homogeneous Flory-Huggins value at the same composition |
+| Chemical potential | `result.chemical_potentials[p]` | $`\beta\mu_p`$ per polymer molecule; saddle-point means restored, with $`\langle\xi\rangle=0`$ in the incompressible model |
+| Grand potential | `result.grand_potential` | $`F-\sum_p(\bar\phi_p/\alpha_p)\beta\mu_p`$ using the full CE F, in the same pressure convention |
+| Coexistence quantities | `result.coexistence_quantities(reference_polymer=0)` | Exchange chemical potentials per reference-chain volume and the reduced grand potential with the reference polymer's chemical potential set to zero |
+| Chain composition | `result.polymer_lengths`, `result.polymer_volume_fractions` | Relative chain lengths $`\alpha_p`$ and polymer volume fractions $`\bar\phi_p`$ |
 | Partition function | `solver.get_partition_function(p)` | Single-chain partition function |
 | Box size | `calculation.cb.get_lx()` | Final box dimensions |
 | Stress | `result.stress` | Stress components; available via `result = calculation.run(..., return_result=True)` (set only when `box_is_altering=True`), or via `solver.compute_stress()` / `solver.get_stress()` |
+
+The final summary prints both relative and full free energies. For phase comparisons at different compositions, use `free_energy_absolute` and the reference-species quantities described in [Phase Equilibrium from Canonical SCFT](PhaseEquilibrium.md), which also explains evaluation at prescribed chemical potentials using CE calculations. `SCFTResult` is obtained with `run(..., return_result=True)`; the thermodynamic values are also stored on the `SCFT` object and by `save_results()`. Chemical potentials are unavailable for grafted chains or supplied initial propagators. Bulk coexistence requires converged, incompressible, periodic states.
 
 ### 5.4 Additional Features
 

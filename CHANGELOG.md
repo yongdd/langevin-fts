@@ -307,17 +307,22 @@ commits are omitted.
   incompressible model. An ABC triblock whose B and C are identical gives the free energy of
   the AB diblock to 10⁻¹³, and a zero pair (χ_AC N = 0) the limit χ_AC N → 0
   (tests/TestScftOptions.py).
-- SCFT computes the free energy from the monomer fields (2026-10-22),
-  F = -Σ_p (φ̄_p/α_p) ln Q_p + <½ φᵀ χN φ - w·φ> (+ <(ζN/2)(Σφ - 1)²>), and reports it
-  relative to the homogeneous state of the same composition, ½ φ̄ᵀ χN φ̄, which is stored as
-  `free_energy_homogeneous` (also in SCFTResult) and printed. The disordered phase has
-  F = 0 at any composition, the value does not depend on the field means, and
-  F + free_energy_homogeneous is the field-theoretic Hamiltonian with its constant at the
-  saddle point, as recorded by L-FTS and CL-FTS (tests/TestScftOptions.py). Incompressible
-  runs with zero field means give the same values as before. With `fts_consistent_energy`
-  F was lower by χN(f - 1/2)² for an AB diblock (-χN(f - 1/2)² for the disordered phase);
-  compressible runs reported the mean-field value minus the constant h_const of the field
-  theory, which has poles where an eigenvalue of χN + ζN eeᵀ crosses zero.
+- SCFT exposes the full canonical Helmholtz free energy as `free_energy_absolute` (2026-10-22),
+  F = Σ_p (φ_p/α_p)[ln(φ_p/(α_p Q_p)) - 1] + <½ φᵀ χN φ - w·φ>
+  (+ the compressibility penalty). `free_energy_homogeneous` is the full homogeneous
+  Flory-Huggins value including ideal mixing entropy. `free_energy`, iteration logs
+  and progress callbacks use F minus this homogeneous value; the final summary prints
+  both relative and full values. A disordered AB melt with alpha = 1, f = 0.3 and chi N = 8
+  has relative F = 0 and full F = 0.68. Full F minus the ideal mixing term equals the L-FTS/CL-FTS Hamiltonian
+  including its constant at the saddle point; those Hamiltonians are unchanged.
+- CE SCFT results include molecular chemical potentials and grand potentials
+  (2026-10-22), with saddle-point field means restored analytically. Reference-species
+  exchange chemical potentials and reduced grand potentials are available through
+  `SCFTResult.coexistence_quantities()`. `find_binary_coexistence()` locates a common
+  tangent using only canonical phase evaluations; `homogeneous_thermodynamics()`
+  evaluates homogeneous polymer mixtures analytically. Bulk coexistence requires
+  converged incompressible periodic states with free chains. See
+  docs/theory/PhaseEquilibrium.md and examples/scft/CanonicalCoexistence.py.
 - `fts_consistent_energy` is removed (2026-10-22). It pinned the field means of an
   incompressible run to the saddle point so that the free energy matched the field-theoretic
   Hamiltonian; the free energy no longer depends on the field means, and incompressible

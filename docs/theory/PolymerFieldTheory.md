@@ -18,24 +18,40 @@ The monomer potential field formulation expresses the Helmholtz free energy dire
 
 ### 1.1 Helmholtz Free Energy
 
-**Per monomer unit:**
+The canonical Helmholtz free energy includes the translational entropy of each polymer species. Let $`n_{\mathrm{ref}}=\rho_0 V/N`$, $`\alpha_p=N_p/N`$ and $`c_p=\bar\phi_p/\alpha_p=n_p/n_{\mathrm{ref}}`$. The single-chain partition function $`Q_p`$ is normalized by volume, so a free chain in zero fields has $`Q_p=1`$.
+
+With segment-unit potential fields, the total free energy is
 
 ```math
-\beta F = -\sum_p n_p \log Q_p + \rho_0 \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]
+\beta F_{\mathrm{tot}} = \sum_p n_p\left[\ln\left(\frac{c_p}{Q_p}\right)-1\right]
++\rho_0\int d\mathbf r\left[\frac12\sum_{ij}\chi_{ij}\phi_i\phi_j-\sum_i w_i\phi_i\right].
 ```
 
-**Per chain unit** (with rescaling $`N w_i(\mathbf{r}) \rightarrow w_i(\mathbf{r})`$):
+After rescaling $`Nw_i\to w_i`$, the full dimensionless free energy stored as `SCFT.free_energy_absolute` is
 
 ```math
-\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \frac{1}{2} \sum_{ij} \chi_{ij} N \phi_i(\mathbf{r}) \phi_j(\mathbf{r}) - \sum_i w_i(\mathbf{r}) \phi_i(\mathbf{r}) \right]
+F\equiv\frac{\beta F_{\mathrm{tot}}}{n_{\mathrm{ref}}}
+=\sum_p c_p\left[\ln\left(\frac{c_p}{Q_p}\right)-1\right]
++\left\langle\frac12\boldsymbol\phi^T X\boldsymbol\phi-\mathbf w\cdot\boldsymbol\phi\right\rangle,
+\qquad X_{ij}=\chi_{ij}N.
 ```
 
-where:
-- $`n_p`$: number of $`p`$-chains
-- $`Q_p`$: single-chain partition function of $`p`$-chain
-- $`\alpha_p = N_p / N`$: relative chain length
-- $`\bar{\phi}_p`$: volume fraction of $`p`$-chains
-- $`\chi_{ij}`$: Flory-Huggins interaction parameter between monomers $`i`$ and $`j`$
+For the compressible model, add $`\frac{\zeta N}{2}\langle(\sum_i\phi_i-1)^2\rangle`$. The convention at $`c_p=0`$ is $`c_p\ln c_p=0`$.
+
+The homogeneous value stored as `free_energy_homogeneous` is
+
+```math
+F_{\mathrm{hom}}=I+\frac12\bar{\boldsymbol\phi}^T X\bar{\boldsymbol\phi},
+\qquad I=\sum_p c_p(\ln c_p-1).
+```
+
+`SCFT.free_energy` and the iteration log report the relative value
+
+```math
+\Delta F=F-F_{\mathrm{hom}}.
+```
+
+It is zero for a disordered bulk state. The final summary prints both relative and full values, and `free_energy_absolute = free_energy + free_energy_homogeneous`. Comparisons across compositions and grand-canonical transforms use the full value. The normalization is per reference-chain volume; the full free energy per actual molecule is $`F/(\sum_p c_p)`$. At the saddle point, with the auxiliary fields at their saddle-point means, $`F-I`$ equals the field-theoretic Hamiltonian including its constant term, as recorded by L-FTS/CL-FTS. The ideal term is independent of the fields in a fixed-composition CE run.
 
 ### 1.2 Self-Consistent Conditions
 
@@ -76,7 +92,7 @@ where $`\langle \cdot \rangle`$ denotes the spatial mean. Since $`\langle \phi_i
 
 This pins $`\langle W_- \rangle`$ to the saddle value while leaving $`\langle W_+ \rangle`$ untouched (since $`P_\perp`$ annihilates the uniform $`[1, 1, \ldots]`$ direction). For AB diblocks, the saddle gives $`\langle W_- \rangle = (1 - 2f) \chi N / 2`$. The $`P_\perp`$ and $`X`$ matrices are $`M \times M`$ for $`M`$ monomer types, so this applies to arbitrary multi-monomer systems.
 
-> **Implementation note:** `scft.py` does not apply this pinning: the incompressible fields are shifted to zero mean at each iteration, $`w_i \leftarrow w_i - \langle w_i \rangle`$ (the uniform modes do not change the concentrations). The reported free energy does not depend on the field means: it is computed from the monomer fields with the expression of Section 1.1, $`F = -\sum_p (\bar{\phi}_p/\alpha_p) \log Q_p + \frac{1}{V}\int d\mathbf{r} \left[ \frac{1}{2} \boldsymbol{\phi}^T X \boldsymbol{\phi} - \mathbf{w} \cdot \boldsymbol{\phi} \right]`$ (plus $`\frac{\zeta N}{2} (\sum_i \phi_i - 1)^2`$ for the compressible model), which is unchanged by uniform shifts of the fields because $`\langle \phi_i \rangle`$ is fixed by the chains. It is reported relative to the homogeneous state of the same composition, $`F - \frac{1}{2} \bar{\boldsymbol{\phi}}^T X \bar{\boldsymbol{\phi}}`$ ($`\bar{\phi}_i = \langle \phi_i \rangle`$; for uniform fields $`-\sum_p (\bar{\phi}_p/\alpha_p) \log Q_p = \sum_i w_i \bar{\phi}_i`$), so the disordered phase has $`F = 0`$ at any composition, and $`\frac{1}{2} \bar{\boldsymbol{\phi}}^T X \bar{\boldsymbol{\phi}}`$ ($`\chi N f (1 - f)`$ for an AB diblock) is stored as `free_energy_homogeneous`. Their sum equals the field-theoretic Hamiltonian with its constant term at the saddle point, as recorded by L-FTS/CL-FTS. The $`\langle W_- \rangle`$ pinning matters for the auxiliary-field Hamiltonian evaluated from the fields, whose quadratic term depends on $`\langle W_- \rangle`$ (by $`\chi N (f - 1/2)^2`$ for AB).
+> **Implementation note:** `scft.py` shifts every incompressible monomer field to zero spatial mean during iteration. Since the polymer compositions are fixed, constant shifts of the fields cancel between $`\ln Q_p`$ and $`\langle\mathbf w\cdot\boldsymbol\phi\rangle`$ in the canonical free energy above. Both full and relative free energies are independent of these shifts. Chemical potentials require restoring the saddle-point field means; this is done analytically after the CE calculation, without recomputing propagators. See [Phase Equilibrium from Canonical SCFT](PhaseEquilibrium.md) for the pressure convention, reference-species conversion and coexistence conditions.
 
 ### 1.4 Self-Consistent Conditions (Compressible)
 
@@ -100,11 +116,18 @@ See [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md) for details on 
 
 ### 1.5 Example: AB Diblock Copolymer
 
-For AB-type systems:
+For AB-type systems, the full CE free energy is:
 
 ```math
-\frac{\beta F}{n} = -\sum_p \frac{\bar{\phi}_p}{\alpha_p} \log Q_p + \frac{1}{V} \int d\mathbf{r} \left[ \chi_{AB} N \phi_A(\mathbf{r}) \phi_B(\mathbf{r}) - w_A(\mathbf{r}) \phi_A - w_B(\mathbf{r}) \phi_B \right]
+F=\frac{\beta F_{\mathrm{tot}}}{n_{\mathrm{ref}}}
+=\sum_p \frac{\bar\phi_p}{\alpha_p}
+\left[\ln\left(\frac{\bar\phi_p}{\alpha_p Q_p}\right)-1\right]
++\frac{1}{V}\int d\mathbf r\left[
+\chi_{AB}N\phi_A(\mathbf r)\phi_B(\mathbf r)
+-w_A(\mathbf r)\phi_A(\mathbf r)-w_B(\mathbf r)\phi_B(\mathbf r)\right].
 ```
+
+For a homogeneous pure AB melt with $`\alpha=1`$ and A fraction f, this gives $`F=\chi_{AB}Nf(1-f)-1`$; the reported relative value `free_energy` is zero.
 
 Self-consistent conditions:
 

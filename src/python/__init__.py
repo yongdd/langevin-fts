@@ -21,6 +21,7 @@ from .clfts import CLFTS
 from .wtmd import WTMD
 from .validation import ValidationError
 from .scft import SCFTResult, IterationInfo
+from .phase_equilibrium import coexistence_quantities, homogeneous_thermodynamics, find_binary_coexistence
 from .lfts import LR, LRAM
 from .utils import load_config, ConfigError, save_vtk, draw_polymer_architectures
 

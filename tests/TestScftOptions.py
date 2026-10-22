@@ -12,12 +12,12 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    order ["b", "a"] reproduces the run in the standard order (results are in the
    standard order). Until 2026-10 the initial fields and the boundary conditions
    were not reordered (walls on the wrong axis: dF 9e-2 here).
-3. Free energy: the mean-field free energy from the monomer fields, measured from
-   the homogeneous state (1/2) phibar^T chi N phibar, does not change when the field
-   means are moved to the saddle point (the fields of the field theory of L-FTS),
-   1e-10; with those means F + free_energy_homogeneous equals the field-theoretic
-   Hamiltonian with its constant (as recorded by L-FTS). The disordered phase has
-   F = 0 at any composition. Until 2026-10 the free energy depended on the
+3. Free energy: the full CE value from the monomer fields does not change when
+   the field means are moved to the saddle point (the fields of L-FTS), 1e-10.
+   Subtracting the ideal mixing term gives the field-theoretic Hamiltonian with
+   its constant. The reported relative value is zero in the disordered phase;
+   free_energy_absolute is the full Flory-Huggins value there.
+   Until 2026-10 the free energy depended on the
    convention of the field means: with the former option fts_consistent_energy it
    was -chi N (f - 1/2)^2 in the disordered phase. At 1^T (chi N)^-1 1 = 0
    (chi_AB = chi_AC = 10, chi_BC = 40) the auxiliary field of the zero eigenvalue of
@@ -151,20 +151,22 @@ def test_free_energy():
     with contextlib.redirect_stdout(io.StringIO()):
         calc.prop_solver.compute_propagators({m: w_saddle[i] for i, m in enumerate(calc.monomer_types)})
     Q = [calc.prop_solver.get_partition_function(p) for p in range(calc.prop_solver.get_n_polymer_types())]
-    F_saddle = -np.log(Q[0]) + np.mean(20.0 * phi[0] * phi[1] - np.sum(w_saddle * phi, axis=0)) \
-        - calc.free_energy_homogeneous
+    F_saddle = -1.0 - np.log(Q[0]) + np.mean(20.0 * phi[0] * phi[1] - np.sum(w_saddle * phi, axis=0))
     H = calc.mpt.compute_hamiltonian(calc.prop_solver.molecules, calc.mpt.to_aux_fields(w_saddle), Q, calc.cb,
                                      include_const_term=True)
-    dF = abs(F_saddle - calc.free_energy)
-    dH = abs(H - calc.free_energy - calc.free_energy_homogeneous)
-    check(dF < 1e-10 and dH < 1e-8, f"AB f = 0.3, chi N = 20: F with zero field means = F with saddle means ({dF:.1e}); "
-                                     f"F + free_energy_homogeneous = field-theoretic H with its constant ({dH:.1e})")
+    dF = abs(F_saddle - calc.free_energy_absolute)
+    dH = abs(H - calc.free_energy_absolute - 1.0)
+    d_relative = abs(calc.free_energy + calc.free_energy_homogeneous - calc.free_energy_absolute)
+    check(dF < 1e-10 and d_relative < 1e-12 and dH < 1e-8, f"AB f = 0.3, chi N = 20: F with zero field means = F with saddle means ({dF:.1e}); "
+                                     f"F minus ideal mixing = field-theoretic H with its constant ({dH:.1e})")
 
     params = base([16], [1.6], {"A,B": 8.0}, blocks, False)
     disordered = run(params, {"A": np.zeros(16), "B": np.zeros(16)})
-    check(abs(disordered.free_energy) < 1e-12 and abs(disordered.free_energy_homogeneous - 8.0 * 0.3 * 0.7) < 1e-12,
-          f"disordered AB f = 0.3, chi N = 8: F = 0 ({disordered.free_energy:.1e}), "
-          f"free_energy_homogeneous = chi N f(1 - f)")
+    check(abs(disordered.free_energy) < 1e-12 and abs(disordered.free_energy_absolute - 0.68) < 1e-12
+          and abs(disordered.free_energy_homogeneous - (8.0 * 0.3 * 0.7 - 1.0)) < 1e-12,
+          f"disordered AB f = 0.3, chi N = 8: relative F = {disordered.free_energy:.12f}, "
+          f"full F = {disordered.free_energy_absolute:.12f}, "
+          f"free_energy_homogeneous = chi N f(1 - f) - 1")
 
     fields = {"A": 4.0 * np.cos(2 * np.pi * x), "B": np.zeros(64), "C": -4.0 * np.cos(2 * np.pi * x)}
     results = []
