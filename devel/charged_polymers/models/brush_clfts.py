@@ -34,7 +34,9 @@ What changes vs ChargedCLFTS
    noise into that basis reproduces the exact stationary variance of the
    real-space Langevin SDE for any dt, exactly as in the periodic case.
 3. Structure-function (FFT) diagnostics are disabled (meaningless in the
-   wall basis).
+   wall basis). The run loop is ChargedCLFTS._run; this class supplies the
+   wall solver, the log-partition Hamiltonian and the frozen re-gauge
+   correction through _total_partitions and _hamiltonian.
 
 Platform: cpu-mkl / cpu-fftw / cuda (discrete chain model only on CUDA;
 the complex + non-periodic transforms were fixed in mainline 2026-08-18:
@@ -44,14 +46,11 @@ grids).
 
 Usage: params as ChargedCLFTS plus
     "bc": ["reflecting"]*6            (optional; this is the default here)
-    distinct_polymers[i]["grafting_points"] = {0: "G"}   (grafted chains)
+    polymers[i]["grafting_points"] = {0: "G"}   (grafted chains)
 """
-import os
 import time
-import pathlib
 
 import numpy as np
-from scipy.io import savemat
 
 from polymerfts import _core
 from polymerfts.validation import ValidationError
@@ -67,7 +66,7 @@ class BrushChargedCLFTS(ChargedCLFTS):
     The direct backend also supports explicitly truncated Gaussian bonds.
     """
 
-    def __init__(self, params, random_seed=None):
+    def __init__(self, params, random_seed=None, *, integrator=None, callbacks=None):
         backend = params.get("chain_backend", "spectral")
         grafting = params.get("grafting", "annealed")
         if backend not in ("spectral", "direct"):
@@ -106,7 +105,8 @@ class BrushChargedCLFTS(ChargedCLFTS):
         # Parent builds the (periodic) machinery, validates the charged
         # model, and sets up noise streams / frozen-mode bookkeeping. The
         # periodic solver and Electrostatics are replaced below.
-        super().__init__(params=params, random_seed=random_seed)
+        super().__init__(params=params, random_seed=random_seed,
+                         integrator=integrator, callbacks=callbacks)
 
         # ---- rebuild the computational core with wall BCs ----
         reduce_memory = params.get("reduce_memory", False)
@@ -117,7 +117,7 @@ class BrushChargedCLFTS(ChargedCLFTS):
         molecules = factory.create_molecules_information(
             params["chain_model"], params["ds"], self.segment_lengths)
         graft_labels = []
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             gp = polymer.get("grafting_points", None)
             if gp:
                 gp = {int(k): str(v) for k, v in gp.items()}
@@ -160,15 +160,15 @@ class BrushChargedCLFTS(ChargedCLFTS):
         self.q_init = {label: q_init_sheet for label in set(graft_labels)}
         if backend == "direct":
             from .stable_grafted_chain import StableBrushSolver
-            self.solver = StableBrushSolver(params, self.distinct_polymers, self.segment_lengths)
+            self.solver = StableBrushSolver(params, self.polymers, self.segment_lengths)
 
         # ---- frozen per-species re-gauge shifts (from the SCFT saddle) ----
         # Canonical densities are invariant under W_t -> W_t - s_t; the
         # shifts keep the grafted-chain propagators centered in double
         # precision (obstacle 2.3 of RESULTS_BRUSH_STATUS.md). FROZEN
         # during CL (pure bookkeeping; the reported H gains the constant
-        # +sum_p vf_p s_t, applied in run()).
-        for p in self.distinct_polymers:
+        # +sum_p vf_p s_t, applied in _hamiltonian()).
+        for p in self.polymers:
             btypes = {b["type"] for b in p["blocks"]}
             if len(btypes) > 1 and any(
                     params.get("w_shifts", {}).get(t) for t in btypes):
@@ -182,53 +182,23 @@ class BrushChargedCLFTS(ChargedCLFTS):
         self.w_shifts = {t: float(params.get("w_shifts", {}).get(t, 0.0))
                          for t in self.monomer_types}
         self._h_shift_correction = 0.0
-        for p in self.distinct_polymers:
+        for p in self.polymers:
             t = p["blocks"][0]["type"]
             self._h_shift_correction += p["volume_fraction"] * self.w_shifts[t]
 
         # ---- wall-basis electrostatics (replaces the periodic one) ----
-        species_fractions = {t: 0.0 for t in self.monomer_types}
-        for polymer in self.distinct_polymers:
-            alpha = sum(blk["length"] for blk in polymer["blocks"])
-            for blk in polymer["blocks"]:
-                species_fractions[blk["type"]] += \
-                    polymer["volume_fraction"] * blk["length"] / alpha
         self.electro = ElectrostaticsReflecting(
             self.cb.get_nx(), self.cb.get_lx(), self.monomer_types,
             params["charges"], params["radiuses"], self.electro.e_coupling,
-            species_fractions=species_fractions)
-        self.smearing = _PerSpeciesSmearing(self.electro)
+            species_fractions=self._species_fractions())
+        self.smearing = _PerSpeciesSmearing(self.electro, self.psi_dt_scaling)
 
         # ---- ETD (exact-OU) coefficients on the DCT k grid ----
-        e_coupling = self.electro.e_coupling
-        if e_coupling > 0.0:
-            dt = float(params["langevin"]["dt"])
-            s = self.psi_dt_scaling
-            gamma = self.electro.k_sq / e_coupling
-            a_dec = np.exp(-gamma * dt * s)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                drift = -np.expm1(-gamma * dt * s) / gamma
-                namp = np.sqrt(-np.expm1(-2.0 * gamma * dt * s) / (2.0 * gamma * dt))
-            zero = tuple([0] * self.electro.dim)
-            drift[zero] = dt * s
-            namp[zero] = np.sqrt(s)
-            self._psi_decay = a_dec
-            self._psi_drift = drift
-            self._psi_namp = namp
+        self._build_psi_etd()
 
         print(f"Brush charged CL-FTS: bc = {bc}, "
               f"graft labels = {sorted(set(graft_labels))}, platform = {platform}, "
               f"chain_backend = {backend}, grafting = {grafting}")
-
-    # ------------------------------------------------------------------ #
-    def _psi_force(self, phi):
-        """dH/dpsi = lap(psi)/E + c in the wall (DCT) basis."""
-        c = self.electro.charge_density(phi)
-        if self.electro.e_coupling == 0:
-            return np.zeros_like(c), c
-        psi_hat = self.electro._t(np.reshape(self.psi, self.electro.nx))
-        lap = self.electro._it(-self.electro.k_sq * psi_hat).reshape(-1)
-        return lap / self.electro.e_coupling + c, c
 
     # ------------------------------------------------------------------ #
     def compute_concentrations(self, w_aux):
@@ -264,151 +234,32 @@ class BrushChargedCLFTS(ChargedCLFTS):
 
         return phi, elapsed_time
 
-    def _chain_hamiltonian(self, w_aux, total_partitions):
-        """Use log partitions directly when the reference solver scales Q."""
+    def _chain_hamiltonian(self, w_aux, total_partitions, phi=None):
+        """Use log partitions directly when the reference solver scales Q.
+
+        phi (smeared concentrations) gives the mean-field term of zero-eigenvalue
+        modes, which are not uniform in a wall box.
+        """
         if not hasattr(self.solver, "get_log_partition"):
             return self.mpt.compute_hamiltonian(
-                self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
+                self.molecules, w_aux, total_partitions, self.cb, include_const_term=True, phi=phi)
         h = self.mpt.compute_hamiltonian(
-            self.molecules, w_aux, [1.]*len(self.distinct_polymers), self.cb,
-            include_const_term=True)
-        for p, polymer in enumerate(self.distinct_polymers):
+            self.molecules, w_aux, [1.]*len(self.polymers), self.cb,
+            include_const_term=True, phi=phi)
+        for p, polymer in enumerate(self.polymers):
             alpha = sum(b["length"] for b in polymer["blocks"])
             h -= polymer["volume_fraction"]/alpha * self.solver.get_log_partition(p)
         return h
 
-    # ------------------------------------------------------------------ #
-    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
-        """CL loop (copy of ChargedCLFTS.run): DCT psi update, no S(k)."""
-        print("---------- Run (brush charged CL-FTS) ----------")
+    def _total_partitions(self):
+        return [self.solver.get_total_partition(p)
+                for p in range(self.molecules.get_n_polymer_types())]
 
-        M = len(self.monomer_types)
+    def _hamiltonian(self, w_aux, phi_for_force, total_partitions):
+        """Chain part from the wall solver, electrostatic term and the constant
+        +sum_p vf_p s_t of the frozen re-gauge shifts."""
+        return (self._chain_hamiltonian(w_aux, total_partitions, phi_for_force)
+                + self._electrostatic_hamiltonian() + self._h_shift_correction)
 
-        pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
-
-        w = np.array([np.reshape(initial_fields[m], self.cb.get_total_grid()).astype(np.complex128)
-                      for m in self.monomer_types])
-        w_aux = self.mpt.to_aux_fields(w)
-
-        active = self._active_aux
-        for i in self._frozen_aux:
-            proj = float(np.max(np.abs(w_aux[i])))
-            if proj > 1e-10:
-                print(f"Warning: initial fields have a nonzero projection "
-                      f"({proj:.3e}) onto the zero-eigenvalue aux mode {i}; "
-                      f"projecting it out.")
-            w_aux[i] = 0.0
-
-        H_history = []
-        dH_history = {key: [] for key in self.chi_n}
-
-        if normal_noise_prev is None:
-            normal_noise_prev = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
-        if start_langevin_step is None:
-            start_langevin_step = 1
-
-        time_start = time.time()
-
-        for langevin_step in range(start_langevin_step, self.langevin["max_step"] + 1):
-
-            phi, _ = self.compute_concentrations(w_aux=w_aux)
-            phi_for_force = self.smearing.apply_to_dict(phi)
-
-            w_lambda = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
-            w_lambda[active] = self.mpt.compute_func_deriv(
-                w_aux, phi_for_force, active)
-
-            if self.alpha_ds > 0:
-                for i in active:
-                    if i in self.mpt.aux_fields_real_idx:
-                        w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
-
-            psi_lambda, charge_c = self._psi_force(phi)
-            h_elec = (0.5 * np.mean(self.psi * (psi_lambda - charge_c))
-                      if self.electro.e_coupling > 0 else 0.0)
-
-            # ---- monitoring ----
-            h_deriv = np.zeros((M, self.cb.get_total_grid()), dtype=np.complex128)
-            h_deriv[active] = self.mpt.compute_func_deriv(
-                w_aux, phi_for_force, active)
-            error_level_array = np.std(h_deriv, axis=1)
-            psi_error = float(np.std(psi_lambda))
-
-            total_partitions = [self.solver.get_total_partition(p)
-                                for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self._chain_hamiltonian(w_aux, total_partitions)
-            hamiltonian += h_elec + self._h_shift_correction
-
-            if self.verbose_level >= 1:
-                mass_error = self.cb.mean(h_deriv[M - 1])
-                print(f"{langevin_step:8d} {mass_error.real:+.3E}{mass_error.imag:+.3E}j", end="  [ ")
-                for Q in total_partitions:
-                    print(f"{Q.real:.6E}{Q.imag:+.6E}j", end=" ")
-                print(f"] {hamiltonian.real:+.9E}{hamiltonian.imag:+.9E}j  [", end="")
-                for i in range(M):
-                    print(f" {error_level_array[i]:.3E}", end="")
-                print(f" {psi_error:.3E}", end="")
-                print(" ]")
-
-            if langevin_step % self.recording["sf_computing_period"] == 0:
-                H_history.append(hamiltonian)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
-                for key in self.chi_n:
-                    dH_history[key].append(dH[key])
-
-            if langevin_step % self.recording["sf_recording_period"] == 0 and H_history:
-                H_history_array = np.array(H_history)
-                mdic = {"H_history_real": np.real(H_history_array),
-                        "H_history_imag": np.imag(H_history_array)}
-                for key in self.chi_n:
-                    dH_array = np.array(dH_history[key])
-                    monomer_pair = sorted(key.split(","))
-                    mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(dH_array)
-                    mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(dH_array)
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % langevin_step),
-                        mdic, long_field_names=True, do_compression=True)
-                H_history = []
-                for key in self.chi_n:
-                    dH_history[key] = []
-
-            # NOTE: FFT structure-function diagnostics of the periodic code
-            # are meaningless in the wall basis and are omitted.
-
-            # Advance only after sampling the consistent pre-update state.
-            # ---- update w_aux (identical to mainline CLFTS) ----
-            normal_noise_current = self.random.normal(
-                0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
-            for i in active:
-                scaling = self.dt_scaling[i]
-                if i in self.mpt.aux_fields_real_idx:
-                    noise_factor = 1.0
-                else:
-                    noise_factor = 1j
-                w_aux[i] += (-w_lambda[i] * self.langevin["dt"] * scaling +
-                             0.5 * noise_factor * (normal_noise_prev[i] + normal_noise_current[i]) * np.sqrt(scaling))
-            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
-
-            # ---- update psi: ETD per DCT mode (same scheme, wall basis) ----
-            if self.electro.e_coupling > 0.0:
-                xi = self._random_psi.normal(
-                    0.0, self.langevin["sigma"], self.cb.get_total_grid())
-                psi_hat = self.electro._t(np.reshape(self.psi, self.electro.nx))
-                c_hat = self.electro._t(np.reshape(charge_c, self.electro.nx))
-                xi_hat = self.electro._t(np.reshape(xi, self.electro.nx))
-                psi_hat = (self._psi_decay * psi_hat
-                           + self._psi_drift * c_hat
-                           + 1j * self._psi_namp * xi_hat)
-                psi_hat[tuple([0] * self.electro.dim)] = 0.0   # gauge: k=0
-                self.psi = np.ascontiguousarray(
-                    self.electro._it(psi_hat).reshape(-1))
-
-            if langevin_step % self.recording["recording_period"] == 0:
-                w = self.mpt.to_monomer_fields(w_aux)
-                phi, _ = self.compute_concentrations(w_aux)
-                self.save_simulation_data(
-                    path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
-                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
-
-        time_duration = time.time() - time_start
-        print("total time: %f, time per step: %f" %
-              (time_duration, time_duration / (langevin_step + 1 - start_langevin_step)))
+    # FFT structure functions are meaningless in the wall basis
+    _record_structure_function = False

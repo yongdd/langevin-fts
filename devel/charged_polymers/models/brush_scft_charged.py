@@ -126,7 +126,7 @@ class BrushChargedSCFT(lfts.LFTS):
             platform=platform,
             reduce_memory=params.get("reduce_memory", False))
         graft_labels = []
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             gp = polymer.get("grafting_points", None)
             if gp:
                 gp = {int(k): str(v) for k, v in gp.items()}
@@ -136,9 +136,8 @@ class BrushChargedSCFT(lfts.LFTS):
             else:
                 ps.add_polymer(polymer["volume_fraction"],
                                polymer["blocks_input"])
-        ps._initialize_solver()
         self.prop_solver = ps
-        self.cb = ps._computation_box
+        self.cb = ps.computation_box
 
         # ---- graft source: wall-attached Gaussian sheet ----
         # A strict delta at the first cell forces sub-cell structure that
@@ -161,7 +160,7 @@ class BrushChargedSCFT(lfts.LFTS):
         species_fractions = {t: 0.0 for t in self.monomer_types}
         seg_counts = {t: 0.0 for t in self.monomer_types}
         n_ref = int(round(1.0 / params["ds"]))
-        for polymer in self.distinct_polymers:
+        for polymer in self.polymers:
             alpha = sum(blk["length"] for blk in polymer["blocks"])
             for blk in polymer["blocks"]:
                 t = blk["type"]
@@ -200,7 +199,7 @@ class BrushChargedSCFT(lfts.LFTS):
         # every ln Q_solver ~ 0; they are bookkeeping only (densities
         # untouched; the Hamiltonian is corrected in
         # _compute_hamiltonian_charged).
-        for p in self.distinct_polymers:
+        for p in self.polymers:
             btypes = {b["type"] for b in p["blocks"]}
             if len(btypes) > 1:
                 raise ValidationError(
@@ -210,10 +209,10 @@ class BrushChargedSCFT(lfts.LFTS):
                     "Extend the shift algebra before using multi-type chains.")
         self._w_shift = {t: 0.0 for t in self.monomer_types}
         self._polymer_block_type = [
-            p["blocks"][0]["type"] for p in self.distinct_polymers]
+            p["blocks"][0]["type"] for p in self.polymers]
         self._polymer_alpha = [
             sum(b["length"] for b in p["blocks"])
-            for p in self.distinct_polymers]
+            for p in self.polymers]
 
         print("Brush charged SCFT: bc = all-reflecting, "
               f"graft labels = {sorted(set(graft_labels))}, E = {e_target:g}")
@@ -365,12 +364,12 @@ class BrushChargedSCFT(lfts.LFTS):
             self.prop_solver.get_partition_function(p)
             for p in range(self.prop_solver.get_n_polymer_types())]
         h = self.mpt.compute_hamiltonian(
-            self.prop_solver._molecules, w_aux, partitions, self.cb,
+            self.prop_solver.molecules, w_aux, partitions, self.cb,
             include_const_term=True)
         h += self.electro.hamiltonian_per_chain(charge_c)
         shifts = getattr(self, "_w_shift_used", self._w_shift)
         for p, t in enumerate(self._polymer_block_type):
-            h += self.distinct_polymers[p]["volume_fraction"] * shifts[t]
+            h += self.polymers[p]["volume_fraction"] * shifts[t]
         return h
 
     # ------------------------------------------------------------------ #

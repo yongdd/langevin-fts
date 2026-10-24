@@ -194,71 +194,88 @@ source space group or convert discrete/complex models by approximation.
 
 ## 3. χN Renormalization
 
-Compute the renormalized Flory-Huggins parameter for ultraviolet (UV) divergence correction. Required for quantitative comparison with experiments or particle-based simulations.
-
-The effective interaction parameter is:
+On a grid, the interaction of a field-theoretic simulation is renormalized by the ultraviolet (UV) fluctuations. To linear order, the effective Flory-Huggins parameter is
 
 ```math
-\chi N_{\text{eff}} = z_\infty \times \chi N
+\chi N = z_\infty \, \chi_b N
 ```
 
-where $`z_\infty`$ is the renormalization factor computed by these scripts.
+where the bare $`\chi_b N`$ is the `chi_n` of the simulation. In CL-FTS, the fluctuations of the pressure field also change the chain size. The bare segment length $`a_b`$ must then satisfy $`R_0 = a N^{1/2}`$ ([theory, Section 5.3](../theory/LangevinFieldTheoreticSimulation.md#53-renormalization-and-calibration)). Both corrections are needed to compare simulations with experiments, particle-based simulations or universal theory.
 
-### 3.1 Discrete Chain Model (`renormalization_discrete.m`)
+### 3.1 Usage (`renormalization.py`)
 
-**Recommended** for L-FTS simulations using the discrete chain model.
+```bash
+python scripts/analysis/renormalization.py data_simulation/fields_010000.mat
+python scripts/analysis/renormalization.py --chain-model discrete --n 90 --nbar 1e5 \
+    --nx 32 32 32 --lx 4.5 4.5 4.5 --zeta-n 90 --a-int 0.02 --target 9
+```
 
-**Method:** Computes $`z_\infty`$ using discrete chain bond functions:
+The script uses NumPy and SciPy and does not need the compiled package.
+
+**Inputs.** A fields file supplies `chain_model`, `nx`, `lx`, `ds`, `nbar`, `zeta_n`, `smearing`, `chi_n` and `segment_lengths`. Options override these values or replace the file:
+
+| Option | Meaning |
+|--------|---------|
+| `--chain-model`, `--nx`, `--lx`, `--n`, `--nbar` | Chain model, grid, box in $`R_0`$, segments $`N = 1/\Delta s`$ (discrete chains), $`\bar{N}`$ |
+| `--zeta-n` | Compressibility $`\zeta N`$; `inf` gives the incompressible model |
+| `--a-int`, or `--k-int` and `--dk-int` | Gaussian or sigmoidal smearing as in [Parameters](Parameters.md#smearing); `--a-int 0` removes smearing |
+| `--target` | Prints the $`\chi_b N`$ that gives this $`z_\infty \chi_b N`$ |
+| `--quadrature` | Gauss-Legendre points per axis (default 128) |
+
+**Output:** the example command above prints
+
+```
+discrete chains, N = 90, Nbar = 100000, grid [32, 32, 32], box [4.5, 4.5, 4.5], zeta N = 90, smearing: {'type': 'gaussian', 'a_int': 0.02}
+z_inf = 0.9595668
+a_b/a = 0.9930857  (CL-FTS segment_lengths; L-FTS and SCFT use a_b = a)
+chi_b N for z_inf chi_b N = 9: 9.3792327
+```
+
+With a fields file, the script also prints $`z_\infty \chi_b N`$ for each `chi_n` pair. For CL-FTS, multiply all `segment_lengths` by $`a_b/a`$.
+
+**Requirements and accuracy:**
+- 3D orthogonal box;
+- conformationally symmetric chains (equal `segment_lengths`).
+
+The $`1/k^2`$ singularity of the integrands limits the default quadrature to an accuracy of about $`3 \times 10^{-7}`$ in $`z_\infty`$. `tests/scripts/TestRenormalization.py` checks the results against three references:
+
+- the bond sum of Beardsley and Matsen (2019);
+- the limit $`N \to \infty`$;
+- Fig. 2 of Matsen et al. (2026).
+
+### 3.2 Discrete Chains
+
+Eqs. (29) and (26) of Matsen et al. (2026), in units of $`R_0`$ with $`a^2 = 1/N`$ and the monomer density $`\rho_0 = \bar{N}^{1/2} N`$:
 
 ```math
-z_\infty = 1 - \frac{1 + 2\left(\sum_{i=1}^{N_{\text{bond}}} P_i + P_{\text{cont}}\right)}{\sqrt{\bar{N}} \cdot N \cdot \Delta V}
+z_\infty = 1 - \frac{1}{(2\pi)^3 \rho_0} \int \frac{d\mathbf{k}}{t(k) \left[ 1 + t(k)/\zeta \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{a^2}{72 (2\pi)^3 \rho_0} \int \frac{k^2 \, d\mathbf{k}}{s^2(k) \left[ 1 + t(k)/\zeta \right]} \right]^{-1}
 ```
 
-where $`P_i`$ are the discrete bond contributions ($`N_{\text{bond}} = 100`$) and $`P_{\text{cont}} = 2\,(3N/2\pi)^{3/2}\,\Delta V/\sqrt{N_{\text{bond}} + 1/2}`$ is the continuous-chain estimate of the remaining terms $`i > N_{\text{bond}}`$.
+In these formulas:
 
-**Usage:**
-```matlab
-% Run in directory containing fields_*.mat
-matlab -nodisplay -r "run('/path/to/scripts/analysis/renormalization_discrete.m'); exit"
+- $`t(k) = \tanh(k^2 a^2/12)/\Gamma^2(k)`$ and $`s(k) = \sinh(k^2 a^2/12)`$;
+- $`\Gamma(k)`$ is the smearing function, and $`\zeta N`$ is `zeta_n`;
+- the integrals run over $`-\pi/\Delta_\nu \le k_\nu \le \pi/\Delta_\nu`$.
+
+For $`\zeta \to \infty`$ and $`\Gamma = 1`$, $`z_\infty`$ equals the bond sum of Beardsley and Matsen (2019), $`1 - (1 + 2\sum_i P_i)/(\rho_0 \Delta V)`$, which the former `renormalization_discrete.m` evaluated.
+
+### 3.3 Continuous Chains
+
+Continuous chains use the limit $`N \to \infty`$ of Section 3.2 at a fixed grid in units of $`R_0`$. In this limit, $`\tanh u`$ and $`\sinh u`$ both become $`u = k^2/(12N)`$:
+
+```math
+z_\infty = 1 - \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{12 \, \Gamma^2(k) \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{2 \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]} \right]^{-1}
 ```
 
-**Output:**
-```
-z_inf: 0.XXXXXXX
-```
+Both corrections grow without bound as the grid is refined, as $`z_\infty`$ of discrete chains with contact interactions does.
 
-**Requirements:**
-- Conformationally symmetric chains only ($`\epsilon = b_A/b_B = 1`$)
-- Reads `nbar`, `ds`, `lx`, `nx` from fields file
+The former `renormalization_rpa.m` integrated the athermal RPA of Vorselaars, Stasiak and Matsen (2015) instead. That integral also contains a finite term of order $`\bar{N}^{-1/2}`$ from $`k \lesssim 1/R_0`$, which Eq. (29) does not include because it is derived for $`N \to \infty`$. For example, for a $`32^3`$ grid with $`L = 4 R_0`$ and $`\bar{N} = 10^4`$, the former script gave $`z_\infty = 0.858`$, while the formula above gives 0.813.
 
 **References:**
 - T. M. Beardsley and M. W. Matsen, "Calibration of the Flory-Huggins interaction parameter in field-theoretic simulations," *J. Chem. Phys.* **2019**, 150, 174902
 - T. M. Beardsley and M. W. Matsen, "Fluctuation correction for the order–disorder transition of diblock copolymer melts," *J. Chem. Phys.* **2021**, 154, 124902
-
-### 3.2 Continuous Chain Model (`renormalization_rpa.m`)
-
-For continuous chain model (legacy, less commonly used).
-
-**Method:** Uses RPA structure function integral:
-
-```math
-z_\infty = 1 - \frac{1}{\sqrt{\bar{N}}} \frac{1}{8\pi^3 f(1-f)} \int_{-\pi/\Delta x}^{\pi/\Delta x} S_{\text{RPA}}(k) \, d^3k
-```
-
-$`S_{\text{RPA}}`$ is the athermal ($`\chi N = 0`$) incompressible RPA structure function $`S_{AA}`$ of [L-FTS Section 5.4](../theory/LangevinFieldTheoreticSimulation.md#54-rpa-reference).
-
-**Usage:**
-```matlab
-% Run in directory containing fields_*.mat
-matlab -nodisplay -r "run('/path/to/scripts/analysis/renormalization_rpa.m'); exit"
-```
-
-**Requirements:**
-- Continuous chain model only
-- Conformationally symmetric chains only ($`\epsilon = 1`$)
-
-**Reference:**
 - B. Vorselaars, P. Stasiak, and M. W. Matsen, "Field-Theoretic Simulation of Block Copolymers at Experimentally Relevant Molecular Weights," *Macromolecules* **2015**, 48, 9071
+- M. W. Matsen, J. Ramírez, J. D. Willis, and P. D. Pina, "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations," *J. Chem. Phys.* **2026**, 164, 014905
 
 ---
 
@@ -343,6 +360,6 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 | `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 
-$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#5-structure-functions). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
+$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#6-structure-functions). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).

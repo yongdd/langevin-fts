@@ -27,7 +27,7 @@ C = 9/4
 def parameters(args):
     return dict(nx=[args.sites], lx=[1.], ds=.25, chain_model="discrete",
         segment_lengths={t: 1. for t in TYPES}, chi_n={"P,S": 2.}, zeta_n=4.,
-        distinct_polymers=[dict(volume_fraction=n/9,
+        polymers=[dict(volume_fraction=n/9,
             blocks=[dict(type=t, length=1. if t == "P" else .25)],
             **({"grafting_points": {0: "G"}} if t == "P" else {}))
             for t, n in zip(TYPES, COUNTS)],
@@ -36,8 +36,8 @@ def parameters(args):
         graft_width=0., graft_center=0., chain_backend="spectral",
         langevin=dict(dt=args.dt, nbar=C*C, max_step=round(args.duration/args.dt)),
         alpha_ds=args.stabilization,
-        recording=dict(dir=str(args.out), recording_period=round(args.duration/args.dt),
-            sf_computing_period=10**9, sf_recording_period=10**9),
+        recording=dict(dir=str(args.out), checkpoint_interval=round(args.duration/args.dt),
+            sample_interval=10**9, statistics_save_interval=10**9),
         platform=args.platform, verbose_level=0)
 
 

@@ -272,7 +272,7 @@ def checks(sim, config, exact):
         projected[3] = 0j
     reference_step = step(x,prev_projected,projected,sim.langevin["dt"],0,*config)
     sim.langevin["max_step"] = 1
-    sim.recording["recording_period"] = 1
+    sim.recording["checkpoint_interval"] = 1
     mon = sim.mpt.to_monomer_fields(w)
     sim.run(dict(zip(sim.monomer_types,mon)),normal_noise_prev=previous)
     data = loadmat(Path(sim.recording["dir"])/"fields_000001.mat",simplify_cells=True)

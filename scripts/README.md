@@ -8,7 +8,7 @@ otherwise.
 |--------|----------|
 | [gui/](gui/) | Browser script builder and [web assets](gui/assets/) |
 | [pscf/](pscf/) | PSCF converter and a small initial-field example |
-| [analysis/](analysis/) | MATLAB scripts and Jupyter notebooks for density, structure functions, WTMD and interaction calibration |
+| [analysis/](analysis/) | MATLAB scripts, Jupyter notebooks and a Python script for density, structure functions, WTMD and interaction calibration |
 
 ## Simulation Script Builder (beta)
 
@@ -50,6 +50,14 @@ Run them from the directory containing the simulation output, for example:
 
 ```bash
 jupyter notebook /path/to/langevin-fts/scripts/analysis/plot_2d_density.ipynb
+```
+
+`renormalization.py` computes the UV renormalization factor $`z_\infty`$ of $`\chi N`$ and the
+bare segment length $`a_b/a`$ of CL-FTS. It reads a fields file or takes
+options, and needs only NumPy and SciPy:
+
+```bash
+python scripts/analysis/renormalization.py data_simulation/fields_010000.mat
 ```
 
 See the [tools reference](../docs/references/Tools.md) for usage and

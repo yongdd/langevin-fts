@@ -20,15 +20,15 @@ def parameters(platform="cpu-mkl"):
     return dict(
         nx=[8, 32], lx=[1.2, 2.], ds=.1, chain_model="discrete",
         segment_lengths={t: 1. for t in fractions}, chi_n={"P,S": 10.}, zeta_n=20.,
-        distinct_polymers=[dict(volume_fraction=f,
+        polymers=[dict(volume_fraction=f,
             blocks=[dict(type=t, length=1. if t == "P" else .1)],
             **({"grafting_points": {0: "G"}} if t == "P" else {}))
             for t, f in fractions.items()],
         charges={"P": -1., "C": 1., "SP": 3., "SM": -1., "S": 0.},
         radiuses={t: .2 for t in fractions}, bjerrum_e=25.,
         langevin=dict(max_step=4, dt=.025, nbar=1e4), alpha_ds=0.,
-        recording=dict(dir="unused", recording_period=2,
-                       sf_computing_period=1, sf_recording_period=2),
+        recording=dict(dir="unused", checkpoint_interval=2,
+                       sample_interval=1, statistics_save_interval=2),
         chain_backend="direct", grafting="quenched", graft_width=0.,
         bc=["reflecting"]*4, bond_boundaries=["reflecting", "hard-reflecting"],
         platform=platform, verbose_level=0)
@@ -71,7 +71,7 @@ def forces_and_grafts(platform):
     phi, _ = sim.compute_concentrations(w)
     assert sim.solver.check_total_partition()
     mass_error = max(abs(phi[p0["blocks"][0]["type"]].mean()-p0["volume_fraction"])
-                     for p0 in p["distinct_polymers"])
+                     for p0 in p["polymers"])
     anchor = sim.solver.chains[0].anchor_density.mean(axis=-1)
     anchor_error = float(np.max(abs(anchor-1)))
     assert mass_error < 1e-12 and anchor_error < 1e-12
@@ -130,21 +130,23 @@ def checkpoint_and_monitoring(platform, root):
     error = max(np.max(abs(a[k]-b[k])) for k in keys)
     assert error < 1e-12, error
     saved_params = json.loads(str(a["initial_params_json"]))
-    assert saved_params["distinct_polymers"][0]["grafting_points"] == {"0": "G"}
+    assert saved_params["polymers"][0]["grafting_points"] == {"0": "G"}
     assert full._random_psi.bit_generator.state == resumed._random_psi.bit_generator.state
     # Saved densities must correspond to the saved (post-update) fields.
     wmon = np.array([a[f"w_{t}_real"]+1j*a[f"w_{t}_imag"] for t in full.monomer_types])
     phi, _ = full.compute_concentrations(full.mpt.to_aux_fields(wmon))
     saved_error = max(np.max(abs(phi[t]-a[f"phi_{t}_real"]-1j*a[f"phi_{t}_imag"])) for t in phi)
     assert saved_error < 1e-12
-    # First recorded H must use the initial w, psi and Q at the same time.
+    # A recorded H must use the w, psi and Q of the same (post-update) step:
+    # recompute the last H of the first window from the step-2 checkpoint.
     fresh = BrushChargedCLFTS(parameters(platform), random_seed=51)
-    waux = fresh.mpt.to_aux_fields(np.array([initial[t] for t in fresh.monomer_types]))
-    waux[fresh._frozen_aux] = 0.
-    fresh.compute_concentrations(waux)
-    h0 = fresh._chain_hamiltonian(waux, [1.]*len(fresh.monomer_types))
+    saved = loadmat(root/"full"/"fields_000002.mat", squeeze_me=True)
+    waux = np.asarray(saved["w_aux"]).reshape(len(fresh.monomer_types), -1)
+    fresh.psi = np.asarray(saved["psi_real"]).reshape(-1) + 1j*np.asarray(saved["psi_imag"]).reshape(-1)
+    phi_saved, _ = fresh.compute_concentrations(waux)
+    h0 = fresh._hamiltonian(waux, fresh.smearing.apply_to_dict(phi_saved), fresh._total_partitions())
     hfile = loadmat(root/"full"/"dH_000002.mat", squeeze_me=True)
-    recorded = hfile["H_history_real"][0]+1j*hfile["H_history_imag"][0]
+    recorded = hfile["H_history_real"][-1]+1j*hfile["H_history_imag"][-1]
     assert abs(h0-recorded) < 1e-12
     # Zero coupling is a defined, finite neutral electrostatic sector.
     p["bjerrum_e"] = 0.
@@ -275,8 +277,8 @@ def run_brush():
     if steps <= equil or equil < 0 or args.dt <= 0:
         raise ValueError("Require duration > equil >= 0 and dt > 0.")
     p["langevin"].update(dt=args.dt, nbar=args.nbar, max_step=steps)
-    p["recording"].update(dir=str(args.out), recording_period=steps,
-                         sf_computing_period=steps, sf_recording_period=steps)
+    p["recording"].update(dir=str(args.out), checkpoint_interval=steps,
+                         sample_interval=steps, statistics_save_interval=steps)
     sim = BrushChargedCLFTS(p, random_seed=args.seed)
     w, phi, error = saddle(sim)
     nz = p["nx"][-1]
@@ -301,7 +303,7 @@ def run_brush():
     stride = max(1, round(.25/args.dt))
     compute = sim.compute_concentrations
     call, mass_error, partition_error = 0, 0., 0.
-    fractions = {v["blocks"][0]["type"]: v["volume_fraction"] for v in p["distinct_polymers"]}
+    fractions = {v["blocks"][0]["type"]: v["volume_fraction"] for v in p["polymers"]}
 
     def sample(w_aux):
         nonlocal call, mass_error, partition_error

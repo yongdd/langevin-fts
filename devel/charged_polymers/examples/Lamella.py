@@ -81,7 +81,7 @@ params = {
     # the charge density.
     "psi_dt_scaling": 1.0,
 
-    "distinct_polymers":[
+    "polymers":[
         {   # Polyelectrolyte
             "volume_fraction":polymer_fraction,
             "blocks":[
@@ -110,9 +110,9 @@ params = {
 
     "recording":{                       # Recording simulation data
         "dir":"data_simulation",        # Directory name
-        "recording_period":1000,        # Period for fields/concentrations
-        "sf_computing_period":10,       # Period for structure function
-        "sf_recording_period":10000,    # Period for recording str. func.
+        "checkpoint_interval":1000,        # Period for fields/concentrations
+        "sample_interval":10,       # Period for structure function
+        "statistics_save_interval":10000,    # Period for recording str. func.
     },
 
     # Dynamical stabilization (Willis & Matsen 2024): damps Im[W-] hot

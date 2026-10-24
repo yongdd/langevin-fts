@@ -26,6 +26,19 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Interface changes
 
+- `scripts/analysis/renormalization.py` replaces `renormalization_discrete.m` and
+  `renormalization_rpa.m` (2026-10-24):
+  - It reads a fields file or takes options and needs only NumPy and SciPy.
+  - It evaluates z∞ and the bare segment length a_b/a of CL-FTS from Eqs. (29) and (26) of
+    Matsen et al., *J. Chem. Phys.* **164**, 014905 (2026), with compressibility and smearing.
+  - It prints the χ_bN for a target z∞χ_bN.
+
+  Discrete chains without compressibility and smearing give the values of the former
+  `renormalization_discrete.m`, as `tests/scripts/TestRenormalization.py` checks. Continuous
+  chains now use the N → ∞ limit of the same formulas instead of the athermal RPA of
+  `renormalization_rpa.m`, so their z∞ changes. For example, a 32³ grid with L = 4R₀ and
+  N̄ = 10⁴ gives 0.813 instead of 0.858: the RPA integral also counted a finite term from
+  k ≲ 1/R₀.
 - `SymmetricPolymerTheory.compute_h_deriv_chin()` no longer needs `chi_n`: call it as
   `compute_h_deriv_chin(w_aux=..., phi=...)`. The older call with `chi_n` first still works
   and checks it against the object's χN, as before (2026-10-24).

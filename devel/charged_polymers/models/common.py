@@ -19,11 +19,17 @@ class _PerSpeciesSmearing:
 
     Density smearing uses the individual species kernels. Model classes
     assemble the propagator inputs, including the electrostatic potential.
+    `type` and `params` enter the mainline checkpoint settings, so a
+    continuation must use the same charged model.
     """
 
-    def __init__(self, electro):
+    def __init__(self, electro, psi_dt_scaling=1.0):
         self._electro = electro
         self.enabled = True
+        self.type = "per_species_charged"
+        self.params = {"radiuses": dict(electro.radiuses), "charges": dict(electro.charges),
+                       "e_coupling": electro.e_coupling, "psi_dt_scaling": float(psi_dt_scaling),
+                       "basis": type(electro).__name__}
 
     def apply_to_dict(self, fields):
         return self._electro.smear_dict(fields)
