@@ -2,10 +2,12 @@
 
 All auxiliary fields are complex and fluctuate: real noise on the exchange
 fields, imaginary noise on the pressure field, with optional dynamical
-stabilization (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024)) and
-smearing (Matsen et al., J. Chem. Phys. 164, 014905 (2026)). Parameters are
-documented in docs/references/Parameters.md; a complete script is
-examples/clfts/Lamella.py.
+stabilization (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024)),
+smearing (Matsen et al., J. Chem. Phys. 164, 014905 (2026)) and smeared
+Coulomb interactions through a fluctuating electrostatic potential
+(electrostatics.py). Parameters are documented in
+docs/references/Parameters.md; complete scripts are examples/clfts/Lamella.py
+and examples/clfts/ChargedDiblock.py.
 """
 
 import os
@@ -21,6 +23,7 @@ from scipy.io import savemat, loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
+from .electrostatics import Electrostatics
 from .propagator_solver import PropagatorSolver
 from .validation import normalize_params, validate_lfts_params, ValidationError, parse_chi_n
 from .utils import (
@@ -256,6 +259,15 @@ class CLFTS:
             angles=self.prop_solver.get_angles_degrees(),
             bc=self.prop_solver.bc
         )
+
+        # Smeared Coulomb interactions (optional): the electrostatic potential ψ, felt by
+        # charged types as z_i ψ, fluctuates next to the auxiliary fields (electrostatics.py)
+        self.electrostatics = None
+        if params.get("electrostatics", None) is not None:
+            self.electrostatics = Electrostatics(params["electrostatics"], self.monomer_types, self.smearing,
+                                                 round(1.0 / params["ds"]), self.langevin, random_seed)
+            print("Electrostatics: charges", self.electrostatics.charges,
+                  "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
@@ -290,6 +302,10 @@ class CLFTS:
             w_input[random_polymer_name] = np.zeros(self.prop_solver.n_grid, dtype=np.complex128)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type] * fraction
+
+        # Charged types feel the electrostatic potential: w_i + z_i ψ
+        if self.electrostatics is not None:
+            self.electrostatics.add_potential(w_input)
 
         # Apply smearing to fields before computing propagators
         # Following Matsen et al., J. Chem. Phys. 164, 014905 (2026), the fields
@@ -396,6 +412,10 @@ class CLFTS:
             mdic["phi_" + name + "_real"] = np.real(phi[name])
             mdic["phi_" + name + "_imag"] = np.imag(phi[name])
 
+        # Electrostatic potential and its noise stream
+        if self.electrostatics is not None:
+            mdic.update(self.electrostatics.checkpoint_data())
+
         # Save data with matlab format
         atomic_savemat(path, mdic, long_field_names=True, do_compression=True)
 
@@ -434,6 +454,8 @@ class CLFTS:
                           "inc": int(load_data["random_state_inc"])},
                 "has_uint32": 0, "uinteger": 0}
         print("Restored Random Number Generator:", self.random_bg.state)
+        if self.electrostatics is not None:
+            self.electrostatics.restore(load_data)
 
         # Make initial_fields (complex)
         initial_fields = {}
@@ -519,6 +541,10 @@ class CLFTS:
         if not np.all(np.isfinite(w_aux)):
             raise ValidationError("Initial fields must be finite")
 
+        # The electrostatic potential starts at zero; a continuation has restored it
+        if self.electrostatics is not None and _restart_data is None:
+            self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
+
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
         drift_history = []
@@ -587,6 +613,10 @@ class CLFTS:
 
             drift_max = float(np.max(np.abs(w_lambda * self.dt_scaling[:, None])))
 
+            # Charge density of the same state, for the step of the electrostatic potential
+            if self.electrostatics is not None:
+                charge_density = self.electrostatics.charge_density(phi_for_force)
+
             # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
                 0.0, self.langevin["sigma"], [M, self.prop_solver.n_grid]
@@ -605,6 +635,12 @@ class CLFTS:
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
+            # Electrostatic potential: one step with its own noise stream
+            if self.electrostatics is not None:
+                self.electrostatics.step(charge_density)
+                if not np.all(np.isfinite(self.electrostatics.psi)):
+                    raise ValidationError(f"Non-finite electrostatic potential at step {langevin_step}")
+
             # Concentrations and partition functions of the updated fields
             phi, _ = self.compute_concentrations(w_aux=w_aux)
             phi_for_force = self.smearing.apply_to_dict(phi)
@@ -621,6 +657,8 @@ class CLFTS:
             total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
             hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver.molecules, w_aux, total_partitions, self.cb,
                                                       include_const_term=True, phi=phi_for_force)
+            if self.electrostatics is not None:
+                hamiltonian += self.electrostatics.hamiltonian()
             if not np.isfinite(hamiltonian):
                 raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
             self.run_status["last_completed_step"] = langevin_step
@@ -634,6 +672,10 @@ class CLFTS:
                 print(f"] {hamiltonian.real:+.9E}{hamiltonian.imag:+.9E}j  [", end="")
                 for i in range(M):
                     print(f" {error_level_array[i]:.3E}", end="")
+                # Poisson residual of the electrostatic potential
+                if self.electrostatics is not None:
+                    psi_force = self.electrostatics.force(self.electrostatics.charge_density(phi_for_force))
+                    print(f" {np.std(psi_force):.3E}", end="")
                 print(" ]")
 
             # Compute H and dH/dchi_n
@@ -719,14 +761,14 @@ class CLFTS:
                         1.0 / max(sf_sample_count, 1) *
                         self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     )
-                    # With smearing the fields couple to the smeared densities, so <μ φ> = Γ(k) S(k):
-                    # divide by Γ to record S(k) of the densities (modes the smeared interaction
+                    # With smearing the fields couple to the smeared densities, so <μ_i φ_j> = Γ_i(k) S_ij(k):
+                    # divide by Γ_i to record S(k) of the densities (modes the smeared interaction
                     # does not see, Γ < 1e-12, are recorded as 0). With walls Γ lives in the cosine
                     # basis while S(k) is a Fourier transform, so it is recorded as it is.
-                    if self.smearing.enabled and self.smearing.periodic:
-                        gamma = self.smearing.fourier
-                        sf_scaled = np.divide(sf_scaled, gamma, out=np.zeros_like(sf_scaled), where=gamma > 1e-12)
                     monomer_pair = sorted(key.split(","))
+                    if self.smearing.enabled and self.smearing.periodic:
+                        gamma = self.smearing.kernel(monomer_pair[0])
+                        sf_scaled = np.divide(sf_scaled, gamma, out=np.zeros_like(sf_scaled), where=gamma > 1e-12)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(sf_scaled)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(sf_scaled)
                 mdic["sample_count"] = sf_sample_count

@@ -251,10 +251,25 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
         kind = smearing.get("type", "gaussian")
         if kind not in ("gaussian", "sigmoidal"):
             raise ValidationError("Unknown smearing type")
-        keys = ("a_int",) if kind == "gaussian" else ("k_int", "dk_int")
-        for key in keys:
-            _finite_number(smearing.get(key, 5.0 if key == "dk_int" else None), "smearing." + key,
-                           positive=key != "a_int", nonnegative=key == "a_int")
+        if kind == "gaussian" and isinstance(smearing.get("a_int"), dict):
+            # One smearing length per monomer type (CL-FTS)
+            if not complex_fields:
+                raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
+            if set(smearing["a_int"]) != set(params["segment_lengths"]):
+                raise ValidationError("Per-type 'smearing.a_int' needs one length for each monomer type")
+            if _has_random_copolymer(params):
+                raise ValidationError("Per-type 'smearing.a_int' does not support random copolymers")
+            for name, a_int in smearing["a_int"].items():
+                _finite_number(a_int, f"smearing.a_int.{name}", nonnegative=True)
+        else:
+            keys = ("a_int",) if kind == "gaussian" else ("k_int", "dk_int")
+            for key in keys:
+                _finite_number(smearing.get(key, 5.0 if key == "dk_int" else None), "smearing." + key,
+                               positive=key != "a_int", nonnegative=key == "a_int")
+    if params.get("electrostatics") is not None:
+        if not complex_fields:
+            raise ValidationError("'electrostatics' is supported in CL-FTS only")
+        validate_electrostatics(params)
     wtmd = params.get("wtmd")
     if wtmd is not None:
         if not isinstance(wtmd, dict):
@@ -268,3 +283,48 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
         _finite_number(hi, "wtmd.psi_max")
         if hi <= lo or (hi - lo) / wtmd.get("dpsi", 1e-3) < 2:
             raise ValidationError("WTMD range must contain at least two bins")
+
+
+def _has_random_copolymer(params):
+    return any(isinstance(block, dict) and "monomer_fractions" in block
+               for polymer in params.get("polymers", []) for block in polymer.get("blocks", []))
+
+
+def validate_electrostatics(params: Dict[str, Any]) -> None:
+    """Charges, coupling and electroneutrality of the CL-FTS 'electrostatics' input."""
+    electrostatics = params["electrostatics"]
+    if not isinstance(electrostatics, dict):
+        raise ValidationError("'electrostatics' must be a dict or None")
+    charges = electrostatics.get("charges")
+    if not isinstance(charges, dict) or not charges:
+        raise ValidationError("'electrostatics.charges' must be a dict {monomer type: valence}")
+    unknown = set(charges) - set(params["segment_lengths"])
+    if unknown:
+        raise ValidationError(f"'electrostatics.charges' has unknown monomer types: {sorted(unknown)}")
+    for name, valence in charges.items():
+        _finite_number(valence, f"electrostatics.charges.{name}")
+    if ("bjerrum_length" in electrostatics) == ("coupling" in electrostatics):
+        raise ValidationError("Give exactly one of 'electrostatics.bjerrum_length' (l_B/R0) and "
+                              "'electrostatics.coupling' (E)")
+    for key in ("bjerrum_length", "coupling"):
+        if key in electrostatics:
+            _finite_number(electrostatics[key], "electrostatics." + key, nonnegative=True)
+    n_segments = 1.0 / params["ds"]
+    if "bjerrum_length" in electrostatics and abs(n_segments - round(n_segments)) > 1e-9:
+        raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
+    _finite_number(electrostatics.get("psi_dt_scaling", 1.0), "electrostatics.psi_dt_scaling", positive=True)
+    # Point charges have a grid-dependent self-energy; the charges are smeared
+    if params.get("smearing") is None:
+        raise ValidationError("'electrostatics' needs 'smearing' (the smeared charge distribution)")
+    if any(str(b).lower() != "periodic" for b in params.get("bc") or []):
+        raise ValidationError("'electrostatics' supports periodic boxes only")
+    if _has_random_copolymer(params):
+        raise ValidationError("'electrostatics' does not support random copolymers")
+    # Electroneutrality: Σ_i z_i φ_i = 0 with the overall segment fraction φ_i of each type
+    total = 0.0
+    for polymer in params["polymers"]:
+        length = sum(block["length"] for block in polymer["blocks"])
+        for block in polymer["blocks"]:
+            total += charges.get(block["type"], 0.0) * polymer["volume_fraction"] * block["length"] / length
+    if abs(total) > 1e-10:
+        raise ValidationError(f"The system is not electroneutral: sum of z_i phi_i = {total:.3e}")

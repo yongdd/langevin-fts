@@ -260,6 +260,8 @@ class SCFT:
         for key in ("optimizer", "relax_cell"):
             if key not in params:
                 raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
+        if params.get("electrostatics") is not None or isinstance((params.get("smearing") or {}).get("a_int"), dict):
+            raise ValidationError("'electrostatics' and per-type 'smearing.a_int' are supported in CL-FTS only")
 
         # Handle axis ordering (convert user ordering to standard [a, b, c]); this
         # rewrites nx/lx/bc/angles in `params`, so the key is dropped from the copy that

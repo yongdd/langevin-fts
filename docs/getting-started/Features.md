@@ -21,7 +21,7 @@
 |------|-------------|
 | **SCFT** | Mean-field equilibrium with Anderson mixing, stress-based box optimization, and space groups. |
 | **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations and Well-Tempered Metadynamics (WTMD). |
-| **CL-FTS** (beta) | Complex Langevin with dynamical stabilization. |
+| **CL-FTS** (beta) | Complex Langevin with dynamical stabilization and smeared Coulomb interactions (charged polymers and counterions, periodic boxes). |
 
 ---
 

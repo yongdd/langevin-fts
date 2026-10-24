@@ -123,7 +123,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
 ENDFOREACH()
 
 SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation TestExtensions TestPropagatorAnalytic TestConvergenceOrderLite TestSamplingStatistics
-    TestStructureFunctionRPA TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence
+    TestStructureFunctionRPA TestChargedStructureFunctionRPA TestClftsElectrostatics
+    TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
     APPEND PROPERTY LABELS numerical)
 

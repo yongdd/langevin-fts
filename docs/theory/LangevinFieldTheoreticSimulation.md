@@ -211,7 +211,59 @@ To use the calibration, multiply all `segment_lengths` by $`a_b/a`$ and set `chi
 
 ### 5.5 Using the CLFTS Class
 
-`CLFTS(params, random_seed)` takes the parameters of the L-FTS example in Section 7.1 without `saddle` and `compressor`. It adds `zeta_n`, `dynamic_stabilization` and, optionally, `smearing` (see [CL-FTS Parameters](../references/Parameters.md#cl-fts-parameters)). [examples/clfts/Lamella.py](../../examples/clfts/Lamella.py) is a complete script.
+`CLFTS(params, random_seed)` takes the parameters of the L-FTS example in Section 7.1 without `saddle` and `compressor`. It adds `zeta_n`, `dynamic_stabilization` and, optionally, `smearing` and `electrostatics` (see [CL-FTS Parameters](../references/Parameters.md#cl-fts-parameters)). [examples/clfts/Lamella.py](../../examples/clfts/Lamella.py) and [examples/clfts/ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) are complete scripts.
+
+### 5.6 Charged Systems
+
+Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment, so the compressibility term counts them like the other species.
+
+**Coulomb interaction.** The charges interact through the smeared charge density and the Coulomb kernel:
+
+```math
+c(\mathbf{r}) = \sum_i z_i \, (\Gamma_i * \phi_i)(\mathbf{r}), \qquad \frac{\beta U_{el}}{C V / R_0^3} = \frac{E}{2V} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
+```
+
+Here $`\Gamma_i`$ is the smearing function of type $`i`$; one Gaussian length per type plays the role of a Born radius. The coupling in units of the reference chain is
+
+```math
+E = 4\pi l_B \rho_0 N R_0^2 = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}
+```
+
+**Electrostatic potential.** A Hubbard-Stratonovich transformation decouples the interaction with an electrostatic potential $`\psi`$. Like the pressure field, $`\psi`$ is an imaginary-type field stored on the rotated contour. Each type feels $`z_i \psi`$, so the propagator input becomes $`\Gamma_i * (w_i + z_i \psi)`$, and
+
+```math
+\frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, \nabla^2 \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{\nabla^2 \psi}{E} + c
+```
+
+The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
+
+**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 5.1) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`\nabla^2 \psi / E`$ relaxes at the rate $`s k^2/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing:
+
+```math
+\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k^2}{2 (k^2/E) \, \delta\tau N}} \, \hat{\xi}_{\mathbf{k}}, \qquad a_k = e^{-s (k^2/E) \delta\tau N}
+```
+
+In this step:
+
+- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream (seed + 1). The noise of the auxiliary fields is therefore the same as without charges.
+- $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
+- As $`k \to 0`$, the step becomes the Euler step with mobility $`s`$.
+
+The stationary variance of the linear modes does not depend on $`\delta\tau`$, while the response to the charge density stays explicit.
+
+**Observables.**
+- **H:** the recorded $`H`$ includes $`H_{el}`$.
+- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included; $`\psi`$ does not enter the estimator. The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$.
+- **RPA:** the RPA of Section 6.4 adds $`(E/k^2)\, z z^T`$ to the interaction matrix.
+
+**Tests.**
+- `TestClftsElectrostatics` checks:
+  - that zero valences, or zero coupling, reproduce CL-FTS without charges bit for bit;
+  - that the forces of $`\psi`$ and of the auxiliary fields are the derivatives of $`H`$;
+  - that a continued run reproduces an uninterrupted one bit for bit.
+- `TestChargedStructureFunctionRPA` compares a charged diblock with counterions with the RPA.
+
+**Limitations.** The implementation supports periodic boxes only and no random copolymers. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
 
 ---
 
@@ -293,6 +345,14 @@ S(\mathbf{k}) = \left[ G^{-1} + \Gamma(\mathbf{k})^2 \, U \right]^{-1}, \qquad \
 ```
 
 with $`\Gamma(k)^2 = \exp(-a^2 k^2)`$ for Gaussian smearing. This holds in a periodic box, where the recorded $`S_{ij}`$ is divided by $`\Gamma`$.
+
+**Charges.** With one smearing function per type and the valences of Section 5.6:
+
+```math
+S(\mathbf{k}) = \left[ G^{-1} + D_\Gamma \left( U + \frac{E}{k^2} \, z z^T \right) D_\Gamma \right]^{-1}, \qquad D_\Gamma = \mathrm{diag}(\Gamma_1, \ldots, \Gamma_M)
+```
+
+Here $`G`$ is block-diagonal over the molecules: each molecule contributes its single-chain correlations, weighted by its volume fraction divided by its length (in units of $`N`$). A counterion of one segment adds $`\phi_C / N`$.
 
 **Validity.** The RPA leaves out fluctuation corrections, of relative order $`\bar{N}^{-1/2}`$, which grow as $`\chi N`$ approaches the order-disorder transition. Grid and contour discretization change the high wavevectors, so comparisons use the lowest modes; finite discretization and fluctuation corrections must be distinguished from sampling uncertainty.
 

@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""
+Structure functions of charged CL-FTS against the RPA (Debye-Hueckel level).
+
+A melt of AB diblocks (discrete chains, N = 20, f = 0.5) whose A segments carry the
+valence z_A = 0.2, neutralized by monovalent counterions C (one segment), with
+chi N = 6, zeta N = 100, per-type Gaussian smearing and the Coulomb coupling
+E = 1e4, at Nbar = 1e6 where the fluctuations are Gaussian, in a 2D box. The RPA is
+
+  S/(rho0 N) = [G^-1 + Gamma (X + zeta N e e^T) Gamma + (E/k^2) (Gamma z)(Gamma z)^T]^-1,
+
+with the single-chain correlations G_ij = sum_p phi_p/(n_p N) sum_{s in i, s' in j}
+exp(-k^2 |s - s'|/(6N)) of molecules p with n_p segments, the smearing functions
+Gamma_i(k) = exp(-a_i^2 k^2/2) and the valences z. S(k) is averaged over the shells
+|k| = 2 pi n/L, n = 1..8 (four or more wavevectors each). For S_AA, S_BB and S_AB the
+mean ratio to the RPA must lie within 5 % of 1 and every shell within 20 %. Screening
+lowers S_CC at the first four shells to 0.16-0.72 of the RPA without charges, which
+makes its estimator noisy (a standard error of 0.3 at n = 1 from 4 x 40000 steps in
+1D); only its mean over n = 2..8 is checked, within 10 %, and the first four shells
+must lie below 0.85 of the RPA without charges.
+"""
+
+import os
+import io
+import sys
+import glob
+import contextlib
+import tempfile
+import shutil
+
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
+import numpy as np
+from scipy.io import loadmat
+from polymerfts import _core, CLFTS
+
+CHI_N, ZETA_N, N, N_A, NX, LX, NBAR, STEPS = 6.0, 100.0, 20, 10, 32, 4.0, 1e6, 30000
+Z_A, COUPLING = 0.2, 1e4
+PHI_C = Z_A * N_A / N / (1 + Z_A * N_A / N)   # z_A phi_A = phi_C
+RADII = {"A": 0.1, "B": 0.1, "C": 0.15}
+N_MODES = 8
+
+n_pass = 0
+n_fail = 0
+
+
+def check(cond, msg):
+    global n_pass, n_fail
+    if cond:
+        n_pass += 1
+        print(f"[PASS] {msg}")
+    else:
+        n_fail += 1
+        print(f"[FAIL] {msg}")
+
+
+def cpu_platform():
+    cpu = [p for p in _core.PlatformSelector.avail_platforms() if p.startswith("cpu")]
+    return cpu[0] if cpu else "cuda"
+
+
+def rpa(coupling):
+    """S/(rho0 N) of the pairs AA, BB, AB, CC for the first N_MODES wavevectors."""
+    types, z = ["A", "B", "C"], np.array([Z_A, 0.0, -1.0])
+    segments = np.arange(N)
+    a, b = segments < N_A, segments >= N_A
+    result = {"A,A": [], "B,B": [], "A,B": [], "C,C": []}
+    for n in range(1, N_MODES + 1):
+        k = 2 * np.pi * n / LX
+        bonds = np.exp(-k ** 2 / (6 * N) * np.abs(segments[:, None] - segments[None, :]))
+        G = np.zeros((3, 3))
+        G[0, 0] = (1 - PHI_C) / N ** 2 * bonds[np.ix_(a, a)].sum()
+        G[1, 1] = (1 - PHI_C) / N ** 2 * bonds[np.ix_(b, b)].sum()
+        G[0, 1] = G[1, 0] = (1 - PHI_C) / N ** 2 * bonds[np.ix_(a, b)].sum()
+        G[2, 2] = PHI_C / N
+        gamma = np.array([np.exp(-RADII[t] ** 2 * k ** 2 / 2) for t in types])
+        X = np.array([[0.0, CHI_N, 0.0], [CHI_N, 0.0, 0.0], [0.0, 0.0, 0.0]]) + ZETA_N
+        U = np.outer(gamma, gamma) * (X + coupling / k ** 2 * np.outer(z, z))
+        s = np.linalg.inv(np.linalg.inv(G) + U)
+        result["A,A"].append(s[0, 0]); result["B,B"].append(s[1, 1])
+        result["A,B"].append(s[0, 1]); result["C,C"].append(s[2, 2])
+    return {key: np.array(v) for key, v in result.items()}
+
+
+def params(work_dir):
+    return {"nx": [NX, NX], "lx": [LX, LX], "chain_model": "discrete", "ds": 1 / N,
+            "segment_lengths": {"A": 1.0, "B": 1.0, "C": 1.0}, "chi_n": {"A,B": CHI_N}, "zeta_n": ZETA_N,
+            "polymers": [{"volume_fraction": 1 - PHI_C, "blocks": [{"type": "A", "length": N_A / N},
+                                                                    {"type": "B", "length": 1 - N_A / N}]},
+                         {"volume_fraction": PHI_C, "blocks": [{"type": "C", "length": 1 / N}]}],
+            "smearing": {"type": "gaussian", "a_int": RADII},
+            "electrostatics": {"charges": {"A": Z_A, "C": -1.0}, "coupling": COUPLING},
+            "platform": cpu_platform(), "langevin": {"nbar": NBAR, "dt": 1.0, "max_step": STEPS},
+            "recording": {"dir": work_dir, "checkpoint_interval": STEPS, "sample_interval": 1,
+                          "statistics_save_interval": STEPS},
+            "verbose_level": 1}
+
+
+def shells(s):
+    """Mean of S over the wavevectors with |m|^2 = n^2, n = 1..N_MODES (m: integer frequencies)."""
+    m = np.fft.fftfreq(NX, 1.0 / NX)
+    m_sq = m[:, None] ** 2 + m[None, :] ** 2
+    return np.array([np.mean(s[m_sq == n * n]) for n in range(1, N_MODES + 1)])
+
+
+def run(seed):
+    """Shell-averaged S of the pairs AA, BB, AB, CC of one run."""
+    root = tempfile.mkdtemp()
+    try:
+        work = os.path.join(root, "charged")
+        with contextlib.redirect_stdout(io.StringIO()):
+            sim = CLFTS(params(work), random_seed=seed)
+            sim.run(initial_fields={t: np.zeros(NX * NX) for t in ("A", "B", "C")})
+        data = loadmat(sorted(glob.glob(os.path.join(work, "structure_function_*.mat")))[-1])
+        return {key: shells(np.real(np.reshape(data["structure_function_" + key.replace(",", "_") + "_real"], (NX, NX))))
+                for key in ("A,A", "B,B", "A,B", "C,C")}
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def main():
+    measured = run(7)
+    reference, neutral = rpa(COUPLING), rpa(0.0)
+    for key in ("A,A", "B,B", "A,B"):
+        ratio = measured[key] / reference[key]
+        check(abs(np.mean(ratio) - 1.0) < 0.05 and np.all(np.abs(ratio - 1.0) < 0.2),
+              f"charged CL-FTS S_{key.replace(',', '_')}/RPA: mean {np.mean(ratio):.3f}, "
+              f"range [{ratio.min():.3f}, {ratio.max():.3f}]")
+    ratio = measured["C,C"] / reference["C,C"]
+    check(abs(np.mean(ratio[1:]) - 1.0) < 0.1,
+          f"charged CL-FTS S_C_C/RPA: mean of n = 2..8 {np.mean(ratio[1:]):.3f}, all {np.array2string(ratio, precision=2)}")
+    ratio = measured["C,C"][:4] / neutral["C,C"][:4]
+    check(np.all(ratio < 0.85), f"S_CC below the RPA without charges: ratios {np.array2string(ratio, precision=3)}")
+
+    print(f"\n{n_pass} passed, {n_fail} failed")
+    sys.exit(0 if n_fail == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()

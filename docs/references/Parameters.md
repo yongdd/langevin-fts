@@ -353,7 +353,32 @@ WTMD requires a 3D grid (`nx` with three entries).
 |-----|------|-------------|---------|
 | `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value | `100.0` |
 | `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $`i\,\alpha_{ds}\,\mathrm{Im}[W_-]`$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Willis & Matsen used 0.001 at $`\bar{N} = 10^6`$–$`10^7`$ and 0.01–0.02 at $`\bar{N} = 10^5`$; 0.1 already biased their results | `0.0` |
-| `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability | none |
+| `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability. CL-FTS also accepts one Gaussian length per monomer type | none |
+| `electrostatics` | dict | (Optional) Smeared Coulomb interactions, see [Electrostatics](#electrostatics) | none |
+
+### Electrostatics
+
+Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$. CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([theory, Section 5.6](../theory/LangevinFieldTheoreticSimulation.md#56-charged-systems)). Small ions are molecules of one segment and take volume like the other species.
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `charges` | dict | Valence per segment of each charged monomer type, `{"A": -0.2, "Na": 1.0}`; other types are neutral | required |
+| `bjerrum_length` | float | Bjerrum length $`l_B`$ in units of $`R_0`$; the coupling is $`E = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}`$ with $`N = 1/\Delta s`$ (an integer) | — |
+| `coupling` | float | The coupling $`E = 4\pi l_B \rho_0 N R_0^2`$ directly; give exactly one of `bjerrum_length` and `coupling` | — |
+| `psi_dt_scaling` | float | Mobility of $`\psi`$ relative to the auxiliary fields | `1.0` |
+
+**Requirements:**
+- The system must be electroneutral: $`\sum_i z_i \phi_i = 0`$ with the overall segment fraction $`\phi_i`$ of each type (to $`10^{-10}`$). The counterion fraction therefore follows from the polymer charge.
+- `smearing` must be given; with per-type Gaussian lengths $`a_i`$ (Born radii) each type has its own $`\Gamma_i(k)`$.
+- Periodic boxes only; no random copolymers.
+- `zeta_n` is finite, as always in CL-FTS.
+
+```python
+params["smearing"] = {"type": "gaussian", "a_int": {"A": 0.1, "B": 0.1, "C": 0.15}}
+params["electrostatics"] = {"charges": {"A": 0.2, "C": -1.0}, "bjerrum_length": 0.01}
+```
+
+The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
 
 ---
 
@@ -402,6 +427,7 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 | Type | Keys | $`\Gamma(k)`$ |
 |------|------|--------------|
 | `{"type": "gaussian", "a_int": a}` | smearing length $`a`$ in units of $`R_0`$ (universality needs $`a \lesssim 0.02 R_0`$) | $`\exp(-a^2 k^2 / 2)`$ |
+| `{"type": "gaussian", "a_int": {"A": a_A, ...}}` | CL-FTS only: one length for every monomer type; type $`i`$ is smeared with its own $`\Gamma_i`$, and the structure function of a pair $`i \le j`$ is divided by $`\Gamma_i`$. No random copolymers | $`\exp(-a_i^2 k^2 / 2)`$ |
 | `{"type": "sigmoidal", "k_int": k_c, "dk_int": dk}` | cutoff wavenumber $`k_c \gtrsim 20 / R_0`$, transition width $`dk`$ (default 5.0) | $`C_0 [1 - \tanh((k - k_c)/dk)]`$ |
 
 $`k`$ is the physical wavenumber of the cell, including the cell angles. Along an axis with reflecting or absorbing walls the field is smeared in the cosine (DCT-II) basis, i.e. together with its even image across the wall (across an absorbing wall the propagators are odd, so fields and concentrations are even); the two sides of an axis may have different walls. In SCFT box relaxation the kernel follows the box, and the stress includes the derivative of $`\Gamma(k)`$. Not available together with `space_group`. References: Delaney & Fredrickson, *J. Phys. Chem. B* **2016**, 120, 7615; Matsen et al., *J. Chem. Phys.* **2026**, 164, 014905.

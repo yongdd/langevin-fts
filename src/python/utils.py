@@ -157,6 +157,8 @@ def checkpoint_settings(sim):
         "polymers": sim.polymers, "chi_n": sim.chi_n, "zeta_n": sim.zeta_n,
         "dt": sim.langevin["dt"], "nbar": sim.langevin["nbar"], "dt_scaling": sim.dt_scaling,
         "smearing": {"type": sim.smearing.type, "params": sim.smearing.params},
+        # None without electrostatics, which earlier checkpoints also give
+        "electrostatics": None if getattr(sim, "electrostatics", None) is None else sim.electrostatics.settings(),
         "sample_interval": sim.recording["sample_interval"],
         "statistics_save_interval": sim.recording["statistics_save_interval"],
         "extensions": extension_settings(sim),

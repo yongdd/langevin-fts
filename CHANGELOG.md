@@ -24,6 +24,26 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   directory before importing `_core`, and the tests no longer use variable-length arrays
   or POSIX-only calls.
 
+### Added
+
+- CL-FTS of charged systems (2026-10-24):
+  - The optional `electrostatics` input gives valences per segment (`charges`) and the
+    Bjerrum length or the coupling E.
+  - The charges interact through the smeared charge density with the Coulomb kernel E/k².
+    A fluctuating electrostatic potential ψ, with its own noise stream, carries this
+    interaction. The stiff linear part of ψ is integrated exactly for each wavevector.
+  - Charged block copolymers and counterions are ordinary polymers and one-segment
+    molecules in `polymers`; the input must be electroneutral.
+  - Smearing is required with charges, and Gaussian smearing in CL-FTS accepts one length
+    per monomer type.
+  - Checkpoints store ψ and its noise stream.
+  - Limitations: periodic boxes only, no random copolymers.
+
+  `TestClftsElectrostatics` checks the reductions to neutral CL-FTS (bit for bit), the
+  forces against finite differences of H and bitwise restarts.
+  `TestChargedStructureFunctionRPA` compares a charged diblock with counterions with the
+  RPA. Example: `examples/clfts/ChargedDiblock.py`.
+
 ### Interface changes
 
 - `scripts/analysis/renormalization.py` replaces `renormalization_discrete.m` and

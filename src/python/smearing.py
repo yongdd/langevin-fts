@@ -30,8 +30,10 @@ class Smearing:
 
         - type : str
             "gaussian"
-        - a_int : float
-            Smearing length scale in units of R₀.
+        - a_int : float or dict
+            Smearing length scale in units of R₀, or one length per monomer
+            type ({type: a_int}, CL-FTS only); fields and concentrations of a
+            type are then smeared with its own Γ_i(k).
 
         For Sigmoidal smearing:
 
@@ -60,7 +62,9 @@ class Smearing:
     type : str or None
         Smearing type ("gaussian" or "sigmoidal").
     fourier : ndarray or None
-        Smearing function in Fourier space Γ(k).
+        Smearing function in Fourier space Γ(k); None with per-type lengths.
+    species_fourier : dict or None
+        Γ_i(k) of each monomer type when a_int is given per type.
     params : dict or None
         Smearing parameters.
     k_mag : ndarray or None
@@ -101,11 +105,13 @@ class Smearing:
         self.axis_bc = ["periodic" if bc[2 * d].lower() == "periodic" else "wall" for d in range(self.dim)]
         self.periodic = all(b == "periodic" for b in self.axis_bc)
 
+        self.species_fourier = None
         if smearing_params is None:
             self.enabled = False
             self.fourier = None
             self.type = None
             self.params = None
+            self.per_species = False
             self.k_mag = None
             self.k_sq = None
             return
@@ -116,7 +122,8 @@ class Smearing:
         if self.type == "gaussian":
             if "a_int" not in smearing_params:
                 raise ValueError("Gaussian smearing requires 'a_int' parameter.")
-            self.params = {"a_int": smearing_params["a_int"]}
+            a_int = smearing_params["a_int"]
+            self.params = {"a_int": dict(a_int) if isinstance(a_int, dict) else a_int}
             print(f"Smearing: Gaussian, a_int = {self.params['a_int']}")
         elif self.type == "sigmoidal":
             if "k_int" not in smearing_params:
@@ -126,6 +133,7 @@ class Smearing:
         else:
             raise ValueError(f"Unknown smearing type: {self.type}. "
                            f"Supported types: 'gaussian', 'sigmoidal'")
+        self.per_species = isinstance(self.params.get("a_int"), dict)
 
         self.set_box(lx, angles)
 
@@ -192,7 +200,11 @@ class Smearing:
             self.k_sq = np.reshape(k_sq, self.nx)
         self.k_mag = np.sqrt(self.k_sq)
 
-        if self.type == "gaussian":
+        if self.per_species:
+            # Γ_i(k) = exp(-a_i²·k²/2) for each monomer type
+            self.fourier = None
+            self.species_fourier = {name: np.exp(-a ** 2 * self.k_sq / 2) for name, a in self.params["a_int"].items()}
+        elif self.type == "gaussian":
             # Γ(k) = exp(-a_int²·k²/2)
             self.fourier = np.exp(-self.params["a_int"] ** 2 * self.k_sq / 2)
         else:
@@ -232,6 +244,8 @@ class Smearing:
         result = np.zeros(6)
         if not self.enabled:
             return result
+        if self.per_species:
+            raise NotImplementedError("The stress of per-type smearing lengths is not implemented.")
 
         # <φ (D*w)> = (1/n²) Σ_k conj(φ(k)) D(k) w(k) for a real, even multiplier D
         # (with the orthonormal transforms of wall axes: (1/n) Σ_k conj(φ(k)) D(k) w(k))
@@ -302,7 +316,15 @@ class Smearing:
                 derivatives[slot][tied] += 8 * np.pi ** 2 * u[a] * u[b] * L[a] * L[b] * self._sin[a, b]
         return {slot: d / n_tied for slot, d in derivatives.items()}
 
-    def apply(self, field):
+    def kernel(self, name=None):
+        """Γ(k) on the grid, of monomer type `name` when the lengths are given per type."""
+        if not self.per_species:
+            return self.fourier
+        if name not in self.species_fourier:
+            raise ValueError(f"No smearing length for monomer type '{name}'.")
+        return self.species_fourier[name]
+
+    def apply(self, field, name=None):
         """Apply smearing to a single field array.
 
         Computes smeared field: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
@@ -311,6 +333,8 @@ class Smearing:
         ----------
         field : numpy.ndarray
             Field array of length n_grid (can be complex).
+        name : str, optional
+            Monomer type of the field; required for per-type smearing lengths.
 
         Returns
         -------
@@ -320,6 +344,7 @@ class Smearing:
         """
         if not self.enabled:
             return field
+        gamma = self.kernel(name)
 
         # Reshape to grid dimensions
         field_grid = np.reshape(field, self.nx)
@@ -327,10 +352,10 @@ class Smearing:
         # FFT -> multiply by Γ(k) -> IFFT (DCT-II along wall axes)
         if self.periodic:
             field_fourier = np.fft.fftn(field_grid)
-            field_smeared_fourier = field_fourier * self.fourier
+            field_smeared_fourier = field_fourier * gamma
             field_smeared = np.fft.ifftn(field_smeared_fourier)
         else:
-            field_smeared = self._backward(self._forward(field_grid) * self.fourier)
+            field_smeared = self._backward(self._forward(field_grid) * gamma)
 
         # Reshape back to flat array
         # Return real part for real input, full complex for complex input
@@ -363,7 +388,8 @@ class Smearing:
         Parameters
         ----------
         fields : dict
-            Dictionary of fields {name: field_array}.
+            Dictionary of fields {name: field_array}; with per-type lengths the
+            names are monomer types.
 
         Returns
         -------
@@ -374,7 +400,7 @@ class Smearing:
         if not self.enabled:
             return fields
 
-        return {key: self.apply(field) for key, field in fields.items()}
+        return {key: self.apply(field, key) for key, field in fields.items()}
 
     def __repr__(self):
         """Return string representation."""

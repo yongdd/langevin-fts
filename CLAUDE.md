@@ -202,8 +202,9 @@ Keep each simulation class readable from top to bottom:
   `integrator=` interface for additional methods and named `callbacks=` for
   observables. Preserve accepted-step ordering and checkpoint contracts.
 - `propagator_solver.py` wraps the native solver API; `polymer_field_theory.py`
-  handles monomer/auxiliary-field transformations. `smearing.py`, `wtmd.py` and
-  `phase_equilibrium.py` contain their respective physical operations.
+  handles monomer/auxiliary-field transformations. `smearing.py`, `wtmd.py`,
+  `electrostatics.py` and `phase_equilibrium.py` contain their respective physical
+  operations.
 
 Use [Extensions](docs/internals/Extensions.md) and
 [CustomExtensions.py](examples/lfts/CustomExtensions.py) for callback and integrator
