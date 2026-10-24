@@ -41,6 +41,15 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     example two types that differ only in charge. The structure functions along these
     modes come from ψ; without this, S_ij would miss the charge correlations of such
     systems.
+  - The structure function files also hold `charge_structure_function`, the structure
+    function of the smeared charge density. It comes from two estimators that use ψ:
+    - the mixed form (k²/E)⟨ψc⟩;
+    - the field-field form (k²/E)²[V N̄^(1/2) ⟨ψψ⟩ + E/k²].
+
+    Their difference has mean zero, so at each wavevector the two are combined with the
+    weight of least variance, stored as `charge_structure_function_weight`. The
+    field-field form had 20-600 times less variance where screening is strong, and the
+    mixed form is better where it is weak. Its pending sums continue after a restart.
   - Limitations: periodic boxes only, no random copolymers.
 
   `TestClftsElectrostatics` checks the reductions to neutral CL-FTS (bit for bit), the

@@ -1,6 +1,6 @@
 # Structure Function Estimators in Field-Theoretic Simulations
 
-A field-theoretic simulation (L-FTS or CL-FTS) samples fields, not particles. A particle correlation function such as the structure function is therefore measured as the average of an expression of the fields along the Langevin trajectory, an *estimator*. This document is self-contained. It sets up the model (Section 1), derives the identity behind every estimator used in polymerfts (Section 2), and builds three estimators from it:
+A field-theoretic simulation (L-FTS or CL-FTS) samples fields, not particles. A particle correlation function such as the structure function is therefore measured as the average of an expression of the fields along the Langevin trajectory, an *estimator*. This is the term of statistics and Monte Carlo methods: several estimators can have the same mean but different variances. Field-theoretic literature often calls these expressions *operators* (density, chemical potential or pressure operators; Reference 4). This document is self-contained. It sets up the model (Section 1), derives the identity behind every estimator used in polymerfts (Section 2), and builds three estimators from it:
 
 - the estimator of the auxiliary fields (Section 3) and its limits (Section 4);
 - its completion by the electrostatic potential for composition modes without an auxiliary field (Section 5);
@@ -83,8 +83,17 @@ The intrachain correlation is contained in $`S_{lj}`$ on the right, without bein
 V \sqrt{\bar{N}} \left\langle \frac{k^2}{E} \tilde\psi(\mathbf{k}) \, \tilde\phi_j(-\mathbf{k}) \right\rangle = \sum_l z_l \, \Gamma_l(\mathbf{k}) \, S_{lj}(\mathbf{k})
 ```
 
+**Field-field form.** At fixed particles, $`\Omega_k`$ fluctuates around its mean $`(\lambda_k/M)\, y_k`$ with the Gaussian variance $`-\lambda_k/M`$ (in the same normalization). This variance is positive for real fields ($`\lambda_k < 0`$) and negative on the rotated contour of imaginary fields. Hence
+
+```math
+\mathbf{a}_k^T \Gamma S \Gamma \, \mathbf{a}_k = \left(\frac{M}{\lambda_k}\right)^2 \left[ V \sqrt{\bar{N}} \left\langle \tilde\Omega_k(\mathbf{k}) \, \tilde\Omega_k(-\mathbf{k}) \right\rangle + \frac{\lambda_k}{M} \right], \qquad \mathbf{z}^T \Gamma S \Gamma \, \mathbf{z} = \left(\frac{k^2}{E}\right)^2 \left[ V \sqrt{\bar{N}} \left\langle \tilde\psi(\mathbf{k}) \, \tilde\psi(-\mathbf{k}) \right\rangle + \frac{E}{k^2} \right]
+```
+
+The mixed and the field-field forms have the same mean, but different variances (Section 7).
+
 **In the literature.**
-- For an AB melt, the identity written as a correlation of two fields is the estimator $`S = \rho_0 \langle W_- W_- \rangle/(V\chi_b^2) - \rho_0/(2\chi_b)`$, Eq. (21) of Reference 3, which cites References 1 and 2.
+- For an AB melt, the identity written as a correlation of two fields is the estimator $`S = \rho_0 \langle W_- W_- \rangle/(V\chi_b^2) - \rho_0/(2\chi_b)`$, Eq. (21) of Reference 5, which cites References 1 and 2.
+- Reference 4 treats field-theoretic simulations and their operators in general, for polymers and other fluids.
 - BioFTS evaluates the mixed form $`i G_0 \langle \tilde\rho \, \Psi \rangle`$ in each interaction channel, including its Coulomb channel.
 
 ## 3. Auxiliary-Field Estimator
@@ -153,6 +162,33 @@ The structure function of the smeared charge density follows from the recorded $
 
 Divided by $`\Gamma^2`$ for a common smearing function, this is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$.
 
+**Two forms with complementary noise.** The same quantity $`S_c = \sum_{ij} z_i \Gamma_i S_{ij} \Gamma_j z_j`$ has a mixed form and a field-field form (Section 2). Per sample, they are
+
+```math
+M = \frac{k^2}{E} \, V \sqrt{\bar{N}} \, \tilde\psi(\mathbf{k}) \, \tilde c(-\mathbf{k}), \qquad F = \left(\frac{k^2}{E}\right)^2 \left[ V \sqrt{\bar{N}} \, \tilde\psi(\mathbf{k}) \, \tilde\psi(-\mathbf{k}) + \frac{E}{k^2} \right]
+```
+
+Their variances differ with the strength of screening at the wavevector, $`(E/k^2)\, S_c`$:
+
+- **Strong screening** ($`(E/k^2) S_c \to 1`$, low $`k`$): the bracket of $`F`$ is close to its constant, so $`F`$ has far less variance than $`M`$.
+- **Weak screening** (large $`k`$): $`S_c`$ is a small difference between two large terms of $`F`$, and $`M`$ is better (Section 7).
+
+**Combined estimator.** Since both forms have the mean $`S_c`$, their difference $`D = F - M`$ has mean zero; it is a control variate. For any weight $`w`$, $`\langle M \rangle + w \langle D \rangle`$ is an estimator of $`S_c`$. Its variance is least for
+
+```math
+w = -\frac{\mathrm{Cov}(M, D)}{\mathrm{Var}(D)}
+```
+
+CL-FTS with Coulomb coupling accumulates $`M`$, $`D`$, $`M D`$ and $`D^2`$ at each wavevector. Each `structure_function_*.mat` then contains:
+- `charge_structure_function_real` and `_imag`: $`\langle M \rangle + w \langle D \rangle`$ in units of $`\rho_0 N`$, with $`w`$ from the covariances of the same statistics interval; the mode $`\mathbf{k} = 0`$ is 0.
+- `charge_structure_function_weight`: $`w`$. A weight of 0 is the mixed form, 1 the field-field form.
+
+Details:
+- **Smearing:** $`S_c`$ is the structure function of the smeared charge density; with a common smearing function, $`S_{zz} = S_c/\Gamma^2`$.
+- **Gaussian regime:** at weak fluctuations the charge density responds linearly to $`\psi`$, $`\tilde c \approx -G\tilde\psi`$ with the single-chain response $`G`$. Then $`M`$ and $`F`$ are both linear in $`\tilde\psi(\mathbf{k})\tilde\psi(-\mathbf{k})`$, and the weight removes this term. What remains is the RPA computed from $`G`$, with almost no variance. In this regime the combined estimator therefore does not test how well $`\psi`$ is sampled; the mixed form does.
+- **Approximation in w:** the weight uses the variance of single samples. Neighboring samples are correlated, so $`w`$ is close to, but not exactly, the weight of least variance of the time average. $`\langle M \rangle + w \langle D \rangle`$ remains unbiased up to the statistical error of $`w`$.
+- **Restarts:** the pending sums are stored in the checkpoints and continue after a restart.
+
 ## 7. Validation
 
 **RPA tests.** In the disordered phase at weak fluctuations (large $`\bar{N}`$), the structure function approaches the random-phase approximation (RPA). With the single-chain correlation matrix $`G`$ and $`D_\Gamma = \mathrm{diag}(\Gamma_1, \ldots, \Gamma_M)`$,
@@ -169,7 +205,7 @@ The regression tests compare the estimators with this formula:
 
   In the polyampholyte, the completed estimator gives the charge structure function of the RPA. Without the completion, $`S_{EE} + S_{KK} - 2 S_{EK}`$ is close to zero.
 
-**Comparison with BioFTS.** BioFTS (Reference 4) samples the same bead-spring model with the same Gaussian smearing, an Edwards excluded volume $`v`$ and a Coulomb channel. Its estimator is $`i G_0 \langle \tilde\rho \Psi \rangle`$ per channel, and it advances the fields semi-implicitly.
+**Comparison with BioFTS.** BioFTS (Reference 3) samples the same bead-spring model with the same Gaussian smearing, an Edwards excluded volume $`v`$ and a Coulomb channel. Its estimator is $`i G_0 \langle \tilde\rho \Psi \rangle`$ per channel, and it advances the fields semi-implicitly.
 
 Conditions (bead units, $`b = 1`$):
 - chains of $`N = 20`$ beads at bead density $`\rho_b = 2`$, with $`v = 0.05`$ and smearing length $`a = b/\sqrt{6}`$;
@@ -188,12 +224,37 @@ Each code made four independent runs of 35000 steps after equilibration; BioFTS 
 
 For the charge structure function, polymerfts used the estimator of Section 6. BioFTS approaches polymerfts as its time step decreases, as expected from the bias of semi-implicit stepping.
 
+**Estimators on the same trajectory.** Different estimators of the same structure function can be compared on identical samples. Their difference in noise is then the difference between the estimators alone, not between the sampling dynamics.
+
+Conditions:
+- the polyampholyte above on a $`32^3`$ grid, in CL-FTS on CUDA ($`\delta\tau N = 0.5`$);
+- four independent runs of 17000 steps after equilibration, with every step sampled;
+- the noise is the standard deviation of 1000-step block means (68 blocks).
+
+Compared estimators:
+- **Density:** the mixed form of Section 3, the field-field form of Section 2 for the mode with $`\lambda_k \neq 0`$, and $`V\sqrt{\bar{N}} \langle \tilde\phi \tilde\phi \rangle`$ alone.
+- **Charge:** the mixed form of Section 6 and the field-field form of $`\psi`$.
+
+Results on the shells $`k R_0 = 2.2`$-$`7.5`$:
+
+| Structure function | Means of the two correct forms | Variance, field-field / mixed |
+|---|---|---|
+| Density | agree within 1.4 % (at most 2.2 combined standard errors) | 0.70-0.81 at the three lowest shells, 1.5-13 at larger $`k`$ |
+| Charge | agree within 2.7 %; the field-field values lie 1.5 % lower on average (at most 2.6 combined standard errors) | 0.002-0.05 |
+| Density, $`\langle \phi \phi \rangle`$ alone | negative (e.g. −0.32 against 0.45 at the lowest shell): the intrachain correlation is missing | — |
+
+**Which form has less noise.**
+- **Density:** the mixed form is better overall.
+- **Charge:** in this strongly screened polyampholyte, the field-field form has 20-600 times less variance. Screening suppresses the fluctuations of $`\psi`$ about its Gaussian part, so $`V\sqrt{\bar{N}}\langle\tilde\psi\tilde\psi\rangle + E/k^2`$ fluctuates little. The mixed form, in contrast, multiplies $`\psi`$ by the fluctuating charge density.
+
 ## 8. References
 
 1. Müller, M. & Schmid, F. "Incorporating Fluctuations and Dynamics in Self-Consistent Field Theories for Polymer Blends." In *Advanced Computer Simulation Approaches for Soft Matter Sciences II* (Springer, Berlin, 2005).
 
 2. Spencer, R. K. W. & Matsen, M. W. "Critical Point of Symmetric Binary Homopolymer Blends." *Macromolecules* **49**, 6116 (2016).
 
-3. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+3. Wessén, J., Das, S., Pal, T. & Chan, H. S. "Analytical Formulation and Field-Theoretic Simulation of Sequence-Specific Phase Separation of Protein-Like Heteropolymers with Short- and Long-Spatial-Range Interactions." *J. Phys. Chem. B* **126**, 9222 (2022). Code: <https://github.com/jwessen/BioFTS>.
 
-4. Wessén, J., Das, S., Pal, T. & Chan, H. S. "Analytical Formulation and Field-Theoretic Simulation of Sequence-Specific Phase Separation of Protein-Like Heteropolymers with Short- and Long-Spatial-Range Interactions." *J. Phys. Chem. B* **126**, 9222 (2022). Code: <https://github.com/jwessen/BioFTS>.
+4. Fredrickson, G. H. & Delaney, K. T. *Field-Theoretic Simulations in Soft Matter and Quantum Fluids* (Oxford University Press, Oxford, 2023), International Series of Monographs on Physics 173.
+
+5. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).

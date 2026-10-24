@@ -253,7 +253,7 @@ The stationary variance of the linear modes does not depend on $`\delta\tau`$, w
 
 **Observables.**
 - **H:** the recorded $`H`$ includes $`H_{el}`$.
-- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included. For composition modes without an auxiliary field, such as two types that differ only in charge, $`\psi`$ completes the estimator ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)). The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$.
+- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included. For composition modes without an auxiliary field, such as two types that differ only in charge, $`\psi`$ completes the estimator ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)). The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$. The files also hold `charge_structure_function`, the structure function of the smeared charge density. It combines two estimators that use $`\psi`$ with the weight of least variance at each wavevector, and it is much less noisy where screening is strong ([Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
 - **RPA:** the RPA of Section 6.4 adds $`(E/k^2)\, z z^T`$ to the interaction matrix.
 
 **Tests.**

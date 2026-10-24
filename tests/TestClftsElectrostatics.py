@@ -152,7 +152,7 @@ def restart(root):
     assert str(a["psi_rng_state_json"]) == str(b["psi_rng_state_json"])
     for name in ("dH_000006.mat", "structure_function_000006.mat"):
         assert max_difference(mat(root / "full", name), mat(root / "part", name),
-                              ("H_history", "dH_history", "structure_function_")) == 0.0
+                              ("H_history", "dH_history", "structure_function_", "charge_structure_function")) == 0.0
 
 
 def expect_validation_error(make, message):

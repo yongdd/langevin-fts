@@ -573,7 +573,16 @@ class CLFTS:
             sf_average[type_pair] = np.zeros_like(
                 np.fft.fftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128
             )
-        sf_sample_count = restore_recording_state(_restart_data, H_history, dH_history, sf_average, drift_history)
+        # Charge structure function (with Coulomb coupling): sums of the mixed form M = (k²/E) ψ c, of the
+        # zero-mean difference D = (field-field form) - M and of their products, for a combination
+        # M + w D of least variance (docs/theory/StructureFunctionEstimators.md, Section 6)
+        recorded = dict(sf_average)
+        charge_sums = None
+        if self.electrostatics is not None and self.electrostatics.coupling > 0:
+            charge_sums = {key: np.zeros(self.prop_solver.nx, dtype=np.complex128)
+                           for key in ("charge_mixed", "charge_difference", "charge_mixed_difference", "charge_difference_squared")}
+            recorded.update(charge_sums)
+        sf_sample_count = restore_recording_state(_restart_data, H_history, dH_history, recorded, drift_history)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -756,6 +765,25 @@ class CLFTS:
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
                     sf_average[key] += mu_fourier[monomer_pair[0]] * phi_fourier[monomer_pair[1]]
+                if charge_sums is not None:
+                    es = self.electrostatics
+                    n_grid, nx = self.prop_solver.n_grid, self.prop_solver.nx
+                    norm = self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
+                    psi = np.reshape(es.psi, nx)
+                    psi_k = np.fft.fftn(psi) / n_grid
+                    psi_mk = np.conj(np.fft.fftn(np.conj(psi))) / n_grid
+                    charge = np.reshape(es.charge_density(phi_for_force), nx)
+                    charge_mk = np.conj(np.fft.fftn(np.conj(charge))) / n_grid
+                    rate = es.k_sq / es.coupling
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        mixed = rate * norm * psi_k * charge_mk
+                        difference = rate ** 2 * (norm * psi_k * psi_mk + 1.0 / rate) - mixed
+                    mixed[(0,) * len(nx)] = 0.0
+                    difference[(0,) * len(nx)] = 0.0
+                    charge_sums["charge_mixed"] += mixed
+                    charge_sums["charge_difference"] += difference
+                    charge_sums["charge_mixed_difference"] += mixed.real * difference.real
+                    charge_sums["charge_difference_squared"] += difference.real ** 2
 
             # Save structure function
             if langevin_step % self.recording["statistics_save_interval"] == 0:
@@ -792,6 +820,20 @@ class CLFTS:
                         sf_scaled = np.divide(sf_scaled, gamma, out=np.zeros_like(sf_scaled), where=gamma > 1e-12)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(sf_scaled)
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(sf_scaled)
+                # Structure function of the smeared charge density c = Σ_i z_i Γ_i φ_i: <M> + w <D>
+                # with the weight w = -Cov(M, D)/Var(D) of least variance at each wavevector (w = 0:
+                # the mixed form, w = 1: the field-field form)
+                if charge_sums is not None:
+                    count = max(sf_sample_count, 1)
+                    mixed = charge_sums["charge_mixed"] / count
+                    difference = charge_sums["charge_difference"] / count
+                    covariance = charge_sums["charge_mixed_difference"].real / count - mixed.real * difference.real
+                    variance = charge_sums["charge_difference_squared"].real / count - difference.real ** 2
+                    weight = np.divide(-covariance, variance, out=np.zeros_like(variance), where=variance > 0)
+                    s_charge = mixed + weight * difference
+                    mdic["charge_structure_function_real"] = np.real(s_charge)
+                    mdic["charge_structure_function_imag"] = np.imag(s_charge)
+                    mdic["charge_structure_function_weight"] = weight
                 mdic["sample_count"] = sf_sample_count
                 mdic["simulation_metadata_json"] = json.dumps(self.metadata)
                 savemat(
@@ -799,8 +841,8 @@ class CLFTS:
                     mdic, long_field_names=True, do_compression=True
                 )
                 # Reset arrays
-                for key in sf_average:
-                    sf_average[key][:] = 0.0
+                for key in recorded:
+                    recorded[key][:] = 0.0
                 sf_sample_count = 0
 
             # Observe an accepted state before saving its callback/integrator state.
@@ -810,7 +852,7 @@ class CLFTS:
             # Save simulation data
             if langevin_step % self.recording["checkpoint_interval"] == 0:
                 self._recording_state = {"H_history": H_history, "dH_history": dH_history,
-                                         "sf_average": sf_average, "sample_count": sf_sample_count, "drift_history": drift_history}
+                                         "sf_average": recorded, "sample_count": sf_sample_count, "drift_history": drift_history}
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
