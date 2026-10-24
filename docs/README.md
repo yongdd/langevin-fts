@@ -41,3 +41,4 @@
 | [Tools.md](references/Tools.md) | Utility scripts for visualization and data conversion |
 | [Bibliography.md](references/Bibliography.md) | Publication references |
 | [Errata.md](references/Errata.md) | Corrections to the publications on the algorithms of this library |
+| [RelatedSoftware.md](references/RelatedSoftware.md) | Other polymer field theory software |
