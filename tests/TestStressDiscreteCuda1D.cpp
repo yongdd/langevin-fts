@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <cmath>
 #include <numbers>
+#include <numeric>
 #include <string>
 #include <array>
 #include <chrono>

@@ -74,8 +74,7 @@ installation guide provides separate MKL and FFTW setup paths:
 
 ```bash
 conda activate polymerfts
-conda install --override-channels -c defaults --freeze-installed \
-    fftw mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed fftw mkl-devel
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
@@ -89,6 +88,12 @@ nice -n 10 cmake --build build --parallel 4
 - The base environment includes LAPACKE but installs neither MKL nor FFTW.
   Install the libraries separately before enabling their CPU backends.
   See Installation for setup details.
+- The environment uses conda-forge (Miniforge) on Linux and Windows. On Windows,
+  build with MSVC from an x64 developer prompt in the activated environment and
+  select Ninja with `-G Ninja` (wheels: `-Ccmake.args=-GNinja`): the Visual Studio
+  generator cannot use conda's `nvcc`. conda-forge's `cuda-nvcc`,
+  `cuda-cudart-dev` and `libcufft-dev` supply the CUDA toolkit there. See
+  Installation.
 - Use `-DPOLYMERFTS_USE_CUDA=ON` when CUDA must be built: configuration then fails
   if the toolchain is unsuitable. `AUTO` can fall back to CPU; inspect the output.
 - Set `POLYMERFTS_CUDA_ARCHITECTURES` for the intended toolkit and target devices.

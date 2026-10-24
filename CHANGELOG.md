@@ -8,6 +8,22 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ## [Unreleased]
 
+### Installation and platforms
+
+- The Conda environment and CI use conda-forge (Miniforge) instead of Anaconda's
+  `defaults` channel, on Linux and Windows (2026-10-24). OpenBLAS is selected with
+  `libblas=*=*openblas` and supplies LAPACKE through `openblas`; spglib comes from
+  conda-forge with its C library; the MKL backend installs `mkl-devel`. The pinned
+  versions follow conda-forge for Python 3.14: NumPy 2.5, SciPy 1.18, pandas 3.1,
+  Matplotlib 3.11 and OpenBLAS 0.3.34.
+- Windows builds with MSVC (2026-10-24): CMake finds conda's libraries under
+  `<prefix>/Library`, uses MSVC warning flags, the conforming preprocessor that the CUDA
+  headers need and MSVC's LLVM OpenMP runtime (CMake 3.30+), names the module
+  `_core.pyd` and defines `FFTW_DLL`, without which `fftw_version` came from MKL's FFTW
+  wrappers. LAPACKE uses `std::complex` under MSVC, the package adds the spglib DLL
+  directory before importing `_core`, and the tests no longer use variable-length arrays
+  or POSIX-only calls.
+
 ### Interface changes
 
 - `SymmetricPolymerTheory.compute_h_deriv_chin()` no longer needs `chi_n`: call it as

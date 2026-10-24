@@ -96,6 +96,17 @@ FUNCTION(SET_TEST_LABELS TEST_NAME)
     ENDIF()
 ENDFUNCTION()
 
+# Windows looks for the DLLs of an executable on PATH. The spglib DLL lies in
+# the spglib Python package, above the directory of its import library.
+FUNCTION(SET_TEST_DLL_PATH TEST_NAME)
+    IF(WIN32)
+        GET_FILENAME_COMPONENT(_spglib_lib_dir "${SPGLIB_LIBRARIES}" DIRECTORY)
+        GET_FILENAME_COMPONENT(_spglib_root "${_spglib_lib_dir}" DIRECTORY)
+        SET_PROPERTY(TEST ${TEST_NAME} PROPERTY ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:${_spglib_root}" "PATH=path_list_prepend:${_spglib_root}/bin")
+    ENDIF()
+ENDFUNCTION()
+
 # Add Python Files. They import the package staged in the build tree
 # (see polymerfts_stage in the top-level CMakeLists.txt), so installation
 # is not required and an old site-packages install is never tested by mistake.
@@ -147,6 +158,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
     # in an MKL-only build). A CUDA build run without a visible GPU fails instead.
     SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
+    SET_TEST_DLL_PATH(${TEST_NAME})
 ENDFOREACH()
 
 # Benchmark executables (not added to ctest)
@@ -187,6 +199,7 @@ IF(POLYMERFTS_BUILD_CUDA)
         IF(NOT ${TEST_NAME} MATCHES "Bench")
             ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
             SET_TEST_LABELS(${TEST_NAME})
+            SET_TEST_DLL_PATH(${TEST_NAME})
         ENDIF()
     ENDFOREACH()
     # Its out-of-memory check holds most of the free device memory for a moment

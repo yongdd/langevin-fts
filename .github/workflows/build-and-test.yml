@@ -33,17 +33,18 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /home/runner/conda_pkgs_dir
-        key: conda-defaults-${{ runner.os }}-${{ hashFiles('environment.yml') }}
+        key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
-    - name: Install the Anaconda environment
+    - name: Install the conda environment
       uses: conda-incubator/setup-miniconda@v3
       with:
+        miniforge-version: latest
         activate-environment: polymerfts
         auto-activate-base: false
         environment-file: environment.yml
-        channels: defaults
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
         pkgs-dirs: /home/runner/conda_pkgs_dir
 
     - name: Test script utilities
@@ -62,24 +63,24 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /home/runner/conda_pkgs_dir
-        key: conda-defaults-${{ runner.os }}-${{ hashFiles('environment.yml') }}
+        key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
-    - name: Install the Anaconda environment
+    - name: Install the conda environment
       uses: conda-incubator/setup-miniconda@v3
       with:
+        miniforge-version: latest
         activate-environment: polymerfts
         auto-activate-base: false
         environment-file: environment.yml
-        channels: defaults
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
         pkgs-dirs: /home/runner/conda_pkgs_dir
 
     - name: Install MKL and FFTW
       shell: bash -l {0}
       run: |
-        conda install -y --override-channels -c defaults --freeze-installed \
-          mkl=2025.0.0 mkl-include=2025.0.0 fftw
+        conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel fftw
 
     - name: Record installed dependencies
       shell: bash -l {0}
@@ -166,19 +167,20 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Anaconda Python
+    - name: Set up Python
       uses: conda-incubator/setup-miniconda@v3
       with:
+        miniforge-version: latest
         activate-environment: lint
         auto-activate-base: false
         python-version: "3.14"
-        channels: defaults
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
 
     - name: Install linting tools
       run: |
-        conda install -y --override-channels -c defaults flake8
+        conda install -y --override-channels -c conda-forge flake8
 
     - name: Run flake8 (critical errors only)
       run: |

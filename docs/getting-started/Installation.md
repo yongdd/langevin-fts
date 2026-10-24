@@ -1,6 +1,8 @@
 # Installation
 
-You need Conda and a C++20 compiler. Start by cloning the repository.
+You need Conda and a C++20 compiler. [Miniforge](https://github.com/conda-forge/miniforge)
+provides Conda with conda-forge as its default channel; on Windows, also see
+[Windows](#windows). Start by cloning the repository.
 
 ## 1. Create the Environment
 
@@ -11,8 +13,8 @@ conda env create -f environment.yml
 conda activate polymerfts
 ```
 
-The environment uses Anaconda's official channel and Python 3.14; spglib is
-installed from its upstream PyPI wheel.
+The environment uses the conda-forge channel and Python 3.14, with OpenBLAS for
+LAPACKE and spglib with its C library.
 
 ## 2. Build a Wheel with MKL or FFTW
 
@@ -25,8 +27,7 @@ CUDA is then detected automatically; see [GPU setup](#gpu-setup) for details.
 **MKL**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -34,7 +35,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```
@@ -88,17 +89,66 @@ python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail
 </details>
 
 <details>
+<summary>Windows</summary>
+
+### Windows
+
+Install Visual Studio 2022 or newer with the **Desktop development with C++**
+workload, and [Miniforge](https://github.com/conda-forge/miniforge). Run the steps
+above in an **x64 Native Tools Command Prompt** after `conda activate polymerfts`;
+the Conda commands are the same. In `cmd`, set variables with `set` and continue
+lines with `^`. Select the Ninja generator on the command line: the Visual Studio
+generator builds CUDA only with the Visual Studio integration of NVIDIA's installer,
+and without it `POLYMERFTS_USE_CUDA=AUTO` leaves CUDA out.
+
+```bat
+set CMAKE_PREFIX_PATH=%CONDA_PREFIX%
+python -m pip wheel . --no-deps --wheel-dir dist -Ccmake.args=-GNinja ^
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
+```
+
+For the GPU backend, install the CUDA toolkit into the environment before building.
+Its activation script selects the Visual Studio generator through
+`CMAKE_GENERATOR`, which the `-G` option overrides:
+
+```bat
+conda install --override-channels -c conda-forge --freeze-installed ^
+    cuda-nvcc cuda-cudart-dev libcufft-dev
+```
+
+The native build with CTest adds `-G Ninja`:
+
+```bat
+cmake -S . -B build-tests -G Ninja -DCMAKE_PREFIX_PATH=%CONDA_PREFIX% ^
+    -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_WERROR=ON
+cmake --build build-tests --parallel 4
+ctest --test-dir build-tests --output-on-failure
+```
+
+- MSVC uses its LLVM OpenMP runtime (`/openmp:llvm`), which needs CMake 3.30+; the
+  environment supplies a newer CMake.
+- By default the NVIDIA driver on Windows lets CUDA allocations fall back to system
+  memory ("CUDA - Sysmem Fallback Policy" in the NVIDIA Control Panel). A calculation
+  larger than the GPU memory then runs slowly instead of failing, and the
+  out-of-memory check of `TestCudaDeviceBuffer` fails. The policy can be set to
+  "Prefer No Sysmem Fallback".
+- Checked with Visual Studio 2026 (MSVC 19.51) and CUDA 13.4 from conda-forge.
+
+</details>
+
+<details>
 <summary>Dependencies and CMake options</summary>
 
 ### Dependencies
 
 `environment.yml` supplies the shared dependencies. Install the selected CPU FFT
-library separately, and provide the compiler and any CUDA toolkit outside Conda.
+library separately, and provide the compiler outside Conda. The CUDA toolkit comes
+from the system, or on Windows from conda-forge (see [Windows](#windows)).
 
 | Dependency | Requirement |
 |------------|-------------|
 | Python | 3.11+; the supplied environment uses 3.14 |
-| C++ compiler | C++20 with `std::source_location`, such as GCC 11+; CUDA also requires a compatible host compiler |
+| C++ compiler | C++20 with `std::source_location`, such as GCC 11+ or MSVC from Visual Studio 2022+; CUDA also requires a compatible host compiler |
 | CMake | 3.18+ for CPU-only builds; 3.25.2+ for CUDA |
 | spglib | 2.x; included in the environment |
 | LAPACKE | Included in the environment; manual installs can use `liblapacke-dev` or `LAPACKE_ROOT` |
@@ -163,8 +213,7 @@ CPU CI enables both backends in one job, including their agreement checks.
 To use the same configuration locally:
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0 fftw
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel fftw
 cmake -S . -B build-tests -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
     -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
     -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON

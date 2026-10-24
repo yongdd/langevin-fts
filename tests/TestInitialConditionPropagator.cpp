@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 #include <iomanip>
 #include <cmath>
 #include <numbers>
@@ -54,9 +55,9 @@ int main()
         bool reduce_memory=false;
 
         //-------------- Allocate array ------------
-        double w[M];
-        double q_init[M];
-        double q_out[M];
+        std::vector<double> w(M);
+        std::vector<double> q_init(M);
+        std::vector<double> q_out(M);
 
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
@@ -99,16 +100,16 @@ int main()
                     q_init[0] = 1.0/cb->get_dv(0);
 
                     // Keep the level of field value
-                    cb->zero_mean(w);
+                    cb->zero_mean(w.data());
 
                     // For the given fields find the polymer statistics
-                    solver->compute_propagators({{"A",w}},{{"G", q_init}});
+                    solver->compute_propagators({{"A",w.data()}},{{"G", q_init.data()}});
                     solver->compute_concentrations();
 
                     for(int n=20; n<=N; n+=20)
                     {   
                                                    //output, p, v ,u, n
-                        solver->get_chain_propagator(q_out, 0, 0, 1, n);
+                        solver->get_chain_propagator(q_out.data(), 0, 0, 1, n);
 
                         double sum = 0.0;
                         double x_square = 0.0;

@@ -8,6 +8,16 @@ try:
 except Exception:
     __version__ = "0.10.0"
 
+# Windows does not search PATH or an RPATH for the libraries of an extension
+# module: the spglib library that _core links lives in the spglib package.
+import sys as _sys
+if _sys.platform == "win32":
+    import os as _os
+    import importlib.util as _importlib_util
+    _spglib_spec = _importlib_util.find_spec("spglib")
+    if _spglib_spec is not None and _spglib_spec.origin:
+        _os.add_dll_directory(_os.path.dirname(_spglib_spec.origin))
+
 # Core C++ bindings (re-export all for user convenience)
 from ._core import *
 

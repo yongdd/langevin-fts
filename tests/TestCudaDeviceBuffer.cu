@@ -44,7 +44,11 @@
 #include <cuda_runtime.h>
 #ifdef POLYMERFTS_TEST_HAS_NVML
 #include <nvml.h>
+#ifdef _WIN32
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #endif
 #include "CudaCommon.h"
 #include "AbstractFactory.h"
@@ -121,6 +125,15 @@ static std::string one_line(std::string text)
     return text;
 }
 
+#ifdef _WIN32
+// The CRT environment that getenv reads; an empty value removes the variable
+static void set_env(const char* name, const char* value) { _putenv_s(name, value); }
+static void unset_env(const char* name) { _putenv_s(name, ""); }
+#else
+static void set_env(const char* name, const char* value) { setenv(name, value, 1); }
+static void unset_env(const char* name) { unsetenv(name); }
+#endif
+
 /// Sets OMP_NUM_THREADS (the backends create one stream per thread, at most 4)
 /// for a scope and restores the caller's value afterwards.
 struct ScopedStreams
@@ -131,14 +144,14 @@ struct ScopedStreams
         had = (value != nullptr);
         if (had)
             saved = value;
-        setenv("OMP_NUM_THREADS", n, 1);
+        set_env("OMP_NUM_THREADS", n);
     }
     ~ScopedStreams()
     {
         if (had)
-            setenv("OMP_NUM_THREADS", saved.c_str(), 1);
+            set_env("OMP_NUM_THREADS", saved.c_str());
         else
-            unsetenv("OMP_NUM_THREADS");
+            unset_env("OMP_NUM_THREADS");
     }
     bool had = false;
     std::string saved;

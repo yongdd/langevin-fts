@@ -12,6 +12,7 @@ set(_MKL_SEARCH_PATHS
     ${MKL_ROOT}
     $ENV{MKLROOT}
     $ENV{CONDA_PREFIX}
+    $ENV{CONDA_PREFIX}/Library
     /opt/intel/oneapi/mkl/latest
     /opt/intel/mkl
     /usr/local
@@ -24,30 +25,30 @@ find_path(MKL_INCLUDE_DIR
     PATH_SUFFIXES include
 )
 
-# Find core library
+# Find core library (on Windows, the *_dll names are the import libraries of the DLLs)
 find_library(MKL_CORE_LIB
-    NAMES mkl_core
+    NAMES mkl_core mkl_core_dll
     PATHS ${_MKL_SEARCH_PATHS}
     PATH_SUFFIXES lib lib/intel64
 )
 
 # Find interface library (LP64 for 32-bit integers, ILP64 for 64-bit)
 find_library(MKL_INTEL_LP64_LIB
-    NAMES mkl_intel_lp64
+    NAMES mkl_intel_lp64 mkl_intel_lp64_dll
     PATHS ${_MKL_SEARCH_PATHS}
     PATH_SUFFIXES lib lib/intel64
 )
 
 # Find threading library - prefer sequential for simplicity
 find_library(MKL_SEQUENTIAL_LIB
-    NAMES mkl_sequential
+    NAMES mkl_sequential mkl_sequential_dll
     PATHS ${_MKL_SEARCH_PATHS}
     PATH_SUFFIXES lib lib/intel64
 )
 
 # Alternative: Intel threading (requires libiomp5)
 find_library(MKL_INTEL_THREAD_LIB
-    NAMES mkl_intel_thread
+    NAMES mkl_intel_thread mkl_intel_thread_dll
     PATHS ${_MKL_SEARCH_PATHS}
     PATH_SUFFIXES lib lib/intel64
 )
@@ -74,10 +75,10 @@ if(MKL_FOUND)
         ${MKL_INTEL_LP64_LIB}
         ${_MKL_THREADING_LIB}
         ${MKL_CORE_LIB}
-        dl
-        pthread
-        m
     )
+    if(NOT WIN32)
+        list(APPEND MKL_LIBRARIES dl pthread m)
+    endif()
 
     # Create imported target
     if(NOT TARGET MKL::MKL)

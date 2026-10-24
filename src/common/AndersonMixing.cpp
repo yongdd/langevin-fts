@@ -25,30 +25,51 @@
 #include <vector>
 #include <type_traits>
 #include <cstdio>
-#include <unistd.h>
 #include <fcntl.h>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
+// MSVC has no C99 _Complex, the default complex type of LAPACKE: use
+// std::complex there. lapacke.h then declares lapack_make_complex_* with C
+// linkage returning it (C4190); they are not called here.
+#ifdef _MSC_VER
+#define lapack_complex_float std::complex<float>
+#define lapack_complex_double std::complex<double>
+#pragma warning(push)
+#pragma warning(disable : 4190)
+#endif
 #if __has_include(<lapacke.h>)
 #include <lapacke.h>
 #elif __has_include(<mkl_lapacke.h>)
 #include <mkl_lapacke.h>
 #else
-#error "LAPACKE header not found. Install with: conda install --override-channels -c defaults openblas-devel"
+#error "LAPACKE header not found. Install with: conda install --override-channels -c conda-forge openblas"
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 // RAII helper to suppress stderr (LAPACK xerbla warnings)
 struct SuppressStderr {
+#ifdef _WIN32
+    static constexpr const char* NULL_DEVICE = "NUL";
+#else
+    static constexpr const char* NULL_DEVICE = "/dev/null";
+#endif
     int saved_fd;
     SuppressStderr() {
         fflush(stderr);
-        saved_fd = dup(STDERR_FILENO);
-        int devnull = open("/dev/null", O_WRONLY);
-        dup2(devnull, STDERR_FILENO);
+        saved_fd = dup(fileno(stderr));
+        int devnull = open(NULL_DEVICE, O_WRONLY);
+        dup2(devnull, fileno(stderr));
         close(devnull);
     }
     ~SuppressStderr() {
         fflush(stderr);
-        dup2(saved_fd, STDERR_FILENO);
+        dup2(saved_fd, fileno(stderr));
         close(saved_fd);
     }
 };

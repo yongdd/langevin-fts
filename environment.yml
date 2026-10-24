@@ -1,20 +1,22 @@
 name: polymerfts
 channels:
-  - defaults
+  - conda-forge
   - nodefaults
 dependencies:
   - python=3.14
   - cmake>=3.25.2
   - pybind11=3.1
-  - numpy=2.3
-  - scipy=1.16
-  - pandas=2.3
-  - matplotlib=3.10
+  - numpy=2.5
+  - scipy=1.18
+  - pandas=3.1
+  - matplotlib=3.11
   # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS.
-  - blas=1.0=openblas
-  - openblas-devel=0.3.31
-  - nomkl
+  - libblas=*=*openblas
+  - openblas=0.3.34
+  # The spglib package includes the C library and headers.
+  - spglib=2.8.0
   - make
+  - ninja
   - git
   - pip
   - pyyaml
@@ -23,6 +25,3 @@ dependencies:
   - pygraphviz
   - plotly
   - pytest
-  - pip:
-      # Maintainer-published wheels include the C library and headers.
-      - spglib==2.8.0

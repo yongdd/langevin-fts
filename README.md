@@ -26,14 +26,14 @@ conda activate polymerfts
 
 For GPU support, put CUDA 12.2+ `nvcc` on PATH before building the wheel; CUDA is
 detected automatically. The Conda environment does not include the toolkit.
+On Windows, follow the [Windows notes](docs/getting-started/Installation.md#windows).
 
 Choose one CPU backend.
 
 **MKL**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -41,7 +41,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```

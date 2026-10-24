@@ -1,3 +1,4 @@
+#include <iostream>
 #include <thrust/reduce.h>
 #include "CudaCommon.h"
 
