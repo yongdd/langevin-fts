@@ -253,7 +253,7 @@ The stationary variance of the linear modes does not depend on $`\delta\tau`$, w
 
 **Observables.**
 - **H:** the recorded $`H`$ includes $`H_{el}`$.
-- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included; $`\psi`$ does not enter the estimator. The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$.
+- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included. For composition modes without an auxiliary field, such as two types that differ only in charge, $`\psi`$ completes the estimator ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)). The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$.
 - **RPA:** the RPA of Section 6.4 adds $`(E/k^2)\, z z^T`$ to the interaction matrix.
 
 **Tests.**
@@ -261,7 +261,9 @@ The stationary variance of the linear modes does not depend on $`\delta\tau`$, w
   - that zero valences, or zero coupling, reproduce CL-FTS without charges bit for bit;
   - that the forces of $`\psi`$ and of the auxiliary fields are the derivatives of $`H`$;
   - that a continued run reproduces an uninterrupted one bit for bit.
-- `TestChargedStructureFunctionRPA` compares a charged diblock with counterions with the RPA.
+- `TestChargedStructureFunctionRPA` compares two systems with the RPA:
+  - a charged diblock with counterions;
+  - a polyampholyte melt whose charge mode has no auxiliary field.
 
 **Limitations.** The implementation supports periodic boxes only and no random copolymers. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
 
@@ -277,11 +279,13 @@ The structure function is computed using response theory (chemical potential-den
 S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k}) \rangle, \qquad \mu_i(\mathbf{r}) = \sum_{k} \frac{A_{ik}\, \Omega_k(\mathbf{r})}{\lambda_k}
 ```
 
-where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field, and the sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: all but the last field, see below; CL-FTS: all fields). Shifting the Gaussian integral over a fluctuating field $`\Omega_k`$ gives $`\langle \Omega_k \phi_j \rangle = (\lambda_k / M) \sum_l A_{lk} \langle \phi_l \phi_j \rangle`$, and $`A A^T = M I`$, so with every field fluctuating $`\langle \mu_i \phi_j \rangle = \langle \delta\phi_i \delta\phi_j \rangle`$ and $`S_{ij}`$ is the structure function in units of $`\rho_0 N`$ (in the disordered phase at weak fluctuations it approaches the random-phase approximation of [Section 6.4](#64-rpa-reference)). For real fields $`\tilde{\phi}_j(-\mathbf{k}) = \tilde{\phi}_j^*(\mathbf{k})`$; CL-FTS fields are complex and use $`\tilde{\phi}_j(-\mathbf{k})`$. For AB systems the estimator equals $`V\sqrt{\bar{n}}\,\langle|\tilde{W}_-(\mathbf{k})|^2\rangle/(\chi N)^2 - 1/(2\chi N)`$ on average.
+where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field. The sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: the first $`M-1`$ of them; CL-FTS: all of them). $`S_{ij}`$ is in units of $`\rho_0 N`$; in the disordered phase at weak fluctuations it approaches the random-phase approximation of [Section 6.4](#64-rpa-reference).
 
-With smearing the fields couple to the smeared densities, so the estimator gives $`\Gamma(\mathbf{k}) S_{ij}(\mathbf{k})`$; in a periodic box the recorded structure function is divided by $`\Gamma(\mathbf{k})`$ and is that of the densities (modes with $`\Gamma < 10^{-12}`$, which the smeared interaction does not see, are recorded as 0). In a box with walls $`\Gamma`$ is defined in the cosine basis while $`S_{ij}(\mathbf{k})`$ is a Fourier transform, so the estimator is recorded as it is.
-
-In L-FTS the sum runs over the first $`M-1`$ auxiliary fields with $`\lambda_k \neq 0`$: all but the pressure field (incompressible) or the field of the largest eigenvalue (compressible). When these are the real fields, which fluctuate, the estimator gives $`(P S)_{ij}`$, the structure function projected onto their eigenvectors, $`P = \sum_k \mathbf{a}_k \mathbf{a}_k^T / M`$ with $`\mathbf{a}_k`$ the $`k`$-th column of $`A`$. In incompressible models $`\sum_i \delta\phi_i = 0`$ and $`P S = S`$. In compressible L-FTS the field of the largest eigenvalue stays at its saddle point and the projection onto its eigenvector (close to the total density) is not recorded. An imaginary field among the first $`M-1`$ (L-FTS warns when a field other than the pressure field is imaginary) also stays at its saddle point; its term holds the correlation of the field-averaged concentrations without the intrachain part, and the estimator is then not the structure function. CL-FTS samples all fields and records the full $`S_{ij}`$.
+[Structure Function Estimators](StructureFunctionEstimators.md) covers the rest:
+- **Derivation:** the shift of the Gaussian integral over the fields;
+- **Smearing:** the division by $`\Gamma_i`$, and the projections that L-FTS records;
+- **Charges:** the completion by $`\psi`$ for composition modes without an auxiliary field, such as two types that differ only in charge;
+- **Charge structure function**, and a comparison with BioFTS.
 
 ### 6.2 Computing Structure Functions
 

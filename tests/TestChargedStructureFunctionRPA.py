@@ -18,6 +18,13 @@ lowers S_CC at the first four shells to 0.16-0.72 of the RPA without charges, wh
 makes its estimator noisy (a standard error of 0.3 at n = 1 from 4 x 40000 steps in
 1D); only its mean over n = 2..8 is checked, within 10 %, and the first four shells
 must lie below 0.85 of the RPA without charges.
+
+A melt of polyampholytes E5K5E5K5 (valences -1 and +1, no chi, zeta N = 10, E = 300)
+has a composition mode E - K with zero eigenvalue and no auxiliary field; its
+structure function comes from the electrostatic potential (Section 6.1 of the L-FTS
+theory). The density and the charge structure functions, S_EE + S_KK +- 2 S_EK, must
+meet the criteria of S_AA above, and the charge structure function must lie below the
+RPA without charges at the first three shells.
 """
 
 import os
@@ -40,6 +47,7 @@ Z_A, COUPLING = 0.2, 1e4
 PHI_C = Z_A * N_A / N / (1 + Z_A * N_A / N)   # z_A phi_A = phi_C
 RADII = {"A": 0.1, "B": 0.1, "C": 0.15}
 N_MODES = 8
+PA_SEQUENCE, PA_ZETA_N, PA_COUPLING, PA_RADIUS = "EEEEEKKKKKEEEEEKKKKK", 10.0, 300.0, 0.1
 
 n_pass = 0
 n_fail = 0
@@ -97,6 +105,40 @@ def params(work_dir):
             "verbose_level": 1}
 
 
+def rpa_polyampholyte(coupling):
+    """S/(rho0 N) of the bead density and of the charge density of the polyampholyte melt."""
+    z = np.array([-1.0 if c == "E" else 1.0 for c in PA_SEQUENCE])
+    segments = np.arange(N)
+    types, valences = [z < 0, z > 0], np.array([-1.0, 1.0])
+    density, charge = [], []
+    for n in range(1, N_MODES + 1):
+        k = 2 * np.pi * n / LX
+        bonds = np.exp(-k ** 2 / (6 * N) * np.abs(segments[:, None] - segments[None, :]))
+        G = np.array([[bonds[np.ix_(ti, tj)].sum() for tj in types] for ti in types]) / N ** 2
+        U = np.exp(-PA_RADIUS ** 2 * k ** 2) * (PA_ZETA_N * np.ones((2, 2)) + coupling / k ** 2 * np.outer(valences, valences))
+        s = np.linalg.inv(np.linalg.inv(G) + U)
+        density.append(s.sum())
+        charge.append(valences @ s @ valences)
+    return np.array(density), np.array(charge)
+
+
+def params_polyampholyte(work_dir):
+    blocks, start = [], 0
+    for i in range(1, N + 1):   # consecutive segments of one type form a block
+        if i == N or PA_SEQUENCE[i] != PA_SEQUENCE[start]:
+            blocks.append({"type": PA_SEQUENCE[start], "length": (i - start) / N})
+            start = i
+    return {"nx": [NX, NX], "lx": [LX, LX], "chain_model": "discrete", "ds": 1 / N,
+            "segment_lengths": {"E": 1.0, "K": 1.0}, "chi_n": {}, "zeta_n": PA_ZETA_N,
+            "polymers": [{"volume_fraction": 1.0, "blocks": blocks}],
+            "smearing": {"type": "gaussian", "a_int": PA_RADIUS},
+            "electrostatics": {"charges": {"E": -1.0, "K": 1.0}, "coupling": PA_COUPLING},
+            "platform": cpu_platform(), "langevin": {"nbar": NBAR, "dt": 1.0, "max_step": STEPS},
+            "recording": {"dir": work_dir, "checkpoint_interval": STEPS, "sample_interval": 1,
+                          "statistics_save_interval": STEPS},
+            "verbose_level": 1}
+
+
 def shells(s):
     """Mean of S over the wavevectors with |m|^2 = n^2, n = 1..N_MODES (m: integer frequencies)."""
     m = np.fft.fftfreq(NX, 1.0 / NX)
@@ -104,23 +146,25 @@ def shells(s):
     return np.array([np.mean(s[m_sq == n * n]) for n in range(1, N_MODES + 1)])
 
 
-def run(seed):
-    """Shell-averaged S of the pairs AA, BB, AB, CC of one run."""
+def run(make_params, seed):
+    """Shell-averaged S of all pairs of one run."""
     root = tempfile.mkdtemp()
     try:
         work = os.path.join(root, "charged")
+        p = make_params(work)
         with contextlib.redirect_stdout(io.StringIO()):
-            sim = CLFTS(params(work), random_seed=seed)
-            sim.run(initial_fields={t: np.zeros(NX * NX) for t in ("A", "B", "C")})
+            sim = CLFTS(p, random_seed=seed)
+            sim.run(initial_fields={t: np.zeros(NX * NX) for t in p["segment_lengths"]})
         data = loadmat(sorted(glob.glob(os.path.join(work, "structure_function_*.mat")))[-1])
-        return {key: shells(np.real(np.reshape(data["structure_function_" + key.replace(",", "_") + "_real"], (NX, NX))))
-                for key in ("A,A", "B,B", "A,B", "C,C")}
+        names = sorted(p["segment_lengths"])
+        return {i + "," + j: shells(np.real(np.reshape(data["structure_function_" + i + "_" + j + "_real"], (NX, NX))))
+                for a, i in enumerate(names) for j in names[a:]}
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
 def main():
-    measured = run(7)
+    measured = run(params, 7)
     reference, neutral = rpa(COUPLING), rpa(0.0)
     for key in ("A,A", "B,B", "A,B"):
         ratio = measured[key] / reference[key]
@@ -132,6 +176,18 @@ def main():
           f"charged CL-FTS S_C_C/RPA: mean of n = 2..8 {np.mean(ratio[1:]):.3f}, all {np.array2string(ratio, precision=2)}")
     ratio = measured["C,C"][:4] / neutral["C,C"][:4]
     check(np.all(ratio < 0.85), f"S_CC below the RPA without charges: ratios {np.array2string(ratio, precision=3)}")
+
+    # Polyampholyte: the charge direction has no auxiliary field
+    measured = run(params_polyampholyte, 7)
+    reference, neutral = rpa_polyampholyte(PA_COUPLING), rpa_polyampholyte(0.0)
+    density = measured["E,E"] + measured["K,K"] + 2 * measured["E,K"]
+    charge = measured["E,E"] + measured["K,K"] - 2 * measured["E,K"]
+    for name, s, ref in (("density", density, reference[0]), ("charge", charge, reference[1])):
+        ratio = s / ref
+        check(abs(np.mean(ratio) - 1.0) < 0.05 and np.all(np.abs(ratio - 1.0) < 0.2),
+              f"polyampholyte {name} S/RPA: mean {np.mean(ratio):.3f}, range [{ratio.min():.3f}, {ratio.max():.3f}]")
+    ratio = charge[:3] / neutral[1][:3]
+    check(np.all(ratio < 0.9), f"polyampholyte charge S below the RPA without charges: ratios {np.array2string(ratio, precision=3)}")
 
     print(f"\n{n_pass} passed, {n_fail} failed")
     sys.exit(0 if n_fail == 0 else 1)

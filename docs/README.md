@@ -18,6 +18,7 @@
 | [PolymerFieldTheory.md](theory/PolymerFieldTheory.md) | Field theory formulations (monomer, auxiliary fields) |
 | [SelfConsistentFieldTheory.md](theory/SelfConsistentFieldTheory.md) | SCFT saddle-point equations and iterative methods |
 | [LangevinFieldTheoreticSimulation.md](theory/LangevinFieldTheoreticSimulation.md) | L-FTS and CL-FTS: Langevin dynamics, complex Langevin and structure functions |
+| [StructureFunctionEstimators.md](theory/StructureFunctionEstimators.md) | Derivation of the structure function estimators, their completion with charges, and a comparison with BioFTS |
 | [NumericalMethods.md](theory/NumericalMethods.md) | Pseudo-spectral and real-space solvers |
 | [StressTensor.md](theory/StressTensor.md) | Stress tensor calculation |
 | [SpaceGroup.md](theory/SpaceGroup.md) | Space group symmetry |

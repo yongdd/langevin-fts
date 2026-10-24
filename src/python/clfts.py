@@ -268,6 +268,19 @@ class CLFTS:
                                                  round(1.0 / params["ds"]), self.langevin, random_seed)
             print("Electrostatics: charges", self.electrostatics.charges,
                   "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
+
+        # Structure functions: composition modes with a zero eigenvalue carry no auxiliary field,
+        # but ψ measures the charge direction z, <(k²/E) ψ(k) φ_j(-k)> = Σ_i z_i <Γ_i φ_i φ_j>.
+        # Its part outside the eigenvectors of the auxiliary fields, u = P_0 z (P_0: projector onto
+        # the zero-eigenvalue modes), completes the estimator (docs/theory/StructureFunctionEstimators.md,
+        # Section 5).
+        self._psi_probe = None
+        if self.electrostatics is not None and self.electrostatics.coupling > 0:
+            kept = [k for k in range(M) if not np.isclose(self.mpt.eigenvalues[k], 0.0)]
+            projector = np.eye(M) - sum(np.outer(self.mpt.matrix_a[:, k], self.mpt.matrix_a[:, k]) for k in kept) / M
+            u = projector @ np.array([self.electrostatics.charges[name] for name in self.monomer_types])
+            if u @ u > 1e-12:
+                self._psi_probe = u / (u @ u)
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
@@ -731,6 +744,14 @@ class CLFTS:
                             np.fft.fftn(np.reshape(w_aux[k], self.prop_solver.nx)) *
                             self.mpt.matrix_a[i, k] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
                         )
+                # Zero-eigenvalue modes along u: μ_i += u_i [(k²/E) ψ(k) - Σ_l z_l μ_l(k)] / |u|²
+                if self._psi_probe is not None:
+                    es = self.electrostatics
+                    probe = np.fft.fftn(np.reshape(es.psi, self.prop_solver.nx)) * es.k_sq / es.coupling / self.prop_solver.n_grid
+                    for name in self.monomer_types:
+                        probe -= es.charges[name] * mu_fourier[name]
+                    for i, name in enumerate(self.monomer_types):
+                        mu_fourier[name] = mu_fourier[name] + self._psi_probe[i] * probe
                 # Accumulate S_ij(K) = <μ_i(k) φ_j(-k)>
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))

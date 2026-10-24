@@ -37,12 +37,17 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   - Smearing is required with charges, and Gaussian smearing in CL-FTS accepts one length
     per monomer type.
   - Checkpoints store ψ and its noise stream.
+  - Some composition modes have a zero eigenvalue and therefore no auxiliary field, for
+    example two types that differ only in charge. The structure functions along these
+    modes come from ψ; without this, S_ij would miss the charge correlations of such
+    systems.
   - Limitations: periodic boxes only, no random copolymers.
 
   `TestClftsElectrostatics` checks the reductions to neutral CL-FTS (bit for bit), the
   forces against finite differences of H and bitwise restarts.
-  `TestChargedStructureFunctionRPA` compares a charged diblock with counterions with the
-  RPA. Example: `examples/clfts/ChargedDiblock.py`.
+  `TestChargedStructureFunctionRPA` compares two systems with the RPA: a charged diblock
+  with counterions, and a polyampholyte melt whose charge mode has no auxiliary field.
+  Example: `examples/clfts/ChargedDiblock.py`.
 
 ### Interface changes
 
