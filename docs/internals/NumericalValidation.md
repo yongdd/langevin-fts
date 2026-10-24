@@ -67,7 +67,7 @@ Compare separate jobs along these axes:
 - Grid: increase `--nx` at fixed physical box and model; then refine `--ds` separately.
 - Independent realizations: repeat each comparison with multiple `--seed` values. Account for both within-run autocorrelation and between-run variation.
 - Saddle accuracy: tighten `--saddle-tolerance`; report `saddle_failures` and `noise_resamples`. The default retry policy consumes one new noise per accepted proposal attempt, even when its saddle solve is repeated. Explicit resampling studies assess the former policy and cannot establish that it is unbiased merely because failure is rare.
-- CL-FTS: vary `--alpha` toward zero, inspect imaginary observables and drift tails, and cross-check in regimes where an independent reference is applicable. Bounded trajectories alone do not establish correct sampling.
+- CL-FTS: vary `--alpha` toward zero, inspect imaginary observables and drift tails, and cross-check in regimes where an independent reference is applicable. Bounded trajectories alone do not establish correct sampling, and agreement with another complex Langevin code checks the implementation, not the convergence of the method.
 
 The ESS estimator uses an initial positive sequence of paired autocorrelations and conservatively caps ESS at the number of samples. Structure-factor uncertainty is estimated from saved block averages, so at least four full post-burn-in blocks are required. These are approximate error estimates, not automatic equilibrium or complex-Langevin correctness certificates. Persistent shifts under refinement require investigation even when one comparison falls within its error bars.
 

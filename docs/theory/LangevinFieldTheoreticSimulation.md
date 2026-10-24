@@ -149,7 +149,9 @@ where $`\chi_{\Omega_+}`$ is the response function.
 
 ## 5. Complex Langevin Simulation (CL-FTS)
 
-CL-FTS drops the partial saddle-point approximation: every auxiliary field fluctuates, including the imaginary fields that L-FTS keeps at their saddle points. The fields then become complex, and so do the concentrations, the partition functions $`Q_p`$ and $`H`$. When the dynamics is stable, trajectory averages converge to the averages of the full field theory (References 2 and 4). `CLFTS` uses the compressible model of [PolymerFieldTheory.md](PolymerFieldTheory.md#3-compressible-model) and needs a finite `zeta_n` (default 100).
+CL-FTS drops the partial saddle-point approximation: every auxiliary field fluctuates, including the imaginary fields that L-FTS keeps at their saddle points. The fields then become complex, and so do the concentrations, the partition functions $`Q_p`$ and $`H`$. The method assumes that the stationary averages of this complex dynamics are the averages of the full field theory (References 2 and 5). `CLFTS` uses the compressible model of [PolymerFieldTheory.md](PolymerFieldTheory.md#3-compressible-model) and needs a finite `zeta_n` (default 100).
+
+**Correct convergence.** A stable, bounded trajectory does not guarantee this assumption: complex Langevin dynamics can converge to wrong averages (Reference 4). The justification of the method requires the distribution of the drift to fall off at least exponentially at large magnitude (Reference 6). Large drifts occur, for example, near zeros of $`Q_p`$, where the concentrations can diverge. `drift_max_history` (Section 5.4) records the largest drift of each sample for this check. Results in a new regime therefore need an independent reference; Section 5.6 states the range that has been checked for charged systems.
 
 ### 5.1 Complex Langevin Equations
 
@@ -165,28 +167,28 @@ As in [PolymerFieldTheory.md](PolymerFieldTheory.md#43-sign-convention-for-imagi
 
 The derivatives are those of [PolymerFieldTheory.md](PolymerFieldTheory.md#32-effective-hamiltonian), evaluated with the complex concentrations (smeared, when smearing is used). $`\mathcal{N}_i`$ is real Gaussian noise of unit variance, and $`\sigma_i`$ is that of Section 3.2. The mobility $`\lambda_i`$ (`dt_scaling` in `clfts.py`) follows Section 3.1 with the eigenvalues of $`U = X + \zeta N \, \mathbf{e}\mathbf{e}^T`$. A field with a zero eigenvalue does not enter $`H`$; it has $`\lambda_i = 0`$ and stays fixed.
 
-LM (Section 3.4) is the default integrator and averages the noise over two steps; `langevin.integrator: "euler"` selects Section 3.3. For an AB diblock, these updates are Eqs. (13)-(16) of Reference 10. The time step is fixed. Reference 10 ran LM with $`\delta\tau N = 2`$ in CL-FTS and $`\delta\tau N = 8`$ in L-FTS.
+LM (Section 3.4) is the default integrator and averages the noise over two steps; `langevin.integrator: "euler"` selects Section 3.3. For an AB diblock, these updates are Eqs. (13)-(16) of Reference 12. The time step is fixed. Reference 12 ran LM with $`\delta\tau N = 2`$ in CL-FTS and $`\delta\tau N = 8`$ in L-FTS.
 
 ### 5.2 Hot Spots and Dynamical Stabilization
 
-The imaginary part of a real field can grow without bound at a few grid points ("hot spots"), most often at small $`\bar{N}`$ and with contact interactions (Reference 8). `CLFTS` stops with a `ValidationError` in either of two cases:
+The imaginary part of a real field can grow without bound at a few grid points ("hot spots"), most often at small $`\bar{N}`$ and with contact interactions (Reference 10). `CLFTS` stops with a `ValidationError` in either of two cases:
 
 - the fields, the concentrations or $`H`$ become non-finite;
 - the spatial mean of $`\sum_i \phi_i - 1`$ exceeds $`5 \times 10^{-8}`$ in magnitude, which is usually the first sign of a hot spot.
 
 Two remedies are available:
 
-- **Dynamical stabilization** (Reference 8, `dynamic_stabilization`): the force on each real field gets the term $`i \alpha_{ds} \mathrm{Im}[\Omega_i]`$, which damps its imaginary part.
+- **Dynamical stabilization** (Reference 10, `dynamic_stabilization`): the force on each real field gets the term $`i \alpha_{ds} \mathrm{Im}[\Omega_i]`$, which damps its imaginary part.
   - It biases the sampling toward stronger segregation: a slightly lower $`(\chi N)_{\mathrm{ODT}}`$ and a higher $`S(k^*)`$.
-  - Reference 8 used $`\alpha_{ds} = 0.001`$ at $`\bar{N} = 10^6`$-$`10^7`$ and 0.01-0.02 at $`\bar{N} = 10^5`$.
-  - Reference 10 found structure functions more sensitive to $`\alpha_{ds}`$ than the order-disorder transition, and computed them without stabilization.
-- **Smearing** ([`smearing`](../references/Parameters.md#smearing)): finite-range interactions damp the high-$`k`$ fluctuations from which hot spots grow (Reference 10).
+  - Reference 10 used $`\alpha_{ds} = 0.001`$ at $`\bar{N} = 10^6`$-$`10^7`$ and 0.01-0.02 at $`\bar{N} = 10^5`$.
+  - Reference 12 found structure functions more sensitive to $`\alpha_{ds}`$ than the order-disorder transition, and computed them without stabilization.
+- **Smearing** ([`smearing`](../references/Parameters.md#smearing)): finite-range interactions damp the high-$`k`$ fluctuations from which hot spots grow (Reference 12).
 
 [DYNAMICAL_STABILIZATION.md](../../examples/clfts/DYNAMICAL_STABILIZATION.md) and [SMEARING.md](../../examples/clfts/SMEARING.md) in `examples/clfts/` give recommended values.
 
 ### 5.3 Renormalization and Calibration
 
-The UV divergence of the grid makes the effective interaction $`\chi \approx z_\infty \chi_b`$ differ from the bare $`\chi_b`$ given by `chi_n`. CL-FTS has a second correction: the fluctuations of the imaginary (pressure) field also change the chain size. The bare segment length $`a_b`$ is therefore chosen so that $`R_0 = a N^{1/2}`$ in the limit $`\chi_b \to 0`$. In L-FTS and SCFT, $`a_b = a`$. For discrete chains with smearing function $`\Gamma(k)`$, Reference 10 (Eqs. 26 and 29) gives
+The UV divergence of the grid makes the effective interaction $`\chi \approx z_\infty \chi_b`$ differ from the bare $`\chi_b`$ given by `chi_n`. CL-FTS has a second correction: the fluctuations of the imaginary (pressure) field also change the chain size. The bare segment length $`a_b`$ is therefore chosen so that $`R_0 = a N^{1/2}`$ in the limit $`\chi_b \to 0`$. In L-FTS and SCFT, $`a_b = a`$. For discrete chains with smearing function $`\Gamma(k)`$, Reference 12 (Eqs. 26 and 29) gives
 
 ```math
 \frac{a_b}{a} = \left[ 1 + \frac{a^2}{72 (2\pi)^3 \rho_0} \int \frac{k^2 \, d\mathbf{k}}{s^2(k) \left[ 1 + t(k)/\zeta \right]} \right]^{-1}, \qquad z_\infty = 1 - \frac{1}{(2\pi)^3 \rho_0} \int \frac{d\mathbf{k}}{t(k) \left[ 1 + t(k)/\zeta \right]}
@@ -201,7 +203,7 @@ where:
 
 The same $`z_\infty`$ applies to L-FTS of the compressible model, and as $`\zeta \to \infty`$ the factor $`1 + t/\zeta`$ goes to 1. `scripts/analysis/renormalization.py` ([Tools](../references/Tools.md#3-χn-renormalization)) evaluates both formulas from a fields file or from options. For continuous chains, it uses their limit $`N \to \infty`$, where $`\tanh`$ and $`\sinh`$ become linear.
 
-To use the calibration, multiply all `segment_lengths` by $`a_b/a`$ and set `chi_n` to the $`\chi_b N`$ of the target $`z_\infty \chi_b N`$. Reference 10 adds a quadratic term, $`\chi = z_\infty \chi_b + c_2 (z_\infty \chi_b)^2`$, fitted to renormalized one-loop theory; $`c_2`$ differs between CL-FTS and L-FTS. Section 6.4 gives an example.
+To use the calibration, multiply all `segment_lengths` by $`a_b/a`$ and set `chi_n` to the $`\chi_b N`$ of the target $`z_\infty \chi_b N`$. Reference 12 adds a quadratic term, $`\chi = z_\infty \chi_b + c_2 (z_\infty \chi_b)^2`$, fitted to renormalized one-loop theory; $`c_2`$ differs between CL-FTS and L-FTS. Section 6.4 gives an example.
 
 ### 5.4 Observables
 
@@ -264,6 +266,8 @@ The stationary variance of the linear modes does not depend on $`\delta\tau`$, w
 - `TestChargedStructureFunctionRPA` compares two systems with the RPA:
   - a charged diblock with counterions;
   - a polyampholyte melt whose charge mode has no auxiliary field.
+
+**Checked range.** The tests compare with the RPA where fluctuations are weak. The comparison with BioFTS ([Structure Function Estimators, Section 7](StructureFunctionEstimators.md#7-validation)) extends to a polyampholyte whose structure function lies up to 28 % above the RPA. BioFTS also uses complex Langevin dynamics, so this agreement checks the implementation, not the convergence of the method (Section 5). Strong electrostatic coupling has not been validated. In a small charged lattice model whose averages can be summed exactly, stable complex Langevin runs gave a counterion density about 3 % away from the exact value. A smaller time step and other integrators did not remove the difference, and its cause is not resolved. At strong coupling, compare with an independent reference where one exists and inspect the drift tails.
 
 **Limitations.** The implementation supports periodic boxes only and no random copolymers. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
 
@@ -360,11 +364,11 @@ Here $`G`$ is block-diagonal over the molecules: each molecule contributes its s
 
 **Validity.** The RPA leaves out fluctuation corrections, of relative order $`\bar{N}^{-1/2}`$, which grow as $`\chi N`$ approaches the order-disorder transition. Grid and contour discretization change the high wavevectors, so comparisons use the lowest modes; finite discretization and fluctuation corrections must be distinguished from sampling uncertainty.
 
-**Example.** The conditions of Fig. 3 of Reference 10: symmetric AB diblock ($`f = 0.5`$), discrete chains with $`N = 90`$, $`\zeta N = 90`$, $`\bar{N} = 10^5`$, $`32^3`$ grid with $`L = 4.5 R_0`$, CUDA backend, with contact interactions or Gaussian smearing of $`a_{\mathrm{int}} = 0.02 R_0`$. The bare $`\chi_b N`$ is set so that the effective $`z_\infty \chi_b N = 9`$, with $`z_\infty`$ from Eq. (29) of Reference 10 (0.9548 and 0.9596; the compressible model has the factor $`1/(1 + t/\zeta)`$ in the integrand), and CL-FTS uses the renormalized bare segment length of its Eq. (26) ($`a_b/a = 0.9929`$ and 0.9931). L-FTS treats $`W_+`$ in the partial saddle-point approximation of the same compressible model. Both methods use the LM integrator (L-FTS: $`\Delta t = 8`$; CL-FTS: $`\Delta t = 2`$, $`\alpha_{ds} = 0.01`$) for 15000 steps from zero fields, and the first 5000 steps are discarded. The figure shows $`S = (S_{AA} + S_{BB} - 2 S_{AB})/4`$, the structure function of $`\phi_A - \phi_B`$ used by Reference 10, averaged over shells of equal $`\vert\mathbf{k}\vert`$; error bars are standard errors from two 5000-step blocks. The dotted curve is the incompressible Gaussian-chain RPA at $`\chi N = 9`$.
+**Example.** The conditions of Fig. 3 of Reference 12: symmetric AB diblock ($`f = 0.5`$), discrete chains with $`N = 90`$, $`\zeta N = 90`$, $`\bar{N} = 10^5`$, $`32^3`$ grid with $`L = 4.5 R_0`$, CUDA backend, with contact interactions or Gaussian smearing of $`a_{\mathrm{int}} = 0.02 R_0`$. The bare $`\chi_b N`$ is set so that the effective $`z_\infty \chi_b N = 9`$, with $`z_\infty`$ from Eq. (29) of Reference 12 (0.9548 and 0.9596; the compressible model has the factor $`1/(1 + t/\zeta)`$ in the integrand), and CL-FTS uses the renormalized bare segment length of its Eq. (26) ($`a_b/a = 0.9929`$ and 0.9931). L-FTS treats $`W_+`$ in the partial saddle-point approximation of the same compressible model. Both methods use the LM integrator (L-FTS: $`\Delta t = 8`$; CL-FTS: $`\Delta t = 2`$, $`\alpha_{ds} = 0.01`$) for 15000 steps from zero fields, and the first 5000 steps are discarded. The figure shows $`S = (S_{AA} + S_{BB} - 2 S_{AB})/4`$, the structure function of $`\phi_A - \phi_B`$ used by Reference 12, averaged over shells of equal $`\vert\mathbf{k}\vert`$; error bars are standard errors from two 5000-step blocks. The dotted curve is the incompressible Gaussian-chain RPA at $`\chi N = 9`$.
 
 ![L-FTS, CL-FTS and RPA structure functions](../figures/structure_function_rpa.png)
 
-At the peak ($`k R_0 = 4.63`$), L-FTS gives $`0.306 \pm 0.002`$ (contact) and $`0.295 \pm 0.002`$ (smeared), and CL-FTS gives $`0.316 \pm 0.004`$ and $`0.304 \pm 0.004`$. These agree within about 1 % with the peaks of Fig. 3 of Reference 10 (read from the figure: 0.308 and 0.297 for L-FTS, 0.313 and 0.302 for CL-FTS). Both methods lie below the RPA peak (0.332 at the same $`k`$), which leaves out fluctuation corrections. Reference 10 instead compares the peaks with renormalized one-loop theory and absorbs the remaining difference into a nonlinear $`\chi`$; its coefficient is larger for CL-FTS than for L-FTS (Table I of Reference 10), consistent with CL-FTS lying slightly above L-FTS. The dynamical stabilization used here, which Reference 10 avoided for structure functions, also raises $`S(k^*)`$ slightly (Section 5.2). In CL-FTS, $`S_{AA}`$ also contains a quarter of the total-density fluctuations, about 0.003 at the peak, so it differs from $`S`$.
+At the peak ($`k R_0 = 4.63`$), L-FTS gives $`0.306 \pm 0.002`$ (contact) and $`0.295 \pm 0.002`$ (smeared), and CL-FTS gives $`0.316 \pm 0.004`$ and $`0.304 \pm 0.004`$. These agree within about 1 % with the peaks of Fig. 3 of Reference 12 (read from the figure: 0.308 and 0.297 for L-FTS, 0.313 and 0.302 for CL-FTS). Both methods lie below the RPA peak (0.332 at the same $`k`$), which leaves out fluctuation corrections. Reference 12 instead compares the peaks with renormalized one-loop theory and absorbs the remaining difference into a nonlinear $`\chi`$; its coefficient is larger for CL-FTS than for L-FTS (Table I of Reference 12), consistent with CL-FTS lying slightly above L-FTS. The dynamical stabilization used here, which Reference 12 avoided for structure functions, also raises $`S(k^*)`$ slightly (Section 5.2). In CL-FTS, $`S_{AA}`$ also contains a quarter of the total-density fluctuations, about 0.003 at the peak, so it differs from $`S`$.
 
 ---
 
@@ -466,16 +470,20 @@ where $`\Delta V = V/n_{\mathrm{grid}}`$ is the volume of one grid cell; $`V`$ i
 
 3. Lennon, E. M., Katsov, K. & Fredrickson, G. H. "Free Energy Evaluation in Field-Theoretic Polymer Simulations." *Phys. Rev. Lett.* **101**, 138302 (2008).
 
-4. Delaney, K. T. & Fredrickson, G. H. "Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions." *J. Phys. Chem. B* **120**, 7615 (2016).
+4. Aarts, G., Seiler, E. & Stamatescu, I.-O. "Complex Langevin method: When can it be trusted?" *Phys. Rev. D* **81**, 054508 (2010).
 
-5. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order–disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
+5. Delaney, K. T. & Fredrickson, G. H. "Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions." *J. Phys. Chem. B* **120**, 7615 (2016).
 
-6. Matsen, M. W. & Beardsley, T. M. "Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation." *Polymers* **13**, 2437 (2021).
+6. Nagata, K., Nishimura, J. & Shimasaki, S. "Argument for justification of the complex Langevin method and the condition for correct convergence." *Phys. Rev. D* **94**, 114515 (2016).
 
-7. Vorselaars, B. "Efficient Langevin and Monte Carlo sampling algorithms: The case of field-theoretic simulations." *J. Chem. Phys.* **158**, 114117 (2023).
+7. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order–disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
 
-8. Willis, J. D. & Matsen, M. W. "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts." *J. Chem. Phys.* **161**, 244903 (2024).
+8. Matsen, M. W. & Beardsley, T. M. "Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation." *Polymers* **13**, 2437 (2021).
 
-9. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
+9. Vorselaars, B. "Efficient Langevin and Monte Carlo sampling algorithms: The case of field-theoretic simulations." *J. Chem. Phys.* **158**, 114117 (2023).
 
-10. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+10. Willis, J. D. & Matsen, M. W. "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts." *J. Chem. Phys.* **161**, 244903 (2024).
+
+11. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
+
+12. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).

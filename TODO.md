@@ -109,6 +109,11 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     remain. A working positive sampler for this small system does not validate
     the existing CL dynamics or reproduce the complete PRL theory.
 
+    Mainline: charged CL-FTS in `clfts.py` (`electrostatics.py`) uses the same CL
+    dynamics, so this issue applies to it as well. When it is resolved, update the
+    "Checked range" paragraph of docs/theory/LangevinFieldTheoreticSimulation.md
+    (Section 5.6) and the correct-convergence note at the start of Section 5.
+
 31. Resolve the remaining PRL Fig. 2-3 discrepancies (2026-09-07).
 
     See `devel/charged_polymers/reports/PRL_REPRODUCTION.md` and the added LaTeX
