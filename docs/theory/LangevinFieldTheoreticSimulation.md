@@ -156,7 +156,7 @@ The structure function is computed using response theory (chemical potential-den
 S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k}) \rangle, \qquad \mu_i(\mathbf{r}) = \sum_{k} \frac{A_{ik}\, \Omega_k(\mathbf{r})}{\lambda_k}
 ```
 
-where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field, and the sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: all but the last field, see below; CL-FTS: all fields). Shifting the Gaussian integral over a fluctuating field $`\Omega_k`$ gives $`\langle \Omega_k \phi_j \rangle = (\lambda_k / M) \sum_l A_{lk} \langle \phi_l \phi_j \rangle`$, and $`A A^T = M I`$, so with every field fluctuating $`\langle \mu_i \phi_j \rangle = \langle \delta\phi_i \delta\phi_j \rangle`$ and $`S_{ij}`$ is the structure function in units of $`\rho_0 N`$ (for a disordered AB diblock at weak fluctuations, $`N/S_{AA}(k) = F(x) - 2\chi N`$ of Leibler's RPA). For real fields $`\tilde{\phi}_j(-\mathbf{k}) = \tilde{\phi}_j^*(\mathbf{k})`$; CL-FTS fields are complex and use $`\tilde{\phi}_j(-\mathbf{k})`$. For AB systems the estimator equals $`V\sqrt{\bar{n}}\,\langle|\tilde{W}_-(\mathbf{k})|^2\rangle/(\chi N)^2 - 1/(2\chi N)`$ on average.
+where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field, and the sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: all but the last field, see below; CL-FTS: all fields). Shifting the Gaussian integral over a fluctuating field $`\Omega_k`$ gives $`\langle \Omega_k \phi_j \rangle = (\lambda_k / M) \sum_l A_{lk} \langle \phi_l \phi_j \rangle`$, and $`A A^T = M I`$, so with every field fluctuating $`\langle \mu_i \phi_j \rangle = \langle \delta\phi_i \delta\phi_j \rangle`$ and $`S_{ij}`$ is the structure function in units of $`\rho_0 N`$ (in the disordered phase at weak fluctuations it approaches the random-phase approximation of [Section 5.4](#54-rpa-reference)). For real fields $`\tilde{\phi}_j(-\mathbf{k}) = \tilde{\phi}_j^*(\mathbf{k})`$; CL-FTS fields are complex and use $`\tilde{\phi}_j(-\mathbf{k})`$. For AB systems the estimator equals $`V\sqrt{\bar{n}}\,\langle|\tilde{W}_-(\mathbf{k})|^2\rangle/(\chi N)^2 - 1/(2\chi N)`$ on average.
 
 With smearing the fields couple to the smeared densities, so the estimator gives $`\Gamma(\mathbf{k}) S_{ij}(\mathbf{k})`$; in a periodic box the recorded structure function is divided by $`\Gamma(\mathbf{k})`$ and is that of the densities (modes with $`\Gamma < 10^{-12}`$, which the smeared interaction does not see, are recorded as 0). In a box with walls $`\Gamma`$ is defined in the cosine basis while $`S_{ij}(\mathbf{k})`$ is a Fourier transform, so the estimator is recorded as it is.
 
@@ -176,6 +176,62 @@ In L-FTS, structure functions are computed by:
 - **Peak position**: Characteristic length scale of microphase separation
 - **Peak height**: Degree of ordering (diverges at spinodal)
 - **Low-$`k`$ behavior**: Long-wavelength fluctuations
+
+### 5.4 RPA Reference
+
+In the disordered phase at weak fluctuations (large $`\bar{N}`$, $`\chi N`$ well below the order-disorder transition) the structure function approaches the random-phase approximation (RPA) of Leibler (Reference 6). `tests/TestStructureFunctionRPA.py` compares L-FTS and CL-FTS runs, with and without smearing, against the formulas below, and `tests/validation/validate_fts_sampling.py` uses the same reference for the sampling studies of [Numerical Validation](../internals/NumericalValidation.md).
+
+Lengths are in units of $`R_0`$ and $`S_{ij}`$ is in units of $`\rho_0 N`$ as in Section 5.1, i.e. $`S_{ij}`$ is Leibler's per-monomer structure function divided by $`N`$.
+
+**Ideal-chain correlations.** For a block of contour fraction $`f`$ whose monomer type has the relative segment length $`\epsilon`$, let $`x = \epsilon^2 k^2 / 6`$ ($`k^2 R_g^2`$ of a whole chain of that type) and
+
+```math
+g(f, x) = \frac{2 \left( f x + e^{-f x} - 1 \right)}{x^2}, \qquad h(f, x) = \frac{1 - e^{-f x}}{x}
+```
+
+$`g(1, x)`$ is the Debye function and $`g(f, 0) = f^2`$. For a melt of AB diblocks with A fraction $`f`$ the single-chain correlation matrix is
+
+```math
+G = \begin{pmatrix} g_{AA} & g_{AB} \\ g_{AB} & g_{BB} \end{pmatrix}, \qquad g_{AA} = g(f, x_A), \quad g_{BB} = g(1-f, x_B), \quad g_{AB} = h(f, x_A) \, h(1-f, x_B)
+```
+
+With equal segment lengths, $`g_{AB} = [g(1, x) - g(f, x) - g(1-f, x)]/2`$ and $`g_{AA} + g_{BB} + 2 g_{AB} = g(1, x)`$. These are continuous-chain functions; for the discrete chain model the contour integrals become sums over segments.
+
+**Compressible model.** With $`X`$ the $`\chi N`$ matrix (zero diagonal), $`\mathbf{e} = [1, \ldots, 1]^T`$ and $`U = X + \zeta N \, \mathbf{e}\mathbf{e}^T`$ the interaction matrix of [Polymer Field Theory](PolymerFieldTheory.md),
+
+```math
+S(\mathbf{k}) = \left[ G^{-1} + U \right]^{-1}, \qquad U_{AB} = \begin{pmatrix} \zeta N & \zeta N + \chi N \\ \zeta N + \chi N & \zeta N \end{pmatrix}
+```
+
+**Incompressible model.** The constraint $`\sum_i \delta\phi_i = 0`$ is the limit $`\zeta N \to \infty`$:
+
+```math
+S(\mathbf{k}) = Q \left[ Q^T \left( G^{-1} + X \right) Q \right]^{-1} Q^T
+```
+
+where the $`M - 1`$ columns of $`Q`$ are orthonormal and orthogonal to $`\mathbf{e}`$. For AB, $`Q = [1, -1]^T / \sqrt{2}`$ gives Leibler's result
+
+```math
+\frac{1}{S_{AA}(k)} = F(x) - 2\chi N, \qquad F(x) = \frac{g_{AA} + g_{BB} + 2 g_{AB}}{g_{AA} g_{BB} - g_{AB}^2}, \qquad S_{BB} = -S_{AB} = S_{AA}
+```
+
+which is his $`N/S(q) = F(x) - 2\chi N`$. At $`\chi N = 0`$ this is the athermal $`S_{AA}`$ integrated by the renormalization script `renormalization_rpa.m` ([Tools](../references/Tools.md)).
+
+**Smearing.** The interactions act on the smeared densities, so $`U`$ (or $`X`$) is multiplied by $`\Gamma(\mathbf{k})^2`$, while the recorded structure function is that of the densities (Section 5.1):
+
+```math
+S(\mathbf{k}) = \left[ G^{-1} + \Gamma(\mathbf{k})^2 \, U \right]^{-1}, \qquad \frac{1}{S_{AA}(k)} = F(x) - 2\chi N \, \Gamma(k)^2 \quad \text{(incompressible AB)}
+```
+
+with $`\Gamma(k)^2 = \exp(-a^2 k^2)`$ for Gaussian smearing. This holds in a periodic box, where the recorded $`S_{ij}`$ is divided by $`\Gamma`$.
+
+**Validity.** The RPA leaves out fluctuation corrections, of relative order $`\bar{N}^{-1/2}`$, which grow as $`\chi N`$ approaches the order-disorder transition. Grid and contour discretization change the high wavevectors, so comparisons use the lowest modes; finite discretization and fluctuation corrections must be distinguished from sampling uncertainty.
+
+**Example.** The conditions of Fig. 3 of Reference 7: symmetric AB diblock ($`f = 0.5`$), discrete chains with $`N = 90`$, $`\zeta N = 90`$, $`\bar{N} = 10^5`$, $`32^3`$ grid with $`L = 4.5 R_0`$, CUDA backend, with contact interactions or Gaussian smearing of $`a_{\mathrm{int}} = 0.02 R_0`$. The bare $`\chi_b N`$ is set so that the effective $`z_\infty \chi_b N = 9`$, with $`z_\infty`$ from Eq. (29) of Reference 7 (0.9548 and 0.9596; the compressible model has the factor $`1/(1 + t/\zeta)`$ in the integrand), and CL-FTS uses the renormalized bare segment length of its Eq. (26) ($`a_b/a = 0.9929`$ and 0.9931). L-FTS treats $`W_+`$ in the partial saddle-point approximation of the same compressible model. Both methods use the LM integrator (L-FTS: $`\Delta t = 8`$; CL-FTS: $`\Delta t = 2`$, $`\alpha_{ds} = 0.01`$) for 15000 steps from zero fields, and the first 5000 steps are discarded. The figure shows $`S = (S_{AA} + S_{BB} - 2 S_{AB})/4`$, the structure function of $`\phi_A - \phi_B`$ used by Reference 7, averaged over shells of equal $`\vert\mathbf{k}\vert`$; error bars are standard errors from two 5000-step blocks. The dotted curve is the incompressible Gaussian-chain RPA at $`\chi N = 9`$.
+
+![L-FTS, CL-FTS and RPA structure functions](../figures/structure_function_rpa.png)
+
+At the peak ($`k R_0 = 4.63`$), L-FTS gives $`0.306 \pm 0.002`$ (contact) and $`0.295 \pm 0.002`$ (smeared), and CL-FTS gives $`0.316 \pm 0.004`$ and $`0.304 \pm 0.004`$. These agree within about 1 % with the peaks of Fig. 3 of Reference 7 (read from the figure: 0.308 and 0.297 for L-FTS, 0.313 and 0.302 for CL-FTS). Both methods lie below the RPA peak (0.332 at the same $`k`$), which leaves out fluctuation corrections. Reference 7 instead compares the peaks with renormalized one-loop theory and absorbs the remaining difference into a nonlinear $`\chi`$; its coefficient is larger for CL-FTS than for L-FTS (Table I of Reference 7), consistent with CL-FTS lying slightly above L-FTS. In CL-FTS, $`S_{AA}`$ also contains a quarter of the total-density fluctuations, about 0.003 at the peak, so it differs from $`S`$.
 
 ---
 
@@ -280,3 +336,7 @@ where $`\Delta V = V/n_{\mathrm{grid}}`$ is the volume of one grid cell; $`V`$ i
 4. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order–disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
 
 5. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
+
+6. Leibler, L. "Theory of Microphase Separation in Block Copolymers." *Macromolecules* **13**, 1602 (1980).
+
+7. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).

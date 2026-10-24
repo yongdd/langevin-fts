@@ -245,6 +245,8 @@ For continuous chain model (legacy, less commonly used).
 z_\infty = 1 - \frac{1}{\sqrt{\bar{N}}} \frac{1}{8\pi^3 f(1-f)} \int_{-\pi/\Delta x}^{\pi/\Delta x} S_{\text{RPA}}(k) \, d^3k
 ```
 
+$`S_{\text{RPA}}`$ is the athermal ($`\chi N = 0`$) incompressible RPA structure function $`S_{AA}`$ of [L-FTS Section 5.4](../theory/LangevinFieldTheoreticSimulation.md#54-rpa-reference).
+
 **Usage:**
 ```matlab
 % Run in directory containing fields_*.mat

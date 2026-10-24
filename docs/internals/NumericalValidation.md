@@ -8,7 +8,7 @@ Keep the existing calibrated test parameters and tolerances. A passing solver co
 | Contour refinement | `TestConvergenceOrderLite` | RQM4 and RK2 asymptotic orders on a nonuniform field |
 | Forward/backward consistency | `TestPartitionFunctionCheck`, propagator tests | Every contour pairing yields the same partition function |
 | Material conservation | Propagator tests, `TestSpaceGroupPlatformEquivalence` | Volume-averaged total concentration; expand reduced fields or use orbit weights |
-| Analytical-limit structure factors | `TestStructureFunctionRPA` | Disordered Gaussian-fluctuation regime, L-FTS/CL-FTS with and without smearing |
+| Analytical-limit structure factors | `TestStructureFunctionRPA` | Disordered Gaussian-fluctuation regime, L-FTS/CL-FTS with and without smearing; RPA formulas in [L-FTS Section 5.4](../theory/LangevinFieldTheoreticSimulation.md#54-rpa-reference) |
 | Stress derivatives | `TestStress1D`, `TestStressSpaceGroup`, `TestStressNonPeriodic*`, `TestStressAliasTies` | Lengths, angles, constrained cell deformations and boundary conditions |
 | CPU/GPU agreement | `TestSpaceGroupPlatformEquivalence`, `TestStressComplexPlatforms` | Same input fields, not independently translated/rotated converged phases |
 | Restart equivalence | `TestLftsRun`, `TestLftsDetails`, `TestFtsReliability` | RNG, previous noise, fields, WTMD and pending measurements across recording boundaries |
