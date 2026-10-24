@@ -328,7 +328,7 @@ wtmd.add_bias_to_langevin(psi, w_lambda)
 
 # After successful saddle point convergence: dH/dχN of the fields at which psi
 # was computed (the fields before the update), so that psi and dH form one sample
-dH = mpt.compute_h_deriv_chin(chi_n, w_aux_before, phi_before)
+dH = mpt.compute_h_deriv_chin(w_aux=w_aux_before, phi=phi_before)
 wtmd.store_order_parameter(psi, dH)
 
 if langevin_step % wtmd.update_freq == 0:

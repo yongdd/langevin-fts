@@ -22,9 +22,8 @@ from scipy.io import savemat, loadmat
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 from .propagator_solver import PropagatorSolver
-from .validation import normalize_params, validate_lfts_params, ValidationError
+from .validation import normalize_params, validate_lfts_params, ValidationError, parse_chi_n
 from .utils import (
-    parse_chi_n,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
@@ -642,7 +641,7 @@ class CLFTS:
                 H_history.append(hamiltonian)
                 drift_history.append(drift_max)
                 sf_sample_count += 1
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, phi_for_force)
+                dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux, phi=phi_for_force)
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 

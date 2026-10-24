@@ -73,7 +73,7 @@ def main():
         return 77  # ctest SKIP_RETURN_CODE
     ok = True
 
-    from polymerfts.utils import parse_chi_n
+    from polymerfts.validation import parse_chi_n
     for bad in ("A,B,C", "A", "A,,B"):
         try:
             parse_chi_n({bad: 10.0}, {"A": 1.0, "B": 1.0, "C": 1.0})

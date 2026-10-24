@@ -564,60 +564,6 @@ def draw_polymer_architecture(
     plt.close()
 
 
-def parse_chi_n(
-    chi_n_params: Dict[str, float],
-    segment_lengths: Dict[str, float]
-) -> Dict[str, float]:
-    """Parse and validate Flory-Huggins interaction parameters.
-
-    Parameters
-    ----------
-    chi_n_params : dict
-        Dictionary of chi_n values with monomer pair keys (e.g., "A,B": 15.0).
-    segment_lengths : dict
-        Dictionary of segment lengths for validation.
-
-    Returns
-    -------
-    dict
-        Validated and normalized chi_n dictionary with sorted monomer pair keys.
-
-    Raises
-    ------
-    ValidationError
-        If monomer types are invalid, self-interactions are specified,
-        or duplicate parameters are found.
-    """
-    chi_n = {}
-    for monomer_pair_str, chin_value in chi_n_params.items():
-        if not isinstance(monomer_pair_str, str):
-            raise ValidationError("A chi_n key must name two monomer types, for example 'A,B'.")
-        if ',' in monomer_pair_str:
-            monomer_pair = [name.strip() for name in monomer_pair_str.split(',')]
-            if len(monomer_pair) != 2:
-                raise ValidationError(f"chi_n key '{monomer_pair_str}' must name exactly two monomer types.")
-        else:
-            # Keep legacy pair separators without splitting underscores inside names.
-            pairs = [(a, b) for a in segment_lengths for b in segment_lengths
-                     if any(monomer_pair_str == a + sep + b for sep in (' ', '_', '/'))]
-            if len(pairs) != 1:
-                raise ValidationError(f"chi_n key '{monomer_pair_str}' is invalid or ambiguous; use 'type1,type2'.")
-            monomer_pair = list(pairs[0])
-        if monomer_pair[0] not in segment_lengths:
-            raise ValidationError(f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'.")
-        if monomer_pair[1] not in segment_lengths:
-            raise ValidationError(f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'.")
-        if monomer_pair[0] == monomer_pair[1]:
-            raise ValidationError(f"Do not add self interaction parameter, {monomer_pair_str}.")
-        monomer_pair.sort()
-        sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-        if sorted_monomer_pair in chi_n:
-            raise ValidationError(f"There are duplicated χN ({sorted_monomer_pair}) parameters.")
-        chi_n[sorted_monomer_pair] = chin_value
-    return chi_n
-
-
-
 def process_polymer_blocks(
     polymer: Dict[str, Any]
 ) -> List[List[Any]]:

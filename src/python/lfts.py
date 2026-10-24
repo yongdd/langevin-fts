@@ -12,9 +12,8 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .integrators import checked_fields
 from . import _core
-from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError
+from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError, parse_chi_n
 from .utils import (
-    parse_chi_n,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
@@ -910,7 +909,7 @@ class LFTS:
             if self.wtmd is not None:
                 # Store the order parameter with dH/dχN of the same fields (the fields
                 # before the update, at which psi and the bias were computed)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux_copy, phi_for_force, wtmd=True)
+                dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux_copy, phi=phi_for_force, wtmd=True)
                 self.wtmd.store_order_parameter(psi, dH)
 
                 # Update WTMD bias
@@ -926,7 +925,7 @@ class LFTS:
                 H_history.append(hamiltonian)
                 drift_history.append(drift_max)
                 sf_sample_count += 1
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, self.smearing.apply_to_dict(phi))
+                dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux, phi=self.smearing.apply_to_dict(phi))
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 

@@ -14,10 +14,9 @@ from dataclasses import dataclass
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
-from .validation import normalize_params, validate_system_params, ValidationError
+from .validation import normalize_params, validate_system_params, ValidationError, parse_chi_n
 from .utils import (
     load_config,
-    parse_chi_n,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
@@ -319,17 +318,9 @@ class SCFT:
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=self.zeta_n)
 
-        # χN matrix
+        # χN matrix in the order of monomer_types
         M = len(self.monomer_types)
-        matrix_chi = np.zeros((M,M))
-        for i in range(M):
-            for j in range(i+1,M):
-                key = self.monomer_types[i] + "," + self.monomer_types[j]
-                if key in self.chi_n:
-                    matrix_chi[i,j] = self.chi_n[key]
-                    matrix_chi[j,i] = self.chi_n[key]
-        
-        self.matrix_chi = matrix_chi
+        self.matrix_chi = self.mpt.matrix_chi
         # Incompressible SCFT needs at least two monomer types. A singular χN (a zero pair in a
         # three-monomer system, chemically identical monomers) is fine, and so is 1ᵀ(χN)⁻¹1 = 0,
         # where the auxiliary field of a zero eigenvalue of the projected χN has a linear term:
@@ -342,7 +333,7 @@ class SCFT:
         # the eigenvalues of P⊥ χN P⊥, the size of the composition-pressure coupling
         # (χN/2 for AB)
         self.matrix_q_perp = np.identity(M) - np.ones((M, M))/M
-        projected_chi = self.matrix_q_perp @ matrix_chi @ self.matrix_q_perp
+        projected_chi = self.matrix_q_perp @ self.matrix_chi @ self.matrix_q_perp
         self.pressure_kappa = max(np.max(np.abs(np.linalg.eigvalsh(projected_chi))), 1.0)/2
 
         # Create space group object early (before PropagatorSolver) if specified

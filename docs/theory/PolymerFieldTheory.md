@@ -327,7 +327,7 @@ H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb, include_cons
 h_deriv = mpt.compute_func_deriv(omega, phi, field_indices)
 
 # dH/dχN at fixed auxiliary fields (Section 4.5); phi: {monomer_type: concentration}
-dH = mpt.compute_h_deriv_chin(chi_n, omega, phi)
+dH = mpt.compute_h_deriv_chin(w_aux=omega, phi=phi)
 ```
 
 ### 4.3 Sign Convention for Imaginary Fields
@@ -344,6 +344,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 
 | Attribute | Description |
 |-----------|-------------|
+| `matrix_chi` | Interaction matrix $`X`$ ($`\chi N`$, zero diagonal) in the order of `monomer_types` |
 | `matrix_o` | Orthogonal matrix $`O`$ (eigenvectors) |
 | `matrix_a` | Mapping matrix $`A = O`$ |
 | `matrix_a_inv` | Inverse mapping $`A^{-1} = O^T / M`$ |
@@ -353,7 +354,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 
 ### 4.5 Derivative with Respect to χN
 
-`compute_h_deriv_chin(chi_n, w_aux, phi)` returns $`\partial (\beta H / (C V / R_0^3)) / \partial \chi_{ab} N`$ at fixed auxiliary fields $`\Omega`$, the integration variables. Averaged over the real fields with the imaginary fields at their saddle point (L-FTS), it is the derivative of the free energy of that approximation, because $`\partial H / \partial \Omega_I = 0`$ at the saddle point of the imaginary fields $`\Omega_I`$; with every field fluctuating (CL-FTS) it is the derivative of the full free energy; at a saddle point of all fields it equals $`\langle \phi_a \phi_b \rangle`$. The $`\chi`$-dependent normalization of the Hubbard-Stratonovich transformation is a constant independent of the fields and is not included. `phi` holds the concentrations of the fields (smeared, when smearing is used); it may be omitted for AB systems at $`\chi N \neq 0`$.
+`compute_h_deriv_chin(w_aux=w_aux, phi=phi)` returns $`\partial (\beta H / (C V / R_0^3)) / \partial \chi_{ab} N`$ at fixed auxiliary fields $`\Omega`$, the integration variables. Averaged over the real fields with the imaginary fields at their saddle point (L-FTS), it is the derivative of the free energy of that approximation, because $`\partial H / \partial \Omega_I = 0`$ at the saddle point of the imaginary fields $`\Omega_I`$; with every field fluctuating (CL-FTS) it is the derivative of the full free energy; at a saddle point of all fields it equals $`\langle \phi_a \phi_b \rangle`$. The $`\chi`$-dependent normalization of the Hubbard-Stratonovich transformation is a constant independent of the fields and is not included. `phi` holds the concentrations of the fields (smeared, when smearing is used); it may be omitted for AB systems at $`\chi N \neq 0`$. The derivatives use the $`\chi N`$ the object was built with; the older call `compute_h_deriv_chin(chi_n, w_aux, phi)` still works and checks that `chi_n` equals it.
 
 **Moving frame.** Let $`U = P_\perp X P_\perp`$ (incompressible) or $`U = X + \zeta \mathbf{e}\mathbf{e}^T`$ (compressible), $`\mathbf{o}_k`$ the $`k`$-th column of $`O`$ ($`U \mathbf{o}_k = \lambda_k \mathbf{o}_k`$, $`\vert\mathbf{o}_k\vert^2 = M`$), and $`dU = \partial U / \partial \chi_{ab} N`$, i.e. $`P_\perp E P_\perp`$ or $`E`$ with $`E_{ab} = E_{ba} = 1`$ and all other entries 0. When $`\chi`$ changes, the auxiliary fields follow a frame $`\tilde{O}(\chi)`$ with $`\tilde{O} = O`$ at the given $`\chi`$ and $`\partial \tilde{O} / \partial \chi_{ab} N = O K`$, where $`K`$ is antisymmetric:
 
