@@ -56,8 +56,11 @@
 #include <string>
 #include <array>
 #include <complex>
+#include <memory>
 
 #include "ComputationBox.h"
+#include "ComputationBackend.h"
+#include "NumericalMethods.h"
 #include "Polymer.h"
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
@@ -71,7 +74,9 @@
  *
  * This template class defines the interface for creating all major objects
  * needed for polymer field theory simulations. Concrete implementations
- * (FftwFactory, CudaFactory) provide platform-optimized versions of each object.
+ * (MklFactory, FftwFactory, CudaFactory) provide platform-optimized versions of
+ * each object. The propagator computation is assembled here, the same way on
+ * every platform; a platform contributes only its backend (create_backend()).
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
@@ -97,6 +102,23 @@ class AbstractFactory
 {
 protected:
     bool reduce_memory;    ///< Enable checkpointing mode (reduces memory, increases compute)
+
+    /**
+     * @brief Create the computation backend of the platform.
+     *
+     * The only platform-specific step of create_propagator_computation(). The
+     * computation calls it once while it is constructed, after the space group
+     * is set on the box.
+     *
+     * @param cb            Computation box
+     * @param molecules     Molecules container
+     * @param method_info   Numerical method, already resolved and validated
+     * @param space_group   Space group (nullptr if none)
+     * @param max_n_streams Upper limit of concurrent propagator streams
+     */
+    virtual std::unique_ptr<ComputationBackend<T>> create_backend(
+        ComputationBox<T>* cb, Molecules* molecules, const NumericalMethodInfo& method_info,
+        SpaceGroup* space_group, int max_n_streams) = 0;
 
 public :
     /// Virtual destructor.
@@ -148,6 +170,8 @@ public :
     /**
      * @brief Create a Molecules container.
      *
+     * This is a non-virtual method as the container is platform-independent.
+     *
      * @param chain_model  "continuous" or "discrete"
      * @param ds           Contour step size
      * @param bond_lengths Map of monomer types to segment lengths squared
@@ -160,8 +184,11 @@ public :
      * mols->add_polymer(1.0, diblock_blocks);
      * @endcode
      */
-    virtual Molecules* create_molecules_information(
-        std::string chain_model, double ds, std::map<std::string, double> bond_lengths) = 0;
+    Molecules* create_molecules_information(
+        std::string chain_model, double ds, std::map<std::string, double> bond_lengths)
+    {
+        return new Molecules(chain_model, ds, bond_lengths);
+    }
 
     /**
      * @brief Create a PropagatorComputationOptimizer.
@@ -185,7 +212,10 @@ public :
      *
      * Creates a solver for the chain propagator computation. The numerical method
      * determines whether a pseudo-spectral (FFT-based) or real-space (finite-difference)
-     * solver is used.
+     * solver is used. The chain model and reduce_memory select the computation class
+     * (ComputationContinuous, ComputationDiscrete or their ComputationReduceMemory*
+     * variants); create_backend() supplies the platform. Implemented in
+     * AbstractFactory.cpp for every platform.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container
@@ -194,14 +224,15 @@ public :
      *                                        - "rqm4": 4th-order Richardson (pseudo-spectral)
      *                                        - "rk2":  2nd-order operator splitting (pseudo-spectral)
      *                                        - "cn-adi2": 2nd-order Crank-Nicolson ADI (real-space)
-     * @return Platform-specific PropagatorComputation solver
+     * @param space_group                     Optional space group (reduced basis, real fields only)
+     * @return PropagatorComputation solver with the platform's backend
      *
      * @note Real-space methods (cn-adi*) support non-periodic boundary conditions
      *       but are a beta feature.
      */
-    virtual PropagatorComputation<T>* create_propagator_computation(
+    PropagatorComputation<T>* create_propagator_computation(
         ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
-        std::string numerical_method, SpaceGroup* space_group=nullptr) = 0;
+        std::string numerical_method, SpaceGroup* space_group=nullptr);
 
     /**
      * @brief Create an Anderson Mixing optimizer.

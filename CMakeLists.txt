@@ -261,6 +261,7 @@ ADD_LIBRARY(common
     src/common/ComputationReduceMemoryContinuous.cpp
     src/common/ComputationReduceMemoryDiscrete.cpp
     src/common/AndersonMixing.cpp
+    src/common/AbstractFactory.cpp
     src/common/Scheduler.cpp
     src/common/SpaceGroup.cpp
 )

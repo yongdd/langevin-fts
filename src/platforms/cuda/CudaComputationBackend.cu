@@ -80,9 +80,9 @@ __global__ void ker_add_segment_products(cuDoubleComplex* phi, SegmentProducts<c
 template <typename T>
 CudaComputationBackend<T>::CudaComputationBackend(
     ComputationBox<T>* cb_in, Molecules* molecules,
-    std::string method, std::string numerical_method,
+    const NumericalMethodInfo& method_info,
     SpaceGroup* space_group, int max_n_streams)
-    : cb(nullptr), space_group(space_group), chain_model(molecules->get_model_name()),
+    : cb(nullptr), space_group(space_group),
       solver_discrete(nullptr), n_streams(0), n_basis(0), force_off_diagonal_stress(false)
 {
     for (int i = 0; i < MAX_STREAMS; i++)
@@ -124,10 +124,6 @@ CudaComputationBackend<T>::CudaComputationBackend(
             CUDA_CHECK(count_cuda_event(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming)));
         }
 
-        const auto& method_info = resolve_numerical_method(chain_model, numerical_method, method);
-        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
-        if (method != method_info.solver_type)
-            throw_with_line_number("Solver type does not match the registered numerical method.");
         switch (method_info.id)
         {
         case NumericalMethodId::Discrete:

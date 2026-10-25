@@ -108,33 +108,6 @@ public :
         const double* mask=nullptr) override;
 
     /**
-     * @brief Create molecules container.
-     * @param chain_model  "continuous" or "discrete"
-     * @param ds           Contour step size
-     * @param bond_lengths Segment lengths squared
-     * @return Molecules instance
-     */
-    Molecules* create_molecules_information(
-        std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;
-
-    /**
-     * @brief Create propagator computation solver.
-     *
-     * Creates ComputationContinuous, ComputationDiscrete, or their reduce-memory
-     * variants with the CPU backend, based on chain model, memory mode, and
-     * numerical method.
-     *
-     * @param cb                              Computation box
-     * @param molecules                       Molecules container
-     * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "rqm4", "rk2" (pseudo-spectral) or
-     *                                        "cn-adi2" (real-space)
-     * @param space_group                     Space group for symmetry (optional)
-     * @return CPU propagator solver
-     */
-    PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group=nullptr) override;
-
-    /**
      * @brief Create CPU Anderson mixing optimizer.
      * @param n_var      Number of field variables
      * @param max_hist   Maximum history length
@@ -153,5 +126,11 @@ public :
      * Prints MKL version, number of threads, and other configuration details.
      */
     void display_info() override;
+
+protected:
+    /// CPU backend with MKL transforms (see AbstractFactory::create_backend())
+    std::unique_ptr<ComputationBackend<T>> create_backend(
+        ComputationBox<T>* cb, Molecules* molecules, const NumericalMethodInfo& method_info,
+        SpaceGroup* space_group, int max_n_streams) override;
 };
 #endif

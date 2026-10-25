@@ -101,6 +101,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   full-grid arrays but read and wrote only their first `n_basis` entries. The C++ method
   `PropagatorComputation::compute_propagators_reduced()` is removed;
   `compute_propagators()` already accepts reduced-basis fields (2026-10-25).
+- C++ platform factories implement only `create_backend()` (2026-10-25).
+  `AbstractFactory::create_propagator_computation()` and `create_molecules_information()`
+  are now written once, in `src/common/AbstractFactory.cpp` and `AbstractFactory.h`,
+  instead of three identical copies. The numerical method is resolved and validated there,
+  once. The CPU and CUDA backend constructors take the resolved `NumericalMethodInfo`
+  instead of the method names.
+
 
 ### Fixed
 

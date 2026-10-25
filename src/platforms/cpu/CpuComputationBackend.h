@@ -24,6 +24,7 @@
 #include "CpuSolver.h"
 #include "FFT.h"
 #include "Molecules.h"
+#include "NumericalMethods.h"
 #include "SpaceGroup.h"
 
 template <typename T>
@@ -48,12 +49,12 @@ private:
 
 public:
     /**
-     * @param method           "pseudospectral" or "realspace" (continuous chains)
-     * @param numerical_method "rqm4", "rk2" or "cn-adi2" ("" selects the default)
-     * @param max_n_streams    Upper bound on the number of concurrent propagators
+     * @param method_info   Numerical method, resolved and validated by the factory
+     *                      (AbstractFactory::create_propagator_computation())
+     * @param max_n_streams Upper bound on the number of concurrent propagators
      */
     CpuComputationBackend(ComputationBox<T>* cb, Molecules* molecules,
-                          std::string method, std::string numerical_method,
+                          const NumericalMethodInfo& method_info,
                           FFTBackend fft_backend, SpaceGroup* space_group,
                           int max_n_streams = INT_MAX);
     ~CpuComputationBackend();

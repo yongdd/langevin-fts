@@ -96,29 +96,33 @@ The abstract factory provides a unified interface for creating platform-specific
 ```
 AbstractFactory<T>                    [Abstract Base]
 ├── create_computation_box()          [pure virtual]
-├── create_molecules_information()    [pure virtual]
+├── create_molecules_information()    [concrete, platform-independent]
 ├── create_propagator_computation_optimizer(molecules, aggregate)  [concrete, platform-independent]
-├── create_propagator_computation()   [pure virtual]
+├── create_propagator_computation()   [concrete: Computation* with create_backend()]
 ├── create_anderson_mixing()          [pure virtual]
-└── display_info()                    [pure virtual]
+├── display_info()                    [pure virtual]
+└── create_backend()                  [pure virtual, protected]
         │
         ├── FftwFactory<T>             [CPU - FFTW transforms]
         │   └── Creates: CpuComputationBox, CpuAndersonMixing,
-        │                Computation* with a CpuComputationBackend
+        │                CpuComputationBackend (FFTW)
         │
         ├── MklFactory<T>              [CPU - MKL transforms]
         │   └── Creates: CpuComputationBox, CpuAndersonMixing,
-        │                Computation* with a CpuComputationBackend
+        │                CpuComputationBackend (MKL)
         │
         └── CudaFactory<T>            [GPU]
             └── Creates: CudaComputationBox, CudaAndersonMixing[ReduceMemory],
-                         Computation* with a CudaComputationBackend
+                         CudaComputationBackend
 ```
 
 `Computation*` is one of the platform-neutral computations (`ComputationContinuous`,
 `ComputationDiscrete`, `ComputationReduceMemoryContinuous`,
-`ComputationReduceMemoryDiscrete`), chosen from the chain model and `reduce_memory`. The
-backend creates the solver (`CpuSolver*` or `CudaSolver*`) from the numerical method.
+`ComputationReduceMemoryDiscrete`). `create_propagator_computation()` in
+`src/common/AbstractFactory.cpp` resolves and validates the numerical method once,
+chooses the computation from the chain model and `reduce_memory`, and builds it around
+the backend that the platform returns from `create_backend()`. The backend creates the
+solver (`CpuSolver*` or `CudaSolver*`) for that method.
 
 ### Platform Implementations
 
@@ -166,8 +170,8 @@ AbstractFactory<std::complex<double>>* factory_complex =
 | `create_computation_box(nx, lx, bc, mask=nullptr)` | `ComputationBox<T>*` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
 | `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `ComputationBox<T>*` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
 | `create_propagator_computation_optimizer(molecules, aggregate)` | `PropagatorComputationOptimizer*` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
-| `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
-| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry |
+| `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container (concrete method of the base class) |
+| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry (concrete method of the base class; the platform supplies the backend) |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
 
 ---
@@ -250,9 +254,10 @@ ComputationBackend<T>                         [Abstract Base, grid operations]
                                               checkpoints in pinned host memory
 ```
 
-All of these live in `src/common/` except the two backends. The platform
-factories (`MklFactory`, `FftwFactory`, `CudaFactory`) create the computation
-with their backend; the Python layer and the C++ tests (through
+All of these live in `src/common/` except the two backends.
+`AbstractFactory::create_propagator_computation()` creates the computation with
+the backend that the platform factory (`MklFactory`, `FftwFactory`,
+`CudaFactory`) supplies; the Python layer and the C++ tests (through
 `tests/TestComputationFactory.h`) obtain every computation from a factory.
 
 **Who does what.** The computation classes decide *what* is computed and in
