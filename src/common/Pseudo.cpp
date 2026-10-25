@@ -18,6 +18,7 @@
 #include <complex>
 #include <utility>
 #include "Pseudo.h"
+#include "MinimalFormAlias.h"
 
 //------------------------------------------------------------------------------
 // Constructor
@@ -227,70 +228,20 @@ void Pseudo<T>::update_boltz_bond()
 //------------------------------------------------------------------------------
 // Update Boltzmann factors for periodic BC (with recip_metric support)
 //------------------------------------------------------------------------------
-namespace {
-/**
- * @brief Replace Miller indices by the alias representative minimizing the
- *        reciprocal-metric form (first-Brillouin-zone representative).
- *
- * On the discrete torus each mode k is only defined modulo N, and the
- * multiplier must pick one alias representative. The componentwise
- * principal-zone choice (|m_d| <= N_d/2) is NOT invariant under point-group
- * operations that mix axes with a nonzero metric cross term: e.g. the
- * hexagonal rotation (kx,ky) -> (kx+ky,-kx) can push kx+ky out of the zone,
- * and re-aliasing changes kx^2 + kx*ky + ky^2. The minimal-form
- * representative is group-invariant: symmetry operations permute alias
- * classes and preserve the form, so the minimum over the class is preserved.
- * This makes the pseudo-spectral evolution operator exactly symmetric under
- * the crystal point group (required for space-group reduced-basis
- * computations to match full-grid computations).
- *
- * For orthogonal cells the form is separable and the componentwise
- * representative is already minimal, so callers only invoke this for cells
- * with a nonzero off-diagonal metric (keeping orthogonal results bit-exact).
- * A search window of +/-1 period per axis is sufficient for valid cell
- * geometries (the Voronoi cell of a reduced lattice basis is contained in
- * the union of neighboring translates).
- */
-inline void min_form_alias_rep(
-    int& m1, int& m2, int& m3,
-    const std::array<int, 3>& tnx,
-    double G11, double G22, double G33,
-    double G12, double G13, double G23)
-{
-    auto form = [&](double a, double b, double c) {
-        return G11 * a * a + G22 * b * b + G33 * c * c +
-               2.0 * (G12 * a * b + G13 * a * c + G23 * b * c);
-    };
-
-    const int s1 = (tnx[0] > 1) ? 1 : 0;
-    const int s2 = (tnx[1] > 1) ? 1 : 0;
-    const int s3 = (tnx[2] > 1) ? 1 : 0;
-
-    int b1 = m1, b2 = m2, b3 = m3;
-    double best = form(m1, m2, m3);
-    for (int a = -s1; a <= s1; ++a)
-    {
-        for (int b = -s2; b <= s2; ++b)
-        {
-            for (int c = -s3; c <= s3; ++c)
-            {
-                if (a == 0 && b == 0 && c == 0)
-                    continue;
-                const int t1 = m1 + a * tnx[0];
-                const int t2 = m2 + b * tnx[1];
-                const int t3 = m3 + c * tnx[2];
-                const double f = form(t1, t2, t3);
-                if (f < best)
-                {
-                    best = f;
-                    b1 = t1; b2 = t2; b3 = t3;
-                }
-            }
-        }
-    }
-    m1 = b1; m2 = b2; m3 = b3;
-}
-}  // namespace
+// Oblique cells use the alias representative of least reciprocal-metric form
+// (first-Brillouin-zone representative; see MinimalFormAlias.h). The
+// componentwise principal-zone choice (|m_d| <= N_d/2) is NOT invariant under
+// point-group operations that mix axes with a nonzero metric cross term: e.g.
+// the hexagonal rotation (kx,ky) -> (kx+ky,-kx) can push kx+ky out of the
+// zone, and re-aliasing changes kx^2 + kx*ky + ky^2. The minimal-form
+// representative is group-invariant: symmetry operations permute alias classes
+// and preserve the form, so the minimum over the class is preserved. This makes
+// the pseudo-spectral evolution operator exactly symmetric under the crystal
+// point group (required for space-group reduced-basis computations to match
+// full-grid computations). For orthogonal cells the form is separable and the
+// componentwise representative is already minimal, so only cells with a
+// nonzero off-diagonal metric take this path (keeping orthogonal results
+// bit-exact).
 
 // (A duplicated free-function implementation of the periodic Boltzmann
 // table builder used to live here; it had no callers and risked drifting
@@ -392,7 +343,7 @@ void update_weighted_fourier_basis_periodic_impl(
 
     // Oblique cells need the group-invariant (minimal-form) alias
     // representative, consistent with the diffusion Boltzmann factors;
-    // see min_form_alias_rep(). The search runs in loop-index space
+    // see MinimalFormAlias.h. The search runs in loop-index space
     // (i,j,k with padded leading dims), before mapping to Miller indices.
     // Relative-tolerance gate: exact 90-degree angles produce cos(pi/2)
     // ~ 6e-17, which must not flip orthogonal cells onto this path.
@@ -439,42 +390,21 @@ void update_weighted_fourier_basis_periodic_impl(
     // average is the central difference of the minimum. Orthogonal cells keep the
     // componentwise representative for the diagonal terms (bit-identical); only
     // their cross terms on the Nyquist planes are averaged.
-    const int s1 = (tnx[0] > 1) ? 1 : 0;
-    const int s2 = (tnx[1] > 1) ? 1 : 0;
-    const int s3 = (tnx[2] > 1) ? 1 : 0;
+    const IndexMetric index_metric{La, Lb, Lc, Lab, Lac, Lbc};
+    const std::array<int, 3> grid = {tnx[0], tnx[1], tnx[2]};
     auto mode_basis = [&](int i_s, int j_s, int k_s, double* vv) {
         double v1, v2, v3;
         if (oblique)
         {
-            // Aliases m + N t (t in {-1, 0, 1} on each axis with N > 1) and their forms
-            int alias[27][3];
-            double alias_form[27];
-            int n_alias = 0;
-            double best = form(i_s, j_s, k_s);
-            for (int a = -s1; a <= s1; ++a)
-                for (int b = -s2; b <= s2; ++b)
-                    for (int c = -s3; c <= s3; ++c)
-                    {
-                        alias[n_alias][0] = i_s + a * tnx[0];
-                        alias[n_alias][1] = j_s + b * tnx[1];
-                        alias[n_alias][2] = k_s + c * tnx[2];
-                        alias_form[n_alias] = form(alias[n_alias][0], alias[n_alias][1], alias[n_alias][2]);
-                        best = std::min(best, alias_form[n_alias]);
-                        ++n_alias;
-                    }
-            const double tol = 1e-10 * best;
-            int n_tied = 0;
+            // Aliases of least form (exact search, see MinimalFormAlias.h)
             for (int t = 0; t < 6; ++t)
                 vv[t] = 0.0;
-            for (int n = 0; n < n_alias; ++n)
-            {
-                if (alias_form[n] > best + tol)
-                    continue;
-                deformation(alias[n][0], alias[n][1], alias[n][2], v1, v2, v3);
-                vv[0] += v1 * v1; vv[1] += v2 * v2; vv[2] += v3 * v3;
-                vv[3] += v1 * v2; vv[4] += v1 * v3; vv[5] += v2 * v3;
-                ++n_tied;
-            }
+            const int n_tied = for_each_min_form_alias(
+                {i_s, j_s, k_s}, grid, index_metric, form, 1e-10, [&](int a, int b, int c) {
+                    deformation(a, b, c, v1, v2, v3);
+                    vv[0] += v1 * v1; vv[1] += v2 * v2; vv[2] += v3 * v3;
+                    vv[3] += v1 * v2; vv[4] += v1 * v3; vv[5] += v2 * v3;
+                });
             for (int t = 0; t < 6; ++t)
                 vv[t] /= n_tied;
             return;
@@ -817,7 +747,7 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
     }
 
     // Oblique cells need the group-invariant (minimal-form) alias
-    // representative; see min_form_alias_rep().
+    // representative; see MinimalFormAlias.h.
     // Treat the cell as oblique only when the off-diagonal metric is
     // significant relative to the diagonal: angles of exactly 90 degrees
     // produce cos(pi/2) ~ 6e-17, which must not flip orthogonal cells
@@ -826,6 +756,11 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
     const bool oblique = (std::abs(Gij) > 1e-12 * G_diag_max ||
                           std::abs(Gik) > 1e-12 * G_diag_max ||
                           std::abs(Gjk) > 1e-12 * G_diag_max);
+    const IndexMetric index_metric{Gd[0], Gd[1], Gd[2], Gij, Gik, Gjk};
+    auto form = [&](double a, double b, double c) {
+        return Gd[0] * a * a + Gd[1] * b * b + Gd[2] * c * c +
+               2.0 * (Gij * a * b + Gik * a * c + Gjk * b * c);
+    };
 
     for (const auto& [monomer_type, bond_length] : bond_lengths)
     {
@@ -852,8 +787,9 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                         double mag_q2;
                         if (oblique)
                         {
-                            int m1 = i_signed, m2 = j_signed, m3 = k;
-                            min_form_alias_rep(m1, m2, m3, tnx, Gd[0], Gd[1], Gd[2], Gij, Gik, Gjk);
+                            std::array<int, 3> m = {i_signed, j_signed, k};
+                            min_form_alias_rep(m, tnx, index_metric, form);
+                            const int m1 = m[0], m2 = m[1], m3 = m[2];
                             mag_q2 = prefactor * (Gd[0]*m1*m1 + Gd[1]*m2*m2 + Gd[2]*m3*m3 +
                                 2.0*(Gij*m1*m2 + Gik*m1*m3 + Gjk*m2*m3));
                         }
@@ -876,8 +812,9 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                         double mag_q2;
                         if (oblique)
                         {
-                            int m1 = i_signed, m2 = j_signed, m3 = k_signed;
-                            min_form_alias_rep(m1, m2, m3, tnx, Gd[0], Gd[1], Gd[2], Gij, Gik, Gjk);
+                            std::array<int, 3> m = {i_signed, j_signed, k_signed};
+                            min_form_alias_rep(m, tnx, index_metric, form);
+                            const int m1 = m[0], m2 = m[1], m3 = m[2];
                             mag_q2 = prefactor * (Gd[0]*m1*m1 + Gd[1]*m2*m2 + Gd[2]*m3*m3 +
                                 2.0*(Gij*m1*m2 + Gik*m1*m3 + Gjk*m2*m3));
                         }

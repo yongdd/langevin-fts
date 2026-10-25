@@ -200,6 +200,17 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   backslash escapes (2026-10-25). Under cp949, SCFT stopped at the end of every run;
   under code pages without Greek letters, SCFT, L-FTS and CL-FTS stopped at their start.
   `TestConsoleEncoding` runs a short SCFT with an ASCII stdout.
+- Oblique cells with strongly anisotropic grid spacing, for example 4×32 points on a
+  120-degree cell with equal lengths, used the wrong |k|² for some modes (2026-10-26).
+  The search for the alias of least reciprocal-metric form looked one period around the
+  centered index and missed the minimum (28 of the 128 in-plane modes of that example),
+  in the Boltzmann factors and the stress of the full-grid path and in the ObliqueZ
+  CrysFFT. The search is now exact (`src/common/MinimalFormAlias.h`); on grids with
+  comparable spacing it picks the same aliases as before, so results there are unchanged.
+  Since 16477b99 the CUDA ObliqueZ kernel also needs these factors to be even in
+  (kx, ky), and CUDA and CPU differed by 6e-4 on such grids. `TestMinimalFormAlias`
+  checks the search against a brute-force one on 44,000 modes of random oblique and
+  triclinic cells; `TestCrysFFTObliqueZCuda` adds two such grids.
 
 ### Performance
 

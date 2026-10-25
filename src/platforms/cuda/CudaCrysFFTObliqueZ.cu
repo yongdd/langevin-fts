@@ -16,6 +16,8 @@
 #include "CudaCrysFFTObliqueZ.h"
 #include "CudaCommon.h"
 #include "Exception.h"
+#include "MinimalFormAlias.h"
+#include "ReciprocalMetric.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -102,66 +104,6 @@ __global__ void ker_obliquez_spectral(
 }
 
 }  // namespace
-
-//------------------------------------------------------------------------------
-// Helpers
-//------------------------------------------------------------------------------
-std::array<double, 6> CudaCrysFFTObliqueZ::compute_recip_metric(const std::array<double, 6>& cell_para)
-{
-    const double a = cell_para[0];
-    const double b = cell_para[1];
-    const double c = cell_para[2];
-    const double alpha = cell_para[3];
-    const double beta = cell_para[4];
-    const double gamma = cell_para[5];
-
-    const double cos_a = std::cos(alpha);
-    const double cos_b = std::cos(beta);
-    const double cos_g = std::cos(gamma);
-    const double sin_g = std::sin(gamma);
-
-    const double vol_factor_sq =
-        1.0 - cos_a * cos_a - cos_b * cos_b - cos_g * cos_g + 2.0 * cos_a * cos_b * cos_g;
-    const double vol_factor = std::sqrt(vol_factor_sq);
-    const double volume = a * b * c * vol_factor;
-
-    const double ax = a, ay = 0.0, az = 0.0;
-    const double bx = b * cos_g, by = b * sin_g, bz = 0.0;
-    const double cx = c * cos_b;
-    const double cy = (sin_g != 0.0) ? c * (cos_a - cos_b * cos_g) / sin_g : 0.0;
-    const double cz = volume / (a * b * sin_g);
-
-    const double bc_x = by * cz - bz * cy;
-    const double bc_y = bz * cx - bx * cz;
-    const double bc_z = bx * cy - by * cx;
-
-    const double ca_x = cy * az - cz * ay;
-    const double ca_y = cz * ax - cx * az;
-    const double ca_z = cx * ay - cy * ax;
-
-    const double ab_x = ay * bz - az * by;
-    const double ab_y = az * bx - ax * bz;
-    const double ab_z = ax * by - ay * bx;
-
-    const double a_star_x = bc_x / volume;
-    const double a_star_y = bc_y / volume;
-    const double a_star_z = bc_z / volume;
-    const double b_star_x = ca_x / volume;
-    const double b_star_y = ca_y / volume;
-    const double b_star_z = ca_z / volume;
-    const double c_star_x = ab_x / volume;
-    const double c_star_y = ab_y / volume;
-    const double c_star_z = ab_z / volume;
-
-    std::array<double, 6> metric{};
-    metric[0] = a_star_x * a_star_x + a_star_y * a_star_y + a_star_z * a_star_z;
-    metric[1] = a_star_x * b_star_x + a_star_y * b_star_y + a_star_z * b_star_z;
-    metric[2] = a_star_x * c_star_x + a_star_y * c_star_y + a_star_z * c_star_z;
-    metric[3] = b_star_x * b_star_x + b_star_y * b_star_y + b_star_z * b_star_z;
-    metric[4] = b_star_x * c_star_x + b_star_y * c_star_y + b_star_z * c_star_z;
-    metric[5] = c_star_x * c_star_x + c_star_y * c_star_y + c_star_z * c_star_z;
-    return metric;
-}
 
 //------------------------------------------------------------------------------
 // Constructor / Destructor
@@ -300,7 +242,7 @@ CudaCrysFFTObliqueZ::Table CudaCrysFFTObliqueZ::generateBoltzmann(double ds, con
     const int nz_c = n / 2 + 1;
     std::vector<double> h_table(2 * static_cast<size_t>(M_spectral_));
 
-    const std::array<double, 6> recip_metric = compute_recip_metric(cell);
+    const std::array<double, 6> recip_metric = reciprocal_metric_of_cell(cell);
     const double G11 = recip_metric[0];
     const double G12 = recip_metric[1];
     const double G13 = recip_metric[2];
@@ -316,34 +258,17 @@ CudaCrysFFTObliqueZ::Table CudaCrysFFTObliqueZ::generateBoltzmann(double ds, con
     // The z (DCT) index is a true non-negative frequency and needs no
     // re-aliasing (ObliqueZ requires alpha = beta = 90, i.e. G13 = G23 = 0).
     // The minimal form is the same for (kx, ky) and (-kx, -ky), which makes
-    // the factors even in (kx, ky) as the spectral kernel requires.
+    // the factors even in (kx, ky) as the spectral kernel requires; the search
+    // is exact (MinimalFormAlias.h), since a window of one period misses the
+    // minimum on cells with strongly anisotropic grid spacing.
     // Relative-tolerance gate: gamma of exactly 90 degrees gives
     // cos(pi/2) ~ 6e-17; do not flip rectangular cells onto the
     // minimal-form alias path.
     const bool oblique_xy = (std::abs(G12) > 1e-12 * std::max(std::abs(G11), std::abs(G22)));
-    auto min_form_rep_xy = [&](int& m1, int& m2) {
-        auto form = [&](double a, double b) {
-            return G11 * a * a + 2.0 * G12 * a * b + G22 * b * b;
-        };
-        int b1 = m1, b2 = m2;
-        double best = form(m1, m2);
-        for (int a = -1; a <= 1; ++a)
-        {
-            for (int b = -1; b <= 1; ++b)
-            {
-                if (a == 0 && b == 0)
-                    continue;
-                const int t1 = m1 + a * Nx;
-                const int t2 = m2 + b * Ny;
-                const double f = form(t1, t2);
-                if (f < best)
-                {
-                    best = f;
-                    b1 = t1; b2 = t2;
-                }
-            }
-        }
-        m1 = b1; m2 = b2;
+    const std::array<int, 3> grid_xy = {Nx, Ny, 1};
+    const IndexMetric metric_xy{G11, G22, 0.0, G12, 0.0, 0.0};
+    auto form_xy = [&](double a, double b, double) {
+        return G11 * a * a + 2.0 * G12 * a * b + G22 * b * b;
     };
 
     // (S, D) = (B(kz) + B(n - kz), B(kz) - B(n - kz)) with B(n) = 0, per half-spectrum entry
@@ -352,10 +277,10 @@ CudaCrysFFTObliqueZ::Table CudaCrysFFTObliqueZ::generateBoltzmann(double ds, con
     {
         for (int iy = 0; iy < Ny; ++iy)
         {
-            int m1 = (ix > Nx / 2) ? (ix - Nx) : ix;
-            int m2 = (iy > Ny / 2) ? (iy - Ny) : iy;
+            std::array<int, 3> rep = {(ix > Nx / 2) ? (ix - Nx) : ix, (iy > Ny / 2) ? (iy - Ny) : iy, 0};
             if (oblique_xy)
-                min_form_rep_xy(m1, m2);
+                min_form_alias_rep(rep, grid_xy, metric_xy, form_xy);
+            const int m1 = rep[0], m2 = rep[1];
             auto boltzmann = [&](int m3) {
                 const double gmm = G11 * m1 * m1 + G22 * m2 * m2 + G33 * m3 * m3
                                  + 2.0 * (G12 * m1 * m2 + G13 * m1 * m3 + G23 * m2 * m3);

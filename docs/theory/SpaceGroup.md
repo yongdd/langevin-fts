@@ -394,7 +394,10 @@ a *relative* tolerance on the off-diagonal metric elements
 ($`|G^{*}_{ij}| > 10^{-12} \cdot \max_d G^{*}_{dd}`$); orthogonal cells use the
 principal-zone representative unchanged (both conventions coincide there).
 The same representative is used in the k-space Boltzmann tables, the stress
-tables, and the CrysFFT ObliqueZ generators.
+tables, and the CrysFFT ObliqueZ generators (`src/common/MinimalFormAlias.h`).
+The search is exact rather than limited to one period around the centered
+index, which misses the minimum when the grid spacing differs strongly between
+axes (e.g. 4×32 points on a 120-degree cell with equal lengths).
 
 **Initial-guess note**: analytic initial fields for hexagonal phases should
 be built with the hybrid convention (in-plane $`i/N`$, cell-centered $`z`$) to

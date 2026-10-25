@@ -6,8 +6,10 @@
  * (see CudaCrysFFTObliqueZ.h); the CPU engine runs them as separate transforms.
  * Both use the same Boltzmann convention, so for random fields (standard
  * deviation 5) they must agree to round-off. The grids cover odd and even
- * Nz/2 (including 1 and 2), odd in-plane sizes, and rectangular, hexagonal and
- * monoclinic in-plane angles. Each case also checks an in-place call, that an
+ * Nz/2 (including 1 and 2), odd in-plane sizes, rectangular, hexagonal and
+ * monoclinic in-plane angles, and grid spacings 8x apart in the plane, where
+ * the alias search must be exact for the Boltzmann factors to be even in
+ * (kx, ky) as the CUDA kernel requires. Each case also checks an in-place call, that an
  * out-of-place call keeps its input, a clone sharing the tables, and a cell
  * change followed by a new table.
  */
@@ -119,6 +121,9 @@ int main()
         {{8, 6, 4}, {1.6, 1.2, 1.0, 90 * rad, 90 * rad, 100 * rad}},      // Nz/2 = 2
         {{12, 10, 14}, {1.5, 1.4, 1.8, 90 * rad, 90 * rad, 75 * rad}},    // odd Nz/2 = 7
         {{10, 8, 12}, {1.5, 1.2, 1.6, 90 * rad, 90 * rad, 90 * rad}},     // rectangular
+        // grid spacing 8x apart: a one-period alias window misses the least form
+        {{4, 32, 8}, {4.0, 4.0, 2.0, 90 * rad, 90 * rad, 120 * rad}},
+        {{6, 48, 8}, {2.0, 2.0, 2.0, 90 * rad, 90 * rad, 110 * rad}},
     };
 
     std::mt19937_64 rng(2026);

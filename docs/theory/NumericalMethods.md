@@ -234,7 +234,7 @@ k_sq = (2*pi)^2 * ( G_star_11 * n1^2 + G_star_22 * n2^2 + G_star_33 * n3^2
 boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 ```
 
-For non-orthogonal cells, each index triple is first replaced by its alias $`(n_1 + a_1 N_1, n_2 + a_2 N_2, n_3 + a_3 N_3)`$, $`a_i \in \lbrace -1, 0, 1 \rbrace`$, with the smallest $`|\mathbf{k}|^2`$, so that the discrete operator keeps the point-group symmetry of the cell.
+For non-orthogonal cells, each index triple is first replaced by its alias $`(n_1 + a_1 N_1, n_2 + a_2 N_2, n_3 + a_3 N_3)`$ with the smallest $`|\mathbf{k}|^2`$, so that the discrete operator keeps the point-group symmetry of the cell. The search is exact: an alias whose $`|\mathbf{k}|^2`$ does not exceed that of the centered index satisfies $`|n_d + a_d N_d| \le \sqrt{f\,(G^{*-1})_{dd}}`$ with $`f`$ the metric form of the centered index, which bounds the $`a_d`$ to examine. On nearly isotropic grids this is $`a_d \in \lbrace -1, 0, 1 \rbrace`$; with strongly anisotropic grid spacing the minimum can lie further away.
 
 ---
 

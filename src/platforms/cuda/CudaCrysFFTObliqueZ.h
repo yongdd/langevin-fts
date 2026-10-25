@@ -61,7 +61,6 @@ private:
     /// Clone of `other` sharing its twiddle factors and tables (see clone_sharing_tables()).
     explicit CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other);
 
-    static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
     /// Create the 3D plans, the work buffers and (unless shared) the twiddle factors.
     void init_transforms();
     void free_plans();
