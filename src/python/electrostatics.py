@@ -16,8 +16,9 @@ wavevector (exponential time differencing); the charge density stays explicit. �
 mean of the current and the previous noise, as the Leimkuhler-Matthews integrator of the
 auxiliary fields does: the step is a Leimkuhler-Matthews step of ψ with the time step
 (1 - exp(-γ δτN))/γ of each mode, γ = s k²/E, and the Gaussian statistics of ψ and the
-auxiliary fields are exact for any time step. Only with the Euler integrator does ψ take
-fresh noise; the explicit charge density then biases its variance at first order in γ δτN.
+auxiliary fields are exact for any time step. With an integrator that declares fresh noise
+(averaged_noise = False, as Euler does), ψ takes fresh noise; the explicit charge density
+then biases its variance at first order in γ δτN.
 ψ is kept in Fourier space; its grid values follow from one inverse transform per step,
 and H is evaluated by Parseval's theorem.
 The uniform mode of ψ is zero (electroneutrality). Periodic boxes only.
@@ -55,6 +56,11 @@ class Electrostatics:
         electrostatics, and neighboring seeds do not share streams.
     """
 
+    # Checkpoint data of ψ (checkpoint_data), and the pending sums of the charge structure
+    # function that CLFTS keeps with Coulomb coupling
+    CHECKPOINT_KEYS = ("psi_real", "psi_imag", "psi_k_real", "psi_k_imag", "psi_noise_prev", "psi_rng_state_json")
+    CHARGE_SUMS = ("charge_mixed", "charge_difference", "charge_mixed_difference", "charge_difference_squared")
+
     def __init__(self, params, monomer_types, smearing, n_segments, langevin, bit_generator):
         self.charges = {name: float(params["charges"].get(name, 0.0)) for name in monomer_types}
         if "coupling" in params:
@@ -69,8 +75,8 @@ class Electrostatics:
 
         self.random_bg = bit_generator
         self.random = np.random.Generator(self.random_bg)
-        # Mean of the current and the previous noise (Leimkuhler-Matthews); CLFTS turns it
-        # off for the Euler integrator only
+        # Mean of the current and the previous noise (Leimkuhler-Matthews); CLFTS sets it
+        # from the averaged_noise of its integrator
         self.averaged_noise = True
         self.previous_noise = np.zeros(self.psi.size)
 
@@ -168,22 +174,17 @@ class Electrostatics:
                 "psi_rng_state_json": json.dumps(self.random_bg.state), "psi_noise_prev": self.previous_noise}
 
     def restore(self, data):
-        """ψ and its noise stream from a checkpoint.
+        """ψ, ψ(k), the previous noise and the noise stream from a checkpoint.
 
         ψ(k) is restored as stored, because transforming ψ back does not reproduce it bit
-        for bit; checkpoints written before ψ(k) was stored fall back to the transform, and
-        those written before the previous noise was stored start from zero noise.
+        for bit.
         """
-        missing = [key for key in ("psi_real", "psi_imag", "psi_rng_state_json") if key not in data]
+        missing = [key for key in self.CHECKPOINT_KEYS if key not in data]
         if missing:
             raise ValidationError(f"The checkpoint has no electrostatic potential ({', '.join(missing)}); "
                                   "it was not written with 'electrostatics'")
         self.psi = np.asarray(data["psi_real"]) + 1j * np.asarray(data["psi_imag"])
-        if "psi_k_real" in data:
-            self._psi_k = np.reshape(np.asarray(data["psi_k_real"]) + 1j * np.asarray(data["psi_k_imag"]),
-                                     self.nx).astype(np.complex128)
+        self._psi_k = np.reshape(np.asarray(data["psi_k_real"]) + 1j * np.asarray(data["psi_k_imag"]),
+                                 self.nx).astype(np.complex128)
         self.random_bg.state = json.loads(str(data["psi_rng_state_json"]))
-
-        previous = data.get("psi_noise_prev")
-        self.previous_noise = (np.zeros(self.psi.size) if previous is None
-                               else np.asarray(previous, dtype=np.float64).reshape(-1).copy())
+        self.previous_noise = np.asarray(data["psi_noise_prev"], dtype=np.float64).reshape(-1).copy()

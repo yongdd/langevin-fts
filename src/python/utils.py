@@ -293,11 +293,6 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
             raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
-        if "record_psi_drift_history" in data:
-            psi_drift = data["record_psi_drift_history"]
-            if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
-                    or np.any(psi_drift < 0)):
-                raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
         for monomer in sim.monomer_types:
             names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
                      (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
@@ -310,6 +305,31 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
             name = _measurement_key("sf", ",".join(pair))
             if np.size(data[name]) != sf_size or not np.all(np.isfinite(data[name])):
                 raise ValidationError(f"Invalid checkpoint structure function '{name}'")
+        electrostatics = getattr(sim, "electrostatics", None)
+        if electrostatics is not None:
+            # ψ, ψ(k), the previous noise and the stream of ψ (Electrostatics.checkpoint_data), the
+            # pending drifts of ψ and, with Coulomb coupling, the pending charge structure sums
+            missing = [key for key in electrostatics.CHECKPOINT_KEYS + ("record_psi_drift_history",) if key not in data]
+            if missing:
+                raise ValidationError(f"The checkpoint lacks electrostatic data: {', '.join(missing)}")
+            for key in ("psi_real", "psi_imag", "psi_k_real", "psi_k_imag", "psi_noise_prev"):
+                if (np.size(data[key]) != sim.prop_solver.n_grid or not np.all(np.isfinite(data[key]))
+                        or np.iscomplexobj(data[key])):
+                    raise ValidationError(f"Invalid checkpoint electrostatic array '{key}'")
+            try:
+                np.random.PCG64(0).state = json.loads(str(data["psi_rng_state_json"]))
+            except (ValueError, TypeError, KeyError) as exc:
+                raise ValidationError("Invalid checkpoint random-number state of psi") from exc
+            psi_drift = data["record_psi_drift_history"]
+            if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
+                    or np.any(psi_drift < 0)):
+                raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
+            if electrostatics.coupling > 0:
+                for key in electrostatics.CHARGE_SUMS:
+                    name = _measurement_key("sf", key)
+                    if (name not in data or np.size(data[name]) != int(np.prod(sim.prop_solver.nx))
+                            or not np.all(np.isfinite(data[name]))):
+                        raise ValidationError(f"Invalid checkpoint charge structure sum '{key}'")
         wtmd = getattr(sim, "wtmd", None)
         if wtmd is not None:
             for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
@@ -340,11 +360,7 @@ def restore_recording_state(data, H_history, dH_history, sf_average, drift_histo
     if drift_history is not None and "record_drift_history" in data:
         drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())
     if psi_drift_history is not None:
-        # Checkpoints written before the drift of ψ was recorded leave it unknown (NaN)
-        if "record_psi_drift_history" in data:
-            psi_drift_history.extend(np.atleast_1d(data["record_psi_drift_history"]).tolist())
-        else:
-            psi_drift_history.extend([float("nan")] * int(data["record_sample_count"]))
+        psi_drift_history.extend(np.atleast_1d(data["record_psi_drift_history"]).tolist())
     for key in dH_history:
         dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
     for key, array in sf_average.items():

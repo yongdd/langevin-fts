@@ -13,6 +13,8 @@ class PredictorCorrector:
     # Preserve the identifier in existing example checkpoints.
     name = "example-heun"
     settings = {"version": 1}
+    # Fresh noise in each step (both stages share it); CLFTS gives ψ the same scheme
+    averaged_noise = False
 
     def __init__(self):
         self.force_evaluations = 0

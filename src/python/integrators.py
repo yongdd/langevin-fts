@@ -5,6 +5,9 @@ previous_noise, noise_direction, evaluate_force)`` and returns new active fields
 ``force`` is dH/dw (including bias/stabilization), not the signed drift.
 ``evaluate_force(candidate)`` evaluates intermediate fields, solving the saddle
 in LFTS. Noise is drawn by the run loop once per proposal; do not draw it here.
+``averaged_noise`` declares the noise scheme: True when a step averages ``noise`` and
+``previous_noise`` (Leimkuhler-Matthews), False for fresh noise. CLFTS with
+electrostatics gives the electrostatic potential the same scheme and requires it.
 See docs/internals/Extensions.md for stateful methods and a two-stage example.
 """
 import numpy as np
@@ -15,6 +18,7 @@ from .validation import ValidationError
 class LeimkuhlerMatthews:
     name = "lm"
     settings = {}
+    averaged_noise = True
 
     def step(self, fields, force, *, dt, mobility, noise, previous_noise,
              noise_direction, evaluate_force):
@@ -30,6 +34,7 @@ class LeimkuhlerMatthews:
 class EulerMaruyama:
     name = "euler"
     settings = {}
+    averaged_noise = False
 
     def step(self, fields, force, *, dt, mobility, noise, previous_noise,
              noise_direction, evaluate_force):

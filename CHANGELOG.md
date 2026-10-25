@@ -38,9 +38,10 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     the jumped stream of the auxiliary fields (`PCG64.jumped()`), so runs with neighboring
     seeds share no stream. ψ is kept in Fourier space, where its stiff linear part is
     integrated exactly for each wavevector. Like the Leimkuhler-Matthews integrator of the
-    auxiliary fields, ψ takes the mean of the current and the previous noise, with every
-    integrator but `euler` (custom integrators included; `psi_noise_prev` in checkpoints,
-    older checkpoints continue from zero noise). Its Gaussian statistics are then exact for
+    auxiliary fields, ψ takes the mean of the current and the previous noise
+    (`psi_noise_prev` in checkpoints) when the integrator declares `averaged_noise = True`,
+    as `lm` does; `euler` declares fresh noise, and a custom integrator used with
+    electrostatics must declare one or the other. Its Gaussian statistics are then exact for
     any time step, although the charge density of each step is explicit. With fresh noise
     alone, as before and still with the Euler integrator, the variance of ψ is biased at
     first order in the time step: in `TestChargedStructureFunctionRPA` the charge structure
@@ -49,10 +50,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     molecules in `polymers`; the input must be electroneutral.
   - Smearing is required with charges, with a positive Gaussian length for each charged
     type, and Gaussian smearing in CL-FTS accepts one length per monomer type.
-  - Checkpoints store ψ, its Fourier transform (for bitwise continuation) and its noise
-    stream; a checkpoint without ψ raises `ValidationError`. The run metadata records the
-    initial state of the ψ stream (`initial_psi_rng_state`). A run continued by hand takes ψ
-    through `run(..., initial_psi=...)` and warns without it, since ψ then restarts at zero.
+  - Checkpoints store ψ, its Fourier transform (for bitwise continuation), the previous
+    noise and the stream of ψ, with the pending drifts of ψ and charge structure sums.
+    `continue_run()` checks all of them, and a checkpoint that lacks one or holds an invalid
+    one raises `ValidationError`. The run metadata records the initial state of the ψ
+    stream (`initial_psi_rng_state`). A run continued by hand takes ψ through
+    `run(..., initial_psi=...)` and warns without it, since ψ then restarts at zero;
+    without Coulomb coupling ψ stays zero and a nonzero `initial_psi` is rejected.
   - `psi_drift_max_history` records the largest drift of ψ apart from `drift_max_history`,
     whose maximum the exactly integrated linear part of ψ would dominate.
   - Some composition modes have a zero eigenvalue and therefore no auxiliary field, for

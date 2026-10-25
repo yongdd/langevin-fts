@@ -284,10 +284,15 @@ class CLFTS:
                 self._psi_probe = u / (u @ u)
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
-        # ψ averages two noises as the Leimkuhler-Matthews integrator does (electrostatics.py),
-        # also with custom integrators; only the Euler integrator gives it fresh noise
+        # ψ takes the noise scheme the integrator declares (electrostatics.py): the average of
+        # two noises like Leimkuhler-Matthews, or fresh noise like Euler
         if self.electrostatics is not None:
-            self.electrostatics.averaged_noise = self.integrator.name != "euler"
+            averaged_noise = getattr(self.integrator, "averaged_noise", None)
+            if not isinstance(averaged_noise, (bool, np.bool_)):
+                raise ValidationError("With 'electrostatics' the integrator must declare averaged_noise: True if "
+                                      "it averages the current and the previous noise (Leimkuhler-Matthews), "
+                                      "False if it takes fresh noise")
+            self.electrostatics.averaged_noise = bool(averaged_noise)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):
@@ -500,6 +505,9 @@ class CLFTS:
                 raise ValidationError("initial_psi needs 'electrostatics'")
             if np.size(initial_psi) != self.prop_solver.n_grid or not np.all(np.isfinite(initial_psi)):
                 raise ValidationError("initial_psi must hold one finite value per grid point")
+            # Without Coulomb coupling ψ does not move, so a nonzero ψ would be a fixed potential
+            if self.electrostatics.coupling <= 0 and np.any(np.asarray(initial_psi) != 0):
+                raise ValidationError("initial_psi must be zero without Coulomb coupling (coupling E = 0)")
         self.run_status = {"status": "running", "last_completed_step": first_step - 1,
                            "requested_last_step": self.langevin["max_step"]}
         self.metadata["initial_fields_hash" if _restart_data is None else "restart_fields_hash"] = fields_hash(initial_fields)
@@ -579,7 +587,7 @@ class CLFTS:
             if initial_psi is not None:
                 self.electrostatics.psi = initial_psi
             else:
-                if start_langevin_step is not None and start_langevin_step > 1:
+                if start_langevin_step is not None and start_langevin_step > 1 and self.electrostatics.coupling > 0:
                     warnings.warn("The run continues without initial_psi: the electrostatic potential restarts "
                                   "at zero and relaxes again", RuntimeWarning)
                 self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
@@ -610,7 +618,7 @@ class CLFTS:
         charge_sums = None
         if self.electrostatics is not None and self.electrostatics.coupling > 0:
             charge_sums = {key: np.zeros(self.prop_solver.nx, dtype=np.complex128)
-                           for key in ("charge_mixed", "charge_difference", "charge_mixed_difference", "charge_difference_squared")}
+                           for key in self.electrostatics.CHARGE_SUMS}
             recorded.update(charge_sums)
         sf_sample_count = restore_recording_state(
             _restart_data, H_history, dH_history, recorded, drift_history,
@@ -645,6 +653,12 @@ class CLFTS:
             phi, _ = self.compute_concentrations(w_aux=w_aux)
         phi_for_force = self.smearing.apply_to_dict(phi)
 
+        # Charge density of the current state, and the force of ψ computed at most once for it
+        # (for the drift record, the Poisson residual of the progress line and the next step)
+        es = self.electrostatics
+        charge_density = None if es is None else es.charge_density(phi_for_force)
+        psi_force = None
+
         for langevin_step in range(start_langevin_step, self.langevin["max_step"] + 1):
             step_start = time.perf_counter()
 
@@ -667,14 +681,12 @@ class CLFTS:
 
             drift_max = float(np.max(np.abs(w_lambda * self.dt_scaling[:, None])))
 
-            # Charge density of the same state, for the step of the electrostatic potential
-            if self.electrostatics is not None:
-                charge_density = self.electrostatics.charge_density(phi_for_force)
-                # Largest drift of ψ, s |δH/δψ|, recorded apart from drift_max: its linear part
-                # ∇²ψ/E is integrated exactly and would dominate the maximum at large k
-                if langevin_step % self.recording["sample_interval"] == 0:
-                    es = self.electrostatics
-                    psi_drift_max = float(np.max(np.abs(es.psi_dt_scaling * es.force(charge_density))))
+            # Largest drift of ψ, s |δH/δψ|, recorded apart from drift_max: its linear part ∇²ψ/E
+            # is integrated exactly and would dominate the maximum at large k
+            if es is not None and langevin_step % self.recording["sample_interval"] == 0:
+                if psi_force is None:
+                    psi_force = es.force(charge_density)
+                psi_drift_max = float(np.max(np.abs(es.psi_dt_scaling * psi_force)))
 
             # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
@@ -694,10 +706,11 @@ class CLFTS:
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # Electrostatic potential: one step with its own noise stream
-            if self.electrostatics is not None:
-                self.electrostatics.step(charge_density)
-                if not np.all(np.isfinite(self.electrostatics.psi)):
+            # Electrostatic potential: one step with its own noise stream, from the charge density
+            # of the state before the step
+            if es is not None:
+                es.step(charge_density)
+                if not np.all(np.isfinite(es.psi)):
                     raise ValidationError(f"Non-finite electrostatic potential at step {langevin_step}")
 
             # Concentrations and partition functions of the updated fields
@@ -705,6 +718,8 @@ class CLFTS:
             phi_for_force = self.smearing.apply_to_dict(phi)
             if not np.all(np.isfinite(w_aux)) or not all(np.all(np.isfinite(v)) for v in phi.values()):
                 raise ValidationError(f"Non-finite complex fields or concentrations at step {langevin_step}")
+            if es is not None:
+                charge_density, psi_force = es.charge_density(phi_for_force), None
 
             # Compute functional derivatives for error monitoring (use smeared phi for consistency)
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
@@ -732,8 +747,9 @@ class CLFTS:
                 for i in range(M):
                     print(f" {error_level_array[i]:.3E}", end="")
                 # Poisson residual of the electrostatic potential
-                if self.electrostatics is not None:
-                    psi_force = self.electrostatics.force(self.electrostatics.charge_density(phi_for_force))
+                if es is not None:
+                    if psi_force is None:
+                        psi_force = es.force(charge_density)
                     print(f" {np.std(psi_force):.3E}", end="")
                 print(" ]")
 
@@ -813,8 +829,9 @@ class CLFTS:
                     norm = self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     psi_k = es.psi_k / n_grid
                     psi_mk = es.psi_minus_k() / n_grid
-                    charge = np.reshape(es.charge_density(phi_for_force), nx)
-                    charge_mk = np.conj(np.fft.fftn(np.conj(charge))) / n_grid
+                    # c(-k) = Σ_i z_i Γ_i(k) φ_i(-k) from the φ_i(-k) above (Γ_i is even in k)
+                    charge_mk = sum(z * self.smearing.kernel(name) * phi_fourier[name]
+                                    for name, z in es.charges.items() if z != 0.0)
                     rate = es.k_sq / es.coupling
                     with np.errstate(divide="ignore", invalid="ignore"):
                         mixed = rate * norm * psi_k * charge_mk

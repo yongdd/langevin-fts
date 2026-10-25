@@ -32,6 +32,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from scipy.io import loadmat
 from polymerfts import LFTS, CLFTS, SCFT, PlatformSelector, ValidationError
+from polymerfts.utils import validate_checkpoint, _measurement_key
 
 Z_A = 0.2
 PHI_C = Z_A * 0.5 / (1 + Z_A * 0.5)   # counterions: z_A phi_A = phi_C
@@ -230,9 +231,10 @@ def psi_step(root):
         assert abs(mean - 1.0) < 0.02 and 3 * error < 0.02, \
             f"stationary variance of psi ({integrator}, dt = {dt}, R = {response}): {mean:.4f} +- {error:.4f} of exp(-H)"
 
-    # Every integrator but Euler, custom ones included, gives psi the averaged noise
+    # psi takes the noise scheme its integrator declares (averaged_noise); a custom integrator
+    # must declare it (input_checks)
     class Custom:
-        name, settings = "custom", {}
+        name, settings, averaged_noise = "custom", {}, True
 
         def step(self, fields, force, **kwargs):
             return fields
@@ -284,6 +286,30 @@ def restart(root):
         initial, start_langevin_step=4, initial_psi=np.zeros(3)), "initial_psi")
     expect_validation_error(lambda: CLFTS(parameters(root / "manual", steps=4, electrostatics=False)).run(
         initial, initial_psi=psi), "needs 'electrostatics'")
+    # Without Coulomb coupling psi does not move: a nonzero initial_psi is rejected
+    uncoupled = parameters(root / "manual", steps=4)
+    uncoupled["electrostatics"]["coupling"] = 0.0
+    expect_validation_error(lambda: CLFTS(uncoupled).run(initial, start_langevin_step=4, initial_psi=psi),
+                            "without Coulomb coupling")
+
+    # A checkpoint must hold psi, psi(k), the previous noise, the stream of psi, the pending
+    # drifts of psi and the pending charge structure sums
+    data = loadmat(root / "part" / "fields_000003.mat", squeeze_me=True)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(parameters(root / "part"), random_seed=5)
+    validate_checkpoint(sim, data)
+    pending = np.size(data["record_psi_drift_history"])
+    assert pending == 3, pending
+    for change, message in ((lambda d: d.pop("psi_k_real"), "lacks electrostatic data"),
+                            (lambda d: d.pop("record_psi_drift_history"), "lacks electrostatic data"),
+                            (lambda d: d.update(psi_noise_prev=np.zeros(3)), "electrostatic array 'psi_noise_prev'"),
+                            (lambda d: d.update(psi_rng_state_json="{}"), "random-number state of psi"),
+                            (lambda d: d.update(record_psi_drift_history=np.full(pending, np.nan)),
+                             "record_psi_drift_history"),
+                            (lambda d: d.pop(_measurement_key("sf", "charge_mixed")), "charge structure sum")):
+        modified = dict(data)
+        change(modified)
+        expect_validation_error(lambda: validate_checkpoint(sim, modified), message)
 
 
 def expect_validation_error(make, message):
@@ -341,6 +367,20 @@ def input_checks(root):
     with contextlib.redirect_stdout(io.StringIO()):
         sim = CLFTS(params)
     assert np.isclose(sim.electrostatics.coupling, 4 * np.pi * 0.01 * 20 ** 2 * 100.0)
+
+    # A custom integrator must declare the noise scheme that psi takes (psi_step: declared ones)
+    class Undeclared:
+        name, settings = "undeclared", {}
+
+        def step(self, fields, force, **kwargs):
+            return fields
+    expect_validation_error(lambda: CLFTS(parameters(root / "inputs"), integrator=Undeclared()),
+                            "must declare averaged_noise")
+    fresh = Undeclared()
+    fresh.averaged_noise = False
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(parameters(root / "inputs"), integrator=fresh)
+    assert sim.electrostatics.averaged_noise is False
 
 
 def main():
