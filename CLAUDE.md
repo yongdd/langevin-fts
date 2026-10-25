@@ -74,7 +74,7 @@ installation guide provides separate MKL and FFTW setup paths:
 
 ```bash
 conda activate polymerfts
-conda install --override-channels -c conda-forge --freeze-installed fftw mkl-devel
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11 mkl-devel=2026.1.0
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \

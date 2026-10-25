@@ -33,7 +33,7 @@ Choose one CPU backend.
 **MKL**
 
 ```bash
-conda install --override-channels -c conda-forge --freeze-installed mkl-devel
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -41,7 +41,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c conda-forge --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```

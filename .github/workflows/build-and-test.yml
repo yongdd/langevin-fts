@@ -80,7 +80,7 @@ jobs:
     - name: Install MKL and FFTW
       shell: bash -l {0}
       run: |
-        conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel fftw
+        conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 
     - name: Record installed dependencies
       shell: bash -l {0}
@@ -182,7 +182,7 @@ jobs:
         conda-remove-defaults: "true"
 
     - name: Install MKL and FFTW
-      run: conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel fftw
+      run: conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 
     # docs/getting-started/Installation.md, Windows. vcvars64 runs after the conda
     # activation, so that MSVC's link.exe comes before the MSYS link of Library\usr\bin;

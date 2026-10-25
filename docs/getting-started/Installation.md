@@ -14,7 +14,7 @@ conda activate polymerfts
 ```
 
 The environment uses the conda-forge channel and Python 3.15, with OpenBLAS for
-LAPACKE and spglib with its C library. The libraries are not pinned to versions.
+LAPACKE and spglib with its C library.
 Python 3.15 runs in UTF-8 mode, so output redirected to a file keeps symbols such as
 χN on Windows as well; with Python 3.11-3.14 on Windows, characters the console
 encoding lacks are written as escapes such as `₀` unless `PYTHONUTF8=1` is set.
@@ -30,7 +30,7 @@ CUDA is then detected automatically; see [GPU setup](#gpu-setup) for details.
 **MKL**
 
 ```bash
-conda install --override-channels -c conda-forge --freeze-installed mkl-devel
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -38,7 +38,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c conda-forge --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```
@@ -225,7 +225,7 @@ CPU CI enables both backends in one job, including their agreement checks.
 To use the same configuration locally:
 
 ```bash
-conda install --override-channels -c conda-forge --freeze-installed mkl-devel fftw
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 cmake -S . -B build-tests -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
     -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
     -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON

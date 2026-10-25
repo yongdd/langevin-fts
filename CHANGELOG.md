@@ -14,8 +14,10 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `defaults` channel, on Linux and Windows (2026-10-24). OpenBLAS is selected with
   `libblas=*=*openblas` and supplies LAPACKE through `openblas`; spglib comes from
   conda-forge with its C library; the MKL backend installs `mkl-devel`.
-- The supplied environment uses Python 3.15 and no longer pins library versions
-  (2026-10-26); it keeps only the minimums the build needs (CMake 3.30, pybind11 3).
+- The supplied environment uses Python 3.15 and pins every package to an exact version
+  (2026-10-26), so a new environment gets the libraries tested on Linux and Windows:
+  among them NumPy 2.5.4, SciPy 1.18.1, OpenBLAS 0.3.34, spglib 2.8.0, CMake 4.4.4 and
+  pybind11 3.1.0. The installation commands and CI pin MKL 2026.1.0 and FFTW 3.3.11.
   Python 3.15 runs in UTF-8 mode, so output redirected to a file on Windows keeps the
   Greek symbols of the console output. The conda recipe builds for Python 3.11-3.15 and
   no longer pins NumPy or the pybind11 ABI, and the CI lint job uses Python 3.15.
