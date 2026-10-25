@@ -40,8 +40,8 @@
  * @example
  * @code
  * // Create solver
- * PropagatorComputation<double>* solver = factory->create_propagator_computation(
- *     cb, molecules, optimizer, "rqm4");
+ * std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(
+ *     cb.get(), molecules.get(), optimizer.get(), "rqm4");
  *
  * // Compute propagators with given potential fields
  * std::map<std::string, const double*> w = {{"A", w_A}, {"B", w_B}};

@@ -101,7 +101,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
     std::cout << "============================================================" << std::endl;
 
     // Create factory
-    AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+    std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
     factory->display_info();
 
     // Staggered grid (half-sample symmetric)
@@ -155,7 +155,7 @@ int run_tests(const std::string& platform, bool reduce_memory)
 
     // Create molecules for homopolymer
     std::map<std::string, double> bond_lengths = {{"A", b}};
-    Molecules* molecules = factory->create_molecules_information("Continuous", ds, bond_lengths);
+    std::unique_ptr<Molecules> molecules = factory->create_molecules_information("Continuous", ds, bond_lengths);
 
     // Single A block with 1 step (ds length)
     // Use custom initial condition "G" at vertex 0
@@ -170,12 +170,12 @@ int run_tests(const std::string& platform, bool reduce_memory)
     std::cout << "  Initial condition: Gaussian at vertex 0" << std::endl;
 
     // Create computation box with reflecting BC
-    ComputationBox<double>* cb = factory->create_computation_box(
+    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(
         {N}, {L}, {"reflecting", "reflecting"});
 
     // Create propagator optimizer and solver
-    PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, false);
-    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
+    auto optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), false);
+    std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4");
 
     // Compute propagators with zero field and custom initial condition
     solver->compute_propagators({{"A", w_zero.data()}}, {{"G", q_init.data()}});
@@ -233,14 +233,6 @@ int run_tests(const std::string& platform, bool reduce_memory)
     bool test1_passed = (mass_error < 1e-6) && (max_error < 1e-6)
                         && (init_error <= 1e-12) && (sym_error <= 1e-12);
     std::cout << "\nTest 1: " << (test1_passed ? "PASSED" : "FAILED") << std::endl;
-
-    // Cleanup first test
-    delete solver;
-    delete optimizer;
-    delete molecules;
-    delete cb;
-
-    delete factory;
 
     //=======================================================================
     // Summary

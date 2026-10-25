@@ -150,11 +150,11 @@ The classes each platform provides (the computation classes above them are share
 #include "PlatformSelector.h"
 
 // Create factory for a specific platform ("cpu-fftw", "cpu-mkl", or "cuda")
-AbstractFactory<double>* factory =
+std::unique_ptr<AbstractFactory<double>> factory =
     PlatformSelector::create_factory_real("cuda", reduce_memory);
 
 // For complex-valued field theories
-AbstractFactory<std::complex<double>>* factory_complex =
+std::unique_ptr<AbstractFactory<std::complex<double>>> factory_complex =
     PlatformSelector::create_factory_complex("cuda", reduce_memory);
 ```
 
@@ -167,12 +167,19 @@ AbstractFactory<std::complex<double>>* factory_complex =
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `create_computation_box(nx, lx, bc, mask=nullptr)` | `ComputationBox<T>*` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
-| `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `ComputationBox<T>*` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
-| `create_propagator_computation_optimizer(molecules, aggregate)` | `PropagatorComputationOptimizer*` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
-| `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container (concrete method of the base class) |
-| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry (concrete method of the base class; the platform supplies the backend) |
-| `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
+| `create_computation_box(nx, lx, bc, mask=nullptr)` | `std::unique_ptr<ComputationBox<T>>` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
+| `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `std::unique_ptr<ComputationBox<T>>` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
+| `create_propagator_computation_optimizer(molecules, aggregate)` | `std::unique_ptr<PropagatorComputationOptimizer>` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
+| `create_molecules_information(model, ds, bond_lengths)` | `std::unique_ptr<Molecules>` | Polymer/solvent container (concrete method of the base class) |
+| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `std::unique_ptr<PropagatorComputation<T>>` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry (concrete method of the base class; the platform supplies the backend) |
+| `create_anderson_mixing(n_var, max_hist, ...)` | `std::unique_ptr<AndersonMixing<T>>` | Field update accelerator |
+
+The caller owns the created objects. An object created from others keeps raw pointers
+to them (the optimizer to its molecules; the computation to its box, molecules,
+optimizer and space group), so they must outlive it. Local `unique_ptr`s are destroyed
+in reverse order of declaration, so creating the objects in this order destroys each
+computation before the objects it points to. The Python bindings keep these arguments
+alive with `py::keep_alive`.
 
 ---
 
@@ -607,10 +614,11 @@ that throw need no cleanup code:
 - host arrays: `std::vector`; owned objects (solvers, transforms, CrysFFT engines,
   `Pseudo`, the scheduler, the backend): `std::unique_ptr`.
 
-Raw pointers are lent, never owned. Three places hand out ownership on purpose: the
-factory functions (`create_computation_box`, `create_propagator_computation`, ...),
-whose results the caller (the Python bindings or a C++ test) deletes; the backends'
-`allocate()`/`deallocate()` and `allocate_checkpoint()`/`deallocate_checkpoint()` pairs,
+Raw pointers are lent, never owned. The factory functions (`create_computation_box`,
+`create_propagator_computation`, ...) return `std::unique_ptr`, which the Python bindings
+take over as the holders of their objects. Two places hand out ownership through raw
+pointers on purpose: the backends' `allocate()`/`deallocate()` and
+`allocate_checkpoint()`/`deallocate_checkpoint()` pairs,
 the allocators of the propagator handles and the reduce-memory checkpoints, which the
 computation classes free in one place; and the `CudaCommon` singleton, which is created
 with `new` and deliberately never deleted (it lives until the process exits). cuFFT plans, CUDA streams and events are not memory and are destroyed

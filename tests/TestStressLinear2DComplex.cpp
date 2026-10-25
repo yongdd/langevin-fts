@@ -104,16 +104,16 @@ int main()
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
                     bool reduce_memory = false;
-                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, reduce_memory);
+                    std::unique_ptr<AbstractFactory<T>> factory = PlatformSelector::create_factory_complex(platform, reduce_memory);
 
                     // Create instances
-                    ComputationBox<T>* cb = factory->create_computation_box(nx, lx, {});
-                    Molecules* molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                    std::unique_ptr<ComputationBox<T>> cb = factory->create_computation_box(nx, lx, {});
+                    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                     molecules->add_polymer(1.0, blocks, {});
-                    PropagatorComputationOptimizer* propagator_computation_optimizer =
-                        new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                    PropagatorComputation<T>* solver =
-                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
+                    auto propagator_computation_optimizer =
+                        std::make_unique<PropagatorComputationOptimizer>(molecules.get(), aggregate_propagator_computation);
+                    std::unique_ptr<PropagatorComputation<T>> solver =
+                        factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), numerical_method);
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
                     if (!aggregate_propagator_computation)
@@ -137,12 +137,6 @@ int main()
                     std::cout << "  Stress[1] (zz): " << stress[1] << std::endl;
                     stress0_list.push_back(stress[0]);
                     stress1_list.push_back(stress[1]);
-
-                    delete molecules;
-                    delete propagator_computation_optimizer;
-                    delete cb;
-                    delete solver;
-                    delete factory;
                 }
 
                 // Check consistency within same chain model for stress[0]

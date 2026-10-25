@@ -28,26 +28,25 @@
  * @example
  * @code
  * // Create factory for the desired platform
- * AbstractFactory<double>* factory = PlatformSelector::create_factory_real(
+ * std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(
  *     "cuda", false);  // Use CUDA, no memory reduction
  *
  * // Create simulation objects through factory
- * ComputationBox<double>* cb = factory->create_computation_box(nx, lx, bc);
- * Molecules* molecules = factory->create_molecules_information("continuous", ds, bonds);
- * auto* optimizer = factory->create_propagator_computation_optimizer(molecules, true);
- * auto* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
- * auto* am = factory->create_anderson_mixing(n_var, 20, 1e-1, 0.1, 0.1);
+ * std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, bc);
+ * std::unique_ptr<Molecules> molecules = factory->create_molecules_information("continuous", ds, bonds);
+ * auto optimizer = factory->create_propagator_computation_optimizer(molecules.get(), true);
+ * auto solver = factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4");
+ * auto am = factory->create_anderson_mixing(n_var, 20, 1e-1, 0.1, 0.1);
  *
  * // Display platform information
  * factory->display_info();
  *
- * // Clean up
- * delete solver;
- * delete optimizer;
- * delete molecules;
- * delete cb;
- * delete factory;
+ * // The objects are destroyed in reverse order of creation, so the solver
+ * // goes before the box, molecules and optimizer it points to.
  * @endcode
+ *
+ * Every create function returns a std::unique_ptr. An object created from
+ * others keeps raw pointers to them, so they must outlive it.
  */
 
 #ifndef ABSTRACT_FACTORY_H_
@@ -138,10 +137,10 @@ public :
      * std::vector<int> nx = {32, 32, 32};
      * std::vector<double> lx = {4.0, 4.0, 4.0};
      * std::vector<std::string> bc(6, "periodic");
-     * auto* cb = factory->create_computation_box(nx, lx, bc);
+     * auto cb = factory->create_computation_box(nx, lx, bc);
      * @endcode
      */
-    virtual ComputationBox<T>* create_computation_box(
+    virtual std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -158,9 +157,9 @@ public :
      *               - 1 element: [gamma] for 2D (alpha=beta=90°)
      *               - 3 elements: [alpha, beta, gamma] for full specification
      * @param mask   Optional mask for impenetrable regions
-     * @return Pointer to created ComputationBox
+     * @return Platform-specific ComputationBox instance
      */
-    virtual ComputationBox<T>* create_computation_box(
+    virtual std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -180,14 +179,14 @@ public :
      * @example
      * @code
      * std::map<std::string, double> bonds = {{"A", 1.0}, {"B", 1.0}};
-     * auto* mols = factory->create_molecules_information("continuous", 0.01, bonds);
+     * auto mols = factory->create_molecules_information("continuous", 0.01, bonds);
      * mols->add_polymer(1.0, diblock_blocks);
      * @endcode
      */
-    Molecules* create_molecules_information(
+    std::unique_ptr<Molecules> create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths)
     {
-        return new Molecules(chain_model, ds, bond_lengths);
+        return std::make_unique<Molecules>(chain_model, ds, bond_lengths);
     }
 
     /**
@@ -195,16 +194,16 @@ public :
      *
      * This is a non-virtual method as the optimizer is platform-independent.
      *
-     * @param molecules                     Molecules container
+     * @param molecules                     Molecules container; must outlive the optimizer
      * @param aggregate_propagator_computation Enable propagator aggregation optimization
      * @return PropagatorComputationOptimizer instance
      *
      * @note Aggregation optimization is described in J. Chem. Theory Comput. 2025, 21, 3676.
      *       It can significantly speed up computation for mixtures of similar chains.
      */
-    PropagatorComputationOptimizer* create_propagator_computation_optimizer(Molecules* molecules, bool aggregate_propagator_computation)
+    std::unique_ptr<PropagatorComputationOptimizer> create_propagator_computation_optimizer(Molecules* molecules, bool aggregate_propagator_computation)
     {
-        return new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
+        return std::make_unique<PropagatorComputationOptimizer>(molecules, aggregate_propagator_computation);
     };
 
     /**
@@ -225,12 +224,13 @@ public :
      *                                        - "rk2":  2nd-order operator splitting (pseudo-spectral)
      *                                        - "cn-adi2": 2nd-order Crank-Nicolson ADI (real-space)
      * @param space_group                     Optional space group (reduced basis, real fields only)
-     * @return PropagatorComputation solver with the platform's backend
+     * @return PropagatorComputation solver with the platform's backend. The box,
+     *         molecules, optimizer and space group must outlive it.
      *
      * @note Real-space methods (cn-adi*) support non-periodic boundary conditions
      *       but are a beta feature.
      */
-    PropagatorComputation<T>* create_propagator_computation(
+    std::unique_ptr<PropagatorComputation<T>> create_propagator_computation(
         ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
         std::string numerical_method, SpaceGroup* space_group=nullptr);
 
@@ -247,10 +247,10 @@ public :
      * @example
      * @code
      * int n_var = 32 * 32 * 32;  // Total grid points
-     * auto* am = factory->create_anderson_mixing(n_var, 20, 1e-1, 0.1, 0.1);
+     * auto am = factory->create_anderson_mixing(n_var, 20, 1e-1, 0.1, 0.1);
      * @endcode
      */
-    virtual AndersonMixing<T>* create_anderson_mixing(
+    virtual std::unique_ptr<AndersonMixing<T>> create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) = 0;
 

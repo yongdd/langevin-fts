@@ -48,17 +48,17 @@ MklFactory<T>::MklFactory(bool reduce_memory)
 }
 
 template <typename T>
-ComputationBox<T>* MklFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> MklFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
-    return new CpuComputationBox<T>(nx, lx, bc, mask);
+    return std::make_unique<CpuComputationBox<T>>(nx, lx, bc, mask);
 }
 template <typename T>
-ComputationBox<T>* MklFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> MklFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
     std::vector<double> angles, const double *mask)
 {
-    return new CpuComputationBox<T>(nx, lx, bc, angles, mask);
+    return std::make_unique<CpuComputationBox<T>>(nx, lx, bc, angles, mask);
 }
 template <typename T>
 std::unique_ptr<ComputationBackend<T>> MklFactory<T>::create_backend(
@@ -68,11 +68,11 @@ std::unique_ptr<ComputationBackend<T>> MklFactory<T>::create_backend(
     return std::make_unique<CpuComputationBackend<T>>(cb, molecules, method_info, FFTBackend::MKL, space_group, max_n_streams);
 }
 template <typename T>
-AndersonMixing<T>* MklFactory<T>::create_anderson_mixing(
+std::unique_ptr<AndersonMixing<T>> MklFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-    return new CpuAndersonMixing<T>(
+    return std::make_unique<CpuAndersonMixing<T>>(
         n_var, max_hist, start_error, mix_min, mix_init);
 }
 template <typename T>

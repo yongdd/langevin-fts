@@ -87,10 +87,10 @@ PropagatorResult run_propagator_computation(
     // Create computation box
     std::vector<int> nx = {NX, NY, NZ};
     std::vector<double> lx = {LX, LY, LZ};
-    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
+    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {});
 
     // Create molecules
-    Molecules* molecules = factory->create_molecules_information(
+    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(
         chain_model, ds, {{"A", 1.0}, {"B", 1.0}});
 
     std::vector<BlockInput> blocks = {
@@ -100,11 +100,11 @@ PropagatorResult run_propagator_computation(
     molecules->add_polymer(1.0, blocks, {});
 
     // Create propagator computation optimizer
-    PropagatorComputationOptimizer* pco = new PropagatorComputationOptimizer(molecules, false);
+    auto pco = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), false);
 
     // Create solver
-    PropagatorComputation<double>* solver = factory->create_propagator_computation(
-        cb, molecules, pco, numerical_method);
+    std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(
+        cb.get(), molecules.get(), pco.get(), numerical_method);
 
     // Compute propagators
     solver->compute_propagators({{"A", w_a}, {"B", w_b}}, {});
@@ -121,12 +121,6 @@ PropagatorResult run_propagator_computation(
         result.stress = solver->get_stress();
         result.stress_computed = true;
     }
-
-    // Cleanup
-    delete solver;
-    delete pco;
-    delete molecules;
-    delete cb;
 
     return result;
 }
@@ -274,20 +268,19 @@ int main()
             {
                 std::cout << "=== Platform: " << platform << " ===" << std::endl;
 
-                AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
 
                 for (const auto& config : configs)
                 {
                     const std::string& method = config.first;
                     const std::string& chain = config.second;
 
-                    bool passed = test_same_segment_pairs(factory, platform, method, chain);
+                    bool passed = test_same_segment_pairs(factory.get(), platform, method, chain);
 
                     if (!passed)
                         all_tests_passed = false;
                 }
 
-                delete factory;
                 std::cout << std::endl;
             }
         }

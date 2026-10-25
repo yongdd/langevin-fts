@@ -99,23 +99,23 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
     std::cout << "---- Case: " << cs.name << " (" << platform << ", " << chain_model << ") ----" << std::endl;
     std::cout << "n_reduced_basis: " << n_red << " / " << M << std::endl;
 
-    AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, false);
+    std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, false);
 
     // Solver 1: WITH space group; fields are passed in the reduced basis
-    ComputationBox<double>* cb_sg  = factory->create_computation_box(cs.nx, cs.lx, {});
-    Molecules* molecules_sg        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
+    std::unique_ptr<ComputationBox<double>> cb_sg = factory->create_computation_box(cs.nx, cs.lx, {});
+    std::unique_ptr<Molecules> molecules_sg = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
     molecules_sg->add_polymer(1.0, blocks, {});
-    PropagatorComputationOptimizer* optimizer_sg = new PropagatorComputationOptimizer(molecules_sg, false);
-    PropagatorComputation<double>* solver_sg = factory->create_propagator_computation(
-        cb_sg, molecules_sg, optimizer_sg, "rqm4", cs.sg);
+    auto optimizer_sg = std::make_unique<PropagatorComputationOptimizer>(molecules_sg.get(), false);
+    std::unique_ptr<PropagatorComputation<double>> solver_sg = factory->create_propagator_computation(
+        cb_sg.get(), molecules_sg.get(), optimizer_sg.get(), "rqm4", cs.sg);
 
     // Solver 2: WITHOUT space group; fed the same symmetrized full-grid fields
-    ComputationBox<double>* cb_std = factory->create_computation_box(cs.nx, cs.lx, {});
-    Molecules* molecules_std       = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
+    std::unique_ptr<ComputationBox<double>> cb_std = factory->create_computation_box(cs.nx, cs.lx, {});
+    std::unique_ptr<Molecules> molecules_std = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
     molecules_std->add_polymer(1.0, blocks, {});
-    PropagatorComputationOptimizer* optimizer_std = new PropagatorComputationOptimizer(molecules_std, false);
-    PropagatorComputation<double>* solver_std = factory->create_propagator_computation(
-        cb_std, molecules_std, optimizer_std, "rqm4");
+    auto optimizer_std = std::make_unique<PropagatorComputationOptimizer>(molecules_std.get(), false);
+    std::unique_ptr<PropagatorComputation<double>> solver_std = factory->create_propagator_computation(
+        cb_std.get(), molecules_std.get(), optimizer_std.get(), "rqm4");
 
     std::map<std::string, const double*> w_map_sg =
         {{"A", cs.w_red.data()}, {"B", cs.w_red.data()+n_red}};
@@ -190,12 +190,12 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
             cb_sg->set_lx(lx_p);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_p = compute_energy(solver_sg, molecules_sg);
+            double energy_p = compute_energy(solver_sg.get(), molecules_sg.get());
 
             cb_sg->set_lx(lx_m);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_m = compute_energy(solver_sg, molecules_sg);
+            double energy_m = compute_energy(solver_sg.get(), molecules_sg.get());
 
             double dh_dl = (energy_p-energy_m)/dl;
             double stress_xy = stress_sg[0]+stress_sg[1];
@@ -218,12 +218,12 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
             cb_sg->set_lx(lx_p);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_p = compute_energy(solver_sg, molecules_sg);
+            double energy_p = compute_energy(solver_sg.get(), molecules_sg.get());
 
             cb_sg->set_lx(lx_m);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_m = compute_energy(solver_sg, molecules_sg);
+            double energy_m = compute_energy(solver_sg.get(), molecules_sg.get());
 
             cb_sg->set_lx(cs.lx);
             solver_sg->update_laplacian_operator();
@@ -255,12 +255,12 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
         cb_sg->set_lx(lx_p);
         solver_sg->update_laplacian_operator();
         solver_sg->compute_propagators(w_map_sg, {});
-        double energy_p = compute_energy(solver_sg, molecules_sg);
+        double energy_p = compute_energy(solver_sg.get(), molecules_sg.get());
 
         cb_sg->set_lx(lx_m);
         solver_sg->update_laplacian_operator();
         solver_sg->compute_propagators(w_map_sg, {});
-        double energy_m = compute_energy(solver_sg, molecules_sg);
+        double energy_m = compute_energy(solver_sg.get(), molecules_sg.get());
 
         cb_sg->set_lx(cs.lx);
         solver_sg->update_laplacian_operator();
@@ -289,14 +289,14 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
             cb_sg->set_lx(lx_p);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_p = compute_energy(solver_sg, molecules_sg);
+            double energy_p = compute_energy(solver_sg.get(), molecules_sg.get());
 
             std::vector<double> lx_m = cs.lx;
             lx_m[d] = cs.lx[d] - dl/2;
             cb_sg->set_lx(lx_m);
             solver_sg->update_laplacian_operator();
             solver_sg->compute_propagators(w_map_sg, {});
-            double energy_m = compute_energy(solver_sg, molecules_sg);
+            double energy_m = compute_energy(solver_sg.get(), molecules_sg.get());
 
             cb_sg->set_lx(cs.lx);
             solver_sg->update_laplacian_operator();
@@ -313,16 +313,6 @@ int run_case(const std::string& platform, const std::string& chain_model, const 
             }
         }
     }
-
-    delete solver_sg;
-    delete optimizer_sg;
-    delete molecules_sg;
-    delete cb_sg;
-    delete solver_std;
-    delete optimizer_std;
-    delete molecules_std;
-    delete cb_std;
-    delete factory;
 
     std::cout << "Case passed." << std::endl;
     return 0;

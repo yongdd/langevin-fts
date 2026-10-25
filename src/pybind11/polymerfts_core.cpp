@@ -981,15 +981,14 @@ Example:
             std::transform(type.begin(), type.end(), type.begin(),
             [](unsigned char c){ return std::tolower(c); });
 
+            // The unique_ptr hands the factory to the Python object
             if (type == "real")
             {
-                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory),
-                                py::return_value_policy::take_ownership);
+                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory));
             }
             else if (type == "complex")
             {
-                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory),
-                                py::return_value_policy::take_ownership);
+                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory));
             }
             else {
                 throw std::runtime_error("Invalid type parameter. Must be either 'real' or 'complex'");

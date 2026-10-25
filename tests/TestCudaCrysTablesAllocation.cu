@@ -77,20 +77,20 @@ struct Computation
 static Computation create(const Case& c, const std::vector<double>& lx, bool p1 = false)
 {
     Computation s;
-    s.factory.reset(PlatformSelector::create_factory_real("cuda", false));
+    s.factory = PlatformSelector::create_factory_real("cuda", false);
     s.sg = p1 ? std::make_unique<SpaceGroup>(c.nx, "P1", 1) : std::make_unique<SpaceGroup>(c.nx, c.sg_symbol, c.sg_hall);
     if (!p1 && c.basis == "m3")       s.sg->enable_m3_physical_basis();
     if (!p1 && c.basis == "pmmm")     s.sg->enable_pmmm_physical_basis();
     if (!p1 && c.basis == "z-mirror") s.sg->enable_z_mirror_physical_basis();
     const std::vector<std::string> periodic;
-    s.cb.reset(c.angles.empty()
+    s.cb = c.angles.empty()
         ? s.factory->create_computation_box(c.nx, lx, periodic)
-        : s.factory->create_computation_box(c.nx, lx, periodic, c.angles));
-    s.molecules.reset(s.factory->create_molecules_information(c.chain_model, 0.05, {{"A", 1.0}, {"B", 1.3}}));
+        : s.factory->create_computation_box(c.nx, lx, periodic, c.angles);
+    s.molecules = s.factory->create_molecules_information(c.chain_model, 0.05, {{"A", 1.0}, {"B", 1.3}});
     s.molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
-    s.optimizer.reset(s.factory->create_propagator_computation_optimizer(s.molecules.get(), true));
-    s.computation.reset(s.factory->create_propagator_computation(
-        s.cb.get(), s.molecules.get(), s.optimizer.get(), c.method, s.sg.get()));
+    s.optimizer = s.factory->create_propagator_computation_optimizer(s.molecules.get(), true);
+    s.computation = s.factory->create_propagator_computation(
+        s.cb.get(), s.molecules.get(), s.optimizer.get(), c.method, s.sg.get());
 
     std::mt19937 rng(43);
     std::normal_distribution<double> normal(0.0, 5.0);

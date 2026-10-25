@@ -56,23 +56,18 @@ static std::vector<T> run_case(const std::string& platform, const GridCase& grid
     std::vector<BlockInput> blocks = {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}};
     const int M = w.size()/2;
 
-    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, false);
-    ComputationBox<T>* cb = factory->create_computation_box(grid.nx, grid.lx, {});
-    Molecules* molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
+    std::unique_ptr<AbstractFactory<T>> factory = PlatformSelector::create_factory_complex(platform, false);
+    std::unique_ptr<ComputationBox<T>> cb = factory->create_computation_box(grid.nx, grid.lx, {});
+    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
     molecules->add_polymer(1.0, blocks, {});
-    PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, true);
-    PropagatorComputation<T>* solver = factory->create_propagator_computation(cb, molecules, optimizer, numerical_method);
+    auto optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), true);
+    std::unique_ptr<PropagatorComputation<T>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), numerical_method);
 
     solver->compute_propagators({{"A", &w[0]}, {"B", &w[M]}}, {});
     partition = solver->get_total_partition(0);
     solver->compute_stress();
     std::vector<T> stress = solver->get_stress();
 
-    delete solver;
-    delete optimizer;
-    delete molecules;
-    delete cb;
-    delete factory;
     return stress;
 }
 

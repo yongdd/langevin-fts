@@ -99,16 +99,16 @@ int main()
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for (std::string platform : avail_platforms)
         {
-            AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+            std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
             factory->display_info();
 
             // Create computation box with hexagonal angles
-            ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, angles);
-            Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A", 1.0}, {"B", 1.0}});
+            std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {}, angles);
+            std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, {{"A", 1.0}, {"B", 1.0}});
             molecules->add_polymer(1.0, blocks, {});
-            PropagatorComputationOptimizer* propagator_computation_optimizer = new PropagatorComputationOptimizer(molecules, false);
-            PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
-            AndersonMixing<double>* am = factory->create_anderson_mixing(am_n_var,
+            auto propagator_computation_optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), false);
+            std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
+            std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
             const int M = cb->get_total_grid();
@@ -341,13 +341,6 @@ int main()
             delete[] phi_b;
             delete[] w_plus;
             delete[] w_minus;
-
-            delete molecules;
-            delete propagator_computation_optimizer;
-            delete cb;
-            delete solver;
-            delete am;
-            delete factory;
         }
 
         return 0;

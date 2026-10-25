@@ -31,7 +31,7 @@
 #include "NumericalMethods.h"
 
 template <typename T>
-PropagatorComputation<T>* AbstractFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group)
+std::unique_ptr<PropagatorComputation<T>> AbstractFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group)
 {
     try
     {
@@ -68,7 +68,7 @@ PropagatorComputation<T>* AbstractFactory<T>::create_propagator_computation(Comp
         if (method_info.requires_orthogonal_cell)
             computation->hold_orthogonal_cell();
         group_change.commit();
-        return computation.release();
+        return computation;
     }
     catch(std::exception& exc)
     {

@@ -111,16 +111,16 @@ int main()
             {
             for(bool aggregate_propagator_computation : aggregate_propagator_computations)
             {
-                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                 factory->display_info();
 
                 // Create instances and assign to the variables of base classes for the dynamic binding
-                ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
-                Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {});
+                std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                 molecules->add_polymer(0.3, blocks_1, {});
                 molecules->add_polymer(0.7, blocks_2, {});
-                PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                auto propagator_computation_optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), aggregate_propagator_computation);
+                std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
 
                 // -------------- Print simulation parameters ------------
                 std::cout << std::setprecision(default_precision);
@@ -144,13 +144,6 @@ int main()
                 auto stress = solver->get_stress();
                 std:: cout << "Stress : " << stress[0] << std::endl;
                 stress_list.push_back(stress[0]);
-
-                //------------- Finalize -------------
-                delete molecules;
-                delete propagator_computation_optimizer;
-                delete cb;
-                delete solver;
-                delete factory;
             }
             }
         }

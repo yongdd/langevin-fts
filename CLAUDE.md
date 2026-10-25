@@ -258,7 +258,7 @@ field potentials use the per-reference-chain convention. See
 - Use owning RAII buffers and smart pointers. Device memory uses
   `CudaDeviceBuffer`, pinned host memory uses `CudaPinnedBuffer`; host arrays use
   standard containers. Raw pointers lend access rather than transferring ownership,
-  except where an existing factory or backend allocation interface requires it.
+  except where an existing backend allocation interface requires it.
 - Preserve allocation and resource counters used by safety tests. CUDA destruction
   and release paths must not throw; use the existing release helpers.
 - Share solver mechanics through `CpuSolverPseudoBase` and `CudaSolverPseudoBase`.

@@ -35,7 +35,7 @@
  * double mix_min = 0.1;       // Minimum mixing parameter
  * double mix_init = 0.1;      // Initial mixing parameter
  *
- * AndersonMixing<double>* am = factory->create_anderson_mixing(
+ * std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(
  *     n_var, max_hist, start_error, mix_min, mix_init);
  *
  * // In SCFT iteration loop

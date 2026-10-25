@@ -47,18 +47,18 @@ FftwFactory<T>::FftwFactory(bool reduce_memory)
 }
 
 template <typename T>
-ComputationBox<T>* FftwFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> FftwFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
-    return new CpuComputationBox<T>(nx, lx, bc, mask);
+    return std::make_unique<CpuComputationBox<T>>(nx, lx, bc, mask);
 }
 
 template <typename T>
-ComputationBox<T>* FftwFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> FftwFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
     std::vector<double> angles, const double *mask)
 {
-    return new CpuComputationBox<T>(nx, lx, bc, angles, mask);
+    return std::make_unique<CpuComputationBox<T>>(nx, lx, bc, angles, mask);
 }
 
 template <typename T>
@@ -70,11 +70,11 @@ std::unique_ptr<ComputationBackend<T>> FftwFactory<T>::create_backend(
 }
 
 template <typename T>
-AndersonMixing<T>* FftwFactory<T>::create_anderson_mixing(
+std::unique_ptr<AndersonMixing<T>> FftwFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-    return new CpuAndersonMixing<T>(
+    return std::make_unique<CpuAndersonMixing<T>>(
         n_var, max_hist, start_error, mix_min, mix_init);
 }
 

@@ -57,17 +57,17 @@ CudaFactory<T>::CudaFactory(bool reduce_memory)
 }
 
 template <typename T>
-ComputationBox<T>* CudaFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
-    return new CudaComputationBox<T>(nx, lx, bc, mask);
+    return std::make_unique<CudaComputationBox<T>>(nx, lx, bc, mask);
 }
 template <typename T>
-ComputationBox<T>* CudaFactory<T>::create_computation_box(
+std::unique_ptr<ComputationBox<T>> CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
     std::vector<double> angles, const double* mask)
 {
-    return new CudaComputationBox<T>(nx, lx, bc, angles, mask);
+    return std::make_unique<CudaComputationBox<T>>(nx, lx, bc, angles, mask);
 }
 template <typename T>
 std::unique_ptr<ComputationBackend<T>> CudaFactory<T>::create_backend(
@@ -77,18 +77,18 @@ std::unique_ptr<ComputationBackend<T>> CudaFactory<T>::create_backend(
     return std::make_unique<CudaComputationBackend<T>>(cb, molecules, method_info, space_group, max_n_streams);
 }
 template <typename T>
-AndersonMixing<T>* CudaFactory<T>::create_anderson_mixing(
+std::unique_ptr<AndersonMixing<T>> CudaFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
     if(this->reduce_memory)
     {
-        return new CudaAndersonMixingReduceMemory<T>(
+        return std::make_unique<CudaAndersonMixingReduceMemory<T>>(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
     else
     {
-        return new CudaAndersonMixing<T>(
+        return std::make_unique<CudaAndersonMixing<T>>(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
 }

@@ -70,20 +70,20 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                    std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                     // factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
-                    Molecules *molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {});
+                    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                     molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
-                    PropagatorComputationOptimizer* propagator_computation_optimizer= factory->create_propagator_computation_optimizer(molecules, aggregate_propagator_computation);
+                    std::unique_ptr<PropagatorComputationOptimizer> propagator_computation_optimizer = factory->create_propagator_computation_optimizer(molecules.get(), aggregate_propagator_computation);
 
                     // Display branches
                     propagator_computation_optimizer->display_blocks();
                     propagator_computation_optimizer->display_sub_propagators();
 
-                    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                    std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
 
                     // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
@@ -146,12 +146,6 @@ int main()
                             return -1;
                         }
                     }
-                    
-                    delete factory;
-                    delete cb;
-                    delete molecules;
-                    delete propagator_computation_optimizer;
-                    delete solver;
                 }
             }
         }

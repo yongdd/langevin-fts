@@ -141,16 +141,16 @@ int main()
                 {
                     for(bool reduce_memory : reduce_memorys)
                     {
-                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                        std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                         // factory->display_info();
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
-                        ComputationBox<double>* cb = factory->create_computation_box(nx, lx_backup, {}, mask.data());
-                        Molecules* molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                        std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx_backup, {}, mask.data());
+                        std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
-                        PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                        PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
-                        AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
+                        auto propagator_computation_optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), aggregate_propagator_computation);
+                        std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
+                        std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
                         // -------------- Print simulation parameters ------------
@@ -199,13 +199,6 @@ int main()
                         std::cout<< "]" << std::endl;
 
                         total_partition_list.push_back(sum_total_partition);
-                        
-                        delete factory;
-                        delete cb;
-                        delete molecules;
-                        delete propagator_computation_optimizer;
-                        delete solver;
-                        delete am;
                     }
                 }
             }

@@ -21,6 +21,9 @@
 /**
  * @brief Propagator computation on one platform.
  *
+ * The caller owns the returned computation and deletes it before the box,
+ * molecules and optimizer it points to.
+ *
  * @param platform         "cpu-fftw", "cpu-mkl" or "cuda"
  * @param reduce_memory    Store only checkpoints (reduce-memory mode)
  * @param numerical_method "rqm4", "rk2" or "cn-adi2" (ignored for discrete chains)
@@ -34,10 +37,10 @@ PropagatorComputation<T>* make_propagator_computation(
 {
     std::unique_ptr<AbstractFactory<T>> factory;
     if constexpr (std::is_same_v<T, double>)
-        factory.reset(PlatformSelector::create_factory_real(platform, reduce_memory));
+        factory = PlatformSelector::create_factory_real(platform, reduce_memory);
     else
-        factory.reset(PlatformSelector::create_factory_complex(platform, reduce_memory));
-    return factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
+        factory = PlatformSelector::create_factory_complex(platform, reduce_memory);
+    return factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method).release();
 }
 
 #endif

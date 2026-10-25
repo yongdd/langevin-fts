@@ -37,7 +37,7 @@
  * std::vector<std::string> bc = {"periodic", "periodic", "periodic",
  *                                 "periodic", "periodic", "periodic"};
  *
- * ComputationBox<double>* cb = factory->create_computation_box(nx, lx, bc);
+ * std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, bc);
  *
  * // Compute volume integral of a field
  * double integral_phi = cb->integral(phi);
@@ -47,7 +47,7 @@
  *
  * // Create hexagonal box (γ = 120°)
  * std::vector<double> angles = {90.0, 90.0, 120.0};
- * ComputationBox<double>* hex_cb = factory->create_computation_box(nx, lx, bc, angles);
+ * std::unique_ptr<ComputationBox<double>> hex_cb = factory->create_computation_box(nx, lx, bc, angles);
  * @endcode
  */
 #ifndef COMPUTATION_BOX_H_

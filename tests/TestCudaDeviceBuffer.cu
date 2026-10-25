@@ -225,7 +225,7 @@ static_assert(std::convertible_to<CudaDeviceBuffer<double>, const void*>);
 // One construction and a short run of each kind of object
 //------------------------------------------------------------------------------
 template <typename T>
-static AbstractFactory<T>* make_factory(bool reduce_memory)
+static std::unique_ptr<AbstractFactory<T>> make_factory(bool reduce_memory)
 {
     if constexpr (std::is_same_v<T, double>)
         return PlatformSelector::create_factory_real("cuda", reduce_memory);

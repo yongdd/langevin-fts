@@ -101,6 +101,15 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Interface changes
 
+- The C++ factory functions return `std::unique_ptr` (2026-10-26):
+  `PlatformSelector::create_factory_real`/`create_factory_complex` and every `create_*`
+  function of `AbstractFactory`. C++ callers no longer delete the objects. An object
+  created from others still borrows raw pointers to them, so they must outlive it; local
+  `unique_ptr`s declared in creation order are destroyed in the right order. The C++
+  tests that use the factory hold the objects in `unique_ptr`s; 19 of them deleted the box
+  before the computation, which was harmless only because none used `cn-adi2`, whose
+  computation releases its hold on the box when it is destroyed. The Python interface is
+  unchanged.
 - Constructing `SCFT`, `LFTS` or `CLFTS` no longer writes `polymer_<id>.png` into the
   current directory, where it could overwrite an existing file of that name (2026-10-26).
   `LFTS` and `CLFTS` draw the chain architectures into `recording.dir` when a run starts;

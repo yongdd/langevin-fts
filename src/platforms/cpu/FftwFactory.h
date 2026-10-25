@@ -34,7 +34,7 @@
  * FftwFactory<double> factory(false);  // reduce_memory=false for speed
  *
  * // Create simulation objects
- * auto* cb = factory.create_computation_box(nx, lx, bc);
+ * auto cb = factory.create_computation_box(nx, lx, bc);
  * auto* mols = factory.create_molecules_information("continuous", 0.01, bonds);
  * auto* solver = factory.create_propagator_computation(cb, mols, optimizer, "rqm4");
  *
@@ -89,7 +89,7 @@ public :
      * @param mask Optional mask for impenetrable regions
      * @return CpuComputationBox instance
      */
-    ComputationBox<T>* create_computation_box(
+    std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -104,7 +104,7 @@ public :
      * @param mask   Optional mask for impenetrable regions
      * @return CpuComputationBox instance
      */
-    ComputationBox<T>* create_computation_box(
+    std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -120,7 +120,7 @@ public :
      * @param mix_init   Initial mixing parameter
      * @return CpuAndersonMixing instance
      */
-    AndersonMixing<T>* create_anderson_mixing(
+    std::unique_ptr<AndersonMixing<T>> create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) override;
 
