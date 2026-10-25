@@ -116,6 +116,11 @@ ENDIF()
 # OpenMP flag for its host code below). MSVC's default OpenMP 2.0 rejects the
 # unsigned loop indices of the propagator loops; its LLVM runtime (CMake 3.30+)
 # accepts them.
+IF(MSVC AND CMAKE_VERSION VERSION_LESS 3.30)
+    MESSAGE(FATAL_ERROR "MSVC builds need CMake 3.30 or newer for the LLVM OpenMP runtime "
+                        "(/openmp:llvm), found ${CMAKE_VERSION}. Install a newer CMake, "
+                        "e.g. 'conda install -c conda-forge \"cmake>=3.30\"'.")
+ENDIF()
 SET(OpenMP_RUNTIME_MSVC llvm)
 FIND_PACKAGE(OpenMP REQUIRED)
 SET(CMAKE_CXX_FLAGS        "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")

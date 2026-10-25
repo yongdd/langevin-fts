@@ -18,7 +18,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   Matplotlib 3.11 and OpenBLAS 0.3.34.
 - Windows builds with MSVC (2026-10-24): CMake finds conda's libraries under
   `<prefix>/Library`, uses MSVC warning flags, the conforming preprocessor that the CUDA
-  headers need and MSVC's LLVM OpenMP runtime (CMake 3.30+), names the module
+  headers need and MSVC's LLVM OpenMP runtime (CMake 3.30+; configuration stops with an
+  error on older versions), names the module
   `_core.pyd` and defines `FFTW_DLL`, without which `fftw_version` came from MKL's FFTW
   wrappers. LAPACKE uses `std::complex` under MSVC, the package adds the spglib DLL
   directory before importing `_core`, and the tests no longer use variable-length arrays
