@@ -27,20 +27,20 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Cache conda packages
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /home/runner/conda_pkgs_dir
         key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
     - name: Install the conda environment
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         activate-environment: polymerfts
-        auto-activate-base: false
+        auto-activate: false
         environment-file: environment.yml
         channels: conda-forge
         channel-priority: strict
@@ -57,20 +57,20 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Cache conda packages
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /home/runner/conda_pkgs_dir
         key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
     - name: Install the conda environment
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         activate-environment: polymerfts
-        auto-activate-base: false
+        auto-activate: false
         environment-file: environment.yml
         channels: conda-forge
         channel-priority: strict
@@ -165,14 +165,17 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
+    # The Windows installer of Miniforge 26.9.4-0 fails in `conda init` ("needs sudo"
+    # for Scripts\conda.exe, conda-forge/miniforge#913). Return to latest once a
+    # fixed installer is released.
     - name: Install the conda environment
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v4
       with:
-        miniforge-version: latest
+        miniforge-version: 26.7.2-1
         activate-environment: polymerfts
-        auto-activate-base: false
+        auto-activate: false
         environment-file: environment.yml
         channels: conda-forge
         channel-priority: strict
@@ -209,14 +212,14 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set up Python
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         activate-environment: lint
-        auto-activate-base: false
+        auto-activate: false
         python-version: "3.15"
         channels: conda-forge
         channel-priority: strict
@@ -235,7 +238,7 @@ jobs:
         flake8 src/python --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: "22"
 
@@ -251,7 +254,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check CPU and CUDA computation/solver classes match
       run: |
