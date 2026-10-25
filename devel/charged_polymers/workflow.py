@@ -22,6 +22,7 @@ ROUTES = {
         'brush': ('validation', 'run_brush', 'Same-model MF/CL benchmark'),
         'exact': ('exact', 'run', 'Native CL versus finite particle enumeration'),
         'reduced': ('reduced', 'run', 'Reduced CL integrator and adaptive-step study'),
+        'nagata': ('nagata', 'run', 'Drift-tail criterion and exact sums for chi, zeta and E'),
     },
     'sample': {
         'brush': ('brush_sampling', 'run', 'N=100 planar brush, bulk bath, or tiny control'),
@@ -43,6 +44,7 @@ ROUTES = {
         'cl-reduced': ('cl_analysis', 'analyze_reduced', 'Reduced-integrator comparisons'),
         'cl-brush': ('cl_analysis', 'analyze_brush', 'Same-model MF/CL summary'),
         'marginal': ('cl_analysis', 'analyze_marginal', 'Positive marginal and CL diagnostics'),
+        'nagata': ('nagata', 'analyze', 'Drift tails and exact comparisons of cl nagata runs'),
         'fig1-finite': ('prl_analysis', 'analyze_fig1_finite', 'Original mixed Fig. 1 / small-system data bundle'),
         'prl-scan': ('prl_analysis', 'analyze_scan', 'Figs. 2–3 digitization and checked scan'),
         'matched': ('prl_analysis', 'analyze_matched', 'MC versus concentration-matched LDA/MF SCFT'),

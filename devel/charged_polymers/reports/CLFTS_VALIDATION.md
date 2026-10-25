@@ -15,7 +15,11 @@ MC comparison are in the separate [PRL report](PRL_REPRODUCTION.pdf).
 references in the investigated finite model. Independent chain/drift/noise
 checks pass, and positive representations of the same action recover reference
 means. This supports incorrect CL convergence in that fixture; it is not a
-proof that all CL fails or a complete boundary-term derivation. The FFT
+proof that all CL fails or a complete boundary-term derivation. A drift-tail
+study (2026-10-26) finds the power-law tail of a partition-function zero in every
+setting of this fixture. The bias grows with the weight of that tail, and the
+CL averages agree with the exact sums where it is light: without charges at
+$\zeta N\le1$, and up to $E=10$ at $\zeta N=0.25$–0.5. The FFT
 strong-field issue is separately documented and remains deferred by user decision.
 
 Historical weak-coupling, one-loop and brush observations are retained later
@@ -104,7 +108,7 @@ checks use relative complex error with the original $10^{-7}$ tolerance;
 FFT propagation itself remains unchanged.
 
 The separate MF/CL bridge uses 2D 8×32, L=(1.2,2), N=10, E=25,
-`zetaN=20`, `chiPSN=10`, five canonical species, C=1 and SP=3 valences,
+$\zeta N=20$, $\chi_{PS}N=10$, five canonical species, C=1 and SP=3 valences,
 quenched grafts and truncated-bottom/reflecting-top bonds. Set `alpha_ds=0`.
 First solve all active mean-field equations including their uniform modes;
 only the electrostatic gauge is fixed. Then warm-start CL from that saddle.
@@ -127,10 +131,10 @@ python devel/charged_polymers/workflow.py cl brush \
 ## Exact finite particles versus native CL
 
 The common fixture has one grafted four-bead P chain, two C(+1), SP(+3), SM(-1),
-and S: nine beads total, eight free coordinates, reflecting bonds, L=1,
-N_ref=4, chiN=2, zetaN=4, and Gaussian smearing radius .1.
+and S: nine beads total, eight free coordinates, reflecting bonds, $L=1$,
+$N_{\rm ref}=4$, $\chi N=2$, $\zeta N=4$, and Gaussian smearing radius 0.1.
 Every microscopic configuration of the same finite action is summed:
-$2^8=256$ or $4^8=65,536$. Uniform Gaussian modes cancel in normalized observables;
+$2^8=256$ or $4^8=65{,}536$. Uniform Gaussian modes cancel in normalized observables;
 self terms and canonical multiplicities remain in the exact reference.
 
 The initial 22 native runs use two cells with E=0/25/100, dt=.02/.01/.005,
@@ -140,7 +144,7 @@ units, discarding 200, recording every .1. Two further two-cell E=25/100 runs
 use dt=.0025, seed 173, total time 1000, discard 100. These give 24 completed
 runs, with different physical durations explicitly retained.
 
-The original psi stream uses seed+1: seeds 71/72 overlap across different
+The original $\psi$ stream uses seed+1: seeds 71/72 overlap across different
 field components and are reported separately. They are not pooled as fully
 independent replicates. Seed 173 provides a disjoint stream assignment.
 
@@ -169,7 +173,7 @@ adaptive Euler, steps down to .00015625, physical durations up to 50,000,
 and explicit equilibration intervals.
 
 Adaptive Euler chooses the step from the current drift before drawing noise:
-`dt_actual <= dt_max * min(1,10/max|drift|)`. Noise scales with its square root.
+$dt_{\rm actual}\le dt_{\max}\min(1,\,10/\max|\mathrm{drift}|)$. Noise scales with its square root.
 Samples remain spaced by .1 in physical time, not equally weighted by adaptive
 step count. No rejection, clipping, or stabilizing force is added.
 
@@ -626,11 +630,11 @@ This distinguishes **small Q** from a **spatially inaccurate propagator**.
 ## 3. Connecting MF and CL for the same model
 
 [studies/validation.py](../studies/validation.py) uses a canonical five-species model in 2D:
-8×32, L=(1.2,2), N=10, E=25, zetaN=20, chiPSN=10, with C=1 and SP=3 valences.
+8×32, L=(1.2,2), N=10, E=25, $\zeta N=20$, $\chi_{PS}N=10$, with C=1 and SP=3 valences.
 MF and CL use identical new quenched grafting and truncated-bottom/reflecting-top bonds.
 Dynamic stabilization is disabled with `alpha_ds=0`. **These benchmark numbers are not the PRL physical conditions.**
 
-The full active-field MF residual is `5.14e-12`; MF `<z>=0.4518632443`.
+The full active-field MF residual is `5.14e-12`; MF $\langle z\rangle=0.4518632443$.
 
 | nbar | dt | seed | Production Langevin time | CL mean height ± estimated SE |
 |---|---|---|---|---|
@@ -648,11 +652,11 @@ increasing nbar suppresses fluctuations and approaches MF.
 This checks consistency under these conditions; **it does not establish dt→0 extrapolation or correct strong-coupling CL convergence**.
 Drift samples, complex block profiles for all species, and final checkpoints are preserved.
 
-Refining the MF grid to 16×64 gives `<z>=0.4476186900`, a **0.94%** change.
+Refining the MF grid to 16×64 gives $\langle z\rangle=0.4476186900$, a **0.94%** change.
 The fixed-cell anchor representation also changes with the grid; these are not continuum values.
 Besides the validation code, the external production driver's effective-charge calculation was corrected to use species valences.
 Mean Γ for 26 existing N=50 results was recalculated from original profiles and saved as separate copies.
-For example, `n5f_0p01_s12345.json` changes from Γ=`−0.07406685` to `+0.23989397`.
+For example, `n5f_0p01_s12345.json` changes from $\Gamma=-0.07406685$ to $+0.23989397$.
 Historical mixed-valence results lack species block profiles, so corrected error bars cannot be reconstructed.
 Recalculated copies mark `gamma_blocks` and `gamma_err` as `null` and retain old values in metadata.
 Original files are unchanged. Correcting valences does not validate historical trajectories or agreement with PRL observable definitions.
@@ -692,34 +696,38 @@ The first P bead is fixed at cell 0; its other three beads are free. Thus the
 system has nine beads and zero total charge. There is only one graft anchor;
 the annealed/quenched lateral distinction does not arise in this 1D fixture.
 
-With N_ref=4, V=1 and C=sqrt(nbar)=9/4, the canonical particle multiplicities
-`C V f_p / alpha_p` are exactly 1, 2, 1, 1, 1. The volume fractions are
-4/9, 2/9, 1/9, 1/9, 1/9. chi_PS N=2, zeta N=4, all smearing radii=0.1.
+With $N_{\rm ref}=4$, $V=1$ and $C=\sqrt{\bar N}=9/4$, the canonical particle
+multiplicities $CVf_p/\alpha_p$ are exactly 1, 2, 1, 1, 1. The volume fractions are
+4/9, 2/9, 1/9, 1/9, 1/9; $\chi_{PS}N=2$, $\zeta N=4$, and all smearing radii are 0.1.
 At this coarse spacing the smearing is not continuum-resolved; both reference
 and CL use the same finite cosine multipliers.
 
-Let n_t(j) be the bead occupancy of species t in cell j. The microscopic
-volume fraction is `phi_t(j) = n_t(j) / (C N_ref dv)`, with `dv=1/M`.
-Using the smeared density phi_bar, the particle interaction energy is
+Let $n_t(j)$ be the bead occupancy of species $t$ in cell $j$. The microscopic
+volume fraction is $\phi_t(j)=n_t(j)/(C N_{\rm ref}\,\Delta v)$, with $\Delta v=1/M$.
+Using the smeared densities $\bar\phi_t$, the particle interaction energy is
 
-```
-U = C V [ chi_PS N * mean(phi_bar_P * phi_bar_S)
-          + (zeta N / 2) * mean((sum_t phi_bar_t - 1)^2)
-          + (E / 2) * mean(c * G c) ],
-c = sum_t z_t phi_bar_t,   G = (-laplacian)^(-1) on nonzero modes.
-```
+$$
+\begin{aligned}
+U&=CV\Big[\chi_{PS}N\operatorname{mean}(\bar\phi_P\bar\phi_S)
++\frac{\zeta N}{2}\operatorname{mean}\Big(\Big(\sum_t\bar\phi_t-1\Big)^2\Big)
++\frac{E}{2}\operatorname{mean}(c\,Gc)\Big],\\
+c&=\sum_t z_t\bar\phi_t,\qquad G=(-\nabla^2)^{-1}\ \text{on the nonzero modes}.
+\end{aligned}
+$$
 
-All self terms implied by this finite field action are included. No separate
+Here $\operatorname{mean}$ averages over the $M$ cells. All self terms implied by this
+finite field action are included. No separate
 self-energy subtraction, local incompressibility, or salt reservoir is added.
-The bond multiplier is exp(−k² ds/6), smearing exp(−a² k²/2), and G's multiplier
-is 1/k² except at k=0, where it is zero. The reference constructs these matrices
+The bond multiplier is $e^{-k^2\,ds/6}$, the smearing multiplier $e^{-a^2k^2/2}$, and the
+multiplier of $G$ is $1/k^2$ except at $k=0$, where it is zero. The reference constructs these matrices
 explicitly with cosine modes rather than calling the production transforms.
 
-Each configuration has positive weight `product(bond weights) * exp(-U)`.
+Each configuration has the positive weight $e^{-U}\prod_b B_b$, where $B_b$ are the
+weights of its three bonds.
 Enumerating labelled C particles supplies their correct occupancy multiplicity;
-the canonical 2! is a configuration-independent factor and cancels from averages.
-The 2-cell reference sums all 2^8=256 configurations; the 4-cell reference sums
-all 4^8=65,536. Profiles are therefore obtained without Monte Carlo uncertainty.
+the canonical $2!$ is a configuration-independent factor and cancels from averages.
+The 2-cell reference sums all $2^8=256$ configurations; the 4-cell reference sums
+all $4^8=65{,}536$. Profiles are therefore obtained without Monte Carlo uncertainty.
 
 Two preliminary identities check the mapping:
 
@@ -752,8 +760,8 @@ uses seed+1, so these trajectories share one generator seed across different
 field components. They are not pooled as independent replicates. Seed 173's
 streams do not overlap those seed assignments. Production RNG code is unchanged.
 
-The cancellation diagnostic is `|Q(W)| / Q(Re W)` using the same finite bond
-operator. It is invariant under uniform real field shifts, unlike raw |Q|.
+The cancellation diagnostic is $|Q(W)|/Q(\operatorname{Re}W)$ using the same finite bond
+operator. It is invariant under uniform real field shifts, unlike the raw $|Q|$.
 A small ratio indicates cancellation near possible drift poles; a finite-sample
 histogram alone does not establish a CL correctness criterion.
 
@@ -891,7 +899,7 @@ not the PRL model and not a continuum calculation.
 
 ## Exactly reduced dynamics
 
-Write each field as its spatial mean plus `x*(1,-1)`. In this canonical model,
+Write each field as its spatial mean plus $x\,(1,-1)$. In this canonical model,
 uniform species fields multiply single-particle partitions by constants that
 cancel from normalized densities. Uniform auxiliary modes have decoupled
 Gaussian dynamics; only their differences affect the spatial observables.
@@ -899,14 +907,14 @@ Eliminating those uniform modes therefore leaves the same marginal stochastic
 dynamics, without changing interactions, charges, smearing or the bond matrix.
 
 There are four remaining complex amplitudes: native active auxiliary indices
-0, 3, 4, followed by psi. These are called `field_0` through `field_3` in the
+0, 3, 4, followed by $\psi$. These are called `field_0` through `field_3` in the
 saved analysis. In particular, `field_2` is the amplitude of native auxiliary
 mode 4, not the frozen native mode 2.
 
 The reduced runner explicitly sums the eight conformations of the four-bead
 grafted chain, grouped by the occupancy of cell 0. Point-particle densities
 use their exact two-cell tanh expression. The noise variance of a half-difference
-is the native per-cell variance divided by two, namely `2 dt / C` before the
+is the native per-cell variance divided by two, namely $2\,dt/C$ before the
 mobility factor. The imaginary noise directions and mobilities are preserved.
 
 | Check | Maximum discrepancy |
@@ -918,29 +926,32 @@ mobility factor. The imaginary noise directions and mobilities are preserved.
 | Actual `BrushChargedCLFTS.run` step with the same supplied noise increments | 4.97e-15 |
 
 The native tests call `check_total_partition()` and compare all species.
-The one-step comparison reads the native post-update checkpoint, including psi.
-Additional checks cover E=0 and psi mobility 0.1.
+The one-step comparison reads the native post-update checkpoint, including $\psi$.
+Additional checks cover E=0 and $\psi$ mobility 0.1.
 
 ## A second independent reference: the original field integral
 
 Gauss-Hermite quadrature directly integrates the original field contour after
 the uniform modes have been integrated out. Its integrand is
-`Q_P * Q_C**2 * Q_SP * Q_SM * Q_S` times the Gaussian field factors.
+$Q_P\,Q_C^2\,Q_{SP}\,Q_{SM}\,Q_S$ times the Gaussian field factors.
 The implementation forms density numerators without dividing by Q and does
-not evaluate log Q. It is an entire integrand, including at partition zeros.
+not evaluate $\log Q$. It is an entire integrand, including at partition zeros.
 
 Besides densities, it integrates each field amplitude and its square. Their
 particle references follow by completing the Gaussian square for every one
-of the 256 particle configurations. If `dphi` is the microscopic half-difference,
-the conditional Gaussian centers are
+of the 256 particle configurations. Let $\delta\phi_t$ be the microscopic
+half-difference of species $t$ between the two cells, $s=e^{-a^2\pi^2/2}$ the smearing
+multiplier of that mode, $A_{ti}$ the auxiliary-field matrix (`matrix_a`) and $h_i$
+the quadratic coefficient of field $i$ (`h_coef_mu2[i]`). The conditional Gaussian
+centers are
 
-```
-mu_i = -sum_t A[t,i] * smear * dphi_t / (2 h_coef_mu2[i]),
-mu_psi = E / pi**2 * sum_t z_t * smear * dphi_t.
-```
+$$
+\mu_i=-\frac{s}{2h_i}\sum_t A_{ti}\,\delta\phi_t,\qquad
+\mu_\psi=\frac{E}{\pi^2}\,s\sum_t z_t\,\delta\phi_t.
+$$
 
 The corresponding analytic covariances of the stored complex fields are
-`1/(2 C h_coef_mu2[i])` and `-E/(C pi**2)`. Averaging the centers and their
+$1/(2Ch_i)$ and $-E/(C\pi^2)$. Averaging the centers and their
 squares plus these covariances over the positive particle weights gives the
 exact field moments. Thus the comparison also uses entire observables that
 do not themselves contain a partition denominator.
@@ -962,14 +973,14 @@ Twenty-one additional trajectories and four quadrature jobs completed:
 - E=100: original LM/ETD and additive-noise Heun, dt=.0025/.000625, seeds
   301/401, total time 10,000 with 1,000 discarded.
 - E=0/25: both integrators at dt=.000625, seed 301, the same duration.
-- E=100: Heun with psi mobility .1/10 at dt=.000625, seed 301, the same duration.
+- E=100: Heun with $\psi$ mobility .1/10 at dt=.000625, seed 301, the same duration.
 - E=100: dt=.00015625, time 20,000 with 2,000 discarded; LM/ETD seed 501 and
   Heun seeds 501/601.
 - E=0: dt=.000625, time 50,000 with 5,000 discarded; Heun seed 501 and LM/ETD seed 601.
 - E=100: adaptive Euler at maximum dt=.000625/.00015625, seed 701, time 20,000
   with 2,000 discarded. The step is chosen from the current drift before noise
-  is drawn: `dt_actual <= dt_max * min(1, 10/max|drift|)`. Noise scales with
-  `sqrt(dt_actual)`. Observations are taken at fixed physical times, not weighted
+  is drawn: $dt_{\rm actual}\le dt_{\max}\min(1,\,10/\max|\mathrm{drift}|)$. Noise scales
+  with $\sqrt{dt_{\rm actual}}$. Observations are taken at fixed physical times, not weighted
   equally per adaptive step. No clipping, rejection or stabilizing force is added.
 
 All observations are spaced by .1 Langevin time. Errors are the maximum of
@@ -979,7 +990,7 @@ Different fields use successive PCG64 draws within the reduced runner;
 cross-run seeds are separated. The reduced stochastic trajectories need not
 match the native trajectories point for point to have the same noise law.
 
-At E=100, dt=.00015625, with psi mobility 1:
+At E=100, dt=.00015625, with $\psi$ mobility 1:
 
 | Method, seed | C density in cell 0 ± SE | Auxiliary amplitude `field_2` ± SE |
 |---|---:|---:|
@@ -993,7 +1004,7 @@ The C-density discrepancies are about 27–32 estimated SE; the entire auxiliary
 field mean differs by about 48–50 estimated SE. The various integrators agree
 with each other much better than they agree with the exact reference. The
 adaptive fine-step run reaches the full physical duration in 128,130,102 steps.
-Changing psi mobility by factors of ten also does not restore agreement at
+Changing $\psi$ mobility by factors of ten also does not restore agreement at
 the tested settings. These findings cannot be explained simply by the original
 LM/ETD time step or by statistical noise in a single short trajectory.
 
@@ -1008,34 +1019,33 @@ two code paths, not correctness of their equilibrium distribution.
 
 ## Actual partition zeros and drift poles
 
-For the smeared polymer field half-difference h, the chain partition is
+For the smeared polymer field half-difference $h$, the chain partition is
 
-$$Q_P(h)=c_0e^{h/2}+c_1+c_2e^{-h/2}+c_3e^{-h}.$$
+$$Q_P(h)=c_0e^{h/2}+c_1+c_2e^{-h/2}+c_3e^{-h},$$
 
-where the positive c coefficients sum the eight bond-weighted conformations.
-Factoring out `exp(h/2)` gives a cubic polynomial in `exp(-h/2)`. Its exact
+where the positive coefficients $c_n$ sum the eight bond-weighted conformations.
+Factoring out $e^{h/2}$ gives a cubic polynomial in $e^{-h/2}$. Its exact
 roots locate partition zeros at
 
-```
-h = 0.9614601145 ± 2.7421589828 i,
-h = 1.26847297   + 2 pi i,
-```
+$$
+h=0.9614601145\pm2.7421589828\,i,\qquad h=1.26847297+2\pi i,
+$$
 
-and their repeats by `4 pi i`. Each point-particle partition also has zeros
-at `h=(2n+1) 2 pi i`. These are zeros of the mathematical partition functions,
-independent of FFT evaluation. They produce poles in derivatives of log Q.
+and their repeats by $4\pi i$. Each point-particle partition also has zeros
+at $h=(2n+1)\,2\pi i$. These are zeros of the mathematical partition functions,
+independent of FFT evaluation. They produce poles in derivatives of $\log Q$.
 
 The strongest recorded drift states lie close to P or SP zeros. For example:
 
-- E=0, Heun seed 301: polymer h=.96143145+2.74221821i, only 6.58e-5 from a
-  Q_P zero; drift magnitude 10,167.
-- E=100, fine adaptive Euler: polymer h=.96145934−2.74216402i, only 5.09e-6
-  from a Q_P zero; drift magnitude 131,319. Its time step is reduced accordingly.
+- E=0, Heun seed 301: polymer $h=0.96143145+2.74221821\,i$, only 6.58e-5 from a
+  $Q_P$ zero; drift magnitude 10,167.
+- E=100, fine adaptive Euler: polymer $h=0.96145934-2.74216402\,i$, only 5.09e-6
+  from a $Q_P$ zero; drift magnitude 131,319. Its time step is reduced accordingly.
 
 At the maximum-drift state of each of the 21 trajectories, the native solver
 still passes its unchanged partition check. Comparing native densities with
 full conditional enumeration gives a maximum scaled error of 1.98e-10, using
-`max|difference| / (1+max|reference density|)`. Densities can be of order 1e5
+$\max|\text{difference}|/(1+\max|\text{reference density}|)$. Densities can be of order 1e5
 near these poles, so absolute errors are larger there (up to 1.73e-5 in the
 fine adaptive example); they should not be described as uniformly 1e-14.
 The independent reduced calculation and the native solver agree despite their
@@ -1132,13 +1142,14 @@ FFT, CL drift, physical parameters and existing calibrated tests are unchanged.
 ## A positive marginal of the identical action
 
 Use the four complex half-difference amplitudes of the earlier reduction:
-three active auxiliary fields (native indices 0, 3, 4) and psi. For each of
+three active auxiliary fields (native indices 0, 3, 4) and $\psi$. For each of
 the 256 particle configurations, their action is quadratic plus linear in the
-fields. Integrate the two repulsive auxiliary amplitudes and psi analytically.
-Retain only the attractive amplitude `x=field_0` on its real contour.
+fields. Integrate the two repulsive auxiliary amplitudes and $\psi$ analytically.
+Retain only the attractive amplitude $x$ (`field_0`) on its real contour.
 
-Let `a_i` be the quadratic coefficients, `l_i = smear * dphi @ A[:,i]`,
-`q = smear * dphi @ charges`, and `C=9/4`. The integrated configuration weight
+Let $a_i$ be the quadratic coefficients and, with $s$, $A_{ti}$ and $\delta\phi_t$
+as in the field-integral reference, $l_i=s\sum_t A_{ti}\,\delta\phi_t$,
+$q=s\sum_t z_t\,\delta\phi_t$ and $C=9/4$. The integrated configuration weight
 apart from the retained field is
 
 $$
@@ -1149,15 +1160,15 @@ p(x)&\propto e^{-Ca_0x^2}\sum_{\mathrm{config}}B_{\mathrm{config}}e^{-Cl_0x}.
 \end{aligned}
 $$
 
-Here `a_0=1.25` and `a_1,a_2<0`. Grouping configurations with the same integer
-occupancy difference `n_P(cell0)-n_S(cell0)` reduces the sum to five terms.
-All coefficients are positive. Thus **p(x) has no zero for real x**, and its
+Here $a_0=1.25$ and $a_1,a_2<0$. Grouping configurations with the same integer
+occupancy difference $n_P(0)-n_S(0)$ of cell 0 reduces the sum to five terms.
+All coefficients are positive. Thus **$p(x)$ has no zero for real $x$**, and its
 logarithmic derivative is finite along the sampled path. This does not assert
 that its analytic continuation has no complex zeros.
 
-The real Langevin drift is `-2 a_0 x - <l_0>_x` with noise variance `2 dt/C`.
+The real Langevin drift is $-2a_0x-\langle l_0\rangle_x$ with noise variance $2\,dt/C$.
 The sampler uses additive-noise Heun. Densities and the eliminated field moments
-are conditional averages at x; x and x² are observed directly. Coefficients
+are conditional averages at $x$; $x$ and $x^2$ are observed directly. Coefficients
 come from the bond weights and interaction parameters, without fitting to the
 exact means. No saddle approximation, interaction removal, clipping or
 parameter adjustment is used.
@@ -1207,18 +1218,22 @@ show the original and new E=100 results. All 12 runs and 19 observables are in
 
 For six saved CL trajectories, measure each configuration's minimum distance
 to any exact P or point-particle partition zero in its smeared field amplitude
-h, including the imaginary-period repeats. Analyze observations saved at fixed
+$h$, including the imaginary-period repeats. Analyze observations saved at fixed
 physical times. These distances are not the minima over every integration step.
 
-For an observable O, decompose its measured bias as
+For an observable $O$ and the distance $d$ of a sample to the nearest zero,
+decompose its measured bias as
 
-```
-mean(O - O_exact) = mean[(O - O_exact) 1(distance <= epsilon)]
-                 + mean[(O - O_exact) 1(distance > epsilon)].
-```
+$$
+\begin{aligned}
+\operatorname{mean}(O-O_{\rm exact})
+&=\operatorname{mean}\big[(O-O_{\rm exact})\,\mathbf 1(d\le\epsilon)\big]\\
+&\quad+\operatorname{mean}\big[(O-O_{\rm exact})\,\mathbf 1(d>\epsilon)\big].
+\end{aligned}
+$$
 
 Both terms divide by the original full sample count; they are not conditional
-means or a proposed corrected estimator. At epsilon=.1:
+means or a proposed corrected estimator. At $\epsilon=0.1$:
 
 | CL run | Near-zero sample fraction | Total C-density bias | Near-zero contribution | Remaining contribution |
 |---|---:|---:|---:|---:|
@@ -1237,17 +1252,17 @@ subsequent distribution, or prove which pole causes that distribution.
 
 ## Low-order stationarity does not validate the sampled measure
 
-Compute the unevolved holomorphic generators for `O=x_i,x_i²`, i=0,2,3:
+Compute the unevolved holomorphic generators for $O=x_i,\,x_i^2$ with $i=0,2,3$:
 
-```
-L x_i = f_i,
-L x_i² = 2 x_i f_i + 2 D_i.
-```
+$$
+L\,x_i=f_i,\qquad L\,x_i^2=2x_if_i+2D_i.
+$$
 
-For auxiliary amplitudes, `D_i=sign_i * mobility_i/C`; for psi it is
-`-mobility_psi/C`, or zero at E=0. Negative D here accounts for imaginary noise
+Here $f_i$ is the drift of $x_i$. For auxiliary amplitudes $D_i=\sigma_i m_i/C$, with
+the mobility $m_i$ and the sign $\sigma_i$ (+1 for a real, −1 for an imaginary field);
+for $\psi$ it is $-m_\psi/C$, or zero at E=0. Negative $D_i$ here accounts for imaginary noise
 in the stored complex coordinates. In all six trajectories, every tested real
-and imaginary part of `<L O>` lies within 1.686 estimated SE of zero, despite
+and imaginary part of $\langle LO\rangle$ lies within 1.686 estimated SE of zero, despite
 their incorrect equilibrium averages. The LM comparison concerns the continuous
 generator at its finite time step, not an exact finite-step stationarity identity.
 
@@ -1311,7 +1326,7 @@ checks preserve the evidence needed to reproduce this comparison.
 # 1D Gibbs sampling at 4, 16 and 32 cells
 
 The earlier two-cell marginal retaining only a real field summed all particle configurations.
-Here the repulsive auxiliary field and psi are integrated exactly, while **particle positions and the real field in the attractive channel are retained together**.
+Here the repulsive auxiliary field and $\psi$ are integrated exactly, while **particle positions and the real field in the attractive channel are retained together**.
 This Gibbs sampler draws the real field from a Gaussian at fixed particles and updates each particle using its exact conditional probabilities at fixed field.
 It uses no finite-time-step Langevin integration. It is neither a field-only sampler with all particles integrated out nor the same dynamics as existing CL.
 
@@ -1340,13 +1355,13 @@ $$
 $$
 
 The $a$ in this section differs from the PRL Born radius. Particle updates include every interaction, self term,
-neighboring bead bond weight, and the fixed first bead. Each update sums M candidate positions, without enumerating all $M^8$ configurations.
+neighboring bead bond weight, and the fixed first bead. Each update sums $M$ candidate positions, without enumerating all $M^8$ configurations.
 
 A separate particle-only Gibbs control also integrates out the attractive field. Both samplers' energies were checked against direct evaluation of the original density action;
 particle conditional probabilities were independently computed for real fields with std=5. Existing FFT and CL drift were unchanged.
 
-Conditions follow [Exact finite-action benchmark](CLFTS_VALIDATION.md): N_ref=4, one 4-bead chain, two C(+1), one each of SP(+3), SM(-1), and S,
-L=1, chiN=2, zetaN=4, smearing radius=.1, and reflecting bonds. The first bead is fixed in the first cell.
+Conditions follow [Exact finite-action benchmark](CLFTS_VALIDATION.md): $N_{\rm ref}=4$, one 4-bead chain, two C(+1), one each of SP(+3), SM(-1), and S,
+$L=1$, $\chi N=2$, $\zeta N=4$, smearing radius 0.1, and reflecting bonds. The first bead is fixed in the first cell.
 
 - M=4/16/32 and E=0/100: real-field/particle seeds 1101,1201 and particle-only seed 2101, totaling 18 runs.
 - Three additional M=4, E=25 runs directly match the historical native CL conditions.
@@ -1388,6 +1403,167 @@ This small system has eight free particles; it does not validate performance for
 
 
 ![Small nine-bead Gibbs controls. This is separate from the N=100 planar brush campaign.](figures/oned_prl_20260907/positive_1d_comparison.pdf){width=95%}
+
+
+# Drift-tail criterion and convergent regimes (2026-10-26)
+
+Nagata, Nishimura and Shimasaki
+[PRD 94 (2016) 114515](https://arxiv.org/abs/1606.07627) require the
+probability distribution of the drift magnitude to fall off exponentially or
+faster; a power-law tail lets boundary terms bias the averages. This chapter
+applies the criterion to the two-cell fixture of
+[Exact finite-action benchmark](CLFTS_VALIDATION.md) with $\chi_{PS}N$, $\zeta N$
+and $E$ as parameters. It answers two questions: whether the failing settings
+violate the criterion, and in which settings the CL averages agree with the exact
+sums. Production FFT, CL drift and existing calibrated tests are unchanged.
+
+## Method
+
+The particles, the box, the smearing radius 0.1, $C=9/4$ and $N_{\rm ref}=4$
+are those of the benchmark; $\chi_{PS}N=2$ in every run. The exact reference
+sums the $2^8$ configurations with the energy $U$ of the benchmark for the
+given $\chi_{PS}N$, $\zeta N$ and $E$. The dynamics is that of the reduced
+diagnosis: four complex half-difference amplitudes, the three active auxiliary
+fields and $\psi$. [studies/nagata.py](../studies/nagata.py) evaluates it for
+independent walkers at once in NumPy. Before each run the reduced densities and
+drift are compared with the native solver at 32 complex fields with real and
+imaginary standard deviation 5; the largest difference over all runs is
+$3.5\times10^{-14}$.
+
+Each run starts 2048 independent walkers at the saddle point, discards 20
+Langevin time units and measures 100 units with additive-noise Heun at
+$dt=0.000625$, that is $3.28\times10^{8}$ walker steps. The production LM/ETD
+integrator and $dt/2$ are checked in one convergent setting. Errors are the
+standard deviation of the walker means divided by $\sqrt{2048}$; the walkers
+are independent replicates. At every step the drift magnitude
+$u=\max_i|f_i|$ of the four amplitudes, mobilities included, enters a
+histogram with twenty bins per decade. $S(u)$ denotes the fraction of steps
+with a drift above $u$, and the tables give it at 10 and 100 times the median.
+$z$ is $(\mathrm{CL}-\mathrm{exact})/\mathrm{SE}$ for the counterion density
+(C) and the polymer density (P) in cell 0; max $|z|$ is taken over the C, P
+and SP densities, the height and the amplitude `field_2`.
+
+## Results
+
+With $\zeta N=4$ the averages differ from the exact sums at every coupling,
+already without charges:
+
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 0 | 0.192436 | 0.193016 ± 0.000217 | +2.7 | -6.5 | 6.47 | 1.7e-04 | 1.0e-06 |
+| 4 | 1 | 0.193841 | 0.194397 ± 0.000220 | +2.5 | -6.2 | 6.17 | 5.9e-05 | 2.9e-07 |
+| 4 | 4 | 0.197495 | 0.198185 ± 0.000227 | +3.0 | -8.7 | 8.69 | 1.2e-04 | 6.7e-07 |
+| 4 | 10 | 0.202665 | 0.203437 ± 0.000244 | +3.2 | -10.8 | 10.84 | 2.3e-04 | 1.2e-06 |
+| 4 | 25 | 0.207880 | 0.209324 ± 0.000312 | +4.6 | -14.0 | 14.02 | 3.8e-04 | 2.2e-06 |
+| 4 | 100 | 0.207189 | 0.213322 ± 0.000751 | +8.2 | -27.1 | 27.11 | 6.5e-04 | 3.4e-06 |
+
+At $E=100$ the counterion density reproduces the bias of the earlier native and
+reduced campaigns (0.2131–0.2133 against 0.20719). Without charges, a weaker
+excluded-volume coupling removes the bias:
+
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.25 | 0 | 0.219145 | 0.219147 ± 0.000033 | +0.0 | -0.7 | 0.66 | 1.1e-06 | 1.2e-08 |
+| 0.5 | 0 | 0.216303 | 0.216305 ± 0.000053 | +0.0 | -0.3 | 0.35 | 2.7e-06 | 1.5e-08 |
+| 1 | 0 | 0.211245 | 0.211254 ± 0.000091 | +0.1 | -0.6 | 0.55 | 1.1e-05 | 7.0e-08 |
+| 2 | 0 | 0.203165 | 0.203282 ± 0.000144 | +0.8 | -3.0 | 2.98 | 3.6e-05 | 2.5e-07 |
+| 4 | 0 | 0.192436 | 0.193016 ± 0.000217 | +2.7 | -6.5 | 6.47 | 1.7e-04 | 1.0e-06 |
+
+With weak excluded volume the charged system agrees up to $E=10$ and differs
+from $E=25$ on:
+
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.5 | 1 | 0.217623 | 0.217624 ± 0.000054 | +0.0 | -0.0 | 0.02 | 1.7e-06 | 1.2e-08 |
+| 0.5 | 4 | 0.221057 | 0.221059 ± 0.000067 | +0.0 | -0.4 | 0.36 | 7.4e-06 | 3.4e-08 |
+| 0.5 | 10 | 0.225973 | 0.225975 ± 0.000095 | +0.0 | -1.4 | 1.43 | 2.9e-05 | 1.3e-07 |
+| 0.5 | 25 | 0.231497 | 0.231912 ± 0.000158 | +2.6 | -4.0 | 5.97 | 1.2e-04 | 4.6e-07 |
+| 0.5 | 100 | 0.235725 | 0.238473 ± 0.000538 | +5.1 | -19.8 | 19.80 | 3.3e-04 | 1.5e-06 |
+| 0.25 | 10 | 0.228829 | 0.228816 ± 0.000084 | -0.2 | -2.0 | 1.98 | 1.9e-05 | 7.9e-08 |
+| 0.25 | 100 | 0.239437 | 0.242018 ± 0.000498 | +5.2 | -14.2 | 15.81 | 2.9e-04 | 1.2e-06 |
+
+The integrator and the time step do not change the agreement at $\zeta N=0.5$,
+$E=0$:
+
+| Integrator | dt | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) |
+|---|---:|---:|---:|---:|---:|---:|
+| Heun | 0.000625 | 0.216305 ± 0.000053 | +0.0 | -0.3 | 0.35 | 2.7e-06 |
+| LM/ETD | 0.000625 | 0.216309 ± 0.000053 | +0.1 | -1.1 | 1.08 | 2.4e-06 |
+| Heun | 0.0003125 | 0.216302 ± 0.000054 | -0.0 | +0.2 | 0.16 | 2.9e-06 |
+
+The agreement is not that of a weakly interacting system. Measured from the
+system without interactions (C density 0.222222, P density 0.710377 in cell 0),
+the interactions shift the exact counterion density by 85–121 standard errors
+in the convergent settings without charges or at $E=1$, and by 17–79 at
+$E=4$–10. They shift the polymer density by 8–54 standard errors.
+
+![Left and middle: fraction of steps with a drift above $u$ (solid: CL differs from the exact sum, max $|z|>3$; dashed: agrees). Right: largest deviation against the tail weight; circles Heun, squares LM/ETD, triangle $dt/2$.](figures/nagata_20261026/nagata_drift_tails.pdf){width=100%}
+
+## Interpretation
+
+Every run has the same two-part distribution. Near the median the drift falls
+off steeply, as for Gaussian fluctuations: in most runs the log-log slope of
+$S(u)$ lies between $-4$ and $-8$ for $u$ between 2 and 3.16. From about ten
+times the median on $S(u)$ falls off as $u^{-2}$, with slopes between $-2.0$
+and $-2.6$ per half decade in every run. This is the tail of a simple
+zero of a partition function: there the drift grows as the inverse distance $r$
+from the zero in the complex plane of its field amplitude, and a finite density
+near the zero gives $S(u)\propto r^2\propto u^{-2}$. Strictly, the criterion is
+therefore violated in every tested setting, including those that agree with the
+exact sums.
+
+What differs between the settings is the weight of the tail. Where at most
+$2.9\times10^{-5}$ of the steps have a drift above ten times the median, the CL
+averages agree with the exact sums (max $|z|\le 1.98$). From
+$3.6\times10^{-5}$ on they differ (max $|z|\ge 2.98$), and the deviation grows
+with the weight, up to 27 standard errors. The tail weight follows the
+fluctuations of the imaginary fields: the Gaussian variance of $\psi$ is
+proportional to $E$, that of the pressure field grows with $\zeta N$, and larger
+fluctuations bring the smeared field amplitudes closer to the zeros of $Q_P$ and
+of the point-particle partition functions.
+
+- The failure at $\zeta N=4$ does not need charges: the excluded-volume channel
+  alone reaches the zeros of $Q_P$ often enough to bias the averages.
+- Strong electrostatic coupling fails at every tested excluded volume:
+  $E=25$ with $\zeta N=0.5$ and 4, $E=100$ with $\zeta N=0.25$, 0.5 and 4.
+- CL converges, within the statistical precision of these runs, at $E=0$ with
+  $\zeta N\le1$ and at $\zeta N=0.25$–0.5 up to $E=10$.
+
+The thresholds belong to this fixture, with its $C=9/4$ ($\bar N\approx5$),
+smearing and grid; they are not production criteria. Agreement means a bias
+below about two standard errors, not its absence; the standard errors of the
+convergent runs are $3\times10^{-5}$–$10^{-4}$ for the counterion density and
+$3$–$4\times10^{-4}$ for the polymer density. No run showed an exponential tail, so the criterion is satisfied
+nowhere in the strict sense, and a finite run cannot show that it is. The
+production CL-FTS (`src/python/clfts.py`) records the largest drift of every
+step for each auxiliary field and for $\psi$ (`drift_max_step_history`,
+`psi_drift_max_step_history`) so that the same tail and its weight can be
+inspected in production runs.
+
+## Code and reproduction
+
+- [studies/nagata.py](../studies/nagata.py): exact reference with $\chi_{PS}N$
+  and $\zeta N$, reduced coefficients and native checks, vectorized walkers,
+  drift histograms and analysis.
+- [metadata/nagata_20261026.json](metadata/nagata_20261026.json): parameters,
+  native checks, observables, tail statistics and the drift histogram of every
+  run.
+
+The campaign ran on a local workstation with a standalone copy of the module;
+with the same seed, a short run gives bitwise identical observables and
+histograms with [studies/nagata.py](../studies/nagata.py). One configuration
+takes 10–15 minutes on one CPU core. On a cluster, submit one job per
+configuration:
+
+```bash
+python devel/charged_polymers/workflow.py cl nagata --zeta 0.5 --coupling 10 \
+  --dt .000625 --walkers 2048 --equil 20 --duration 120 --seed 203 \
+  --out /path/to/new/nagata_E10_z0.5
+python devel/charged_polymers/workflow.py analyze nagata /path/to/campaign \
+  --figure /path/to/campaign/nagata_drift_tails.pdf
+```
+
+The seeds of the individual runs are in the metadata file.
 
 
 # Historical weak-coupling and brush campaigns

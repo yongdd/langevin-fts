@@ -32,6 +32,71 @@ See the [computed binodals](reports/figures/mccarty_gaussian_20260915/mccarty_bi
 [critical-point data](reports/figures/mccarty_gaussian_20260915/critical.csv), and
 [coexistence data](reports/figures/mccarty_gaussian_20260915/coexistence.csv).
 
+## Open issue: charged CL convergence
+
+Resolve the charged CL discrepancies against exact finite-lattice particles
+(opened 2026-09-07; moved here from the repository TODO, item 30, on 2026-10-26).
+
+The 24-run benchmark in [CLFTS_VALIDATION.md](reports/CLFTS_VALIDATION.md) passes
+mass/partition and final-state conditional-density checks, but charged CL
+averages differ from exhaustive positive particle sums. At E=100, dt=0.0025,
+the cell-0 counterion density is 0.21308439 +/- 0.00112541 versus exact
+0.20718911. E=0 controls agree within estimated uncertainty.
+Distinguish integration bias, rare-event sampling, and possible incorrect CL
+convergence before treating target PRL simulations as validated. Preserve the
+finite action and native FFT; changing the model cannot validate this benchmark.
+
+Follow-up: 21 trajectories and direct original-contour field quadrature are in
+[CLFTS_VALIDATION.md](reports/CLFTS_VALIDATION.md). Quadrature agrees with the
+particle sum to 2.8e-15. At dt=0.00015625, longer LM/ETD, Heun and adaptive Euler
+still give C density near 0.2132 versus exact 0.20719. Entire field moments also
+disagree. Large drifts occur near analytically located Q_P or Q_SP zeros;
+native and independent densities agree at the drift extremes. Longer E=0
+controls also reveal a smaller bias. These results strongly support incorrect
+CL convergence in this fixture. A validated sampling formulation or validated
+parameter regime is still needed; no production FFT or drift patch was made.
+
+Further diagnostic: [CLFTS_VALIDATION.md](reports/CLFTS_VALIDATION.md) exactly
+integrates the repulsive fields, leaving a positive one-real-field marginal
+of the SAME finite action. Twelve real-Langevin runs recover all 19 reference
+observables within 1.36 estimated SE. Original CL remains biased even though
+its tested low-order stationarity identities pass; near-zero measurements
+do not account directly for the density bias. This supplies a finite-model
+control, not a scalable production repair or a complete pole-boundary proof.
+Original CL validation and PRL reproduction remain open; FFT is unchanged.
+
+1D follow-up: [CLFTS_VALIDATION.md](reports/CLFTS_VALIDATION.md) and
+[PRL_REPRODUCTION.md](reports/PRL_REPRODUCTION.md) implements
+particle/real-field Gibbs updates without exhaustive enumeration, tested on
+4/16/32 cells of the same finite action. It also recalculates PRL Fig. 1 at
+two grid resolutions. Current LDA curves still differ from digitized paper
+values beyond grid/raster errors; ensemble/box and nonlocal-theory differences
+remain. A working positive sampler for this small system does not validate
+the existing CL dynamics or reproduce the complete PRL theory.
+
+Drift-tail follow-up (2026-10-26): the "Drift-tail criterion and convergent
+regimes" chapter of [CLFTS_VALIDATION.md](reports/CLFTS_VALIDATION.md) applies the
+criterion of Nagata, Nishimura and Shimasaki (PRD 94, 114515) to this fixture with
+$`\zeta N`$ and $`E`$ as parameters. Every setting shows the $`u^{-2}`$ tail of a
+partition-function zero in the distribution of the largest drift, so the strict
+criterion is violated everywhere. The bias grows with the weight of the tail. The
+CL averages agree with the exact sums within two standard errors where at most
+$`2.9\times10^{-5}`$ of the steps have a drift above ten times the median: without
+charges at $`\zeta N\le1`$, and up to $`E=10`$ at $`\zeta N=0.25`$–0.5. They differ from
+a tail weight of $`3.6\times10^{-5}`$ on: at $`\zeta N\ge2`$ without charges, at every
+$`E`$ with $`\zeta N=4`$, and at $`E\ge25`$. The thresholds belong to this fixture. The
+cause of the failure, a sampling formulation that removes it, and the behavior at
+production $`\bar N`$ remain open.
+
+Mainline: charged CL-FTS in `src/python/clfts.py` (`src/python/electrostatics.py`)
+uses the same CL dynamics, so this issue applies to it as well. It records the
+largest drift of every step for each auxiliary field and for $`\psi`$
+(`drift_max_step_history`, `psi_drift_max_step_history`), so the same tail can be
+inspected in production runs. When the issue is resolved,
+update the "Checked range" paragraph of
+[ComplexLangevinSimulation.md](../../docs/theory/ComplexLangevinSimulation.md)
+(Section 6) and its Section 3 on correct convergence.
+
 ## Directory layout
 
 ```text
@@ -66,7 +131,8 @@ preserved separately and the shared helper included in source audits.
 
 The original twenty-three research scripts were consolidated into twelve modules
 under [studies/](studies). Electrolyte and McCarty studies each add one module;
-all studies use the [workflow.py](workflow.py) command entry point.
+the 2026-10-26 drift-tail study adds `studies/nagata.py`. All studies use the
+[workflow.py](workflow.py) command entry point.
 Model implementations are in `models/`; run and analysis code remains in `studies/`.
 
 | Module | Responsibility / workflow commands |
@@ -80,6 +146,7 @@ Model implementations are in `models/`; run and analysis code remains in `studie
 | `studies/reduced.py` | Reduced CL dynamics and integrator controls; `cl reduced` |
 | `studies/cl_diagnostics.py` | Checkpoints, field quadrature, poles, identities; `check checkpoints`, `field-integral`, `poles`, `identities` |
 | `studies/cl_analysis.py` | Native/reduced/MF/marginal statistics; `analyze cl-exact`, `cl-reduced`, `cl-brush`, `marginal` |
+| `studies/nagata.py` | Drift-tail criterion with exact sums for varied $`\zeta N`$ and $`E`$; `cl nagata`, `analyze nagata` |
 | `studies/finite_sampling.py` | Nine-bead Gibbs sampler; `sample finite` |
 | `studies/marginal_sampling.py` | Two-cell real-field marginal; `sample marginal` |
 | `studies/brush_sampling.py` | N=100 brush, bath calibration and independent weight checks; `sample brush`, `check brush` |
