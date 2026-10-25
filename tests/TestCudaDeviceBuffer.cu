@@ -27,8 +27,10 @@
  *    the rest of the free memory for a moment, with several leftovers so the
  *    failure falls at different stages. The 64^3 computation used to size them
  *    must release everything too, and may fail only for lack of memory. When the
- *    device memory cannot be held, the test exits with code 77 (a ctest skip).
- *    It runs serially (tests/CMakeLists.txt).
+ *    device memory cannot be held, or the driver backs device allocations with
+ *    system memory once it is full (the default sysmem fallback of WDDM drivers on
+ *    Windows; "Prefer No Sysmem Fallback" in the NVIDIA control panel turns it off),
+ *    the test exits with code 77 (a ctest skip). It runs serially (tests/CMakeLists.txt).
  */
 #include <algorithm>
 #include <complex>
@@ -612,6 +614,24 @@ int main()
                            leftover / 1048576.0, free_left / 1048576.0);
                     continue;
                 }
+                // A driver that backs device allocations with system memory once the
+                // device memory is full (the default sysmem fallback of WDDM drivers on
+                // Windows) never runs out: an allocation larger than the free memory
+                // must fail for the construction to be able to fail
+                bool oversubscribed = false;
+                try
+                {
+                    CudaDeviceBuffer<char> probe(free_left + need);
+                    oversubscribed = true;
+                }
+                catch (const std::exception&) {}
+                if (oversubscribed)
+                {
+                    printf("  [SKIP] leftover %.1f MiB: %.1f MiB could be allocated with %.1f MiB free "
+                           "(device memory backed by system memory)\n",
+                           leftover / 1048576.0, (free_left + need) / 1048576.0, free_left / 1048576.0);
+                    continue;
+                }
                 ++tried;
                 std::string message;
                 bool threw = false;
@@ -652,7 +672,8 @@ int main()
         }
         else
         {
-            printf("  [SKIP] the out-of-memory check could not run (device memory could not be held)\n");
+            printf("  [SKIP] the out-of-memory check could not run (device memory could not be held, "
+                   "or the driver backs it with system memory)\n");
             oom_skipped = true;
         }
     }

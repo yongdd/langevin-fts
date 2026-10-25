@@ -23,7 +23,9 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `_core.pyd` and defines `FFTW_DLL`, without which `fftw_version` came from MKL's FFTW
   wrappers. LAPACKE uses `std::complex` under MSVC, the package adds the spglib DLL
   directory before importing `_core`, and the tests no longer use variable-length arrays
-  or POSIX-only calls.
+  or POSIX-only calls. `TestCudaDeviceBuffer` skips its out-of-memory check (exit code 77)
+  when the driver backs device allocations with system memory once the device memory is
+  full, the default sysmem fallback of WDDM drivers; the construction then cannot run out.
 
 ### Added
 
