@@ -363,8 +363,8 @@ Charged monomer types interact through the smeared charge density $`c = \sum_i z
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `charges` | dict | Valence per segment of each charged monomer type, `{"A": -0.2, "Na": 1.0}`; other types are neutral | required |
-| `bjerrum_length` | float | Bjerrum length $`l_B`$ in units of $`R_0`$; the coupling is $`E = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}`$ with $`N = 1/\Delta s`$ (an integer) | — |
-| `coupling` | float | The coupling $`E = 4\pi l_B \rho_0 N R_0^2`$ directly; give exactly one of `bjerrum_length` and `coupling` | — |
+| `bjerrum_length` | float | Bjerrum length $`l_B`$ in units of $`R_0`$; the coupling is $`E = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}`$ with $`N = 1/\Delta s`$ (an integer). Discrete chains only: $`\Delta s`$ of continuous chains is a contour step, not the number of segments | — |
+| `coupling` | float | The coupling $`E = 4\pi l_B \rho_0 N R_0^2`$ directly, with the physical $`N`$; required for continuous chains. Give exactly one of `bjerrum_length` and `coupling` | — |
 | `psi_dt_scaling` | float | Mobility of $`\psi`$ relative to the auxiliary fields | `1.0` |
 
 **Requirements:**

@@ -225,11 +225,23 @@ Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`).
 c(\mathbf{r}) = \sum_i z_i \, (\Gamma_i * \phi_i)(\mathbf{r}), \qquad \frac{\beta U_{el}}{C V / R_0^3} = \frac{E}{2V} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
 ```
 
-Here $`\Gamma_i`$ is the smearing function of type $`i`$; one Gaussian length per type plays the role of a Born radius. The coupling in units of the reference chain is
+Here $`\Gamma_i`$ is the smearing function of type $`i`$; one Gaussian length per type plays the role of a Born radius.
+
+**Coupling.** In units of $`k_B T`$, charges interact through the kernel $`l_B / |\mathbf{r} - \mathbf{r}'|`$, where $`l_B = e^2 / (4\pi \varepsilon k_B T)`$ is the Bjerrum length. The operator $`(-\nabla^2)^{-1}`$ has the kernel $`1 / (4\pi |\mathbf{r} - \mathbf{r}'|)`$, so the charge number density $`\rho_0 c(\mathbf{r})`$ has the energy
+
+```math
+\beta U_{el} = \frac{l_B}{2} \iint \frac{\rho_0 c(\mathbf{r}) \, \rho_0 c(\mathbf{r}')}{|\mathbf{r} - \mathbf{r}'|} \, d\mathbf{r} \, d\mathbf{r}' = \frac{4\pi l_B \rho_0^2}{2} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
+```
+
+Measuring lengths in units of $`R_0`$ multiplies the volume element by $`R_0^3`$ and $`(-\nabla^2)^{-1}`$ by $`R_0^2`$. Dividing by the number of reference chains, $`C V / R_0^3 = \rho_0 V / N`$ with $`C = \rho_0 R_0^3 / N`$ ([PolymerFieldTheory.md](PolymerFieldTheory.md#23-effective-hamiltonian)), gives the form above with the coupling
 
 ```math
 E = 4\pi l_B \rho_0 N R_0^2 = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}
 ```
+
+The second form uses $`\rho_0 R_0^3 = N C = N \bar{N}^{1/2}`$, which follows from $`R_0 = b N^{1/2}`$ and $`\bar{N} = b^6 \rho_0^2 N`$. The factor $`N^2`$ comes from the valences per segment. A volume $`R_0^3`$ holds the charge $`N \bar{N}^{1/2} c`$, whose Coulomb energy $`l_B (N \bar{N}^{1/2} c)^2 / R_0`$, shared by the $`\bar{N}^{1/2}`$ chains in that volume, is of order $`E c^2`$ per chain.
+
+`bjerrum_length` takes $`N = 1/\Delta s`$ and therefore requires discrete chains. For continuous chains, $`\Delta s`$ is only a contour step, and `coupling` gives $`E`$ with the physical $`N`$.
 
 **Electrostatic potential.** A Hubbard-Stratonovich transformation decouples the interaction with an electrostatic potential $`\psi`$. Like the pressure field, $`\psi`$ is an imaginary-type field stored on the rotated contour. Each type feels $`z_i \psi`$, so the propagator input becomes $`\Gamma_i * (w_i + z_i \psi)`$, and
 
@@ -247,7 +259,7 @@ The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform m
 
 In this step:
 
-- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream (seed + 1). The noise of the auxiliary fields is therefore the same as without charges.
+- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream.
 - $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
 - As $`k \to 0`$, the step becomes the Euler step with mobility $`s`$.
 

@@ -29,15 +29,19 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 - CL-FTS of charged systems (2026-10-24):
   - The optional `electrostatics` input gives valences per segment (`charges`) and the
-    Bjerrum length or the coupling E.
+    Bjerrum length (discrete chains, N = 1/ds) or the coupling E; unknown keys raise
+    `ValidationError`.
   - The charges interact through the smeared charge density with the Coulomb kernel E/k².
-    A fluctuating electrostatic potential ψ, with its own noise stream, carries this
-    interaction. The stiff linear part of ψ is integrated exactly for each wavevector.
+    A fluctuating electrostatic potential ψ carries this interaction. Its noise comes from
+    the jumped stream of the auxiliary fields (`PCG64.jumped()`), so runs with neighboring
+    seeds share no stream. ψ is kept in Fourier space, where its stiff linear part is
+    integrated exactly for each wavevector.
   - Charged block copolymers and counterions are ordinary polymers and one-segment
     molecules in `polymers`; the input must be electroneutral.
   - Smearing is required with charges, and Gaussian smearing in CL-FTS accepts one length
     per monomer type.
-  - Checkpoints store ψ and its noise stream.
+  - Checkpoints store ψ, its Fourier transform (for bitwise continuation) and its noise
+    stream.
   - Some composition modes have a zero eigenvalue and therefore no auxiliary field, for
     example two types that differ only in charge. The structure functions along these
     modes come from ψ; without this, S_ij would miss the charge correlations of such

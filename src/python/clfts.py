@@ -265,7 +265,7 @@ class CLFTS:
         self.electrostatics = None
         if params.get("electrostatics", None) is not None:
             self.electrostatics = Electrostatics(params["electrostatics"], self.monomer_types, self.smearing,
-                                                 round(1.0 / params["ds"]), self.langevin, random_seed)
+                                                 round(1.0 / params["ds"]), self.langevin, self.random_bg.jumped())
             print("Electrostatics: charges", self.electrostatics.charges,
                   "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
 

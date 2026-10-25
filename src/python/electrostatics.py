@@ -14,6 +14,8 @@ with the coupling E = 4π l_B ρ₀ N R₀² = 4π (l_B/R₀) N² N̄^(1/2). At 
 noise). Its linear part ∇²ψ/E is stiff at large k and is integrated exactly for each
 wavevector (exponential time differencing), so that the stationary variance of the
 linear modes does not depend on the time step; the charge density stays explicit.
+ψ is therefore kept in Fourier space; its grid values follow from one inverse transform
+per step, and H is evaluated by Parseval's theorem.
 The uniform mode of ψ is zero (electroneutrality). Periodic boxes only.
 
 References: Riggleman, Kumar & Fredrickson, J. Chem. Phys. 136, 024903 (2012);
@@ -31,8 +33,8 @@ class Electrostatics:
     Parameters
     ----------
     params : dict
-        The `electrostatics` input: `charges` {type: z}, `bjerrum_length` (l_B/R₀)
-        or `coupling` (E), and optionally `psi_dt_scaling` (mobility of ψ, default 1).
+        The `electrostatics` input: `charges` {type: z}, `bjerrum_length` (l_B/R₀, discrete
+        chains) or `coupling` (E), and optionally `psi_dt_scaling` (mobility of ψ, default 1).
     monomer_types : list of str
         Monomer types; types without a charge are neutral.
     smearing : Smearing
@@ -41,12 +43,13 @@ class Electrostatics:
         Segments of the reference chain, N = 1/ds.
     langevin : dict
         Langevin settings with `nbar`, `dt` and the noise standard deviation `sigma`.
-    random_seed : int or None
-        ψ uses its own PCG64 stream (seed + 1), so the noise of the auxiliary fields
-        is the same as without electrostatics.
+    bit_generator : numpy.random.PCG64
+        Own noise stream of ψ, the jumped stream of the auxiliary fields
+        (`random_bg.jumped()`): the noise of the auxiliary fields is the same as without
+        electrostatics, and neighboring seeds do not share streams.
     """
 
-    def __init__(self, params, monomer_types, smearing, n_segments, langevin, random_seed=None):
+    def __init__(self, params, monomer_types, smearing, n_segments, langevin, bit_generator):
         self.charges = {name: float(params["charges"].get(name, 0.0)) for name in monomer_types}
         if "coupling" in params:
             self.coupling = float(params["coupling"])
@@ -58,7 +61,7 @@ class Electrostatics:
         self.sigma = langevin["sigma"]
         self.psi = np.zeros(int(np.prod(self.nx)), dtype=np.complex128)
 
-        self.random_bg = np.random.PCG64() if random_seed is None else np.random.PCG64(random_seed + 1)
+        self.random_bg = bit_generator
         self.random = np.random.Generator(self.random_bg)
 
         # Exact (Ornstein-Uhlenbeck) step of the linear part for each wavevector, rate
@@ -72,6 +75,16 @@ class Electrostatics:
                 self._decay = np.exp(-rate * dt * s)
                 self._response = np.where(rate > 0, -np.expm1(-rate * dt * s) / rate, dt * s)
                 self._noise = np.where(rate > 0, np.sqrt(-np.expm1(-2 * rate * dt * s) / (2 * rate * dt)), np.sqrt(s))
+
+    @property
+    def psi(self):
+        """ψ on the grid (flattened)."""
+        return self._psi
+
+    @psi.setter
+    def psi(self, value):
+        self._psi = np.array(value, dtype=np.complex128).reshape(-1)
+        self._psi_k = np.fft.fftn(np.reshape(self._psi, self.nx))
 
     def add_potential(self, w_input):
         """Add z_i ψ to the monomer fields {type: w_i} of the charged types (in place)."""
@@ -87,31 +100,35 @@ class Electrostatics:
                 c += z * phi_smeared[name]
         return c
 
-    def _laplacian(self, field):
-        return np.reshape(np.fft.ifftn(-self.k_sq * np.fft.fftn(np.reshape(field, self.nx))), -1)
-
     def force(self, c):
         """δH/δψ = ∇²ψ/E + c; zero without Coulomb coupling (ψ stays zero)."""
         if self.coupling <= 0:
             return np.zeros_like(self.psi)
-        return self._laplacian(self.psi) / self.coupling + c
+        return np.reshape(np.fft.ifftn(-self.k_sq * self._psi_k), -1) / self.coupling + c
 
     def step(self, c):
         """Advance ψ by one Langevin step with the charge density c of the same state."""
         if self.coupling <= 0:
             return
         xi = self.random.normal(0.0, self.sigma, self.psi.size)
-        psi_k = (self._decay * np.fft.fftn(np.reshape(self.psi, self.nx))
+        psi_k = (self._decay * self._psi_k
                  + self._response * np.fft.fftn(np.reshape(c, self.nx))
                  + 1j * self._noise * np.fft.fftn(np.reshape(xi, self.nx)))
         psi_k[(0,) * len(self.nx)] = 0.0
-        self.psi = np.reshape(np.fft.ifftn(psi_k), -1)
+        self._psi_k = psi_k
+        self._psi = np.reshape(np.fft.ifftn(psi_k), -1)
 
     def hamiltonian(self):
-        """Electrostatic term (1/(2E V)) ∫ ψ ∇²ψ dr of the current ψ."""
+        """Electrostatic term (1/(2E V)) ∫ ψ ∇²ψ dr of the current ψ.
+
+        By Parseval's theorem, mean(ψ ∇²ψ) = -Σ_k k² ψ(k) ψ(-k) / n² (unnormalized FFT, n grid
+        points); ψ is complex, so ψ(-k) is the index-reversed array, not the conjugate.
+        """
         if self.coupling <= 0:
             return 0.0
-        return 0.5 * np.mean(self.psi * self._laplacian(self.psi)) / self.coupling
+        axes = tuple(range(len(self.nx)))
+        psi_mk = np.roll(np.flip(self._psi_k), 1, axis=axes)
+        return -0.5 * np.sum(self.k_sq * self._psi_k * psi_mk) / self.psi.size ** 2 / self.coupling
 
     def settings(self):
         """Settings that define a continuation (checkpoint hash)."""
@@ -119,9 +136,17 @@ class Electrostatics:
 
     def checkpoint_data(self):
         return {"psi_real": np.real(self.psi), "psi_imag": np.imag(self.psi),
+                "psi_k_real": np.real(self._psi_k), "psi_k_imag": np.imag(self._psi_k),
                 "psi_rng_state_json": json.dumps(self.random_bg.state)}
 
     def restore(self, data):
-        """ψ and its noise stream from a checkpoint."""
-        self.psi = (np.asarray(data["psi_real"]) + 1j * np.asarray(data["psi_imag"])).reshape(-1).astype(np.complex128)
+        """ψ and its noise stream from a checkpoint.
+
+        ψ(k) is restored as stored, because transforming ψ back does not reproduce it bit
+        for bit; checkpoints written before ψ(k) was stored fall back to the transform.
+        """
+        self.psi = np.asarray(data["psi_real"]) + 1j * np.asarray(data["psi_imag"])
+        if "psi_k_real" in data:
+            self._psi_k = np.reshape(np.asarray(data["psi_k_real"]) + 1j * np.asarray(data["psi_k_imag"]),
+                                     self.nx).astype(np.complex128)
         self.random_bg.state = json.loads(str(data["psi_rng_state_json"]))

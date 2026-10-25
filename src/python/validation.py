@@ -207,6 +207,20 @@ def parse_chi_n(
     return chi_n
 
 
+def validate_scft_params(params: Dict[str, Any]) -> None:
+    """Validate the SCFT options before constructing numerical objects."""
+    params = normalize_params(params)
+    validate_system_params(params)
+    for key in ("optimizer", "relax_cell"):
+        if key not in params:
+            raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
+    if params.get("electrostatics") is not None:
+        raise ValidationError("'electrostatics' is supported in CL-FTS only")
+    smearing = params.get("smearing")
+    if isinstance(smearing, dict) and isinstance(smearing.get("a_int"), dict):
+        raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
+
+
 def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> None:
     """Validate the shared Langevin options before constructing numerical objects."""
     params = normalize_params(params)
@@ -295,6 +309,9 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
     electrostatics = params["electrostatics"]
     if not isinstance(electrostatics, dict):
         raise ValidationError("'electrostatics' must be a dict or None")
+    unknown = set(electrostatics) - {"charges", "bjerrum_length", "coupling", "psi_dt_scaling"}
+    if unknown:
+        raise ValidationError(f"'electrostatics' has unknown keys: {sorted(unknown)}")
     charges = electrostatics.get("charges")
     if not isinstance(charges, dict) or not charges:
         raise ValidationError("'electrostatics.charges' must be a dict {monomer type: valence}")
@@ -309,9 +326,15 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
     for key in ("bjerrum_length", "coupling"):
         if key in electrostatics:
             _finite_number(electrostatics[key], "electrostatics." + key, nonnegative=True)
-    n_segments = 1.0 / params["ds"]
-    if "bjerrum_length" in electrostatics and abs(n_segments - round(n_segments)) > 1e-9:
-        raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
+    # E = 4π (l_B/R₀) N² N̄^(1/2) needs the number of segments N. Discrete chains have N = 1/ds;
+    # ds of continuous chains is a contour step, so E would change under contour refinement
+    if "bjerrum_length" in electrostatics:
+        if str(params["chain_model"]).lower() != "discrete":
+            raise ValidationError("'electrostatics.bjerrum_length' needs discrete chains (N = 1/ds); "
+                                  "give 'coupling' (E = 4 pi l_B rho0 N R0^2) for continuous chains")
+        n_segments = 1.0 / params["ds"]
+        if abs(n_segments - round(n_segments)) > 1e-9:
+            raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
     _finite_number(electrostatics.get("psi_dt_scaling", 1.0), "electrostatics.psi_dt_scaling", positive=True)
     # Point charges have a grid-dependent self-energy; the charges are smeared
     if params.get("smearing") is None:

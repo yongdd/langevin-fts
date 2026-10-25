@@ -177,14 +177,18 @@ def input_checks(root):
     expect_validation_error(changed(lambda p: p["electrostatics"].update(bjerrum_length=0.01)), "exactly one")
     expect_validation_error(changed(lambda p: p["electrostatics"].pop("coupling")), "exactly one")
     expect_validation_error(changed(lambda p: p["electrostatics"].update(psi_dt_scaling=0.0)), "psi_dt_scaling")
+    expect_validation_error(changed(lambda p: p["electrostatics"].update(psi_dt_scale=0.2)), "unknown keys")
     expect_validation_error(changed(lambda p: p.pop("smearing")), "needs 'smearing'")
     expect_validation_error(changed(lambda p: p.update(bc=["reflecting"] * 4)), "periodic boxes only")
     expect_validation_error(changed(lambda p: p["smearing"]["a_int"].pop("C")), "one length for each monomer type")
 
-    def bjerrum(p):
-        p["electrostatics"] = {"charges": {"A": Z_A, "C": -1.0}, "bjerrum_length": 0.01}
-        p["chain_model"], p["ds"] = "continuous", 0.03
-    expect_validation_error(changed(bjerrum), "integer 1/ds")
+    def bjerrum(chain_model, ds):
+        def change(p):
+            p["electrostatics"] = {"charges": {"A": Z_A, "C": -1.0}, "bjerrum_length": 0.01}
+            p["chain_model"], p["ds"] = chain_model, ds
+        return change
+    expect_validation_error(changed(bjerrum("continuous", 0.05)), "needs discrete chains")
+    expect_validation_error(changed(bjerrum("discrete", 0.03)), "integer 1/ds")
 
     def lfts(per_type):
         params = parameters(root / "inputs", electrostatics=not per_type)
