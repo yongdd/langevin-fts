@@ -127,6 +127,14 @@ ctest --test-dir build-tests --output-on-failure
 
 - MSVC uses its LLVM OpenMP runtime (`/openmp:llvm`), which needs CMake 3.30+; the
   environment supplies a newer CMake.
+- Ninja reads the header dependencies from the `/showIncludes` lines of `cl`, whose
+  text follows the language of Visual Studio, and CMake stores that text when it
+  configures a build directory. A build that runs in another language than its
+  configure records no header dependencies, so objects are not rebuilt when only a
+  header changes. With a Visual Studio in a language other than English, set
+  `VSLANG=1033` for every configure and build, for example once with
+  `setx VSLANG 1033`. A build directory configured without it keeps the other
+  language's text; configure a new one.
 - By default the NVIDIA driver on Windows lets CUDA allocations fall back to system
   memory ("CUDA - Sysmem Fallback Policy" in the NVIDIA Control Panel). A calculation
   larger than the GPU memory then runs slowly instead of failing, and the
