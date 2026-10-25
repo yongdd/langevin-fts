@@ -92,7 +92,9 @@ def test_import_bundle_executes_independently_and_preserves_model(tmp_path, monk
     monkeypatch.chdir(tmp_path)
     calls = recording_solver(monkeypatch)
     runpy.run_path(str(output / 'simulation.py'), run_name='__main__')
-    assert calls['cwd'] == output / 'results'
+    # The script leaves the working directory alone (it draws no figures) and saves beside itself
+    assert calls['cwd'] == tmp_path and Path.cwd() == tmp_path and 'polymer_figure_dir' not in calls['params']
+    assert all(path.parent.parent == output / 'results' for path in calls['saved'])
     p = calls['params']
     assert p['platform'] == 'cpu-fftw'
     assert p['nx'] == [2, 3, 4] and p['lx'] == [3., 4., 5.]

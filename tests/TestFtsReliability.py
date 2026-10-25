@@ -61,12 +61,16 @@ def main():
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         previous = Path.cwd()
-        os.chdir(root)  # constructors draw chain architectures
+        os.chdir(root)  # any stray output stays in the temporary directory
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 for cls in (LFTS, CLFTS):
                     full = cls(parameters(root / (cls.__name__ + "full")), random_seed=11)
                     assert full.run(fields())["status"] == "completed"
+                    # The run draws the chain architectures into its recording directory, and
+                    # neither the constructor nor the run writes into the current directory
+                    assert (root / (cls.__name__ + "full") / "polymer_0.png").is_file(), cls.__name__
+                    assert not (root / "polymer_0.png").exists(), cls.__name__
                     first = cls(parameters(root / (cls.__name__ + "first"), 1), random_seed=11)
                     first.run(fields())
                     continued = cls(parameters(root / (cls.__name__ + "continued")), random_seed=99)

@@ -38,12 +38,20 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    chi_AC -> 0 (with box relaxation).
    Until 2026-10 incompressible SCFT rejected every singular chi N matrix, which
    includes any zero pair in a three-monomer system.
+6. Polymer figures: constructing SCFT writes no file into the current directory (an
+   existing polymer_0.png stays as it was) and draws polymer_<id>.png only into
+   polymer_figure_dir. Colors beyond the sixth monomer type are the same in every call
+   and leave the global NumPy random state unchanged. Until 2026-10 every constructor
+   overwrote polymer_<id>.png in the current directory, and the extra colors came from
+   np.random.rand.
 """
 
 import os
 import io
 import sys
 import contextlib
+import tempfile
+from pathlib import Path
 
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -239,12 +247,47 @@ def test_singular_chi():
               f"ABC with chi_AC N = 0, {model}: the limit chi_AC N -> 0 (dF {dF:.1e} and dL {dL:.1e} to chi_AC N = 1e-6)")
 
 
+def test_polymer_figures():
+    params = base([8], [2.0], {"A,B": 10.0}, [("A", 0.5), ("B", 0.5)], False)
+    previous = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmp:
+        os.chdir(tmp)
+        try:
+            Path("polymer_0.png").write_text("ORIGINAL")
+            with contextlib.redirect_stdout(io.StringIO()):
+                scft.SCFT(params=params)
+                scft.SCFT(params={**params, "polymer_figure_dir": "figures"})
+            unchanged = Path("polymer_0.png").read_text() == "ORIGINAL"
+            only_figures = sorted(os.listdir()) == ["figures", "polymer_0.png"]
+            check(unchanged and only_figures and Path("figures/polymer_0.png").stat().st_size > 0,
+                  "SCFT draws polymer_0.png only into polymer_figure_dir")
+        finally:
+            os.chdir(previous)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            scft.SCFT(params={**params, "polymer_figure_dir": 3})
+        check(False, "polymer_figure_dir must be a path")
+    except ValidationError as exc:
+        check("polymer_figure_dir" in str(exc), "polymer_figure_dir must be a path")
+
+    from polymerfts.utils import create_monomer_color_dict
+    types = {name: 1.0 for name in "ABCDEFGH"}
+    np.random.seed(7)
+    colors = create_monomer_color_dict(types)
+    after = np.random.random()
+    np.random.seed(7)
+    check(after == np.random.random() and all(np.array_equal(colors[t], c)
+                                              for t, c in create_monomer_color_dict(types).items()),
+          "extra monomer colors are fixed and leave the global NumPy random state unchanged")
+
+
 def main():
     test_angle_relaxation()
     test_axis_ordering()
     test_free_energy()
     test_field_residual()
     test_singular_chi()
+    test_polymer_figures()
     print(f"\n{n_pass} passed, {n_fail} failed")
     sys.exit(0 if n_fail == 0 else 1)
 

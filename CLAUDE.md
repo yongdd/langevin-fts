@@ -133,9 +133,9 @@ change. The available tests depend on the compiled backends. A CUDA build needs
 an allocated, visible GPU to validate its CUDA tests; a CPU-only run does not
 establish GPU correctness. Report failures and skips accurately.
 
-Constructing `SCFT`, `LFTS` or `CLFTS` writes `polymer_<id>.png` in the current
-directory. Run temporary checks and examples from a scratch directory so generated
-files do not enter the source tree. Some native tests read inputs from `tests/`;
+`LFTS` and `CLFTS` runs write `polymer_<id>.png` into `recording.dir`; `SCFT` writes it
+only into `polymer_figure_dir` when given. Run temporary checks and examples from a
+scratch directory so generated files do not enter the source tree. Some native tests read inputs from `tests/`;
 use CTest to preserve their configured working directory.
 
 For changes to numerical algorithms or propagator kernels:

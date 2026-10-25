@@ -119,12 +119,19 @@ where $`z_\infty`$ is the renormalization factor from the discrete chain model.
 
 ### 1.4 Polymer Architecture Drawing
 
-`SCFT(params)`, `LFTS(params)` and `CLFTS(params)` draw the chain architectures as graphs (vertices = chain ends and junctions, edges = blocks labelled with their segment numbers) into `polymer_0.png`, `polymer_1.png`, ... in the current directory. To redraw them later:
+The chain architectures are drawn as graphs (vertices = chain ends and junctions, edges = blocks labelled with their segment numbers) into `polymer_0.png`, `polymer_1.png`, ...:
+
+- `LFTS` and `CLFTS` draw them into the recording directory (`recording.dir`) when a run starts;
+- `SCFT` draws them at construction only into `polymer_figure_dir`, when the input gives one ([Parameters](Parameters.md)).
+
+Constructing a calculation therefore writes no files into the current directory. To draw them elsewhere:
 
 ```python
 from polymerfts import draw_polymer_architectures
-draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths)
+draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths, directory="figures")
 ```
+
+The colors of the first six monomer types are fixed; further types take colors from a fixed local random stream, which leaves the global NumPy random state unchanged.
 
 Uses networkx and matplotlib; a graphviz layout is used when pygraphviz is installed.
 

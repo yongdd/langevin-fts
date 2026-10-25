@@ -93,6 +93,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Interface changes
 
+- Constructing `SCFT`, `LFTS` or `CLFTS` no longer writes `polymer_<id>.png` into the
+  current directory, where it could overwrite an existing file of that name (2026-10-26).
+  `LFTS` and `CLFTS` draw the chain architectures into `recording.dir` when a run starts;
+  `SCFT` draws them only into the new `polymer_figure_dir`, when given.
+  `draw_polymer_architectures()` takes a `directory`, and its colors beyond the sixth
+  monomer type come from a fixed local stream instead of the global NumPy random state.
+  The scripts of the PSCF conversion draw no figures and no longer change the working
+  directory.
 - `scripts/analysis/renormalization.py` replaces `renormalization_discrete.m` and
   `renormalization_rpa.m` (2026-10-24):
   - It reads a fields file or takes options and needs only NumPy and SciPy.

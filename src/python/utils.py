@@ -470,7 +470,7 @@ def notify_callbacks(sim, step, w_aux, phi, hamiltonian, drift_max, error_level,
 
 
 # =============================================================================
-# Polymer architecture drawing (SCFT/LFTS draw at construction; draw_polymer_architectures redraws)
+# Polymer architecture drawing (SCFT into polymer_figure_dir, LFTS/CLFTS into the recording directory)
 # =============================================================================
 
 DEFAULT_MONOMER_COLORS: List[str] = [
@@ -499,25 +499,31 @@ def create_monomer_color_dict(
     if colors is None:
         colors = DEFAULT_MONOMER_COLORS
 
+    # Colors beyond the list come from a fixed local stream: the same in every run, and the
+    # global NumPy random state stays untouched
+    extra_colors = np.random.default_rng(0)
     dict_color = {}
     for count, monomer_type in enumerate(segment_lengths.keys()):
         if count < len(colors):
             dict_color[monomer_type] = colors[count]
         else:
-            dict_color[monomer_type] = np.random.rand(3,)
+            dict_color[monomer_type] = extra_colors.random(3)
 
     return dict_color
 
 
-def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer"):
-    """Draw every polymer of a simulation to ``<prefix>_<id>.png`` in the current directory.
+def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer", directory="."):
+    """Draw every polymer of a simulation to ``<directory>/<prefix>_<id>.png``.
 
-    Example: ``draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths)``
-    after ``calc = SCFT(params)`` (or LFTS / CLFTS).
+    SCFT draws them into ``polymer_figure_dir`` when the input gives one; LFTS and CLFTS
+    draw them into the recording directory when a run starts. To draw them elsewhere:
+    ``draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths, directory=...)``.
     """
+    Path(directory).mkdir(parents=True, exist_ok=True)
     dict_color = create_monomer_color_dict(segment_lengths)
     for idx, polymer in enumerate(polymers):
-        draw_polymer_architecture(polymer, idx, ds, dict_color, output_file=f"{prefix}_{idx}.png")
+        draw_polymer_architecture(polymer, idx, ds, dict_color,
+                                  output_file=os.path.join(directory, f"{prefix}_{idx}.png"))
 
 
 def draw_polymer_architecture(

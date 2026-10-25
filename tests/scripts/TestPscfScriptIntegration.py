@@ -78,5 +78,5 @@ def test_imported_script_converges(tmp_path, case):
         np.testing.assert_allclose(fields['angles'], p['angles'], rtol=0, atol=1e-8)
     else:
         assert abs(float(np.asarray(fields['lx']).item()) - p['lx'][0]) > 1e-3
-    assert (bundle / 'results/polymer_0.png').is_file()
-    assert not (tmp_path / 'polymer_0.png').exists()
+    # The script writes only its results; no chain architecture figures
+    assert not list(bundle.rglob('polymer_*.png')) and not (tmp_path / 'polymer_0.png').exists()

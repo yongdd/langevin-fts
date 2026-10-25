@@ -271,9 +271,6 @@ class LFTS:
                 self.segment_lengths[random_type] = effective_segment_length
                 self.random_fraction[random_type] = fraction
 
-        # Draw the chain architectures (polymer_<id>.png in the current directory)
-        draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths)
-
         # Boundary conditions (default: periodic)
         bc = params.get("bc", None)
         if bc is None:
@@ -760,8 +757,9 @@ class LFTS:
         # (the LR/LRAM setup already called compute_concentrations on w = 0)
         self._partition_checked = False
 
-        # Simulation data directory
+        # Simulation data directory, with the drawings of the chain architectures (polymer_<id>.png)
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
+        draw_polymer_architectures(self.polymers, self.ds, self.segment_lengths, directory=self.recording["dir"])
 
         # Reshape initial fields
         w = np.array([np.reshape(initial_fields[m], self.prop_solver.n_grid)

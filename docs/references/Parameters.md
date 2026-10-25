@@ -243,6 +243,12 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 |-----|------|-------------|---------|
 | `axis_ordering` | list[str] | Order in which `nx`, `lx`, `bc` and `angles` are given, e.g. `["b", "a", "c"]`; the code converts to the standard `[a, b, c]`. The arrays of `initial_fields` (and `q_init`) are given in the same order as `nx` and transposed too. Results (fields, concentrations, saved files with their `nx` and `lx`) are in the standard order; to pass them back as initial fields of a run with `axis_ordering`, transpose them to its order | `["a", "b", "c"]` |
 
+### Output
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `polymer_figure_dir` | str | Directory into which the constructor draws the chain architectures (`polymer_<id>.png`); without it no figures are written | none |
+
 `space_group` and `smearing` are described under [Advanced Options](#advanced-options).
 
 ---
@@ -287,7 +293,7 @@ The optional `"resample"` policy reproduces the earlier noise-selection behavior
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `dir` | str | Output directory name |
+| `dir` | str | Output directory name; a run also draws the chain architectures here (`polymer_<id>.png`) |
 | `checkpoint_interval` | int | Interval for saving complete restart checkpoints |
 | `sample_interval` | int | Collect H, dH/dχN, drift and structure-function samples every N Langevin steps |
 | `statistics_save_interval` | int | Save the collected histories and averaged structure functions, then reset the accumulators, every N Langevin steps |

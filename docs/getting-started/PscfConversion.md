@@ -204,11 +204,11 @@ each command's mapping. If there are no write commands, `results/fields.mat` is
 saved by default. Output paths must be relative filenames without `..`;
 conflicting file/directory paths are rejected.
 
-The script creates a fresh `results/` beside `simulation.py`, including polymer
-architecture drawings. It refuses to reuse an existing results directory.
-A failed or unconverged calculation raises an error before saving snapshots;
-its results directory may already contain drawings. Move that directory before
-rerunning the script.
+The script creates a fresh `results/` beside `simulation.py` and leaves the working
+directory unchanged; it draws no polymer architecture figures. It refuses to reuse an
+existing results directory. A failed or unconverged calculation raises an error before
+saving snapshots, leaving an empty results directory. Move or remove that directory
+before rerunning the script.
 
 ### Supported parameters and limitations
 

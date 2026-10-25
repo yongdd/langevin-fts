@@ -214,6 +214,9 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
     for key in ("optimizer", "relax_cell"):
         if key not in params:
             raise ValidationError(f"Missing required parameter for SCFT: '{key}'")
+    figure_dir = params.get("polymer_figure_dir")
+    if figure_dir is not None and not isinstance(figure_dir, (str, PathLike)):
+        raise ValidationError(f"'polymer_figure_dir' must be a directory path or None, got {figure_dir!r}")
     if params.get("electrostatics") is not None:
         raise ValidationError("'electrostatics' is supported in CL-FTS only")
     smearing = params.get("smearing")

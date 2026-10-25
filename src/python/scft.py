@@ -293,8 +293,11 @@ class SCFT:
                 self.segment_lengths[random_type] = effective_segment_length
                 self.random_fraction[random_type] = fraction
 
-        # Draw the chain architectures (polymer_<id>.png in the current directory)
-        draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths)
+        # Draw the chain architectures (polymer_<id>.png) only into a directory the input names,
+        # so that constructing a calculation writes no files
+        if params.get("polymer_figure_dir") is not None:
+            draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths,
+                                       directory=params["polymer_figure_dir"])
 
         # Boundary conditions (default: periodic) and lattice angles [alpha, beta, gamma] in degrees
         bc = params.get("bc", None)

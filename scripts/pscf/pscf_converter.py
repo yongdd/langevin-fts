@@ -831,10 +831,9 @@ def main():
     initial = loadmat(directory / "initial.mat", simplify_cells=True)
     initial_fields = {name: np.asarray(initial["w_" + name]).reshape(params["nx"])
                       for name in params["segment_lengths"]}
-    # Keep output, including polymer architecture drawings, beside this script.
+    # Keep the results beside this script.
     results = directory / "results"
     results.mkdir(exist_ok=False)
-    os.chdir(results)
     calculation = scft.SCFT(params=params)
     result = calculation.run(initial_fields=initial_fields, return_result=True)
     if not result.converged:
