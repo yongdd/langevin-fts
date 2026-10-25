@@ -2,11 +2,12 @@ import os
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-from polymerfts import scft
 
-# OpenMP environment variables
+# OpenMP environment variables (set before importing polymerfts)
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
 
 # Major Simulation params
 chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref

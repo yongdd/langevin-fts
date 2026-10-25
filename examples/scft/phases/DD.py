@@ -4,11 +4,12 @@ import numpy as np
 import json
 import scipy.io
 from scipy.ndimage import gaussian_filter
-from polymerfts import scft
 
-# OpenMP environment variables
+# OpenMP environment variables (set before importing polymerfts)
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
 
 # Major Simulation params
 f = 0.4       # A-fraction of major BCP chain, f

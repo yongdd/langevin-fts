@@ -2,11 +2,12 @@ import os
 import time
 import numpy as np
 from scipy.io import savemat, loadmat
-from polymerfts import CLFTS
 
-# OpenMP environment variables
+# OpenMP environment variables (set before importing polymerfts)
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import CLFTS
 
 f = 0.5        # A-fraction of major BCP chain, f
 eps = 1.0      # a_A/a_B, conformational asymmetry

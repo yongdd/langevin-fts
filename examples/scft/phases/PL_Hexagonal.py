@@ -26,11 +26,12 @@ import os
 import numpy as np
 import scipy.io
 from scipy.ndimage import zoom
-from polymerfts import scft
 
-# OpenMP environment variables
+# OpenMP environment variables (set before importing polymerfts)
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
 
 # Major Simulation params
 f = 0.4       # A-fraction of major BCP chain, f
