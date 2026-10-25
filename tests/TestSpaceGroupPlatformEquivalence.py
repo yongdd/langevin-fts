@@ -9,7 +9,9 @@ cell exercising the z-mirror/ObliqueZ CrysFFT with an odd physical nz = 15,
 and P6_3/mmc on a 9x9x8 cell whose odd in-plane sizes are allowed because the
 grid check is per axis: only nz is constrained by the 6_3 screw, and Fddd on
 8x8x16, the recursive-3m fold with nx = ny below the selector's nz/2 >= 8
-heuristic axis), each chain model (continuous and
+heuristic axis, and P2/m with unique axis c on an 11x10x8 cell with
+gamma = 100 degrees, an oblique cell for ObliqueZ that is not hexagonal),
+each chain model (continuous and
 discrete), and each available platform, this test verifies that turning
 space-group (SG) reduction on does not change the physics relative to a
 full-grid computation with the identical symmetrized field:
@@ -34,9 +36,11 @@ full-grid computation with the identical symmetrized field:
 
 Both space-group basis modes are covered:
   - "physical" basis (m3 -> pmmm auto-enable for orthogonal cells, z-mirror
-    for the hexagonal cell, mirroring scft.py), which uses the CrysFFT
+    for the oblique cells, mirroring scft.py), which uses the CrysFFT
     PmmmDct / Recursive3m / ObliqueZ solvers, and
-  - "irreducible" basis (no physical basis enabled).
+  - "irreducible" basis (no physical basis enabled), where the solvers map
+    the reduced basis to the CrysFFT physical grid by gather/scatter; the
+    oblique cells take ObliqueZ here as well.
 
 ACTUAL mask + space-group contract encoded by this test
 -------------------------------------------------------
@@ -113,6 +117,8 @@ def create_space_group(case_name, nx):
         return _core.SpaceGroup(nx, "P6_3/mmc", 488)
     if case_name == "Fddd":
         return _core.SpaceGroup(nx, "Fddd", 336)
+    if case_name == "P2/m":
+        return _core.SpaceGroup(nx, "P2/m", 58)   # unique axis c: mirror (x, y, -z)
     return _core.SpaceGroup(nx, "Im-3m", 529)
 
 
@@ -121,8 +127,8 @@ def make_space_group(case_name, nx, physical):
     exactly like scft.py does for orthogonal cells (m3 -> pmmm)."""
     sg = create_space_group(case_name, nx)
     mode = "irreducible"
-    if physical and case_name in ("P6/mmm", "P6_3/mmc"):
-        sg.enable_z_mirror_physical_basis()   # hexagonal cell: z-mirror / ObliqueZ CrysFFT
+    if physical and case_name in ("P6/mmm", "P6_3/mmc", "P2/m"):
+        sg.enable_z_mirror_physical_basis()   # oblique cell: z-mirror / ObliqueZ CrysFFT
         mode = "z-mirror-physical"
     elif physical:
         try:
@@ -339,6 +345,8 @@ def main():
         ("P6/mmm", [24, 24, 30], [2.0, 2.0, 2.5], [90.0, 90.0, 120.0]),
         # odd in-plane sizes: the 6_3 screw constrains only nz (per-axis grid check)
         ("P6_3/mmc", [9, 9, 8], [1.8, 1.8, 2.0], [90.0, 90.0, 120.0]),
+        # monoclinic oblique cell (cell-centered in-plane grid), ObliqueZ with odd nx
+        ("P2/m", [11, 10, 8], [1.5, 1.3, 1.2], [90.0, 90.0, 100.0]),
     ]
 
     for case_name, nx, lx, angles in cases:

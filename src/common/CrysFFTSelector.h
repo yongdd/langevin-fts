@@ -184,9 +184,14 @@ inline CrysFFTSelection select_crysfft_mode(
         return selection;
     }
 
+    // Pmmm/3m need an orthogonal cell; ObliqueZ needs only alpha = beta = 90
+    // degrees and an even Nz (both part of can_oblique_z), so it also serves
+    // oblique cells on the irreducible basis
     if (!is_orthogonal)
     {
         selection.can_pmmm = false;
+        if (selection.can_oblique_z)
+            selection.mode = CrysFFTChoice::ObliqueZ;
         return selection;
     }
 

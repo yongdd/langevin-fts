@@ -133,6 +133,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `TestMoleculesValidation`, `TestInputChecks` and `TestCudaCrysTablesAllocation` cover
   these fixes.
 
+### Performance
+
+- Cells with α = β = 90° and γ ≠ 90° use the ObliqueZ CrysFFT with the irreducible basis
+  too, when the space group has a z-mirror, for example a hexagonal or monoclinic
+  `SpaceGroup` passed to `PropagatorSolver` without a physical basis (2026-10-25). They
+  used the full-grid FFT. The transform is the one of the z-mirror basis, which SCFT
+  enables on these cells, so SCFT is unchanged; on CUDA it is slower than the full-grid
+  FFT on small grids, as with that basis. `TestSpaceGroupPlatformEquivalence` adds a
+  monoclinic P2/m cell (γ = 100°, odd n_x).
+
 ## [0.10.0] - 2026-10-23
 
 The first release since v0.9.1 (May 2025). The

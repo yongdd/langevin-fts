@@ -230,12 +230,14 @@ CrysFFT is enabled automatically when:
 - Dimension is 3D
 - Boundary conditions are periodic
 - Fields are real-valued
-- Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis)
+- Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis and on cells with γ≠90°)
 
 **Selection order:** an enabled physical basis (Section 6.4) fixes the variant:
 3m recursive for the m3 basis, Pmmm DCT for the Pmmm basis and ObliqueZ for the
-z-mirror basis. With the irreducible basis the cell must be orthogonal and `Nx`,
-`Ny`, `Nz` all even, and the first applicable variant is used:
+z-mirror basis. With the irreducible basis, a cell with α=β=90° and γ≠90° (e.g.
+hexagonal) uses ObliqueZ when the space group has a z-mirror, and the standard FFT
+otherwise. An orthogonal cell needs `Nx`, `Ny`, `Nz` all even, and the first
+applicable variant is used:
 
 1. **3m recursive** if the space group provides 3m translations, the
    translation-parity fold permutation is valid (every generator translation
@@ -245,9 +247,6 @@ z-mirror basis. With the irreducible basis the cell must be orthogonal and `Nx`,
 2. **Pmmm DCT** if space group has mirror planes in x/y/z
 3. **ObliqueZ** if space group has a z-mirror
 4. Fall back to standard FFT
-
-A cell with α=β=90° and γ≠90° (e.g. hexagonal) therefore uses ObliqueZ only with the
-z-mirror physical basis.
 
 The 3m fold pairs each twiddle factor with the Boltzmann sub-array selected by
 the translation-parity permutation; glide translations by an odd number of
