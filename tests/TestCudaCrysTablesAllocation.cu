@@ -23,6 +23,10 @@
  *   no CrysFFT path (the device copies of the fields); the allocation test hook
  *   fails any further one.
  * - After a cell change, these calls may allocate nothing.
+ * - Neither call builds a table (the table cache reuses the buffers of dropped
+ *   tables, so only its build counter shows a build in the loop).
+ * - compute_stress() builds the stress multipliers before its segment loop and
+ *   only once per cell: a second call builds none and gives the same stress.
  * - After the change, the results equal those of a computation created for the
  *   new cell.
  */
@@ -36,6 +40,7 @@
 #include <vector>
 
 #include "CudaCommon.h"
+#include "CudaCrysFFTTables.h"
 #include "AbstractFactory.h"
 #include "ComputationBox.h"
 #include "Molecules.h"
@@ -134,6 +139,22 @@ static bool compute_with_allocations(Computation& s, long long allowed)
     return ok;
 }
 
+/// Number of CrysFFT tables built by f()
+template <typename F>
+static long long count_table_builds(F&& f)
+{
+    const long long start = cuda_crysfft_table_build_counter().load();
+    f();
+    return cuda_crysfft_table_build_counter().load() - start;
+}
+
+static bool no_builds(const char* what, long long builds)
+{
+    if (builds != 0)
+        printf("  %s built %lld CrysFFT tables\n", what, builds);
+    return builds == 0;
+}
+
 int main()
 {
     std::vector<Case> cases = {
@@ -154,7 +175,9 @@ int main()
             const long long first_call = count_allocations(p1);
 
             Computation s = create(c, c.lx);
-            bool ok = compute_with_allocations(s, first_call);
+            bool ok = true;
+            long long builds = count_table_builds([&] { ok = compute_with_allocations(s, first_call); });
+            ok = no_builds("The first call", builds) && ok;
 
             // A new cell: the tables are rebuilt by update_laplacian_operator()
             std::vector<double> new_lx = c.lx;
@@ -162,8 +185,20 @@ int main()
                 l *= 1.07;
             s.cb->set_lx(new_lx);
             s.computation->update_laplacian_operator();
-            ok = compute_with_allocations(s, 0) && ok;
+            builds = count_table_builds([&] { ok = compute_with_allocations(s, 0) && ok; });
+            ok = no_builds("The call after the cell change", builds) && ok;
             ok = s.computation->check_total_partition() && ok;
+
+            // Stress: multipliers before the segment loop, once per cell
+            s.computation->compute_stress();
+            const std::vector<double> stress = s.computation->get_stress();
+            builds = count_table_builds([&] { s.computation->compute_stress(); });
+            ok = no_builds("The second compute_stress()", builds) && ok;
+            if (s.computation->get_stress() != stress)
+            {
+                printf("  The second compute_stress() changed the stress\n");
+                ok = false;
+            }
 
             Computation fresh = create(c, new_lx);
             compute(fresh);

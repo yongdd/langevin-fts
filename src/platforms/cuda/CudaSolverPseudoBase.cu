@@ -506,16 +506,18 @@ void CudaSolverPseudoBase<T>::crysfft_diffuse(
 
     if (crysfft_identity_map_)
     {
-        // The physical grid is the reduced basis: diffuse into d_q_out and apply
-        // the factors there (diffusion() preserves its input when out of place)
-        double* d_src = d_q_in;
+        // The physical grid is the reduced basis: work in d_q_out, in place (an
+        // out-of-place diffusion would first copy its input into d_q_out)
         if (pre != nullptr)
         {
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_crysfft_in_[STREAM], d_q_in, pre, 1.0, M_phys);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_in, pre, 1.0, M_phys);
             CUDA_CHECK_LAUNCH();
-            d_src = d_crysfft_in_[STREAM];
+            crysfft->diffusion(d_q_out, d_q_out, stream);
         }
-        crysfft->diffusion(d_src, d_q_out, stream);
+        else
+        {
+            crysfft->diffusion(d_q_in, d_q_out, stream);   // preserves d_q_in when out of place
+        }
         if (mid != nullptr)
         {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_out, mid, 1.0, M_phys);
@@ -530,32 +532,31 @@ void CudaSolverPseudoBase<T>::crysfft_diffuse(
         return;
     }
 
-    // Expand to the physical grid, diffuse there and reduce back
+    // Expand to the physical grid, diffuse there in place and reduce back
+    double* d_work = d_crysfft_in_[STREAM];
     if (pre != nullptr)
         ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-            d_crysfft_in_[STREAM], d_q_in, pre, d_crysfft_phys_to_reduced_, M_phys);
+            d_work, d_q_in, pre, d_crysfft_phys_to_reduced_, M_phys);
     else
         ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-            d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
+            d_work, d_q_in, d_crysfft_phys_to_reduced_, M_phys);
     CUDA_CHECK_LAUNCH();
 
-    crysfft->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], stream);
-    double* d_result = d_crysfft_out_[STREAM];
+    crysfft->diffusion(d_work, d_work, stream);
     if (mid != nullptr)
     {
-        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_result, mid, d_crysfft_phys_to_reduced_, M_phys);
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work, mid, d_crysfft_phys_to_reduced_, M_phys);
         CUDA_CHECK_LAUNCH();
-        crysfft->diffusion(d_crysfft_out_[STREAM], d_crysfft_in_[STREAM], stream);
-        d_result = d_crysfft_in_[STREAM];
+        crysfft->diffusion(d_work, d_work, stream);
     }
     if (post != nullptr)
     {
-        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_result, post, d_crysfft_phys_to_reduced_, M_phys);
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work, post, d_crysfft_phys_to_reduced_, M_phys);
         CUDA_CHECK_LAUNCH();
     }
 
     ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-        d_q_out, d_result, d_crysfft_reduced_to_phys_, n_basis_);
+        d_q_out, d_work, d_crysfft_reduced_to_phys_, n_basis_);
     CUDA_CHECK_LAUNCH();
 }
 
@@ -730,6 +731,7 @@ void CudaSolverPseudoBase<T>::update_crysfft_tables()
         for (const Block& block : molecules->get_polymer(p).get_blocks())
             block_steps.insert({block.monomer_type, mapping.get_ds_index(block.contour_length)});
     crysfft_coeffs_.clear();
+    crysfft_stress_keys_.clear();   // the cell change drops the stress multipliers too
     for (const auto& [monomer_type, ds_idx] : block_steps)
         for (double coeff : crysfft_block_coeffs(monomer_type, ds_idx))
             crysfft_coeffs_.insert(coeff);
@@ -873,6 +875,107 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
 }
 
 //------------------------------------------------------------------------------
+// CrysFFT stress fast path
+//------------------------------------------------------------------------------
+template <typename T>
+bool CudaSolverPseudoBase<T>::crysfft_stress_fast_path() const
+{
+    // The fast path computes only the diagonal sums (V₁₁, V₂₂, V₃₃). Crystal systems
+    // eligible for CrysFFT are orthogonal and never optimize angles; with the
+    // force-off-diagonal flag (angle optimization active) the standard path,
+    // which computes the cross terms, takes over.
+    return use_crysfft_ && space_group_ != nullptr && is_periodic_ && dim_ == 3
+        && this->cb->is_orthogonal()
+        && !this->force_off_diagonal_stress_
+        && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m);
+}
+
+template <typename T>
+double CudaSolverPseudoBase<T>::stress_bond_length_sq(const std::string& monomer_type, bool is_half_bond_length) const
+{
+    const auto& bond_lengths = this->molecules->get_bond_lengths();
+    auto bond_it = bond_lengths.find(monomer_type);
+    if (bond_it == bond_lengths.end())
+        throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
+    double bond_length_sq = bond_it->second * bond_it->second;
+    if (is_half_bond_length)
+        bond_length_sq *= 0.5;
+    return bond_length_sq;
+}
+
+template <typename T>
+CudaCrysFFTStressArgs CudaSolverPseudoBase<T>::crysfft_stress_args(int STREAM, double bond_length_sq, bool include_bond_factor)
+{
+    const std::vector<double> lx_vec = this->cb->get_lx();
+
+    CudaCrysFFTStressArgs args{};
+    args.crysfft = crysfft_[STREAM].get();
+    args.mode = crysfft_mode_;
+    args.identity_map = crysfft_identity_map_;
+    args.M_phys = crysfft_physical_size_;
+    args.n_basis = n_basis_;
+    args.M_full = this->cb->get_total_grid();
+    args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
+    args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
+    args.d_orbit_counts = d_crysfft_orbit_counts_;
+    args.d_phys_work = d_crysfft_in_[STREAM];
+    args.d_phys_out = d_crysfft_out_[STREAM];
+    if constexpr (std::is_same_v<T, double>)
+        args.d_reduce_buf = d_stress_sum[STREAM];
+    args.d_cub_temp = d_temp_storage[STREAM];
+    args.cub_temp_bytes = temp_storage_bytes[STREAM];
+    args.space_group = space_group_;
+    args.lx[0] = lx_vec[0];
+    args.lx[1] = lx_vec[1];
+    args.lx[2] = lx_vec[2];
+    args.bond_length_sq = bond_length_sq;
+    args.include_bond_factor = include_bond_factor;
+    args.global_ds = include_bond_factor ? this->molecules->get_global_ds() : 0.0;
+    args.stream = streams[STREAM][0];
+    return args;
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::prepare_stress()
+{
+    try
+    {
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (std::is_same_v<T, double>)
+        {
+            crysfft_stress_keys_.clear();
+            if (!crysfft_stress_fast_path())
+                return;
+
+            // The multipliers of each block's monomer type, full and (discrete chains)
+            // half bonds: the first stream builds them, and every stream records them
+            // in its table view, so the segment loop neither builds nor locks
+            std::set<std::string> monomer_types;
+            for (int p = 0; p < molecules->get_n_polymer_types(); ++p)
+                for (const Block& block : molecules->get_polymer(p).get_blocks())
+                    monomer_types.insert(block.monomer_type);
+            for (const std::string& monomer_type : monomer_types)
+            {
+                for (const bool half : {false, true})
+                {
+                    const bool include_bond_factor = (get_stress_boltz_bond(monomer_type, half) != nullptr);
+                    if (half && !include_bond_factor)
+                        continue;   // continuous chains: one multiplier per axis group
+                    const double bond_length_sq = stress_bond_length_sq(monomer_type, half);
+                    for (int i = 0; i < n_streams; ++i)
+                        cuda_crysfft_prepare_stress_tables(crysfft_stress_args(i, bond_length_sq, include_bond_factor));
+                    crysfft_stress_keys_.insert({bond_length_sq, include_bond_factor});
+                }
+            }
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
 // Stress of one segment (shared by RQM4, RK2 and the discrete chain)
 //------------------------------------------------------------------------------
 template <typename T>
@@ -904,13 +1007,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         const int M = this->cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        const auto& bond_lengths = this->molecules->get_bond_lengths();
-        auto bond_it = bond_lengths.find(monomer_type);
-        if (bond_it == bond_lengths.end())
-            throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
-        double bond_length_sq = bond_it->second * bond_it->second;
-        if (is_half_bond_length)
-            bond_length_sq *= 0.5;
+        const double bond_length_sq = stress_bond_length_sq(monomer_type, is_half_bond_length);
 
         // Chain-model-specific Boltzmann bond factor (nullptr for continuous chains).
         // The discrete chain multiplies exp(-k^2 b^2 ds/6) * b^2 into the integrand
@@ -940,37 +1037,15 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
             // force-off-diagonal flag is set (angle optimization active),
             // fall back to the standard path below — which can compute the
             // cross terms — instead of silently returning zeros for them.
-            if (use_crysfft_ && space_group_ != nullptr && is_periodic_ && DIM == 3
-                && this->cb->is_orthogonal()
-                && !this->force_off_diagonal_stress_
-                && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m))
+            if (crysfft_stress_fast_path())
             {
-                const std::vector<double> lx_vec = this->cb->get_lx();
-
-                CudaCrysFFTStressArgs args{};
-                args.crysfft = crysfft_[STREAM].get();
-                args.mode = crysfft_mode_;
-                args.identity_map = crysfft_identity_map_;
-                args.M_phys = crysfft_physical_size_;
-                args.n_basis = n_basis_;
-                args.M_full = M;
-                args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
-                args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
-                args.d_orbit_counts = d_crysfft_orbit_counts_;
-                args.d_phys_work = d_crysfft_in_[STREAM];
-                args.d_phys_out = d_crysfft_out_[STREAM];
-                args.d_reduce_buf = d_stress_sum[STREAM];
-                args.d_cub_temp = d_temp_storage[STREAM];
-                args.cub_temp_bytes = temp_storage_bytes[STREAM];
-                args.space_group = space_group_;
-                args.lx[0] = lx_vec[0];
-                args.lx[1] = lx_vec[1];
-                args.lx[2] = lx_vec[2];
-                args.bond_length_sq = bond_length_sq;
-                args.include_bond_factor = (_d_boltz_bond != nullptr);   // discrete chains
-                args.global_ds = (_d_boltz_bond != nullptr) ? this->molecules->get_global_ds() : 0.0;
-                args.stream = streams[STREAM][0];
-
+                // discrete chains carry the bond factor. A multiplier missing from
+                // prepare_stress() would be built here, inside the segment loop.
+                const bool include_bond_factor = (_d_boltz_bond != nullptr);
+                if (!crysfft_stress_keys_.contains({bond_length_sq, include_bond_factor}))
+                    throw_with_line_number("The CrysFFT stress multipliers of monomer type \"" + monomer_type +
+                        "\" were not prepared (see prepare_stress()).");
+                const CudaCrysFFTStressArgs args = crysfft_stress_args(STREAM, bond_length_sq, include_bond_factor);
                 cuda_crysfft_compute_single_segment_stress(
                     args, d_q_pair, &d_q_pair[n_basis_], d_segment_stress);
                 return;

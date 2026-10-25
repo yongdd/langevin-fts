@@ -38,6 +38,7 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"   // CudaCrysFFTBase, CudaCrysFFTMode
+#include "CudaCrysFFTStress.h"
 
 class SpaceGroup;
 struct CrysFFTBasisMapping;
@@ -90,6 +91,7 @@ protected:
     CudaDeviceBuffer<double> d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
     CudaDeviceBuffer<double> d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
     std::set<double> crysfft_coeffs_;   ///< Step coefficients whose tables update_crysfft_tables() built
+    std::set<std::pair<double, bool>> crysfft_stress_keys_;   ///< (b², bond factor) of the stress multipliers prepare_stress() built
 
     /**
      * @param max_fft_batch             Largest number of fields the derived solver
@@ -206,6 +208,12 @@ private:
                        const std::array<double, 9>& m3_translations);
     /// Pass the current cell to the CrysFFT objects and build the Boltzmann tables of all steps.
     void update_crysfft_tables();
+    /// True when the segment stress takes the CrysFFT fast path (Pmmm or 3m, orthogonal 3D cell).
+    bool crysfft_stress_fast_path() const;
+    /// b² of the monomer type, halved for a half bond (the stress integrand and its multiplier key).
+    double stress_bond_length_sq(const std::string& monomer_type, bool is_half_bond_length) const;
+    /// Arguments of the CrysFFT stress fast path on this stream.
+    CudaCrysFFTStressArgs crysfft_stress_args(int STREAM, double bond_length_sq, bool include_bond_factor);
 
 public:
     virtual ~CudaSolverPseudoBase();
@@ -239,6 +247,9 @@ public:
         int n_basis) override;
 
     void update_laplacian_operator() override;
+
+    /// Build the CrysFFT stress multipliers of every block before the segment loop.
+    void prepare_stress() override;
 };
 
 #endif  // CUDA_SOLVER_PSEUDO_BASE_H_

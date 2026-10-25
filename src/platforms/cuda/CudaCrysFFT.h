@@ -28,6 +28,7 @@
 #include <cufft.h>
 
 #include "CudaCommon.h"
+#include "CudaCrysFFTTables.h"
 
 // Forward declaration
 class CudaRealTransform3D;
@@ -47,9 +48,10 @@ enum class CudaCrysFFTMode
  *
  * A solver keeps one object per stream. The k-space tables (Boltzmann factors,
  * stress multipliers) depend only on the grid, the cell and the coefficient, so
- * the objects made by clone_sharing_tables() share them: a table is built once,
- * by the first object that needs it, and read by all. Building and looking up
- * a table hold a mutex; set_cell_para() must not run while any stream computes.
+ * the objects made by clone_sharing_tables() share them and the cell
+ * (CudaCrysFFTTables.h): a table is built once, by the first object that needs
+ * it, and set_cell_para() on any object changes the cell of all of them. It
+ * must not run while any stream computes.
  */
 class CudaCrysFFTBase
 {
@@ -80,23 +82,13 @@ private:
     int M_logical_;                     ///< Total logical grid size
     int M_physical_;                    ///< Total physical grid size
 
-    // Cell parameters (Lx, Ly, Lz, alpha, beta, gamma)
-    std::array<double, 6> cell_para_;
+    /// Tables of M_physical_ values: exp(-k² ds)/M_logical per ds, Σ k_d² per axis
+    /// mask and exp(-k²·coeff)·Σ k_d² per (axis mask, coeff), shared with the
+    /// clones together with the cell (see CudaCrysFFTTables.h)
+    using Table = CudaDeviceBuffer<double>;
+    enum TableKind { kBoltzmann, kAxisK2, kAxisBoltzK2 };
+    CudaCrysFFTTableView<Table> tables_;
 
-    /// Device tables shared with the clones (see CudaCrysFFTBase); members other
-    /// than the mutex are accessed with it held
-    struct Tables
-    {
-        std::mutex mutex;
-        std::array<double, 6> cell_para;                                         ///< Cell of the tables
-        std::map<double, CudaDeviceBuffer<double>> boltzmann;                    ///< exp(-k² ds)/M_logical per ds
-        std::array<CudaDeviceBuffer<double>, 8> axis_k2;                         ///< Σ k_d² per axis mask
-        std::map<std::pair<int, double>, CudaDeviceBuffer<double>> axis_boltz_k2;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
-        std::vector<CudaDeviceBuffer<double>> spare;                             ///< Buffers of the tables dropped by the last cell change
-    };
-    std::shared_ptr<Tables> tables_;
-
-    std::map<double, const double*> boltz_seen_;   ///< Tables of tables_->boltzmann this object has looked up (no lock per step)
     const double* d_boltz_current_;   ///< Table of ds_current_ (not owning)
     double ds_current_;
 
@@ -109,17 +101,18 @@ private:
     cudaStream_t stream_{0};      ///< CUDA stream for execution
 
     /// Clone of `other` sharing its tables (see clone_sharing_tables()).
-    CudaCrysFFT(const CudaCrysFFT& other, std::shared_ptr<Tables> tables);
+    explicit CudaCrysFFT(const CudaCrysFFT& other);
 
-    /// Boltzmann factors for given ds (tables_->mutex held).
-    CudaDeviceBuffer<double> generateBoltzmann(double ds);
+    /// Boltzmann factors for given ds and cell, in `buffers` (a table build, see CudaCrysFFTTables::get()).
+    Table generateBoltzmann(double ds, const std::array<double, 6>& cell, Table buffers);
 
-    /// Device table of M_physical_ values from h (a spare buffer when one is left),
-    /// copied on stream_ and complete on return (tables_->mutex held)
-    CudaDeviceBuffer<double> uploadTable(const std::vector<double>& h);
+    /// The M_physical_ values of h in `buffers` (allocated when empty), copied
+    /// on stream_ and complete on return
+    Table uploadTable(const std::vector<double>& h, Table buffers);
 
-    /// Compute per-axis k² arrays on the physical grid (host).
-    void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
+    /// Compute per-axis k² arrays of the cell on the physical grid (host).
+    void computeAxisK2Host(const std::array<double, 6>& cell,
+                           std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
 
 public:
     /**

@@ -78,6 +78,9 @@ public:
      */
     void apply_multiplier(double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream);
 
+    /// Build the multiplier cache of apply_multiplier(type, coeff) now (outside the stress loop).
+    void prepare_multiplier(MultiplierType type, double coeff);
+
 private:
     /// Device tables of one k-space multiplier (owning; the struct is move-only)
     struct KCacheDevice
@@ -92,7 +95,6 @@ private:
     int M_physical_{0};
     int M_complex_{0};
 
-    std::array<double, 6> cell_para_;
     std::array<double, 9> translational_part_;
 
     /// Pairing permutation of the fold: twiddle r_p multiplies the
@@ -101,24 +103,19 @@ private:
     /// See Recursive3mFoldParity.h for the derivation.
     std::array<int, 8> fold_perm_{};
 
-    /// Tables shared with the clones (see CudaCrysFFTBase). The twiddle factors are
-    /// fixed at construction; the other members are accessed with the mutex held.
-    struct Tables
+    /// Twiddle factors of the fold, fixed by the grid and the translations (shared with the clones)
+    struct Twiddles
     {
-        std::mutex mutex;
-        std::array<double, 6> cell_para;                     ///< Cell of the caches
-        std::array<std::vector<double>, 8> r_re;             ///< Twiddle factors (real part)
-        std::array<std::vector<double>, 8> r_im;             ///< Twiddle factors (imaginary part)
-        std::unordered_map<double, KCacheDevice> k_cache;    ///< Boltzmann caches per coefficient
-        /// Multiplier caches for the stress fast path, keyed by (type, coeff)
-        std::map<std::pair<int, double>, KCacheDevice> multiplier_cache;
-        /// Device buffers of the caches dropped by the last cell change; the next
-        /// cache builds reuse them instead of allocating (all caches have one shape)
-        std::vector<KCacheDevice> spare;
+        std::array<std::vector<double>, 8> re;
+        std::array<std::vector<double>, 8> im;
     };
-    std::shared_ptr<Tables> tables_;
+    std::shared_ptr<const Twiddles> twiddles_;
 
-    std::unordered_map<double, const KCacheDevice*> k_seen_;   ///< Caches of tables_->k_cache this object has looked up (no lock per step)
+    /// k-space caches: Boltzmann factors per coefficient and the stress
+    /// multipliers per (type, coeff), shared with the clones together with the
+    /// cell (see CudaCrysFFTTables.h); all caches have one shape
+    enum TableKind { kBoltzmann, kMultiplier };
+    CudaCrysFFTTableView<KCacheDevice> tables_;
     const KCacheDevice* k_current_{nullptr};
     double coeff_current_{0.0};
 
@@ -131,16 +128,20 @@ private:
 
     cudaStream_t stream_{0};
 
-    /// Clone of `other` sharing its tables (see clone_sharing_tables()).
-    CudaCrysFFTRecursive3m(const CudaCrysFFTRecursive3m& other, std::shared_ptr<Tables> tables);
+    /// Clone of `other` sharing its twiddle factors and tables (see clone_sharing_tables()).
+    explicit CudaCrysFFTRecursive3m(const CudaCrysFFTRecursive3m& other);
 
     void init_plans();
     void free_plans();
-    void generate_twiddle_factors();
-    // The cache builders run with tables_->mutex held
-    KCacheDevice generate_k_cache(double coeff);
-    KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
-    KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);
+    std::shared_ptr<const Twiddles> generate_twiddle_factors() const;
+    // The cache builders make the cache of the given cell in `cache` (a table
+    // build, see CudaCrysFFTTables::get())
+    KCacheDevice generate_k_cache(double coeff, const std::array<double, 6>& cell, KCacheDevice cache);
+    KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff,
+                                                  const std::array<double, 6>& cell, KCacheDevice cache);
+    KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat, KCacheDevice cache);
+    /// The multiplier cache of (type, coeff), built when missing.
+    const KCacheDevice& multiplier_cache(MultiplierType type, double coeff);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
     void apply_with_cache(const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream);

@@ -181,6 +181,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `TestCudaFFTMixedBC` checks that the backward transform keeps its input.
   `TestObliqueZStress` checks all six stress components and lattice changes, including
   γ alone, of oblique cells with the ObliqueZ CrysFFT on both bases, CPU against CUDA.
+- CUDA CrysFFT objects that share tables (2026-10-26): after one object changed the cell,
+  its clones (`clone_sharing_tables()`) kept pointers to the dropped tables and built new
+  tables for their own, older cell. A clone used before its own cell change read a dropped
+  table: wrong propagators, or an illegal memory access with Recursive3m. The solvers
+  change the cell of every object before they compute, so their results were not
+  affected. The cell now lives with the shared tables, each lookup notices a cell change,
+  and tables are built for the shared cell. A cell change also waits for the device before
+  another stream reuses the buffers of the dropped tables. `TestCrysFFTSharedTables`
+  covers the three engines, and `TestCudaCrysTablesAllocation` counts table builds, which
+  buffer reuse hid from its allocation check.
 
 - Console output no longer raises `UnicodeEncodeError` when stdout is redirected to a file
   or pipe whose encoding lacks the Greek letters and subscripts it prints (χN, κ,
@@ -201,6 +211,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   1.66 times as long at 24×24×30, 0.89 at 48×48×60 and 0.51 at 96³ (before: 2.26, 1.09
   and 0.69). Results change at round-off (about 1e-15 relative). `TestCrysFFTObliqueZCuda`
   compares the CUDA and CPU engines on random fields.
+- CUDA CrysFFT, results unchanged bit for bit (2026-10-26):
+  - An object looks up a table it has already used without the lock of the shared tables;
+    the stress multipliers took it at every segment.
+  - `compute_stress()` builds the stress multipliers before its segment loop, once per
+    cell; they were built inside the loop, with allocations and synchronous uploads.
+  - The CrysFFT steps transform in place, which saves the device copy of an out-of-place
+    Pmmm or recursive 3m diffusion.
+  - The Pmmm, recursive 3m and ObliqueZ engines share one table cache
+    (`CudaCrysFFTTables.h`), and the z-major DCT routines that ObliqueZ no longer uses
+    are removed.
 - CUDA, results unchanged bit for bit (2026-10-25):
   - The CrysFFT objects of the streams share their k-space tables (Boltzmann factors,
     stress multipliers and, for Recursive3m, the twiddle factors): each table is built and

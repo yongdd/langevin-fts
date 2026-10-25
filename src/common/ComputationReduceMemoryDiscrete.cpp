@@ -294,6 +294,7 @@ void ComputationReduceMemoryDiscrete<T>::compute_stress()
     try
     {
         this->check_stress_supported("pseudospectral");
+        this->backend->prepare_stress();
 
         // Stress of each block: sum over its bonds (see ComputationDiscrete)
         std::vector<std::array<T, 6>> stress_of_block;

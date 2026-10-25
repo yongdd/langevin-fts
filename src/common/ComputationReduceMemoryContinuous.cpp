@@ -202,6 +202,7 @@ void ComputationReduceMemoryContinuous<T>::compute_stress()
     try
     {
         this->check_stress_supported(method);
+        this->backend->prepare_stress();
 
         // Stress of each block: Simpson's rule over the segment stresses
         std::vector<std::array<T, 6>> stress_of_block;

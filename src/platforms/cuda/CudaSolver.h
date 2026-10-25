@@ -166,5 +166,8 @@ public:
         CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) = 0;
 
+    /// Build the tables compute_single_segment_stress() needs, before the streams
+    /// compute the segment stresses (default: nothing).
+    virtual void prepare_stress() {}
 };
 #endif

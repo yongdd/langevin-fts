@@ -145,6 +145,9 @@ CudaComputationBackend<T>::CudaComputationBackend(
             else
                 throw_with_line_number("The cn-adi2 method is only available for real fields.");
             break;
+        default:
+            throw_with_line_number("The CUDA backend has no solver for the numerical method \"" +
+                                   std::string(method_info.name) + "\".");
         }
 
         // Ones for free chain ends
@@ -548,6 +551,12 @@ void CudaComputationBackend<T>::normalize_concentration(int stream, BackendArray
     CUDA_CHECK_LAUNCH();
     ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, s>>>(d_phi, to_device_scalar(norm), d_phi, 0.0, d_phi, n_basis);
     CUDA_CHECK_LAUNCH();
+}
+
+template <typename T>
+void CudaComputationBackend<T>::prepare_stress()
+{
+    solver->prepare_stress();
 }
 
 template <typename T>

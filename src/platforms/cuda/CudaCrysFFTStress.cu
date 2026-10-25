@@ -60,7 +60,50 @@ __global__ void ker_crysfft_stress_finalize(
     // zero-initialize their buffer.
 }
 
+// Bond factor coefficient b²·ds/6 of the multipliers (discrete chains; 0 without the factor)
+double crysfft_stress_coeff(const CudaCrysFFTStressArgs& args)
+{
+    return args.include_bond_factor ? args.bond_length_sq * args.global_ds / 6.0 : 0.0;
+}
+
+// Recursive3m multiplier summing k_d² over the axes of `axes` (1: x, 2: y, 4: z)
+CudaCrysFFTRecursive3m::MultiplierType recursive3m_multiplier_type(int axes, bool bond)
+{
+    using MT = CudaCrysFFTRecursive3m::MultiplierType;
+    switch (axes)
+    {
+        case 1:  return bond ? MT::ExpKx2  : MT::Kx2;
+        case 2:  return bond ? MT::ExpKy2  : MT::Ky2;
+        case 4:  return bond ? MT::ExpKz2  : MT::Kz2;
+        case 3:  return bond ? MT::ExpKxy2 : MT::Kxy2;
+        case 7:  return bond ? MT::ExpK2   : MT::K2;
+        default: throw_with_line_number("CrysFFT stress: no multiplier for the axis group " + std::to_string(axes) + ".");
+    }
+}
+
+// The Pmmm multiplier table of an axis group (built when missing)
+const double* pmmm_multiplier(const CudaCrysFFTStressArgs& args, int axes)
+{
+    CudaCrysFFT* pmmm = static_cast<CudaCrysFFT*>(args.crysfft);
+    return args.include_bond_factor ? pmmm->get_axis_boltz_k2_multiplier(axes, crysfft_stress_coeff(args))
+                                    : pmmm->get_axis_k2_multiplier(axes);
+}
+
 }  // namespace
+
+void cuda_crysfft_prepare_stress_tables(const CudaCrysFFTStressArgs& args)
+{
+    if (args.mode != CudaCrysFFTMode::PmmmDct && args.mode != CudaCrysFFTMode::Recursive3m)
+        throw_with_line_number("CrysFFT stress fast path supports only Pmmm and Recursive3m modes.");
+    for (int axes : crysfft_stress_axis_groups(args.space_group->get_crystal_system()))
+    {
+        if (args.mode == CudaCrysFFTMode::PmmmDct)
+            pmmm_multiplier(args, axes);
+        else
+            static_cast<CudaCrysFFTRecursive3m*>(args.crysfft)->prepare_multiplier(
+                recursive3m_multiplier_type(axes, args.include_bond_factor), crysfft_stress_coeff(args));
+    }
+}
 
 void cuda_crysfft_compute_single_segment_stress(
     const CudaCrysFFTStressArgs& args,
@@ -75,7 +118,7 @@ void cuda_crysfft_compute_single_segment_stress(
         throw_with_line_number("CrysFFT stress fast path supports only Pmmm and Recursive3m modes.");
 
     // Bond factor coefficient (discrete chains): b²·ds/6
-    const double coeff = args.include_bond_factor ? args.bond_length_sq * args.global_ds / 6.0 : 0.0;
+    const double coeff = crysfft_stress_coeff(args);
 
     // ===== Step 1: Fill physical grid from reduced basis (q2) =====
     // Loop-invariant: apply_multiplier preserves its input (both engines copy
@@ -104,26 +147,13 @@ void cuda_crysfft_compute_single_segment_stress(
         if (args.mode == CudaCrysFFTMode::PmmmDct)
         {
             CudaCrysFFT* pmmm = static_cast<CudaCrysFFT*>(args.crysfft);
-            const double* d_mult = args.include_bond_factor
-                ? pmmm->get_axis_boltz_k2_multiplier(axes, coeff)
-                : pmmm->get_axis_k2_multiplier(axes);
-            pmmm->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out, d_mult, args.stream);
+            pmmm->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out, pmmm_multiplier(args, axes), args.stream);
         }
         else  // Recursive3m
         {
             CudaCrysFFTRecursive3m* rec = static_cast<CudaCrysFFTRecursive3m*>(args.crysfft);
-            using MT = CudaCrysFFTRecursive3m::MultiplierType;
-            const bool bond = args.include_bond_factor;
-            MT type;
-            switch (axes)
-            {
-                case 1:  type = bond ? MT::ExpKx2  : MT::Kx2;  break;
-                case 2:  type = bond ? MT::ExpKy2  : MT::Ky2;  break;
-                case 4:  type = bond ? MT::ExpKz2  : MT::Kz2;  break;
-                case 3:  type = bond ? MT::ExpKxy2 : MT::Kxy2; break;
-                default: type = bond ? MT::ExpK2   : MT::K2;   break;
-            }
-            rec->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out, type, coeff, args.stream);
+            rec->apply_multiplier(const_cast<double*>(d_q2_phys), args.d_phys_out,
+                                  recursive3m_multiplier_type(axes, args.include_bond_factor), coeff, args.stream);
         }
 
         // ===== Step 3: Reduce physical grid back to reduced basis =====

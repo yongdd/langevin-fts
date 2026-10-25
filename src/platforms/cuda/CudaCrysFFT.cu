@@ -66,8 +66,7 @@ CudaCrysFFT::CudaCrysFFT(
     std::array<double, 6> cell_para,
     std::array<double, 9> /* trans_part - ignored for DCT-II/III */)
     : nx_logical_(nx_logical),
-      cell_para_(cell_para),
-      tables_(std::make_shared<Tables>()),
+      tables_(std::make_shared<CudaCrysFFTTables<Table>>(cell_para)),
       d_boltz_current_(nullptr),
       ds_current_(0.0)
 {
@@ -76,9 +75,7 @@ CudaCrysFFT::CudaCrysFFT(
     for (int d = 0; d < 3; ++d)
     {
         if (nx_logical_[d] % 2 != 0)
-        {
-            throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
-        }
+            throw_with_line_number("CudaCrysFFT requires even grid dimensions.");
     }
 
     // Physical grid: (N/2) in each dimension
@@ -93,20 +90,18 @@ CudaCrysFFT::CudaCrysFFT(
 
     // Normalization: 1/M_logical for round-trip
     norm_factor_ = 1.0 / static_cast<double>(M_logical_);
-    tables_->cell_para = cell_para_;
 
     // Create CudaRealTransform objects for DCT-II and DCT-III
     dct_forward_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
     dct_backward_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
 }
 
-CudaCrysFFT::CudaCrysFFT(const CudaCrysFFT& other, std::shared_ptr<Tables> tables)
+CudaCrysFFT::CudaCrysFFT(const CudaCrysFFT& other)
     : nx_logical_(other.nx_logical_),
       nx_physical_(other.nx_physical_),
       M_logical_(other.M_logical_),
       M_physical_(other.M_physical_),
-      cell_para_(other.cell_para_),
-      tables_(std::move(tables)),
+      tables_(other.tables_.shared()),
       d_boltz_current_(nullptr),
       ds_current_(0.0),
       norm_factor_(other.norm_factor_)
@@ -117,7 +112,7 @@ CudaCrysFFT::CudaCrysFFT(const CudaCrysFFT& other, std::shared_ptr<Tables> table
 
 std::unique_ptr<CudaCrysFFTBase> CudaCrysFFT::clone_sharing_tables() const
 {
-    return std::unique_ptr<CudaCrysFFTBase>(new CudaCrysFFT(*this, tables_));
+    return std::unique_ptr<CudaCrysFFTBase>(new CudaCrysFFT(*this));
 }
 
 //------------------------------------------------------------------------------
@@ -130,52 +125,20 @@ CudaCrysFFT::~CudaCrysFFT() = default;   // the owning members release the table
 //------------------------------------------------------------------------------
 void CudaCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
 {
-    auto same_lengths = [](const std::array<double, 6>& a, const std::array<double, 6>& b) {
-        return a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
-    };
-    if (same_lengths(cell_para, cell_para_))
-        return;
-
-    cell_para_ = cell_para;
-    boltz_seen_.clear();
-    d_boltz_current_ = nullptr;
-    ds_current_ = 0.0;
-
-    // The first object to see the new cell drops the shared tables, keeping their
-    // device buffers for the tables the next steps rebuild. Reusing the buffers is
-    // safe because the computations synchronize every stream before
-    // update_laplacian_operator() can change the cell; set_cell_para() must not
-    // run while a kernel may still read the old tables.
-    std::lock_guard<std::mutex> lock(tables_->mutex);
-    if (same_lengths(cell_para, tables_->cell_para))
-        return;
-    tables_->cell_para = cell_para;
-    for (auto& kv : tables_->boltzmann)
-        if (!kv.second.empty()) tables_->spare.push_back(std::move(kv.second));
-    tables_->boltzmann.clear();
-    for (CudaDeviceBuffer<double>& d_k2 : tables_->axis_k2)
-        if (!d_k2.empty()) tables_->spare.push_back(std::move(d_k2));
-    for (auto& kv : tables_->axis_boltz_k2)
-        if (!kv.second.empty()) tables_->spare.push_back(std::move(kv.second));
-    tables_->axis_boltz_k2.clear();
+    // Changes the cell of every object sharing the tables (no-op for the current cell)
+    tables_.shared()->set_cell(cell_para);
+    if (tables_.refresh())
+        d_boltz_current_ = nullptr;
 }
 
-CudaDeviceBuffer<double> CudaCrysFFT::uploadTable(const std::vector<double>& h)
+CudaCrysFFT::Table CudaCrysFFT::uploadTable(const std::vector<double>& h, Table buffers)
 {
-    CudaDeviceBuffer<double> d_table;
-    if (!tables_->spare.empty())
-    {
-        d_table = std::move(tables_->spare.back());
-        tables_->spare.pop_back();
-    }
-    else
-    {
-        d_table.allocate(M_physical_);
-    }
+    if (buffers.empty())
+        buffers.allocate(M_physical_);
     // on failure the local releases the table
-    CUDA_CHECK(cudaMemcpyAsync(d_table, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
+    CUDA_CHECK(cudaMemcpyAsync(buffers, h.data(), sizeof(double) * M_physical_, cudaMemcpyHostToDevice, stream_));
     CUDA_CHECK(cudaStreamSynchronize(stream_));
-    return d_table;
+    return buffers;
 }
 
 //------------------------------------------------------------------------------
@@ -183,33 +146,29 @@ CudaDeviceBuffer<double> CudaCrysFFT::uploadTable(const std::vector<double>& h)
 //------------------------------------------------------------------------------
 void CudaCrysFFT::set_contour_step(double ds)
 {
-    if (ds == ds_current_ && d_boltz_current_ != nullptr) return;
+    if (tables_.refresh())   // another object changed the cell
+        d_boltz_current_ = nullptr;
+    if (d_boltz_current_ != nullptr && ds == ds_current_)
+        return;
 
-    auto seen = boltz_seen_.find(ds);
-    if (seen == boltz_seen_.end())
-    {
-        std::lock_guard<std::mutex> lock(tables_->mutex);
-        auto it = tables_->boltzmann.find(ds);
-        if (it == tables_->boltzmann.end())
-            it = tables_->boltzmann.emplace(ds, generateBoltzmann(ds)).first;
-        seen = boltz_seen_.emplace(ds, it->second.get()).first;
-    }
-
+    d_boltz_current_ = tables_.get({kBoltzmann, 0, ds},
+        [&](const std::array<double, 6>& cell, Table buffers) {
+            return generateBoltzmann(ds, cell, std::move(buffers));
+        }).get();
     ds_current_ = ds;
-    d_boltz_current_ = seen->second;
 }
 
 //------------------------------------------------------------------------------
 // Generate Boltzmann factors
 //------------------------------------------------------------------------------
-CudaDeviceBuffer<double> CudaCrysFFT::generateBoltzmann(double ds)
+CudaCrysFFT::Table CudaCrysFFT::generateBoltzmann(double ds, const std::array<double, 6>& cell, Table buffers)
 {
     // Compute on host, then copy to device
     std::vector<double> h_boltz(M_physical_);
 
-    double Lx = cell_para_[0];
-    double Ly = cell_para_[1];
-    double Lz = cell_para_[2];
+    double Lx = cell[0];
+    double Ly = cell[1];
+    double Lz = cell[2];
 
     int Nx2 = nx_physical_[0];
     int Ny2 = nx_physical_[1];
@@ -238,7 +197,7 @@ CudaDeviceBuffer<double> CudaCrysFFT::generateBoltzmann(double ds)
         }
     }
 
-    return uploadTable(h_boltz);
+    return uploadTable(h_boltz, std::move(buffers));
 }
 
 //------------------------------------------------------------------------------
@@ -252,8 +211,10 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
 void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
 {
     set_stream(stream);
+    if (tables_.refresh())   // another object changed the cell
+        d_boltz_current_ = nullptr;
     if (d_boltz_current_ == nullptr)
-        throw_with_line_number("CudaCrysFFT::set_contour_step must be called before diffusion().");
+        throw_with_line_number("CudaCrysFFT::set_contour_step must be called before diffusion() and after a cell change.");
     int threads = 256;
     int blocks = grid_blocks(M_physical_, threads);
 
@@ -362,15 +323,16 @@ void CudaCrysFFT::apply_multiplier(double* d_q_in, double* d_q_out, const double
 //------------------------------------------------------------------------------
 // Per-axis k² arrays (host computation)
 //------------------------------------------------------------------------------
-void CudaCrysFFT::computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const
+void CudaCrysFFT::computeAxisK2Host(const std::array<double, 6>& cell,
+                                    std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const
 {
     kx2.resize(M_physical_);
     ky2.resize(M_physical_);
     kz2.resize(M_physical_);
 
-    const double factor_x = 2.0 * M_PI / cell_para_[0];
-    const double factor_y = 2.0 * M_PI / cell_para_[1];
-    const double factor_z = 2.0 * M_PI / cell_para_[2];
+    const double factor_x = 2.0 * M_PI / cell[0];
+    const double factor_y = 2.0 * M_PI / cell[1];
+    const double factor_z = 2.0 * M_PI / cell[2];
 
     const int Nx2 = nx_physical_[0];
     const int Ny2 = nx_physical_[1];
@@ -403,21 +365,17 @@ void CudaCrysFFT::computeAxisK2Host(std::vector<double>& kx2, std::vector<double
 const double* CudaCrysFFT::get_axis_k2_multiplier(int axes)
 {
     if (axes < 1 || axes > 7)
-        throw std::invalid_argument("CudaCrysFFT::get_axis_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z)");
+        throw_with_line_number("CudaCrysFFT::get_axis_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z).");
 
-    std::lock_guard<std::mutex> lock(tables_->mutex);
-    CudaDeviceBuffer<double>& d_table = tables_->axis_k2[axes];
-    if (!d_table.empty())
-        return d_table.get();
-
-    std::vector<double> kx2, ky2, kz2;
-    computeAxisK2Host(kx2, ky2, kz2);
-    std::vector<double> h_mult(M_physical_);
-    for (int i = 0; i < M_physical_; ++i)
-        h_mult[i] = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
-
-    d_table = uploadTable(h_mult);
-    return d_table.get();
+    return tables_.get({kAxisK2, axes, 0.0},
+        [&](const std::array<double, 6>& cell, Table buffers) {
+            std::vector<double> kx2, ky2, kz2;
+            computeAxisK2Host(cell, kx2, ky2, kz2);
+            std::vector<double> h_mult(M_physical_);
+            for (int i = 0; i < M_physical_; ++i)
+                h_mult[i] = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
+            return uploadTable(h_mult, std::move(buffers));
+        }).get();
 }
 
 //------------------------------------------------------------------------------
@@ -426,27 +384,19 @@ const double* CudaCrysFFT::get_axis_k2_multiplier(int axes)
 const double* CudaCrysFFT::get_axis_boltz_k2_multiplier(int axes, double coeff)
 {
     if (axes < 1 || axes > 7)
-        throw std::invalid_argument("CudaCrysFFT::get_axis_boltz_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z)");
+        throw_with_line_number("CudaCrysFFT::get_axis_boltz_k2_multiplier: axes must be a mask of 1 (x), 2 (y), 4 (z).");
 
-    auto key = std::make_pair(axes, coeff);
-    std::lock_guard<std::mutex> lock(tables_->mutex);
-    auto it = tables_->axis_boltz_k2.find(key);
-    if (it != tables_->axis_boltz_k2.end())
-        return it->second.get();
-
-    std::vector<double> kx2, ky2, kz2;
-    computeAxisK2Host(kx2, ky2, kz2);
-
-    std::vector<double> h_mult(M_physical_);
-    for (int i = 0; i < M_physical_; ++i)
-    {
-        double k2 = kx2[i] + ky2[i] + kz2[i];
-        double axis_k2 = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
-        h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
-    }
-
-    CudaDeviceBuffer<double> d_table = uploadTable(h_mult);
-    const double* d_ptr = d_table.get();     // stays valid: the map takes the same allocation
-    tables_->axis_boltz_k2[key] = std::move(d_table);
-    return d_ptr;
+    return tables_.get({kAxisBoltzK2, axes, coeff},
+        [&](const std::array<double, 6>& cell, Table buffers) {
+            std::vector<double> kx2, ky2, kz2;
+            computeAxisK2Host(cell, kx2, ky2, kz2);
+            std::vector<double> h_mult(M_physical_);
+            for (int i = 0; i < M_physical_; ++i)
+            {
+                double k2 = kx2[i] + ky2[i] + kz2[i];
+                double axis_k2 = ((axes & 1) ? kx2[i] : 0.0) + ((axes & 2) ? ky2[i] : 0.0) + ((axes & 4) ? kz2[i] : 0.0);
+                h_mult[i] = std::exp(-k2 * coeff) * axis_k2;
+            }
+            return uploadTable(h_mult, std::move(buffers));
+        }).get();
 }

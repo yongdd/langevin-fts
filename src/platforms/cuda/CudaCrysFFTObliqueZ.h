@@ -37,21 +37,12 @@ private:
     int M_physical_{0};
     int M_spectral_{0};   ///< Nx * Ny * (Nz/4 + 1): half spectrum of the physical grid
 
-    std::array<double, 6> cell_para_;
-    std::array<double, 6> recip_metric_;
+    /// (S, D) pairs per ds (see the file comment), shared with the clones
+    /// together with the cell (see CudaCrysFFTTables.h)
+    using Table = CudaDeviceBuffer<double>;
+    enum TableKind { kBoltzmann };
+    CudaCrysFFTTableView<Table> tables_;
 
-    /// Device tables shared with the clones (see CudaCrysFFTBase); members other
-    /// than the mutex are accessed with it held
-    struct Tables
-    {
-        std::mutex mutex;
-        std::array<double, 6> cell_para;                       ///< Cell of the tables
-        std::map<double, CudaDeviceBuffer<double>> boltzmann;  ///< (S, D) pairs per ds (see the file comment)
-        std::vector<CudaDeviceBuffer<double>> spare;           ///< Buffers of the tables dropped by the last cell change
-    };
-    std::shared_ptr<Tables> tables_;
-
-    std::map<double, const double*> boltz_seen_;   ///< Tables of tables_->boltzmann this object has looked up (no lock per step)
     const double* d_boltz_current_{nullptr};   ///< Table of ds_current_ (not owning)
     double ds_current_{0.0};
 
@@ -59,7 +50,8 @@ private:
     cufftHandle plan_bwd_{};   ///< 3D Z2D of the physical grid
     bool plans_initialized_{false};
 
-    CudaDeviceBuffer<double> d_twiddle_;               ///< (cos, sin)(pi kz/(Nz/2)) per stored kz
+    /// (cos, sin)(pi kz/(Nz/2)) per stored kz; depends only on the grid, shared with the clones
+    std::shared_ptr<const CudaDeviceBuffer<double>> d_twiddle_;
     CudaDeviceBuffer<double> d_real_;                  ///< Permuted physical grid
     CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_;  ///< Its half spectrum
     CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_out_;
@@ -67,15 +59,15 @@ private:
     double norm_factor_{1.0};
     cudaStream_t stream_{0};
 
-    /// Clone of `other` sharing its tables (see clone_sharing_tables()).
-    CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other, std::shared_ptr<Tables> tables);
+    /// Clone of `other` sharing its twiddle factors and tables (see clone_sharing_tables()).
+    explicit CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other);
 
     static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
-    /// Create the 3D plans, the twiddle factors and the work buffers.
+    /// Create the 3D plans, the work buffers and (unless shared) the twiddle factors.
     void init_transforms();
     void free_plans();
-    /// (S, D) table for given ds (tables_->mutex held).
-    CudaDeviceBuffer<double> generateBoltzmann(double ds);
+    /// (S, D) table for given ds and cell, in `buffers` (a table build, see CudaCrysFFTTables::get()).
+    Table generateBoltzmann(double ds, const std::array<double, 6>& cell, Table buffers);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
 
