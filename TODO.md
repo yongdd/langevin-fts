@@ -102,50 +102,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     the stress would keep the FFT. Offer it as an optional method, not the default, and
     pass the checks listed above before using it.
 
-30. Resolve charged CL discrepancies against exact finite-lattice particles (2026-09-07).
-
-    The 24-run benchmark in `devel/charged_polymers/reports/CLFTS_VALIDATION.md` passes
-    mass/partition and final-state conditional-density checks, but charged CL
-    averages differ from exhaustive positive particle sums. At E=100, dt=0.0025,
-    the cell-0 counterion density is 0.21308439 +/- 0.00112541 versus exact
-    0.20718911. E=0 controls agree within estimated uncertainty.
-    Distinguish integration bias, rare-event sampling, and possible incorrect CL
-    convergence before treating target PRL simulations as validated. Preserve the
-    finite action and native FFT; changing the model cannot validate this benchmark.
-
-    Follow-up: 21 trajectories and direct original-contour field quadrature are in
-    `devel/charged_polymers/reports/CLFTS_VALIDATION.md`. Quadrature agrees with the
-    particle sum to 2.8e-15. At dt=0.00015625, longer LM/ETD, Heun and adaptive Euler
-    still give C density near 0.2132 versus exact 0.20719. Entire field moments also
-    disagree. Large drifts occur near analytically located Q_P or Q_SP zeros;
-    native and independent densities agree at the drift extremes. Longer E=0
-    controls also reveal a smaller bias. These results strongly support incorrect
-    CL convergence in this fixture. A validated sampling formulation or validated
-    parameter regime is still needed; no production FFT or drift patch was made.
-
-    Further diagnostic: `devel/charged_polymers/reports/CLFTS_VALIDATION.md` exactly
-    integrates the repulsive fields, leaving a positive one-real-field marginal
-    of the SAME finite action. Twelve real-Langevin runs recover all 19 reference
-    observables within 1.36 estimated SE. Original CL remains biased even though
-    its tested low-order stationarity identities pass; near-zero measurements
-    do not account directly for the density bias. This supplies a finite-model
-    control, not a scalable production repair or a complete pole-boundary proof.
-    Original CL validation and PRL reproduction remain open; FFT is unchanged.
-
-    1D follow-up: `devel/charged_polymers/reports/CLFTS_VALIDATION.md` and
-    `devel/charged_polymers/reports/PRL_REPRODUCTION.md` implements
-    particle/real-field Gibbs updates without exhaustive enumeration, tested on
-    4/16/32 cells of the same finite action. It also recalculates PRL Fig. 1 at
-    two grid resolutions. Current LDA curves still differ from digitized paper
-    values beyond grid/raster errors; ensemble/box and nonlocal-theory differences
-    remain. A working positive sampler for this small system does not validate
-    the existing CL dynamics or reproduce the complete PRL theory.
-
-    Mainline: charged CL-FTS in `clfts.py` (`electrostatics.py`) uses the same CL
-    dynamics, so this issue applies to it as well. When it is resolved, update the
-    "Checked range" paragraph of docs/theory/LangevinFieldTheoreticSimulation.md
-    (Section 5.6) and the correct-convergence note at the start of Section 5.
-
 31. Resolve the remaining PRL Fig. 2-3 discrepancies (2026-09-07).
 
     See `devel/charged_polymers/reports/PRL_REPRODUCTION.md` and the added LaTeX
@@ -183,6 +139,10 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 - 27. File formats: `fields_*.mat`, SCFT results and `structure_function_*.mat` are
   described in docs/references/Tools.md (section 5), YAML/JSON parameter files in
   docs/references/Parameters.md.
+- 30. Charged CL discrepancies against exact finite-lattice particles: moved to the
+  charged-polymer research notes (2026-10-26). The user-facing caveat is the "Checked
+  range" paragraph of docs/theory/ComplexLangevinSimulation.md (Section 6) and its
+  Section 3.2.
 - Check whether CUDA cub works with CUDA 12.0 and later (2026-10-21): the CUDA code is
   C++20 and needs CUDA 12.2+; it builds with 12.2.1, 12.4.1 and configures with 13.0.2,
   and the full test suite passes with 12.4.1.

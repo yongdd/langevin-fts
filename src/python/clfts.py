@@ -44,6 +44,7 @@ from .utils import (
     initialize_extensions,
     restore_extensions,
     notify_callbacks,
+    DriftTailSummary,
 )
 
 # OpenMP environment variables
@@ -598,6 +599,13 @@ class CLFTS:
         H_history = []
         drift_history = []
         psi_drift_history = []
+        # Largest drift of every step for each auxiliary field, and of ψ, for the distribution of
+        # the drift magnitude; a summary of this run's distribution is printed at the end
+        drift_step_history = []
+        psi_drift_step_history = []
+        tail_labels = [f"auxiliary field {i} ({'real' if i in self.mpt.aux_fields_real_idx else 'imaginary'})"
+                       for i in range(M)]
+        drift_tail = DriftTailSummary(tail_labels + (["psi"] if self.electrostatics is not None else []))
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
@@ -621,7 +629,9 @@ class CLFTS:
             recorded.update(charge_sums)
         sf_sample_count = restore_recording_state(
             _restart_data, H_history, dH_history, recorded, drift_history,
-            psi_drift_history=psi_drift_history if self.electrostatics is not None else None)
+            psi_drift_history=psi_drift_history if self.electrostatics is not None else None,
+            drift_step_history=drift_step_history, n_fields=M,
+            psi_drift_step_history=psi_drift_step_history if self.electrostatics is not None else None)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -678,14 +688,18 @@ class CLFTS:
                     if i in self.mpt.aux_fields_real_idx:
                         w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
 
-            drift_max = float(np.max(np.abs(w_lambda * self.dt_scaling[:, None])))
+            field_drift_max = np.max(np.abs(w_lambda * self.dt_scaling[:, None]), axis=1)
+            drift_max = float(np.max(field_drift_max))
+            drift_step_history.append(field_drift_max)
 
             # Largest drift of ψ, s |δH/δψ|, recorded apart from drift_max: its linear part ∇²ψ/E
             # is integrated exactly and would dominate the maximum at large k
-            if es is not None and langevin_step % self.recording["sample_interval"] == 0:
+            if es is not None:
                 if psi_force is None:
                     psi_force = es.force(charge_density)
                 psi_drift_max = float(np.max(np.abs(es.psi_dt_scaling * psi_force)))
+                psi_drift_step_history.append(psi_drift_max)
+            drift_tail.add(np.r_[field_drift_max, [psi_drift_max] if es is not None else []])
 
             # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
@@ -769,8 +783,10 @@ class CLFTS:
                 mdic = {"H_history_real": np.real(H_history_array), "H_history_imag": np.imag(H_history_array),
                         "sample_count": sf_sample_count, "drift_max_history": np.asarray(drift_history),
                         "simulation_metadata_json": json.dumps(self.metadata)}
+                mdic["drift_max_step_history"] = np.reshape(drift_step_history, (-1, M))
                 if self.electrostatics is not None:
                     mdic["psi_drift_max_history"] = np.asarray(psi_drift_history)
+                    mdic["psi_drift_max_step_history"] = np.asarray(psi_drift_step_history)
                 for key in self.chi_n:
                     dH_array = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
@@ -784,6 +800,8 @@ class CLFTS:
                 H_history = []
                 drift_history = []
                 psi_drift_history = []
+                drift_step_history = []
+                psi_drift_step_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
 
@@ -914,9 +932,11 @@ class CLFTS:
             # Save simulation data
             if langevin_step % self.recording["checkpoint_interval"] == 0:
                 self._recording_state = {"H_history": H_history, "dH_history": dH_history,
-                                         "sf_average": recorded, "sample_count": sf_sample_count, "drift_history": drift_history}
+                                         "sf_average": recorded, "sample_count": sf_sample_count, "drift_history": drift_history,
+                                         "drift_step_history": drift_step_history}
                 if self.electrostatics is not None:
                     self._recording_state["psi_drift_history"] = psi_drift_history
+                    self._recording_state["psi_drift_step_history"] = psi_drift_step_history
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
@@ -928,3 +948,4 @@ class CLFTS:
 
         n_steps = max(langevin_step + 1 - start_langevin_step, 1)
         print("total time: %f, time per step: %f" % (time_duration, time_duration / n_steps))
+        drift_tail.report()

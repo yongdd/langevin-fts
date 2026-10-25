@@ -19,6 +19,7 @@ SET(BASIC_TESTS
     TestInputChecks
     TestMoleculesValidation
     TestPartitionGuard
+    TestDriftStepHistory
     # Platform & utilities
     TestConsoleEncoding
     TestDisplayArchitecture

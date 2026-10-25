@@ -41,6 +41,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- CL-FTS records the largest drift over the grid of every Langevin step, for each auxiliary
+  field (`drift_max_step_history`) and for ψ (`psi_drift_max_step_history`), in the `dH`
+  files (2026-10-26). Checkpoints keep the steps since the last statistics file, and the
+  end of a run prints a summary of the distribution. The tail of this distribution decides
+  whether complex Langevin averages converge correctly (Nagata, Nishimura & Shimasaki,
+  PRD 94, 114515 (2016)); `drift_max_history` holds only the sampled steps.
+  `scripts/analysis/drift_tail.py` reads the records of a run and prints the tail and its
+  log-log slopes. `TestDriftStepHistory` checks the records, restarts and checkpoints.
 - CL-FTS of charged systems (2026-10-24):
   - The optional `electrostatics` input gives valences per segment (`charges`) and the
     Bjerrum length (discrete chains, N = 1/ds) or the coupling E; unknown keys raise

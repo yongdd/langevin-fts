@@ -264,7 +264,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `dt` | float | Langevin time step $`\Delta\tau \cdot N_{ref}`$ | Required |
-| `nbar` | float | Invariant polymerization index $`\bar{n}`$ | Required |
+| `nbar` | float | Invariant polymerization index $`\bar{N}`$ | Required |
 | `max_step` | int | Final Langevin step number, including steps restored from a checkpoint | Required |
 | `integrator` | str | Built-in Langevin method: `"lm"` or `"euler"`; an `integrator=` constructor argument takes precedence | `"lm"` |
 
@@ -298,7 +298,7 @@ The optional `"resample"` policy reproduces the earlier noise-selection behavior
 | `sample_interval` | int | Collect H, dH/dχN, drift and structure-function samples every N Langevin steps |
 | `statistics_save_interval` | int | Save the collected histories and averaged structure functions, then reset the accumulators, every N Langevin steps |
 
-All intervals are positive integer counts of Langevin steps. Structure functions are normalized by the actual sample count, including when `statistics_save_interval` is not a multiple of `sample_interval`. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS. Custom callbacks use their own `interval` independently of these built-in measurements.
+All intervals are positive integer counts of Langevin steps. Structure functions are normalized by the actual sample count, including when `statistics_save_interval` is not a multiple of `sample_interval`. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS. CL-FTS also records `drift_max_step_history`, the maximum of every step for each auxiliary field (one column per field), and with electrostatics `psi_drift_max_step_history`; checkpoints keep the steps since the last statistics file. See [ComplexLangevinSimulation.md](../theory/ComplexLangevinSimulation.md#3-correct-convergence) for their use. Custom callbacks use their own `interval` independently of these built-in measurements.
 
 Field checkpoints use format version 2 and are replaced atomically. They store the full PCG64 state, previous noise, auxiliary fields, concentrations, pending measurement sums/histories, WTMD state, and custom integrator/callback settings and states. Version-1 files continue with default LM and no callbacks. `continue_run(path)` validates the effective physical and numerical settings before restoring the RNG. The output directory, checkpoint interval, maximum final step, verbosity and backend may change; sampling periods, model, integrator settings, named callbacks and WTMD bias settings must match. On a different backend only numerical/statistical equivalence is expected. Old unversioned files require `continue_run(path, allow_legacy=True)` and emit a warning because compatibility and pending measurements cannot be verified.
 
@@ -364,7 +364,7 @@ WTMD requires a 3D grid (`nx` with three entries).
 
 ### Electrostatics
 
-Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$. CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([theory, Section 5.6](../theory/LangevinFieldTheoreticSimulation.md#56-charged-systems)). Small ions are molecules of one segment and take volume like the other species.
+Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$ ([model](../theory/PolymerFieldTheory.md#5-electrostatic-interactions)). CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([sampling](../theory/ComplexLangevinSimulation.md#6-charged-systems)). Small ions are molecules of one segment and take volume like the other species.
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
@@ -428,7 +428,7 @@ See [SpaceGroup.md](../theory/SpaceGroup.md) for available space groups.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `smearing` | dict | (Optional, SCFT/L-FTS/CL-FTS) Finite-range interactions: the fields are convolved with a smearing function before the propagators and the concentrations before the forces, $`w_\Gamma(k) = w(k)\,\Gamma(k)`$ |
+| `smearing` | dict | (Optional, SCFT/L-FTS/CL-FTS) Finite-range interactions: the fields are convolved with a smearing function before the propagators and the concentrations before the forces, $`w_\Gamma(k) = w(k)\,\Gamma(k)`$ ([theory](../theory/PolymerFieldTheory.md#4-smeared-interactions)) |
 
 | Type | Keys | $`\Gamma(k)`$ |
 |------|------|--------------|

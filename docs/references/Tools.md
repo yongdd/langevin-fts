@@ -9,6 +9,7 @@ This document describes the utility scripts in `scripts/analysis/` and `scripts/
 3. [χN Renormalization](#3-χn-renormalization)
 4. [Field Conversion](#4-field-conversion)
 5. [File Format Reference](#5-file-format-reference)
+6. [CL-FTS Drift Distribution](#6-cl-fts-drift-distribution)
 
 ---
 
@@ -207,7 +208,7 @@ On a grid, the interaction of a field-theoretic simulation is renormalized by th
 \chi N = z_\infty \, \chi_b N
 ```
 
-where the bare $`\chi_b N`$ is the `chi_n` of the simulation. In CL-FTS, the fluctuations of the pressure field also change the chain size. The bare segment length $`a_b`$ must then satisfy $`R_0 = a N^{1/2}`$ ([theory, Section 5.3](../theory/LangevinFieldTheoreticSimulation.md#53-renormalization-and-calibration)). Both corrections are needed to compare simulations with experiments, particle-based simulations or universal theory.
+where the bare $`\chi_b N`$ is the `chi_n` of the simulation. In CL-FTS, the fluctuations of the pressure field also change the chain size. The bare segment length $`a_b`$ must then satisfy $`R_0 = a N^{1/2}`$ ([theory, Section 5](../theory/LangevinFieldTheoreticSimulation.md#5-renormalization-and-calibration), which gives the formulas the script evaluates). Both corrections are needed to compare simulations with experiments, particle-based simulations or universal theory.
 
 ### 3.1 Usage (`renormalization.py`)
 
@@ -251,34 +252,6 @@ Both integrands approach $`c/k^2`$ at $`k = 0`$ ($`c = 12`$ for $`z_\infty`$, $`
 - the bond sum of Beardsley and Matsen (2019);
 - the limit $`N \to \infty`$;
 - Fig. 2 of Matsen et al. (2026).
-
-### 3.2 Discrete Chains
-
-Eqs. (29) and (26) of Matsen et al. (2026), in units of $`R_0`$ with $`a^2 = 1/N`$ and the monomer density $`\rho_0 = \bar{N}^{1/2} N`$:
-
-```math
-z_\infty = 1 - \frac{1}{(2\pi)^3 \rho_0} \int \frac{d\mathbf{k}}{t(k) \left[ 1 + t(k)/\zeta \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{a^2}{72 (2\pi)^3 \rho_0} \int \frac{k^2 \, d\mathbf{k}}{s^2(k) \left[ 1 + t(k)/\zeta \right]} \right]^{-1}
-```
-
-In these formulas:
-
-- $`t(k) = \tanh(k^2 a^2/12)/\Gamma^2(k)`$ and $`s(k) = \sinh(k^2 a^2/12)`$;
-- $`\Gamma(k)`$ is the smearing function, and $`\zeta N`$ is `zeta_n`;
-- the integrals run over $`-\pi/\Delta_\nu \le k_\nu \le \pi/\Delta_\nu`$.
-
-For $`\zeta \to \infty`$ and $`\Gamma = 1`$, $`z_\infty`$ equals the bond sum of Beardsley and Matsen (2019), $`1 - (1 + 2\sum_i P_i)/(\rho_0 \Delta V)`$, which the former `renormalization_discrete.m` evaluated.
-
-### 3.3 Continuous Chains
-
-Continuous chains use the limit $`N \to \infty`$ of Section 3.2 at a fixed grid in units of $`R_0`$. In this limit, $`\tanh u`$ and $`\sinh u`$ both become $`u = k^2/(12N)`$:
-
-```math
-z_\infty = 1 - \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{12 \, \Gamma^2(k) \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{2 \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]} \right]^{-1}
-```
-
-Both corrections grow without bound as the grid is refined, as $`z_\infty`$ of discrete chains with contact interactions does.
-
-The former `renormalization_rpa.m` integrated the athermal RPA of Vorselaars, Stasiak and Matsen (2015) instead. That integral also contains a finite term of order $`\bar{N}^{-1/2}`$ from $`k \lesssim 1/R_0`$, which Eq. (29) does not include because it is derived for $`N \to \infty`$. For example, for a $`32^3`$ grid with $`L = 4 R_0`$ and $`\bar{N} = 10^4`$, the former script gave $`z_\infty = 0.858`$, while the formula above gives 0.813.
 
 **References:**
 - T. M. Beardsley and M. W. Matsen, "Calibration of the Flory-Huggins interaction parameter in field-theoretic simulations," *J. Chem. Phys.* **2019**, 150, 174902
@@ -365,11 +338,11 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | Variable | Description |
 |----------|-------------|
 | `nx`, `lx` | Grid and box dimensions |
-| `structure_function_A_A` | $`S_{AA}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_A(-\mathbf{k}) \rangle`$ |
-| `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
-| `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
+| `structure_function_A_A` | $`S_{AA}(\mathbf{k}) = V \sqrt{\bar{N}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_A(-\mathbf{k}) \rangle`$ |
+| `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{N}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
+| `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{N}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 
-$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; see [LangevinFieldTheoreticSimulation.md](../theory/LangevinFieldTheoreticSimulation.md#6-structure-functions). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
+$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; $`ar{N}`$ is `nbar`; see the [estimator](../theory/LangevinFieldTheoreticSimulation.md#42-estimator). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).
 
@@ -378,3 +351,15 @@ CL-FTS uses complex fields, so its files differ from those of L-FTS:
 - With electrostatics they also hold `charge_structure_function_real` and `_imag`: the structure function of the smeared charge density. At each wavevector it combines the mixed and the field-field estimators of the electrostatic potential with the weight of least variance; the weight is stored as `charge_structure_function_weight`. It is less noisy than $`\sum_{ij} z_i z_j S_{ij}`$, by orders of magnitude where screening is strong. The two forms alone are stored as `charge_structure_function_mixed_*` and `charge_structure_function_field_field_*`: in the Gaussian regime only they show how well ψ is sampled.
 
 See [Structure Function Estimators](../theory/StructureFunctionEstimators.md) for all three estimators.
+
+## 6. CL-FTS Drift Distribution
+
+Complex Langevin averages are correct only if the distribution of the drift magnitude falls off exponentially or faster at large magnitude (Nagata, Nishimura and Shimasaki, Phys. Rev. D **94**, 114515 (2016)). CL-FTS records the largest drift over the grid of every Langevin step in the `dH_XXXXXX.mat` files: `drift_max_step_history` with one column per auxiliary field, and with electrostatics `psi_drift_max_step_history`. `drift_tail.py` reads them for one recording directory:
+
+```bash
+python scripts/analysis/drift_tail.py data_simulation
+python scripts/analysis/drift_tail.py data_simulation --skip 20000 --plot drift_tail.png
+```
+
+`--skip` leaves out the equilibration steps. For each field the script prints the number of steps, the median and the maximum, the fraction $`S(u)`$ of steps with a drift above 10, 100 and 1000 times the median, and the log-log slope of $`S(u)`$ per interval of $`u`$. An exponential tail steepens without bound on a log-log plot. A slope that stays constant over the largest decades is a power-law tail: near a simple zero of a partition function $`S(u) \propto u^{-2}`$. The weight of such a tail sets the size of the bias, and a finite run cannot show an exponential tail, so compare with an independent reference where one exists ([ComplexLangevinSimulation.md](../theory/ComplexLangevinSimulation.md#32-test-against-exact-averages), Section 3.2). The end of a CL-FTS run prints, for the steps of that run, $`S(u)`$ at 10 and 100 times the median and the slope between them.
+

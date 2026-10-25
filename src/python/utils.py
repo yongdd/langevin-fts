@@ -224,6 +224,12 @@ def checkpoint_data(sim):
         data["record_drift_history"] = np.asarray(state.get("drift_history", []))
         if "psi_drift_history" in state:
             data["record_psi_drift_history"] = np.asarray(state["psi_drift_history"])
+        # CL-FTS: the drifts of every step since the last statistics file (per auxiliary field)
+        if "drift_step_history" in state:
+            data["record_drift_step_history"] = np.reshape(np.asarray(state["drift_step_history"], dtype=np.float64),
+                                                           (-1, len(sim.monomer_types)))
+        if "psi_drift_step_history" in state:
+            data["record_psi_drift_step_history"] = np.asarray(state["psi_drift_step_history"], dtype=np.float64)
         data["record_sample_count"] = state["sample_count"]
         for key, values in state["dH_history"].items():
             data[_measurement_key("dH", key)] = np.asarray(values)
@@ -324,6 +330,15 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
             raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
+        # The drifts of every step since the last statistics file (absent in checkpoints of
+        # earlier versions, whose continued runs record them from the restart on)
+        pending_steps = step % sim.recording["statistics_save_interval"]
+        for key, per_step in (("record_drift_step_history", n_fields), ("record_psi_drift_step_history", 1)):
+            if key in data:
+                values = np.atleast_1d(np.asarray(data[key]))
+                if (np.size(values) != pending_steps * per_step or np.iscomplexobj(values)
+                        or not np.all(np.isfinite(values)) or np.any(values < 0)):
+                    raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         for monomer in sim.monomer_types:
             names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
                      (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
@@ -383,7 +398,8 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
         raise ValidationError(f"Invalid checkpoint: {exc}") from exc
 
 
-def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None):
+def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None,
+                            drift_step_history=None, n_fields=1, psi_drift_step_history=None):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
@@ -392,11 +408,60 @@ def restore_recording_state(data, H_history, dH_history, sf_average, drift_histo
         drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())
     if psi_drift_history is not None:
         psi_drift_history.extend(np.atleast_1d(data["record_psi_drift_history"]).tolist())
+    if drift_step_history is not None and "record_drift_step_history" in data:
+        drift_step_history.extend(np.reshape(data["record_drift_step_history"], (-1, n_fields)))
+    if psi_drift_step_history is not None and "record_psi_drift_step_history" in data:
+        psi_drift_step_history.extend(np.atleast_1d(data["record_psi_drift_step_history"]).tolist())
     for key in dH_history:
         dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
     for key, array in sf_average.items():
         array[:] = np.asarray(data[_measurement_key("sf", key)]).reshape(array.shape)
     return int(data["record_sample_count"])
+
+
+class DriftTailSummary:
+    """Distribution of the largest drift of each step, summarized at the end of a CL-FTS run.
+
+    Complex Langevin averages need the distribution of the drift magnitude to fall off
+    exponentially or faster (Nagata, Nishimura & Shimasaki, Phys. Rev. D 94, 114515 (2016)).
+    The counts stay in memory, twenty bins per decade (the printed median and maximum are
+    bin edges); the step values themselves are recorded as drift_max_step_history and
+    psi_drift_max_step_history. The summary gives
+    numbers, not a verdict: a finite run cannot show an exponential tail, and the weight of
+    a power-law tail sets the size of the bias.
+    """
+    EDGES = 10.0 ** (np.arange(-120, 241) / 20)
+
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.counts = np.zeros((len(self.labels), self.EDGES.size + 1), dtype=np.int64)
+
+    def add(self, values):
+        self.counts[np.arange(len(self.labels)), np.searchsorted(self.EDGES, values)] += 1
+
+    def report(self):
+        steps = int(self.counts[0].sum()) if self.labels else 0
+        if steps == 0:
+            return
+        print(f"Largest drift per step ({steps} steps of this run); S(u) = P(drift > u) at 10 and 100 "
+              "times the median, and the log-log slope of S between them (scripts/analysis/drift_tail.py):")
+        for label, counts in zip(self.labels, self.counts):
+            beyond = steps - np.cumsum(counts)          # steps above EDGES[k]
+            k_median = int(np.searchsorted(-beyond, -steps / 2))
+            if k_median >= self.EDGES.size:
+                continue
+            median = self.EDGES[k_median]
+            if median <= self.EDGES[0]:
+                print(f"  {label}: no drift")
+                continue
+            k10 = min(np.searchsorted(self.EDGES, 10 * median), self.EDGES.size - 1)
+            k100 = min(np.searchsorted(self.EDGES, 100 * median), self.EDGES.size - 1)
+            s10, s100 = beyond[k10] / steps, beyond[k100] / steps
+            slope = f"{np.log(s100 / s10) / np.log(self.EDGES[k100] / self.EDGES[k10]):.2f}" \
+                if beyond[k100] >= 20 else "-"
+            largest = self.EDGES[min(np.flatnonzero(counts).max(), self.EDGES.size - 1)]
+            print(f"  {label}: median ~{median:.3g}, maximum < {largest:.3g}, "
+                  f"S(10x) {s10:.3g}, S(100x) {s100:.3g}, slope {slope}")
 
 
 # Small extension mechanics; the physical order of calls stays in each run loop.

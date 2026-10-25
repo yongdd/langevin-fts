@@ -1,14 +1,16 @@
 # Polymer Field Theory
 
-This document describes the mathematical formulation of polymer field theory used in SCFT, L-FTS, and CL-FTS simulations. Three representations are covered: monomer potential fields, auxiliary fields (incompressible model), and auxiliary fields (compressible model).
+This document describes the mathematical formulation of polymer field theory used in SCFT, L-FTS, and CL-FTS simulations. Three representations are covered: monomer potential fields, auxiliary fields (incompressible model), and auxiliary fields (compressible model). Sections 4 and 5 add smeared interactions and the electrostatic interactions of charged monomers.
 
 ## Table of Contents
 
 1. [Monomer Potential Fields](#1-monomer-potential-fields)
 2. [Incompressible Model](#2-incompressible-model)
 3. [Compressible Model](#3-compressible-model)
-4. [Implementation](#4-implementation)
-5. [References](#5-references)
+4. [Smeared Interactions](#4-smeared-interactions)
+5. [Electrostatic Interactions](#5-electrostatic-interactions)
+6. [Implementation](#6-implementation)
+7. [References](#7-references)
 
 ---
 
@@ -231,7 +233,7 @@ O = \begin{pmatrix} 1 & 1 \\ -1 & 1 \end{pmatrix}
 \begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix} = O^T \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix}
 ```
 
-so that $`\Phi_- = \phi_A - \phi_B`$ and $`\Phi_+ = \phi_A + \phi_B`$, consistent with $`\Phi_i = \sum_j O_{ji} \phi_j`$ in Section 4.1 and with the incompressibility condition $`\delta H / \delta \Omega_+ \propto \Phi_+ - 1`$.
+so that $`\Phi_- = \phi_A - \phi_B`$ and $`\Phi_+ = \phi_A + \phi_B`$, consistent with $`\Phi_i = \sum_j O_{ji} \phi_j`$ in Section 6.1 and with the incompressibility condition $`\delta H / \delta \Omega_+ \propto \Phi_+ - 1`$.
 
 ---
 
@@ -277,9 +279,96 @@ where:
 
 ---
 
-## 4. Implementation
+## 4. Smeared Interactions
 
-### 4.1 SymmetricPolymerTheory Class
+With contact interactions, the renormalization of $`\chi`$ by the fluctuations grows without bound as the grid is refined ([Langevin FTS, Section 5.1](LangevinFieldTheoreticSimulation.md#51-effective-interaction-and-chain-size)). Smearing gives the interactions a finite range (References 4 and 5); with a smearing function that decays at large $`k`$, this correction converges. `smearing.py` implements it for SCFT, L-FTS and CL-FTS; the [Parameter Reference](../references/Parameters.md#smearing) lists the inputs and restrictions.
+
+### 4.1 Smeared Densities
+
+The monomers interact through their smeared densities
+
+```math
+\rho_i^\Gamma(\mathbf{r}) = \int \Gamma_i(\mathbf{r} - \mathbf{r}') \, \rho_i(\mathbf{r}') \, d\mathbf{r}', \qquad \tilde\rho_i^\Gamma(\mathbf{k}) = \Gamma_i(\mathbf{k}) \, \tilde\rho_i(\mathbf{k})
+```
+
+which replace $`\rho_i`$ in the interaction energies of Sections 2.1 and 3.1 and in the incompressibility constraint of Section 2.1. $`\Gamma_i(\mathbf{r}) = \Gamma_i(-\mathbf{r})`$, so a field couples to a smeared density as the smeared field couples to the density:
+
+```math
+\int \Omega \, (\Gamma_i * \rho_i) \, d\mathbf{r} = \int (\Gamma_i * \Omega) \, \rho_i \, d\mathbf{r}
+```
+
+The Hubbard-Stratonovich transformation therefore leaves the quadratic terms of the effective Hamiltonians of Sections 2.3 and 3.2 unchanged. The chains feel the smeared fields, and the functional derivatives contain the smeared concentrations:
+
+```math
+Q_p = Q_p\big[\{\Gamma_i * W_i\}\big], \qquad \Phi_i(\mathbf{r}) \;\to\; \Phi_i^\Gamma(\mathbf{r}) = \sum_j O_{ji} \, (\Gamma_j * \phi_j)(\mathbf{r})
+```
+
+In the incompressible model, the pressure field therefore constrains the smeared total density, $`\sum_j \Gamma_j * \phi_j = 1`$. With a single $`\Gamma`$ that does not vanish, this is the same as $`\sum_j \phi_j = 1`$.
+
+### 4.2 Smearing Functions
+
+$`\Gamma(0) = 1`$, so smearing conserves the amount of each type.
+
+| `type` | $`\Gamma(\mathbf{k})`$ | Parameters |
+|--------|------------------------|------------|
+| `gaussian` | $`\exp(-a^2 k^2 / 2)`$, the transform of $`(2\pi a^2)^{-3/2} \exp(-r^2 / 2a^2)`$ | range $`a`$ (`a_int`) in units of $`R_0`$ |
+| `sigmoidal` | $`C_0 \left[ 1 - \tanh\left( (k - k_c)/\Delta k \right) \right]`$, $`C_0 = 1/\left[ 1 - \tanh(-k_c/\Delta k) \right]`$ | cutoff $`k_c`$ (`k_int`), width $`\Delta k`$ (`dk_int`) |
+
+- **Wavenumber:** $`k`$ is the physical wavenumber of the cell, including the cell angles. $`\Gamma`$ follows the box, so the SCFT stress contains the derivative of $`\Gamma`$.
+- **Walls:** along an axis with reflecting or absorbing walls, fields and concentrations are even across the wall, so they are smeared together with their mirror image, in the cosine (DCT-II) basis.
+- **Per type:** CL-FTS accepts one Gaussian range $`a_i`$ for every type, which gives each type its own $`\Gamma_i`$. One $`\Gamma`$ applies to all types otherwise.
+
+Smearing also enters the structure functions, whose recorded values are divided by $`\Gamma_i`$ ([Langevin FTS, Section 4.2](LangevinFieldTheoreticSimulation.md#42-estimator)), their RPA ([Section 4.4](LangevinFieldTheoreticSimulation.md#44-rpa-reference)) and the charge density of Section 5.
+
+---
+
+## 5. Electrostatic Interactions
+
+Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment and count in the total density like the other species. The charges add a Coulomb interaction to the interactions of Sections 2 and 3. `electrostatics.py` implements it; only CL-FTS samples the electrostatic potential ([CL-FTS, Section 6](ComplexLangevinSimulation.md#6-charged-systems)).
+
+### 5.1 Coulomb Interaction
+
+The charges interact through the smeared charge density and the Coulomb kernel:
+
+```math
+c(\mathbf{r}) = \sum_i z_i \, (\Gamma_i * \phi_i)(\mathbf{r}), \qquad \frac{\beta U_{el}}{C V / R_0^3} = \frac{E}{2V} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
+```
+
+Here $`\Gamma_i`$ is the smearing function of type $`i`$ (Section 4); one Gaussian length per type plays the role of a Born radius. Point charges would have a self-energy that depends on the grid, so every charged type needs a positive smearing length.
+
+### 5.2 Coupling Constant
+
+In units of $`k_B T`$, charges interact through the kernel $`l_B / |\mathbf{r} - \mathbf{r}'|`$, where $`l_B = e^2 / (4\pi \varepsilon k_B T)`$ is the Bjerrum length. The operator $`(-\nabla^2)^{-1}`$ has the kernel $`1 / (4\pi |\mathbf{r} - \mathbf{r}'|)`$, so the charge number density $`\rho_0 c(\mathbf{r})`$ has the energy
+
+```math
+\beta U_{el} = \frac{l_B}{2} \iint \frac{\rho_0 c(\mathbf{r}) \, \rho_0 c(\mathbf{r}')}{|\mathbf{r} - \mathbf{r}'|} \, d\mathbf{r} \, d\mathbf{r}' = \frac{4\pi l_B \rho_0^2}{2} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
+```
+
+Measuring lengths in units of $`R_0`$ multiplies the volume element by $`R_0^3`$ and $`(-\nabla^2)^{-1}`$ by $`R_0^2`$. Dividing by the number of reference chains, $`C V / R_0^3 = \rho_0 V / N`$ with $`C = \rho_0 R_0^3 / N`$ (Section 2.3), gives the form of Section 5.1 with the coupling
+
+```math
+E = 4\pi l_B \rho_0 N R_0^2 = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}
+```
+
+The second form uses $`\rho_0 R_0^3 = N C = N \bar{N}^{1/2}`$, which follows from $`R_0 = b N^{1/2}`$ and $`\bar{N} = b^6 \rho_0^2 N`$. The factor $`N^2`$ comes from the valences per segment. A volume $`R_0^3`$ holds the charge $`N \bar{N}^{1/2} c`$, whose Coulomb energy $`l_B (N \bar{N}^{1/2} c)^2 / R_0`$, shared by the $`\bar{N}^{1/2}`$ chains in that volume, is of order $`E c^2`$ per chain.
+
+`bjerrum_length` takes $`N = 1/\Delta s`$ and therefore requires discrete chains. For continuous chains, $`\Delta s`$ is only a contour step, and `coupling` gives $`E`$ with the physical $`N`$.
+
+### 5.3 Electrostatic Potential
+
+A Hubbard-Stratonovich transformation decouples the interaction with an electrostatic potential $`\psi`$. Like the pressure field, $`\psi`$ is an imaginary-type field. Each type feels $`z_i \psi`$, so the propagator input becomes $`\Gamma_i * (w_i + z_i \psi)`$. The effective Hamiltonian of Sections 2.3 and 3.2 gains the term
+
+```math
+\frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, \nabla^2 \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{\nabla^2 \psi}{E} + c
+```
+
+The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
+
+---
+
+## 6. Implementation
+
+### 6.1 SymmetricPolymerTheory Class
 
 The `polymerfts.SymmetricPolymerTheory` class computes the coefficients for the effective Hamiltonian:
 
@@ -295,7 +384,7 @@ The `polymerfts.SymmetricPolymerTheory` class computes the coefficients for the 
 
 where $`\Phi_i(\mathbf{r}) = \sum_j O_{ji} \phi_j(\mathbf{r})`$.
 
-### 4.2 Usage Example
+### 6.2 Usage Example
 
 ```python
 import numpy as np
@@ -326,11 +415,11 @@ H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb, include_cons
 # Compute functional derivatives
 h_deriv = mpt.compute_func_deriv(omega, phi, field_indices)
 
-# dH/dχN at fixed auxiliary fields (Section 4.5); phi: {monomer_type: concentration}
+# dH/dχN at fixed auxiliary fields (Section 6.5); phi: {monomer_type: concentration}
 dH = mpt.compute_h_deriv_chin(w_aux=omega, phi=phi)
 ```
 
-### 4.3 Sign Convention for Imaginary Fields
+### 6.3 Sign Convention for Imaginary Fields
 
 In the implementation, there is a negative sign in front of the functional derivative with respect to imaginary fields. This is because we find the minimum for real fields and maximum for imaginary fields:
 
@@ -340,7 +429,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 # h_deriv[1] = -δH/δΩ_+ (imaginary field, maximize)
 ```
 
-### 4.4 Key Attributes
+### 6.4 Key Attributes
 
 | Attribute | Description |
 |-----------|-------------|
@@ -352,7 +441,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 | `aux_fields_real_idx` | Indices of real auxiliary fields |
 | `aux_fields_imag_idx` | Indices of imaginary auxiliary fields |
 
-### 4.5 Derivative with Respect to χN
+### 6.5 Derivative with Respect to χN
 
 `compute_h_deriv_chin(w_aux=w_aux, phi=phi)` returns $`\partial (\beta H / (C V / R_0^3)) / \partial \chi_{ab} N`$ at fixed auxiliary fields $`\Omega`$, the integration variables. Averaged over the real fields with the imaginary fields at their saddle point (L-FTS), it is the derivative of the free energy of that approximation, because $`\partial H / \partial \Omega_I = 0`$ at the saddle point of the imaginary fields $`\Omega_I`$; with every field fluctuating (CL-FTS) it is the derivative of the full free energy; at a saddle point of all fields it equals $`\langle \phi_a \phi_b \rangle`$. The $`\chi`$-dependent normalization of the Hubbard-Stratonovich transformation is a constant independent of the fields and is not included. `phi` holds the concentrations of the fields (smeared, when smearing is used); it may be omitted for AB systems at $`\chi N \neq 0`$. The derivatives use the $`\chi N`$ the object was built with; the older call `compute_h_deriv_chin(chi_n, w_aux, phi)` still works and checks that `chi_n` equals it.
 
@@ -394,10 +483,14 @@ is added, and the columns of $`O K`$ of the dropped fields are left out of the r
 
 ---
 
-## 5. References
+## 7. References
 
 1. Arora, A., Morse, D. C., Bates, F. S. & Dorfman, K. D. "Accelerating self-consistent field theory of block polymers in a variable unit cell." *J. Chem. Phys.* **146**, 244902 (2017).
 
 2. Düchs, D., Delaney, K. T. & Fredrickson, G. H. "A multi-species exchange model for fully fluctuating polymer field theory simulations." *J. Chem. Phys.* **141**, 174103 (2014).
 
 3. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
+
+4. Delaney, K. T. & Fredrickson, G. H. "Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions." *J. Phys. Chem. B* **120**, 7615 (2016).
+
+5. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).

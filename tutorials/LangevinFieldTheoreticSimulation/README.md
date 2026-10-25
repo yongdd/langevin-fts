@@ -2,7 +2,7 @@
 
 Include compositional fluctuations beyond mean-field theory.
 
-For detailed theory documentation, see [LangevinFieldTheoreticSimulation.md](../../docs/theory/LangevinFieldTheoreticSimulation.md).
+For detailed theory documentation, see [LangevinFieldTheoreticSimulation.md](../../docs/theory/LangevinFieldTheoreticSimulation.md) (shared by L-FTS and CL-FTS) and [PartialSaddlePointApproximation.md](../../docs/theory/PartialSaddlePointApproximation.md) (L-FTS).
 
 ## Environment Setup
 

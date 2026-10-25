@@ -3,8 +3,8 @@
 The A segments carry the valence z_A (a fraction of a charge per segment) and are
 neutralized by monovalent counterions C, molecules of one segment. The charges are
 smeared with one Gaussian length per type, and the Coulomb interaction is decoupled
-with a fluctuating electrostatic potential psi; see Section 5.6 of
-docs/theory/LangevinFieldTheoreticSimulation.md and the 'electrostatics' parameters
+with a fluctuating electrostatic potential psi; see Section 6 of
+docs/theory/ComplexLangevinSimulation.md and the 'electrostatics' parameters
 in docs/references/Parameters.md.
 """
 

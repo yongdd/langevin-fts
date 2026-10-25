@@ -15,9 +15,11 @@
 | Document | Description |
 |----------|-------------|
 | [ChainPropagators.md](theory/ChainPropagators.md) | Chain propagators, partition functions, and concentrations |
-| [PolymerFieldTheory.md](theory/PolymerFieldTheory.md) | Field theory formulations (monomer, auxiliary fields) |
+| [PolymerFieldTheory.md](theory/PolymerFieldTheory.md) | Field theory formulations (monomer, auxiliary fields), smeared and electrostatic interactions |
 | [SelfConsistentFieldTheory.md](theory/SelfConsistentFieldTheory.md) | SCFT saddle-point equations and iterative methods |
-| [LangevinFieldTheoreticSimulation.md](theory/LangevinFieldTheoreticSimulation.md) | L-FTS and CL-FTS: Langevin dynamics, complex Langevin and structure functions |
+| [LangevinFieldTheoreticSimulation.md](theory/LangevinFieldTheoreticSimulation.md) | What L-FTS and CL-FTS share: Langevin dynamics, observables and output files, structure functions, renormalization and calibration |
+| [PartialSaddlePointApproximation.md](theory/PartialSaddlePointApproximation.md) | L-FTS: partial saddle-point approximation, saddle-point iteration and the `LFTS` class |
+| [ComplexLangevinSimulation.md](theory/ComplexLangevinSimulation.md) | CL-FTS: complex Langevin dynamics, correct convergence, stabilization and charged systems |
 | [StructureFunctionEstimators.md](theory/StructureFunctionEstimators.md) | Derivation of the structure function estimators, their completion with charges, and a comparison with BioFTS |
 | [NumericalMethods.md](theory/NumericalMethods.md) | Pseudo-spectral and real-space solvers |
 | [StressTensor.md](theory/StressTensor.md) | Stress tensor calculation |

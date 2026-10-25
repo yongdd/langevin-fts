@@ -1,69 +1,45 @@
-# Langevin Field-Theoretic Simulation (L-FTS and CL-FTS)
+# Langevin Field-Theoretic Simulation
 
-This document describes Langevin field-theoretic simulation (L-FTS), which includes compositional fluctuations beyond mean-field theory, and complex Langevin simulation (CL-FTS), which samples every field without the partial saddle-point approximation.
+This document describes what the two Langevin field-theoretic simulations of polymerfts share: the Langevin dynamics, the recorded observables, the structure functions and the renormalization of the interaction. [PartialSaddlePointApproximation.md](PartialSaddlePointApproximation.md) describes L-FTS with the partial saddle-point approximation, and [ComplexLangevinSimulation.md](ComplexLangevinSimulation.md) describes complex Langevin simulation (CL-FTS).
 
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Partial Saddle-Point Approximation](#2-partial-saddle-point-approximation)
-3. [Langevin Dynamics](#3-langevin-dynamics)
-4. [Saddle-Point Iteration for Imaginary Fields](#4-saddle-point-iteration-for-imaginary-fields)
-5. [Complex Langevin Simulation (CL-FTS)](#5-complex-langevin-simulation-cl-fts)
-6. [Structure Functions](#6-structure-functions)
-7. [Implementation](#7-implementation)
-8. [References](#8-references)
+2. [Langevin Dynamics](#2-langevin-dynamics)
+3. [Observables and Output Files](#3-observables-and-output-files)
+4. [Structure Functions](#4-structure-functions)
+5. [Renormalization and Calibration](#5-renormalization-and-calibration)
+6. [References](#6-references)
 
 ---
 
 ## 1. Overview
 
-L-FTS is a simulation method that incorporates compositional fluctuations into polymer field theory. Unlike SCFT, which finds a single saddle-point solution, L-FTS samples field configurations according to the Boltzmann distribution, capturing:
+Field-theoretic simulations (FTS) include the fluctuations of the fields of polymer field theory. Unlike SCFT, which finds a single saddle-point solution, they sample field configurations according to their Boltzmann weight, capturing:
 
 - **Fluctuation effects**: Order-disorder transition shifts, composition fluctuations
 - **Correlation functions**: Structure factors, scattering functions
 - **Thermodynamic averages**: Ensemble-averaged properties
 
-The key insight is the **partial saddle-point approximation (PSPA)**: real fields fluctuate via Langevin dynamics while imaginary fields are kept at their saddle points. Sections 2-4 describe L-FTS. CL-FTS (Section 5) lets the imaginary fields fluctuate as well, at the cost of complex fields and possible numerical instabilities. The structure functions of Section 6 apply to both methods.
+polymerfts samples the fields with Langevin dynamics in two ways:
+
+| | L-FTS | CL-FTS |
+|---|---|---|
+| Fluctuating fields | The real auxiliary fields; the imaginary fields stay at their saddle point | Every auxiliary field, which makes the fields complex |
+| Model | Incompressible or compressible | Compressible (finite `zeta_n`) |
+| Main caveat | The partial saddle-point approximation | Correct convergence of complex Langevin dynamics |
+| Class | `LFTS` | `CLFTS` |
+| Method document | [PartialSaddlePointApproximation.md](PartialSaddlePointApproximation.md) | [ComplexLangevinSimulation.md](ComplexLangevinSimulation.md) |
+
+Both use the Langevin dynamics of Section 2, record the observables of Section 3 and the structure functions of Section 4, and need the renormalization of Section 5 for a comparison with experiments or other simulations.
 
 ---
 
-## 2. Partial Saddle-Point Approximation
+## 2. Langevin Dynamics
 
-### 2.1 Partition Function
+### 2.1 Continuous Langevin Equation
 
-The canonical partition function in field-theoretic representation:
-
-```math
-\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}])
-```
-
-In PSPA, we split auxiliary fields into real ($`\Omega_i`$) and imaginary ($`\Omega_j`$) components:
-
-```math
-\mathcal{Z} \propto \int \{\mathcal{D}\Omega_i\} \exp(-\beta H[\{\Omega_i\}, \{\Omega_j^*\}])
-```
-
-where $`\{\Omega_j^*\}`$ are saddle-point solutions for imaginary fields:
-
-```math
-\left.\frac{\delta H[\{\Omega_i\}, \{\Omega_j\}]}{\delta \Omega_j}\right|_{\Omega_j = \Omega_j^*} = 0
-```
-
-### 2.2 Example: AB Diblock Copolymer
-
-For AB-type systems:
-- **Real field**: $`\Omega_-`$ (exchange field, composition fluctuations)
-- **Imaginary field**: $`\Omega_+`$ (pressure-like field, incompressibility)
-
-The exchange field $`\Omega_-`$ fluctuates according to Langevin dynamics, while $`\Omega_+`$ is kept at its saddle point to enforce incompressibility.
-
----
-
-## 3. Langevin Dynamics
-
-### 3.1 Continuous Langevin Equation
-
-The real fields evolve according to:
+In both methods the real fields evolve according to:
 
 ```math
 \frac{\partial \Omega_i(\mathbf{r}, \tau)}{\partial \tau} = -\lambda_i \frac{\delta H}{\delta \Omega_i(\mathbf{r}, \tau)} + \eta(\mathbf{r}, \tau)
@@ -73,9 +49,9 @@ with noise statistics:
 - $`\langle \eta(\mathbf{r}, \tau) \rangle = 0`$
 - $`\langle \eta(\mathbf{r}, \tau) \eta(\mathbf{r}', \tau') \rangle = 2\lambda_i k_B T \, \delta(\mathbf{r} - \mathbf{r}') \delta(\tau - \tau')`$
 
-Here $`\lambda_i`$ is the relative step size (mobility) of field $`i`$, `dt_scaling` in `lfts.py`, not an eigenvalue: for the first $`M-1`$ auxiliary fields it is the absolute value of the field's eigenvalue in [PolymerFieldTheory.md](PolymerFieldTheory.md#23-effective-hamiltonian) divided by the largest absolute eigenvalue among them, and it is 1 for the last field $`\Omega_M`$. For AB systems $`\lambda_- = \lambda_+ = 1`$.
+Here $`\lambda_i`$ is the relative step size (mobility) of field $`i`$, `dt_scaling` in `lfts.py`, not an eigenvalue: for the first $`M-1`$ auxiliary fields it is the absolute value of the field's eigenvalue in [PolymerFieldTheory.md](PolymerFieldTheory.md#23-effective-hamiltonian) divided by the largest absolute eigenvalue among them, and it is 1 for the last field $`\Omega_M`$. For AB systems $`\lambda_- = \lambda_+ = 1`$. CL-FTS takes the eigenvalues of $`U = X + \zeta N \, \mathbf{e}\mathbf{e}^T`$ and also moves the imaginary fields ([CL-FTS, Section 2](ComplexLangevinSimulation.md#2-complex-langevin-equations)).
 
-### 3.2 Discretized Equation (Per Chain Unit)
+### 2.2 Discretized Equation (Per Chain Unit)
 
 Discretizing with cell volume $`\Delta V`$ and time step $`\delta\tau`$:
 
@@ -88,7 +64,7 @@ where:
 - $`\sigma_i^2 = \lambda_i \frac{2 \delta\tau N}{\Delta V / R_0^3 \cdot \sqrt{\bar{N}}}`$
 - $`\bar{N} = b^6 \rho_0^2 N`$: invariant polymerization index
 
-### 3.3 Euler Method
+### 2.3 Euler Method
 
 The simplest discretization (first-order in $`\delta\tau`$):
 
@@ -96,7 +72,7 @@ The simplest discretization (first-order in $`\delta\tau`$):
 \Omega_-(\mathbf{r}, \tau + \delta\tau) = \Omega_-(\mathbf{r}, \tau) - \lambda_- \left[\Phi_-(\mathbf{r}) + \frac{2}{\chi N}\Omega_-(\mathbf{r})\right] \delta\tau N + \sigma \mathcal{N}(\mathbf{r}, \tau)
 ```
 
-### 3.4 Leimkuhler-Matthews Method
+### 2.4 Leimkuhler-Matthews Method
 
 A more accurate second-order method that averages noise over two time steps:
 
@@ -109,229 +85,78 @@ A more accurate second-order method that averages noise over two time steps:
 - More stable for larger time steps
 - Reduced systematic bias
 
----
+LM is the default integrator of both methods; `langevin.integrator: "euler"` selects Section 2.3, and [Extensions](../internals/Extensions.md#langevin-integrators) describes how to add an integrator.
 
-## 4. Saddle-Point Iteration for Imaginary Fields
+### 2.5 Noise Amplitude
 
-### 4.1 Simple Mixing
-
-Update the pressure-like field using gradient descent; $`k`$ counts the saddle-point iterations within one Langevin step:
+The noise amplitude depends on system parameters:
 
 ```math
-\Omega_+^{(k+1)}(\mathbf{r}) = \Omega_+^{(k)}(\mathbf{r}) + \alpha \left[\phi_A(\mathbf{r}) + \phi_B(\mathbf{r}) - 1\right]
+\sigma = \sqrt{\frac{2 \cdot \delta\tau N}{\Delta V \cdot \sqrt{\bar{N}}}}
 ```
 
-where $`\alpha`$ is the mixing parameter of the compressor (`mix_init`, adapted as in SCFT simple mixing), not the time step $`\delta\tau N`$.
-
-### 4.2 Anderson Mixing
-
-Accelerates convergence using history of previous iterations (see [SelfConsistentFieldTheory.md](SelfConsistentFieldTheory.md)).
-
-### 4.3 Linear Response
-
-Uses linear response theory to predict the saddle-point directly:
-
-```math
-\Omega_+^* \approx \Omega_+^{(0)} + \chi_{\Omega_+}^{-1} \cdot (\phi_+ - 1)
-```
-
-where $`\chi_{\Omega_+}`$ is the response function.
-
-### 4.4 Available Compressors
-
-| Name | Description |
-|------|-------------|
-| `am` | Anderson Mixing |
-| `lr` | Linear Response |
-| `lram` | Linear Response + Anderson Mixing (hybrid) |
+where $`\Delta V = V/n_{\mathrm{grid}}`$ is the volume of one grid cell; $`V`$ is the volume of the simulation cell, which includes the angle factor of a non-orthogonal cell ($`\Delta V = \Delta x \Delta y \Delta z`$ only for an orthogonal box).
 
 ---
 
-## 5. Complex Langevin Simulation (CL-FTS)
+## 3. Observables and Output Files
 
-CL-FTS drops the partial saddle-point approximation: every auxiliary field fluctuates, including the imaginary fields that L-FTS keeps at their saddle points. The fields then become complex, and so do the concentrations, the partition functions $`Q_p`$ and $`H`$. The method assumes that the stationary averages of this complex dynamics are the averages of the full field theory (References 2 and 5). `CLFTS` uses the compressible model of [PolymerFieldTheory.md](PolymerFieldTheory.md#3-compressible-model) and needs a finite `zeta_n` (default 100).
+Both methods write their measurements into `recording.dir` at the intervals of [`recording`](../references/Parameters.md#recording): `sample_interval` for the samples, `statistics_save_interval` for the files of averages and histories, and `checkpoint_interval` for the fields. [Tools, Section 5](../references/Tools.md#5-file-format-reference) describes the file formats.
 
-**Correct convergence.** A stable, bounded trajectory does not guarantee this assumption: complex Langevin dynamics can converge to wrong averages (Reference 4). The justification of the method requires the distribution of the drift to fall off at least exponentially at large magnitude (Reference 6). Large drifts occur, for example, near zeros of $`Q_p`$, where the concentrations can diverge. `drift_max_history` (Section 5.4) records the largest drift of each sample for this check, and `psi_drift_max_history` that of the electrostatic potential (Section 5.6). Results in a new regime therefore need an independent reference; Section 5.6 states the range that has been checked for charged systems.
+| File | Contents |
+|------|----------|
+| `fields_NNNNNN.mat` | Fields, concentrations and auxiliary fields, with the random-number state and the pending measurements; runs continue from these files |
+| `dH_NNNNNN.mat` | Histories of $`H`$, $`\partial H / \partial (\chi N)`$ and of the largest drift |
+| `structure_function_NNNNNN.mat` | Structure functions $`S_{ij}`$ averaged over the samples of the interval (Section 4) |
+| `run_status.json` | Completion or failure and the last accepted step |
 
-### 5.1 Complex Langevin Equations
-
-As in [PolymerFieldTheory.md](PolymerFieldTheory.md#43-sign-convention-for-imaginary-fields), $`H`$ is minimized with respect to the real fields and maximized with respect to the imaginary fields at the saddle point; for AB, $`\Omega_-`$ is real and $`\Omega_+`$ imaginary. An imaginary field is integrated along the imaginary axis, $`\Omega_j = i w_j`$ with real $`w_j`$. Written for $`\Omega_j`$, the real Langevin step of $`w_j`$ reverses the sign of the force and makes the noise imaginary:
-
-```math
-\Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \sigma_i \mathcal{N}_i(\mathbf{r}, \tau) \qquad \text{(real fields)}
-```
-
-```math
-\Omega_j(\mathbf{r}, \tau + \delta\tau) = \Omega_j(\mathbf{r}, \tau) + \lambda_j \frac{\delta H}{\delta \Omega_j} \delta\tau N + i \sigma_j \mathcal{N}_j(\mathbf{r}, \tau) \qquad \text{(imaginary fields)}
-```
-
-The derivatives are those of [PolymerFieldTheory.md](PolymerFieldTheory.md#32-effective-hamiltonian), evaluated with the complex concentrations (smeared, when smearing is used). $`\mathcal{N}_i`$ is real Gaussian noise of unit variance, and $`\sigma_i`$ is that of Section 3.2. The mobility $`\lambda_i`$ (`dt_scaling` in `clfts.py`) follows Section 3.1 with the eigenvalues of $`U = X + \zeta N \, \mathbf{e}\mathbf{e}^T`$. A field with a zero eigenvalue does not enter $`H`$; it has $`\lambda_i = 0`$ and stays fixed.
-
-LM (Section 3.4) is the default integrator and averages the noise over two steps; `langevin.integrator: "euler"` selects Section 3.3. For an AB diblock, these updates are Eqs. (13)-(16) of Reference 12. The time step is fixed. Reference 12 ran LM with $`\delta\tau N = 2`$ in CL-FTS and $`\delta\tau N = 8`$ in L-FTS.
-
-### 5.2 Hot Spots and Dynamical Stabilization
-
-The imaginary part of a real field can grow without bound at a few grid points ("hot spots"), most often at small $`\bar{N}`$ and with contact interactions (Reference 10). `CLFTS` stops with a `ValidationError` in either of two cases:
-
-- the fields, the concentrations or $`H`$ become non-finite;
-- the spatial mean of $`\sum_i \phi_i - 1`$ exceeds $`5 \times 10^{-8}`$ in magnitude, which is usually the first sign of a hot spot.
-
-Two remedies are available:
-
-- **Dynamical stabilization** (Reference 10, `dynamic_stabilization`): the force on each real field gets the term $`i \alpha_{ds} \mathrm{Im}[\Omega_i]`$, which damps its imaginary part.
-  - It biases the sampling toward stronger segregation: a slightly lower $`(\chi N)_{\mathrm{ODT}}`$ and a higher $`S(k^*)`$.
-  - Reference 10 used $`\alpha_{ds} = 0.001`$ at $`\bar{N} = 10^6`$-$`10^7`$ and 0.01-0.02 at $`\bar{N} = 10^5`$.
-  - Reference 12 found structure functions more sensitive to $`\alpha_{ds}`$ than the order-disorder transition, and computed them without stabilization.
-- **Smearing** ([`smearing`](../references/Parameters.md#smearing)): finite-range interactions damp the high-$`k`$ fluctuations from which hot spots grow (Reference 12).
-
-[DYNAMICAL_STABILIZATION.md](../../examples/clfts/DYNAMICAL_STABILIZATION.md) and [SMEARING.md](../../examples/clfts/SMEARING.md) in `examples/clfts/` give recommended values.
-
-### 5.3 Renormalization and Calibration
-
-The UV divergence of the grid makes the effective interaction $`\chi \approx z_\infty \chi_b`$ differ from the bare $`\chi_b`$ given by `chi_n`. CL-FTS has a second correction: the fluctuations of the imaginary (pressure) field also change the chain size. The bare segment length $`a_b`$ is therefore chosen so that $`R_0 = a N^{1/2}`$ in the limit $`\chi_b \to 0`$. In L-FTS and SCFT, $`a_b = a`$. For discrete chains with smearing function $`\Gamma(k)`$, Reference 12 (Eqs. 26 and 29) gives
-
-```math
-\frac{a_b}{a} = \left[ 1 + \frac{a^2}{72 (2\pi)^3 \rho_0} \int \frac{k^2 \, d\mathbf{k}}{s^2(k) \left[ 1 + t(k)/\zeta \right]} \right]^{-1}, \qquad z_\infty = 1 - \frac{1}{(2\pi)^3 \rho_0} \int \frac{d\mathbf{k}}{t(k) \left[ 1 + t(k)/\zeta \right]}
-```
-
-where:
-
-- $`s(k) = \sinh(k^2 a^2/12)`$ and $`t(k) = \tanh(k^2 a^2/12) / \Gamma^2(k)`$;
-- the integrals run over $`-\pi/\Delta_\nu \le k_\nu \le \pi/\Delta_\nu`$;
-- $`\rho_0`$ is the monomer density, with $`\rho_0 a^3 = (\bar{N}/N)^{1/2}`$;
-- $`\zeta N`$ is `zeta_n`.
-
-The same $`z_\infty`$ applies to L-FTS of the compressible model, and as $`\zeta \to \infty`$ the factor $`1 + t/\zeta`$ goes to 1. `scripts/analysis/renormalization.py` ([Tools](../references/Tools.md#3-χn-renormalization)) evaluates both formulas from a fields file or from options. For continuous chains, it uses their limit $`N \to \infty`$, where $`\tanh`$ and $`\sinh`$ become linear.
-
-To use the calibration, multiply all `segment_lengths` by $`a_b/a`$ and set `chi_n` to the $`\chi_b N`$ of the target $`z_\infty \chi_b N`$. Reference 12 adds a quadratic term, $`\chi = z_\infty \chi_b + c_2 (z_\infty \chi_b)^2`$, fitted to renormalized one-loop theory; $`c_2`$ differs between CL-FTS and L-FTS. Section 6.4 gives an example.
-
-### 5.4 Observables
-
-- **Hamiltonian:** $`H`$ and $`\partial H / \partial (\chi N)`$ are complex and recorded as real and imaginary parts (`H_history_real`, `H_history_imag`, `dH_history_*_real`, `dH_history_*_imag`). Their ensemble averages are real, so the imaginary parts average to zero within the statistical error. `drift_max_history` includes the stabilization term. With charges, `psi_drift_max_history` holds the largest drift of $`\psi`$, $`s \, \vert \delta H / \delta \psi \vert`$, separately: its linear part $`\nabla^2 \psi / E`$ is integrated exactly and would dominate the maximum at large $`k`$.
-- **Structure functions:** they use all fields with $`\lambda_k \neq 0`$ (Section 6.1) and full complex Fourier transforms, and are recorded as `structure_function_*_real` and `structure_function_*_imag`. In the compressible model $`S_{AA}`$ also contains the total-density fluctuations. For AB, the composition structure function is $`(S_{AA} + S_{BB} - 2 S_{AB})/4`$ (Section 6.4).
-- **Fields:** `fields_*.mat` stores the complex fields and concentrations as `_real`/`_imag` pairs, and runs restart from these files as in L-FTS.
-
-### 5.5 Using the CLFTS Class
-
-`CLFTS(params, random_seed)` takes the parameters of the L-FTS example in Section 7.1 without `saddle` and `compressor`. It adds `zeta_n`, `dynamic_stabilization` and, optionally, `smearing` and `electrostatics` (see [CL-FTS Parameters](../references/Parameters.md#cl-fts-parameters)). [examples/clfts/Lamella.py](../../examples/clfts/Lamella.py) and [examples/clfts/ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) are complete scripts.
-
-### 5.6 Charged Systems
-
-Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment, so the compressibility term counts them like the other species.
-
-**Coulomb interaction.** The charges interact through the smeared charge density and the Coulomb kernel:
-
-```math
-c(\mathbf{r}) = \sum_i z_i \, (\Gamma_i * \phi_i)(\mathbf{r}), \qquad \frac{\beta U_{el}}{C V / R_0^3} = \frac{E}{2V} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
-```
-
-Here $`\Gamma_i`$ is the smearing function of type $`i`$; one Gaussian length per type plays the role of a Born radius.
-
-**Coupling.** In units of $`k_B T`$, charges interact through the kernel $`l_B / |\mathbf{r} - \mathbf{r}'|`$, where $`l_B = e^2 / (4\pi \varepsilon k_B T)`$ is the Bjerrum length. The operator $`(-\nabla^2)^{-1}`$ has the kernel $`1 / (4\pi |\mathbf{r} - \mathbf{r}'|)`$, so the charge number density $`\rho_0 c(\mathbf{r})`$ has the energy
-
-```math
-\beta U_{el} = \frac{l_B}{2} \iint \frac{\rho_0 c(\mathbf{r}) \, \rho_0 c(\mathbf{r}')}{|\mathbf{r} - \mathbf{r}'|} \, d\mathbf{r} \, d\mathbf{r}' = \frac{4\pi l_B \rho_0^2}{2} \int c \, (-\nabla^2)^{-1} c \, d\mathbf{r}
-```
-
-Measuring lengths in units of $`R_0`$ multiplies the volume element by $`R_0^3`$ and $`(-\nabla^2)^{-1}`$ by $`R_0^2`$. Dividing by the number of reference chains, $`C V / R_0^3 = \rho_0 V / N`$ with $`C = \rho_0 R_0^3 / N`$ ([PolymerFieldTheory.md](PolymerFieldTheory.md#23-effective-hamiltonian)), gives the form above with the coupling
-
-```math
-E = 4\pi l_B \rho_0 N R_0^2 = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}
-```
-
-The second form uses $`\rho_0 R_0^3 = N C = N \bar{N}^{1/2}`$, which follows from $`R_0 = b N^{1/2}`$ and $`\bar{N} = b^6 \rho_0^2 N`$. The factor $`N^2`$ comes from the valences per segment. A volume $`R_0^3`$ holds the charge $`N \bar{N}^{1/2} c`$, whose Coulomb energy $`l_B (N \bar{N}^{1/2} c)^2 / R_0`$, shared by the $`\bar{N}^{1/2}`$ chains in that volume, is of order $`E c^2`$ per chain.
-
-`bjerrum_length` takes $`N = 1/\Delta s`$ and therefore requires discrete chains. For continuous chains, $`\Delta s`$ is only a contour step, and `coupling` gives $`E`$ with the physical $`N`$.
-
-**Electrostatic potential.** A Hubbard-Stratonovich transformation decouples the interaction with an electrostatic potential $`\psi`$. Like the pressure field, $`\psi`$ is an imaginary-type field stored on the rotated contour. Each type feels $`z_i \psi`$, so the propagator input becomes $`\Gamma_i * (w_i + z_i \psi)`$, and
-
-```math
-\frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, \nabla^2 \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{\nabla^2 \psi}{E} + c
-```
-
-The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
-
-**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 5.1) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`\nabla^2 \psi / E`$ relaxes at the rate $`\gamma_k = s k^2/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing. Like the Leimkuhler-Matthews integrator of the auxiliary fields (Section 3.4), $`\psi`$ takes the mean of the current and the previous noise. It follows the noise scheme the integrator declares (`averaged_noise`, see [Extensions](../internals/Extensions.md#langevin-integrators)): averaged with the Leimkuhler-Matthews integrator, fresh with the Euler integrator. A custom integrator, which does not receive $`\psi`$, must declare it:
-
-```math
-\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k}{4 (k^2/E) \, \delta\tau N}} \, \big(\hat{\xi}_{\mathbf{k}} + \hat{\xi}'_{\mathbf{k}}\big), \qquad a_k = e^{-\gamma_k \delta\tau N}
-```
-
-In this step:
-
-- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream. $`\hat\xi'_{\mathbf{k}}`$ is the noise of the previous step (zero at the first step); checkpoints store it as `psi_noise_prev`.
-- $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
-- The step is the Leimkuhler-Matthews step of $`\psi`$ with the time step $`(1 - a_k)/\gamma_k < \delta\tau N`$ of each mode, so it is stable for any $`\delta\tau`$. As $`k \to 0`$ it becomes the Leimkuhler-Matthews step with mobility $`s`$.
-
-The Leimkuhler-Matthews step samples a Gaussian distribution exactly for any stable time step and any mobilities. For Gaussian fluctuations, the statistics of $`\psi`$ and of the auxiliary fields therefore do not depend on $`\delta\tau`$, although the charge density is explicit.
-
-With the Euler integrator, $`\psi`$ takes fresh noise, $`i \sqrt{(1 - a_k^2)/(2 (k^2/E)\, \delta\tau N)}\, \hat\xi_{\mathbf{k}}`$. The linear modes alone then keep their exact variance, but the explicit charge density changes it at first order in $`\gamma_k \delta\tau N`$. Where the charge density follows $`\psi`$ as $`\hat c = -R \hat\psi`$, the variance is too large by the factor
-
-```math
-\frac{1 + \epsilon}{1 + \frac{2 a_k}{1 + a_k} \epsilon - \frac{1 - a_k}{1 + a_k} \epsilon^2} \approx 1 + \epsilon \tanh\frac{\gamma_k \delta\tau N}{2}, \qquad \epsilon = \frac{R E}{k^2}
-```
-
-Before the Leimkuhler-Matthews noise was introduced, this was the step of every integrator. In the polyampholyte of `TestChargedStructureFunctionRPA` ($`E = 300`$, $`\delta\tau N = 1`$) it put the charge structure functions from $`\psi`$ about 2 % above the RPA; with the averaged noise they agree within 0.5 % ([Structure Function Estimators, Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
-
-**Observables.**
-- **H:** the recorded $`H`$ includes $`H_{el}`$.
-- **Structure functions:** Section 6.1 gives $`S_{ij}`$ of all types, counterions included. For composition modes without an auxiliary field, such as two types that differ only in charge, $`\psi`$ completes the estimator ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)). The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$. The files also hold `charge_structure_function`, the structure function of the smeared charge density. It combines two estimators that use $`\psi`$ with the weight of least variance at each wavevector, and it is much less noisy where screening is strong ([Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
-- **RPA:** the RPA of Section 6.4 adds $`(E/k^2)\, z z^T`$ to the interaction matrix.
-
-**Tests.**
-- `TestClftsElectrostatics` checks:
-  - that zero valences, or zero coupling, reproduce CL-FTS without charges bit for bit;
-  - that the forces of $`\psi`$ and of the auxiliary fields are the derivatives of $`H`$;
-  - that the step of $`\psi`$ without its noise is the exact flow of its force, and that its stationary variance is exact, also with a linear charge response and far beyond the stability limit of Euler steps;
-  - that a continued run reproduces an uninterrupted one bit for bit.
-- `TestChargedStructureFunctionRPA` compares two systems with the RPA:
-  - a charged diblock with counterions;
-  - a polyampholyte melt whose charge mode has no auxiliary field.
-
-**Checked range.** The tests compare with the RPA where fluctuations are weak. The comparison with BioFTS ([Structure Function Estimators, Section 7](StructureFunctionEstimators.md#7-validation)) extends to a polyampholyte whose structure function lies up to 28 % above the RPA. BioFTS also uses complex Langevin dynamics, so this agreement checks the implementation, not the convergence of the method (Section 5). Strong electrostatic coupling has not been validated. In a small charged lattice model whose averages can be summed exactly, stable complex Langevin runs gave a counterion density about 3 % away from the exact value. A smaller time step and other integrators did not remove the difference, and its cause is not resolved. At strong coupling, compare with an independent reference where one exists and inspect the drift tails of `drift_max_history` and `psi_drift_max_history`.
-
-**Limitations.** The implementation supports periodic boxes only and no random copolymers. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
+- **Hamiltonian:** $`H`$ and $`\partial H / \partial (\chi N)`$ are recorded at every sample (`H_history`, `dH_history_*`). In CL-FTS they are complex and recorded as real and imaginary parts (`H_history_real`, `H_history_imag`, `dH_history_*_real`, `dH_history_*_imag`). Their ensemble averages are real, so the imaginary parts average to zero within the statistical error.
+- **Drift:** `drift_max_history` holds the largest scaled force of each sampled step, including dynamical stabilization in CL-FTS. CL-FTS also records the largest drift of every step for each auxiliary field (`drift_max_step_history`, one column per field) and, with charges, that of $`\psi`$ (`psi_drift_max_history` at the sampled steps, `psi_drift_max_step_history` at every step); checkpoints keep the steps since the last statistics file. The linear part $`\nabla^2 \psi / E`$ of the force of $`\psi`$ is integrated exactly and would dominate the maximum at large $`k`$, so $`\psi`$ is recorded apart. [CL-FTS, Section 3](ComplexLangevinSimulation.md#3-correct-convergence) explains their use.
+- **Structure functions:** L-FTS uses the first $`M-1`$ auxiliary fields and real Fourier transforms. CL-FTS uses all fields with $`\lambda_k \neq 0`$ and full complex Fourier transforms, recorded as `structure_function_*_real` and `structure_function_*_imag`; in its compressible model $`S_{AA}`$ also contains the total-density fluctuations. For AB, the composition structure function is $`(S_{AA} + S_{BB} - 2 S_{AB})/4`$ (Section 4.4).
+- **Fields:** CL-FTS stores the complex fields and concentrations as `_real`/`_imag` pairs.
 
 ---
 
-## 6. Structure Functions
+## 4. Structure Functions
 
-### 6.1 Definition
+### 4.1 Definition
 
-The structure function is computed using response theory (chemical potential-density correlation):
+The structure function is the correlation of the segment densities. In units of $`\rho_0 N`$,
 
 ```math
-S_{ij}(\mathbf{k}) = V \sqrt{\bar{n}} \langle \tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k}) \rangle, \qquad \mu_i(\mathbf{r}) = \sum_{k} \frac{A_{ik}\, \Omega_k(\mathbf{r})}{\lambda_k}
+S_{ij}(\mathbf{k}) = \frac{1}{\rho_0 N V} \left\langle \hat{\rho}_i(\mathbf{k}) \, \hat{\rho}_j(-\mathbf{k}) \right\rangle, \qquad \mathbf{k} \neq 0
 ```
 
-where $`\tilde{\mu}_i(\mathbf{k})`$ and $`\tilde{\phi}_j(\mathbf{k})`$ are the Fourier transforms (normalized by the number of grid points) of the chemical potential field $`\mu_i`$ and of the concentration field. The sum runs over the auxiliary fields with $`\lambda_k \neq 0`$ (L-FTS: the first $`M-1`$ of them; CL-FTS: all of them). $`S_{ij}`$ is in units of $`\rho_0 N`$; in the disordered phase at weak fluctuations it approaches the random-phase approximation of [Section 6.4](#64-rpa-reference).
+where $`\hat{\rho}_i(\mathbf{r})`$ is the microscopic density of the segments of type $`i`$ and $`\rho_0`$ is the segment density. In the disordered phase at weak fluctuations, $`S_{ij}`$ approaches the random-phase approximation of [Section 4.4](#44-rpa-reference).
 
-[Structure Function Estimators](StructureFunctionEstimators.md) covers the rest:
-- **Derivation:** the shift of the Gaussian integral over the fields;
-- **Smearing:** the division by $`\Gamma_i`$, and the projections that L-FTS records;
-- **Charges:** the completion by $`\psi`$ for composition modes without an auxiliary field, such as two types that differ only in charge;
+### 4.2 Estimator
+
+A simulation samples fields, not particles. In a field configuration the chains do not interact, and the concentration $`\phi_i`$ is their average density, so $`\langle \tilde{\phi}_i \tilde{\phi}_j \rangle`$ misses the correlation within a chain. At fixed particles, each auxiliary field is Gaussian with a mean proportional to the density it couples to. The correlation of a field with a concentration is therefore proportional to $`S_{ij}`$ itself ([Structure Function Estimators, Section 2](StructureFunctionEstimators.md#2-the-gaussian-shift-identity)). Combined into the chemical potential fields of the monomer types, this gives $`S_{ij}`$ as an average over the sampled fields alone:
+
+```math
+S_{ij}(\mathbf{k}) = \frac{V \sqrt{\bar{N}}}{\Gamma_i(\mathbf{k})} \left\langle \tilde{\mu}_i(\mathbf{k}) \, \tilde{\phi}_j(-\mathbf{k}) \right\rangle, \qquad \mu_i(\mathbf{r}) = \sum_{k:\, \lambda_k \neq 0} \frac{A_{ik}\, \Omega_k(\mathbf{r})}{\lambda_k}
+```
+
+- Tildes denote Fourier transforms normalized by the number of grid points. $`\Gamma_i`$ is the smearing function of type $`i`$ ([Polymer Field Theory, Section 4](PolymerFieldTheory.md#4-smeared-interactions); $`\Gamma_i = 1`$ for contact interactions).
+- The identity needs fluctuating fields, so the sum runs over the sampled fields with $`\lambda_k \neq 0`$: the first $`M-1`$ in L-FTS, all of them in CL-FTS.
+- Each sample takes the fields and the concentrations of the same accepted step, and the recorded $`S_{ij}`$ is the average over the trajectory.
+
+The estimator equals the definition when the sampled fields cover every fluctuating composition mode. [Structure Function Estimators](StructureFunctionEstimators.md) gives the derivation and the remaining cases:
+- **Projections:** what L-FTS records in compressible models, and what is recorded for modes without an auxiliary field;
+- **Charges:** the completion by $`\psi`$ for such modes, e.g. two types that differ only in charge;
 - **Charge structure function**, and a comparison with BioFTS.
 
-### 6.2 Computing Structure Functions
-
-In L-FTS, structure functions are computed by:
-1. Fourier transforming the chemical potential fields $`\mu_i(\mathbf{r})`$
-2. Fourier transforming the concentration fields $`\phi_j(\mathbf{r})`$
-3. Computing $`\tilde{\mu}_i(\mathbf{k}) \tilde{\phi}_j(-\mathbf{k})`$ from the concentrations of the same fields
-4. Averaging over Langevin trajectory
-5. Multiplying by $`V \sqrt{\bar{n}}`$ normalization factor
-
-### 6.3 Physical Interpretation
+### 4.3 Physical Interpretation
 
 - **Peak position**: Characteristic length scale of microphase separation
 - **Peak height**: Degree of ordering (diverges at spinodal)
 - **Low-$`k`$ behavior**: Long-wavelength fluctuations
 
-### 6.4 RPA Reference
+### 4.4 RPA Reference
 
 In the disordered phase at weak fluctuations (large $`\bar{N}`$, $`\chi N`$ well below the order-disorder transition) the structure function approaches the random-phase approximation (RPA) of Leibler (Reference 1). `tests/TestStructureFunctionRPA.py` compares L-FTS and CL-FTS runs, with and without smearing, against the formulas below, and `tests/validation/validate_fts_sampling.py` uses the same reference for the sampling studies of [Numerical Validation](../internals/NumericalValidation.md).
 
-Lengths are in units of $`R_0`$ and $`S_{ij}`$ is in units of $`\rho_0 N`$ as in Section 6.1, i.e. $`S_{ij}`$ is Leibler's per-monomer structure function divided by $`N`$.
+Lengths are in units of $`R_0`$ and $`S_{ij}`$ is in units of $`\rho_0 N`$ as in Section 4.1, i.e. $`S_{ij}`$ is Leibler's per-monomer structure function divided by $`N`$.
 
 **Ideal-chain correlations.** For a block of contour fraction $`f`$ whose monomer type has the relative segment length $`\epsilon`$, let $`x = \epsilon^2 k^2 / 6`$ ($`k^2 R_g^2`$ of a whole chain of that type) and
 
@@ -367,7 +192,7 @@ where the $`M - 1`$ columns of $`Q`$ are orthonormal and orthogonal to $`\mathbf
 
 which is his $`N/S(q) = F(x) - 2\chi N`$.
 
-**Smearing.** The interactions act on the smeared densities, so $`U`$ (or $`X`$) is multiplied by $`\Gamma(\mathbf{k})^2`$, while the recorded structure function is that of the densities (Section 6.1):
+**Smearing.** The interactions act on the smeared densities, so $`U`$ (or $`X`$) is multiplied by $`\Gamma(\mathbf{k})^2`$, while the recorded structure function is that of the densities (Sections 4.1 and 4.2):
 
 ```math
 S(\mathbf{k}) = \left[ G^{-1} + \Gamma(\mathbf{k})^2 \, U \right]^{-1}, \qquad \frac{1}{S_{AA}(k)} = F(x) - 2\chi N \, \Gamma(k)^2 \quad \text{(incompressible AB)}
@@ -375,7 +200,7 @@ S(\mathbf{k}) = \left[ G^{-1} + \Gamma(\mathbf{k})^2 \, U \right]^{-1}, \qquad \
 
 with $`\Gamma(k)^2 = \exp(-a^2 k^2)`$ for Gaussian smearing. This holds in a periodic box, where the recorded $`S_{ij}`$ is divided by $`\Gamma`$.
 
-**Charges.** With one smearing function per type and the valences of Section 5.6:
+**Charges.** With one smearing function per type and the valences of [Polymer Field Theory, Section 5](PolymerFieldTheory.md#5-electrostatic-interactions):
 
 ```math
 S(\mathbf{k}) = \left[ G^{-1} + D_\Gamma \left( U + \frac{E}{k^2} \, z z^T \right) D_\Gamma \right]^{-1}, \qquad D_\Gamma = \mathrm{diag}(\Gamma_1, \ldots, \Gamma_M)
@@ -385,105 +210,53 @@ Here $`G`$ is block-diagonal over the molecules: each molecule contributes its s
 
 **Validity.** The RPA leaves out fluctuation corrections, of relative order $`\bar{N}^{-1/2}`$, which grow as $`\chi N`$ approaches the order-disorder transition. Grid and contour discretization change the high wavevectors, so comparisons use the lowest modes; finite discretization and fluctuation corrections must be distinguished from sampling uncertainty.
 
-**Example.** The conditions of Fig. 3 of Reference 12: symmetric AB diblock ($`f = 0.5`$), discrete chains with $`N = 90`$, $`\zeta N = 90`$, $`\bar{N} = 10^5`$, $`32^3`$ grid with $`L = 4.5 R_0`$, CUDA backend, with contact interactions or Gaussian smearing of $`a_{\mathrm{int}} = 0.02 R_0`$. The bare $`\chi_b N`$ is set so that the effective $`z_\infty \chi_b N = 9`$, with $`z_\infty`$ from Eq. (29) of Reference 12 (0.9548 and 0.9596; the compressible model has the factor $`1/(1 + t/\zeta)`$ in the integrand), and CL-FTS uses the renormalized bare segment length of its Eq. (26) ($`a_b/a = 0.9929`$ and 0.9931). L-FTS treats $`W_+`$ in the partial saddle-point approximation of the same compressible model. Both methods use the LM integrator (L-FTS: $`\Delta t = 8`$; CL-FTS: $`\Delta t = 2`$, $`\alpha_{ds} = 0.01`$) for 15000 steps from zero fields, and the first 5000 steps are discarded. The figure shows $`S = (S_{AA} + S_{BB} - 2 S_{AB})/4`$, the structure function of $`\phi_A - \phi_B`$ used by Reference 12, averaged over shells of equal $`\vert\mathbf{k}\vert`$; error bars are standard errors from two 5000-step blocks. The dotted curve is the incompressible Gaussian-chain RPA at $`\chi N = 9`$.
+**Example.** The conditions of Fig. 3 of Reference 9: symmetric AB diblock ($`f = 0.5`$), discrete chains with $`N = 90`$, $`\zeta N = 90`$, $`\bar{N} = 10^5`$, $`32^3`$ grid with $`L = 4.5 R_0`$, CUDA backend, with contact interactions or Gaussian smearing of $`a_{\mathrm{int}} = 0.02 R_0`$. The bare $`\chi_b N`$ is set so that the effective $`z_\infty \chi_b N = 9`$, with $`z_\infty`$ from Eq. (29) of Reference 9 (0.9548 and 0.9596; the compressible model has the factor $`1/(1 + t/\zeta)`$ in the integrand), and CL-FTS uses the renormalized bare segment length of its Eq. (26) ($`a_b/a = 0.9929`$ and 0.9931). L-FTS treats $`W_+`$ in the partial saddle-point approximation of the same compressible model. Both methods use the LM integrator (L-FTS: $`\Delta t = 8`$; CL-FTS: $`\Delta t = 2`$, $`\alpha_{ds} = 0.01`$) for 15000 steps from zero fields, and the first 5000 steps are discarded. The figure shows $`S = (S_{AA} + S_{BB} - 2 S_{AB})/4`$, the structure function of $`\phi_A - \phi_B`$ used by Reference 9, averaged over shells of equal $`\vert\mathbf{k}\vert`$; error bars are standard errors from two 5000-step blocks. The dotted curve is the incompressible Gaussian-chain RPA at $`\chi N = 9`$.
 
 ![L-FTS, CL-FTS and RPA structure functions](../figures/structure_function_rpa.png)
 
-At the peak ($`k R_0 = 4.63`$), L-FTS gives $`0.306 \pm 0.002`$ (contact) and $`0.295 \pm 0.002`$ (smeared), and CL-FTS gives $`0.316 \pm 0.004`$ and $`0.304 \pm 0.004`$. These agree within about 1 % with the peaks of Fig. 3 of Reference 12 (read from the figure: 0.308 and 0.297 for L-FTS, 0.313 and 0.302 for CL-FTS). Both methods lie below the RPA peak (0.332 at the same $`k`$), which leaves out fluctuation corrections. Reference 12 instead compares the peaks with renormalized one-loop theory and absorbs the remaining difference into a nonlinear $`\chi`$; its coefficient is larger for CL-FTS than for L-FTS (Table I of Reference 12), consistent with CL-FTS lying slightly above L-FTS. The dynamical stabilization used here, which Reference 12 avoided for structure functions, also raises $`S(k^*)`$ slightly (Section 5.2). In CL-FTS, $`S_{AA}`$ also contains a quarter of the total-density fluctuations, about 0.003 at the peak, so it differs from $`S`$.
+At the peak ($`k R_0 = 4.63`$), L-FTS gives $`0.306 \pm 0.002`$ (contact) and $`0.295 \pm 0.002`$ (smeared), and CL-FTS gives $`0.316 \pm 0.004`$ and $`0.304 \pm 0.004`$. These agree within about 1 % with the peaks of Fig. 3 of Reference 9 (read from the figure: 0.308 and 0.297 for L-FTS, 0.313 and 0.302 for CL-FTS). Both methods lie below the RPA peak (0.332 at the same $`k`$), which leaves out fluctuation corrections. Reference 9 instead compares the peaks with renormalized one-loop theory and absorbs the remaining difference into a nonlinear $`\chi`$; its coefficient is larger for CL-FTS than for L-FTS (Table I of Reference 9), consistent with CL-FTS lying slightly above L-FTS. The dynamical stabilization used here, which Reference 9 avoided for structure functions, also raises $`S(k^*)`$ slightly ([CL-FTS, Section 4](ComplexLangevinSimulation.md#4-hot-spots-and-dynamical-stabilization)). In CL-FTS, $`S_{AA}`$ also contains a quarter of the total-density fluctuations, about 0.003 at the peak, so it differs from $`S`$.
 
 ---
 
-## 7. Implementation
+## 5. Renormalization and Calibration
 
-### 7.1 Using the LFTS Class
+### 5.1 Effective Interaction and Chain Size
 
-```python
-from polymerfts import lfts
-import numpy as np
+The ultraviolet (UV) fluctuations of the grid renormalize the interaction: to linear order, the effective Flory-Huggins parameter is $`\chi N = z_\infty \chi_b N`$, where the bare $`\chi_b N`$ is `chi_n` (Reference 5). This holds for L-FTS and CL-FTS, with and without compressibility. CL-FTS has a second correction: the fluctuations of the imaginary (pressure) field also change the chain size. The bare segment length $`a_b`$ is therefore chosen so that $`R_0 = a N^{1/2}`$ in the limit $`\chi_b \to 0`$. In L-FTS and SCFT, $`a_b = a`$.
 
-params = {
-    "platform": "cuda",              # or "cpu-mkl", "cpu-fftw"
-    "nx": [40, 40, 40],              # Grid points
-    "lx": [4.36, 4.36, 4.36],        # Box size
-
-    "chain_model": "discrete",       # or "continuous"
-    "ds": 1/90,                      # Contour step (1/N_Ref)
-
-    "segment_lengths": {"A": 1.0, "B": 1.0},
-    "chi_n": {"A,B": 17.0},
-
-    "polymers": [{
-        "volume_fraction": 1.0,
-        "blocks": [
-            {"type": "A", "length": 0.4},
-            {"type": "B", "length": 0.6},
-        ],
-    }],
-
-    "langevin": {
-        "max_step": 10000,           # Total Langevin steps
-        "dt": 8.0,                   # Time step (delta_tau * N_Ref)
-        "nbar": 10000,               # Invariant polymerization index
-    },
-
-    "recording": {
-        "dir": "data_simulation",
-        "checkpoint_interval": 1000,     # Save fields every N steps
-        "sample_interval": 10,    # Compute S(k) every N steps
-        "statistics_save_interval": 1000,  # Save S(k) every N steps
-    },
-
-    "saddle": {
-        "max_iter": 100,
-        "tolerance": 1e-4,
-    },
-
-    "compressor": {
-        "name": "lram",              # Linear Response + Anderson Mixing
-        "max_hist": 20,
-        "start_error": 5e-1,
-        "mix_min": 0.01,
-        "mix_init": 0.01,
-    },
-
-    "verbose_level": 1,
-}
-
-# Initialize and run
-random_seed = 12345
-simulation = lfts.LFTS(params=params, random_seed=random_seed)
-simulation.run(initial_fields={"A": w_A, "B": w_B})
-```
-
-### 7.2 Key Parameters
-
-| Parameter | Description | Typical Value |
-|-----------|-------------|---------------|
-| `nbar` | Invariant polymerization index $`\bar{N}`$ | 100 - 10000 |
-| `dt` | Time step $`\delta\tau N`$ | 1.0 - 10.0 |
-| `max_step` | Total Langevin steps | 10000 - 100000 |
-| `tolerance` | Incompressibility tolerance | 1e-4 |
-
-### 7.3 Noise Amplitude
-
-The noise amplitude depends on system parameters:
+**Discrete chains.** Eqs. (29) and (26) of Reference 9 give, in units of $`R_0`$ with $`a^2 = 1/N`$ and the monomer density $`\rho_0 = \bar{N}^{1/2} N`$,
 
 ```math
-\sigma = \sqrt{\frac{2 \cdot \delta\tau N}{\Delta V \cdot \sqrt{\bar{N}}}}
+z_\infty = 1 - \frac{1}{(2\pi)^3 \rho_0} \int \frac{d\mathbf{k}}{t(k) \left[ 1 + t(k)/\zeta \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{a^2}{72 (2\pi)^3 \rho_0} \int \frac{k^2 \, d\mathbf{k}}{s^2(k) \left[ 1 + t(k)/\zeta \right]} \right]^{-1}
 ```
 
-where $`\Delta V = V/n_{\mathrm{grid}}`$ is the volume of one grid cell; $`V`$ is the volume of the simulation cell, which includes the angle factor of a non-orthogonal cell ($`\Delta V = \Delta x \Delta y \Delta z`$ only for an orthogonal box).
+In these formulas:
 
-### 7.4 Output Files
+- $`t(k) = \tanh(k^2 a^2/12)/\Gamma^2(k)`$ and $`s(k) = \sinh(k^2 a^2/12)`$;
+- $`\Gamma(k)`$ is the smearing function, and $`\zeta N`$ is `zeta_n`;
+- the integrals run over $`-\pi/\Delta_\nu \le k_\nu \le \pi/\Delta_\nu`$.
 
-| File | Description |
-|------|-------------|
-| `fields_NNNNNN.mat` | Potential fields and concentrations |
-| `structure_function_NNNNNN.mat` | Structure functions $`S_{AA}`$, $`S_{AB}`$, $`S_{BB}`$ |
+In the incompressible limit $`\zeta \to \infty`$ the factor $`1 + t/\zeta`$ goes to 1. For $`\zeta \to \infty`$ and $`\Gamma = 1`$, $`z_\infty`$ equals the bond sum of Reference 5, $`1 - (1 + 2\sum_i P_i)/(\rho_0 \Delta V)`$, which the former `renormalization_discrete.m` evaluated.
+
+**Continuous chains.** Continuous chains use the limit $`N \to \infty`$ of the discrete formulas at a fixed grid in units of $`R_0`$. In this limit, $`\tanh u`$ and $`\sinh u`$ both become $`u = k^2/(12N)`$:
+
+```math
+z_\infty = 1 - \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{12 \, \Gamma^2(k) \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]}, \qquad \frac{a_b}{a} = \left[ 1 + \frac{1}{(2\pi)^3 \sqrt{\bar{N}}} \int \frac{2 \, d\mathbf{k}}{k^2 \left[ 1 + k^2/(12 \zeta N \Gamma^2(k)) \right]} \right]^{-1}
+```
+
+Both corrections grow without bound as the grid is refined, as $`z_\infty`$ of discrete chains with contact interactions does.
+
+### 5.2 Calibration
+
+`scripts/analysis/renormalization.py` ([Tools, Section 3](../references/Tools.md#3-χn-renormalization)) evaluates both corrections from a fields file or from options. To use the calibration, set `chi_n` to the $`\chi_b N`$ of the target $`z_\infty \chi_b N`$ and, in CL-FTS, multiply all `segment_lengths` by $`a_b/a`$. Reference 9 adds a quadratic term, $`\chi = z_\infty \chi_b + c_2 (z_\infty \chi_b)^2`$, fitted to renormalized one-loop theory; $`c_2`$ differs between CL-FTS and L-FTS. Section 4.4 gives an example.
+
+### 5.3 Earlier RPA Calibration
+
+The former `renormalization_rpa.m` integrated the athermal RPA of Reference 4 instead. That integral also contains a finite term of order $`\bar{N}^{-1/2}`$ from $`k \lesssim 1/R_0`$, which Eq. (29) does not include because it is derived for $`N \to \infty`$. For example, for a $`32^3`$ grid with $`L = 4 R_0`$ and $`\bar{N} = 10^4`$, the former script gave $`z_\infty = 0.858`$, while the formula above gives 0.813.
 
 ---
 
-## 8. References
+## 6. References
 
 1. Leibler, L. "Theory of Microphase Separation in Block Copolymers." *Macromolecules* **13**, 1602 (1980).
 
@@ -491,20 +264,14 @@ where $`\Delta V = V/n_{\mathrm{grid}}`$ is the volume of one grid cell; $`V`$ i
 
 3. Lennon, E. M., Katsov, K. & Fredrickson, G. H. "Free Energy Evaluation in Field-Theoretic Polymer Simulations." *Phys. Rev. Lett.* **101**, 138302 (2008).
 
-4. Aarts, G., Seiler, E. & Stamatescu, I.-O. "Complex Langevin method: When can it be trusted?" *Phys. Rev. D* **81**, 054508 (2010).
+4. Vorselaars, B., Stasiak, P. & Matsen, M. W. "Field-Theoretic Simulation of Block Copolymers at Experimentally Relevant Molecular Weights." *Macromolecules* **48**, 9071 (2015).
 
-5. Delaney, K. T. & Fredrickson, G. H. "Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions." *J. Phys. Chem. B* **120**, 7615 (2016).
+5. Beardsley, T. M. & Matsen, M. W. "Calibration of the Flory-Huggins interaction parameter in field-theoretic simulations." *J. Chem. Phys.* **150**, 174902 (2019).
 
-6. Nagata, K., Nishimura, J. & Shimasaki, S. "Argument for justification of the complex Langevin method and the condition for correct convergence." *Phys. Rev. D* **94**, 114515 (2016).
+6. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order–disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
 
-7. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order–disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
+7. Vorselaars, B. "Efficient Langevin and Monte Carlo sampling algorithms: The case of field-theoretic simulations." *J. Chem. Phys.* **158**, 114117 (2023).
 
-8. Matsen, M. W. & Beardsley, T. M. "Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation." *Polymers* **13**, 2437 (2021).
+8. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
 
-9. Vorselaars, B. "Efficient Langevin and Monte Carlo sampling algorithms: The case of field-theoretic simulations." *J. Chem. Phys.* **158**, 114117 (2023).
-
-10. Willis, J. D. & Matsen, M. W. "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts." *J. Chem. Phys.* **161**, 244903 (2024).
-
-11. Morse, D. C., Yong, D. & Chen, K. "Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems." *Macromolecules* **58**, 816 (2025).
-
-12. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+9. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).

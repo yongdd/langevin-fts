@@ -102,7 +102,7 @@ the noise scheme the integrator declares in `averaged_noise`: `True` averages tw
 from the ψ stream like `lm`, `False` gives fresh noise like `euler`. The built-in
 integrators declare it; a custom integrator used with `electrostatics` must declare it,
 or the construction raises `ValidationError`
-([L-FTS and CL-FTS theory, Section 5.6](../theory/LangevinFieldTheoreticSimulation.md#56-charged-systems)).
+([CL-FTS theory, Section 6](../theory/ComplexLangevinSimulation.md#6-charged-systems)).
 
 The loop draws noise once per proposal and maintains previous noise after
 acceptance. Intermediate stages reuse that noise. `evaluate_force(candidate)`
