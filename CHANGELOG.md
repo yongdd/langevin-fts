@@ -37,7 +37,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     A fluctuating electrostatic potential ψ carries this interaction. Its noise comes from
     the jumped stream of the auxiliary fields (`PCG64.jumped()`), so runs with neighboring
     seeds share no stream. ψ is kept in Fourier space, where its stiff linear part is
-    integrated exactly for each wavevector.
+    integrated exactly for each wavevector. Like the Leimkuhler-Matthews integrator of the
+    auxiliary fields, ψ takes the mean of the current and the previous noise, with every
+    integrator but `euler` (custom integrators included; `psi_noise_prev` in checkpoints,
+    older checkpoints continue from zero noise). Its Gaussian statistics are then exact for
+    any time step, although the charge density of each step is explicit. With fresh noise
+    alone, as before and still with the Euler integrator, the variance of ψ is biased at
+    first order in the time step: in `TestChargedStructureFunctionRPA` the charge structure
+    functions from ψ lay 2 % above the RPA, and the field-field form up to 30 % below it.
   - Charged block copolymers and counterions are ordinary polymers and one-segment
     molecules in `polymers`; the input must be electroneutral.
   - Smearing is required with charges, with a positive Gaussian length for each charged
@@ -61,12 +68,19 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     weight of least variance, stored as `charge_structure_function_weight`. The
     field-field form had 20-600 times less variance where screening is strong, and the
     mixed form is better where it is weak. Its pending sums continue after a restart.
+    The two forms are also stored alone (`charge_structure_function_mixed`,
+    `charge_structure_function_field_field`): in the Gaussian regime the combination
+    follows from the linear response of the chains and does not show how well ψ is
+    sampled.
   - Limitations: periodic boxes only, no random copolymers.
 
-  `TestClftsElectrostatics` checks the reductions to neutral CL-FTS (bit for bit), the
-  forces against finite differences of H and bitwise restarts.
-  `TestChargedStructureFunctionRPA` compares two systems with the RPA: a charged diblock
-  with counterions, and a polyampholyte melt whose charge mode has no auxiliary field.
+  `TestClftsElectrostatics` checks the reductions to neutral CL-FTS and to one common
+  smearing length (bit for bit), the forces against finite differences of H, the ψ step
+  against the exact flow of its force, the stationary variance of ψ without charges and
+  with a linear charge response, and bitwise restarts. `TestChargedStructureFunctionRPA`
+  compares two systems with the RPA: a charged diblock with counterions, and a
+  polyampholyte melt whose charge mode has no auxiliary field. It estimates standard
+  errors from block means and requires every tolerance to exceed 2 of them.
   Example: `examples/clfts/ChargedDiblock.py`.
 
 ### Interface changes
@@ -109,7 +123,6 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   instead of three identical copies. The numerical method is resolved and validated there,
   once. The CPU and CUDA backend constructors take the resolved `NumericalMethodInfo`
   instead of the method names.
-
 
 ### Fixed
 

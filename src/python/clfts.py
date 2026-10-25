@@ -284,6 +284,10 @@ class CLFTS:
                 self._psi_probe = u / (u @ u)
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        # ψ averages two noises as the Leimkuhler-Matthews integrator does (electrostatics.py),
+        # also with custom integrators; only the Euler integrator gives it fresh noise
+        if self.electrostatics is not None:
+            self.electrostatics.averaged_noise = self.integrator.name != "euler"
         self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):
@@ -580,6 +584,9 @@ class CLFTS:
                                   "at zero and relaxes again", RuntimeWarning)
                 self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
 
+            # Without a checkpoint ψ starts without previous noise, like the auxiliary fields
+            self.electrostatics.previous_noise = np.zeros(self.prop_solver.n_grid)
+
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
         drift_history = []
@@ -856,7 +863,9 @@ class CLFTS:
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(sf_scaled)
                 # Structure function of the smeared charge density c = Σ_i z_i Γ_i φ_i: <M> + w <D>
                 # with the weight w = -Cov(M, D)/Var(D) of least variance at each wavevector (w = 0:
-                # the mixed form, w = 1: the field-field form)
+                # the mixed form, w = 1: the field-field form). Both forms are recorded too: in the
+                # Gaussian regime the combination follows from the linear response of the chains
+                # and does not show how well ψ is sampled (docs/theory/StructureFunctionEstimators.md)
                 if charge_sums is not None:
                     count = max(sf_sample_count, 1)
                     mixed = charge_sums["charge_mixed"] / count
@@ -868,6 +877,9 @@ class CLFTS:
                     mdic["charge_structure_function_real"] = np.real(s_charge)
                     mdic["charge_structure_function_imag"] = np.imag(s_charge)
                     mdic["charge_structure_function_weight"] = weight
+                    for form, s_form in (("mixed", mixed), ("field_field", mixed + difference)):
+                        mdic["charge_structure_function_" + form + "_real"] = np.real(s_form)
+                        mdic["charge_structure_function_" + form + "_imag"] = np.imag(s_form)
                 mdic["sample_count"] = sf_sample_count
                 mdic["simulation_metadata_json"] = json.dumps(self.metadata)
                 savemat(

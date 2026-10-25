@@ -12,10 +12,14 @@ field it is an imaginary-type field, and type i feels z_i ψ, so the propagator 
 with the coupling E = 4π l_B ρ₀ N R₀² = 4π (l_B/R₀) N² N̄^(1/2). At the saddle point
 -∇²ψ = E c (Poisson equation). ψ moves like an imaginary field (drift +δH/δψ, imaginary
 noise). Its linear part ∇²ψ/E is stiff at large k and is integrated exactly for each
-wavevector (exponential time differencing), so that the stationary variance of the
-linear modes does not depend on the time step; the charge density stays explicit.
-ψ is therefore kept in Fourier space; its grid values follow from one inverse transform
-per step, and H is evaluated by Parseval's theorem.
+wavevector (exponential time differencing); the charge density stays explicit. ψ takes the
+mean of the current and the previous noise, as the Leimkuhler-Matthews integrator of the
+auxiliary fields does: the step is a Leimkuhler-Matthews step of ψ with the time step
+(1 - exp(-γ δτN))/γ of each mode, γ = s k²/E, and the Gaussian statistics of ψ and the
+auxiliary fields are exact for any time step. Only with the Euler integrator does ψ take
+fresh noise; the explicit charge density then biases its variance at first order in γ δτN.
+ψ is kept in Fourier space; its grid values follow from one inverse transform per step,
+and H is evaluated by Parseval's theorem.
 The uniform mode of ψ is zero (electroneutrality). Periodic boxes only.
 
 References: Riggleman, Kumar & Fredrickson, J. Chem. Phys. 136, 024903 (2012);
@@ -65,11 +69,17 @@ class Electrostatics:
 
         self.random_bg = bit_generator
         self.random = np.random.Generator(self.random_bg)
+        # Mean of the current and the previous noise (Leimkuhler-Matthews); CLFTS turns it
+        # off for the Euler integrator only
+        self.averaged_noise = True
+        self.previous_noise = np.zeros(self.psi.size)
 
         # Exact (Ornstein-Uhlenbeck) step of the linear part for each wavevector, rate
-        # γ_k = s k²/E: decay a = exp(-γ_k δτN), response (1 - a)/(k²/E) to the charge
-        # density and noise amplitude sqrt((1 - a²)/(2 k²/E δτN)), which keeps the exact
-        # stationary variance; all three reduce to the Euler step as k → 0
+        # γ_k = s k²/E: decay a = exp(-γ_k δτN) and response (1 - a)/(k²/E) to the charge
+        # density. The noise amplitude sqrt((1 - a²)/(2 k²/E δτN)) of fresh noise keeps the
+        # exact variance of the linear part; sqrt((1 - a)/(4 k²/E δτN)) on the sum of two
+        # noises is that of a Leimkuhler-Matthews step of time (1 - a)/γ_k, exact also with
+        # the explicit charge density. All reduce to the Euler (LM) step as k → 0
         if self.coupling > 0:
             dt, s = float(langevin["dt"]), self.psi_dt_scaling
             rate = self.k_sq / self.coupling
@@ -77,6 +87,8 @@ class Electrostatics:
                 self._decay = np.exp(-rate * dt * s)
                 self._response = np.where(rate > 0, -np.expm1(-rate * dt * s) / rate, dt * s)
                 self._noise = np.where(rate > 0, np.sqrt(-np.expm1(-2 * rate * dt * s) / (2 * rate * dt)), np.sqrt(s))
+                self._averaged_noise = np.where(rate > 0, np.sqrt(-np.expm1(-rate * dt * s) / (4 * rate * dt)),
+                                                np.sqrt(s) / 2)
 
     @property
     def psi(self):
@@ -124,9 +136,14 @@ class Electrostatics:
         if self.coupling <= 0:
             return
         xi = self.random.normal(0.0, self.sigma, self.psi.size)
+        if self.averaged_noise:
+            noise = self._averaged_noise * np.fft.fftn(np.reshape(xi + self.previous_noise, self.nx))
+            self.previous_noise = xi
+        else:
+            noise = self._noise * np.fft.fftn(np.reshape(xi, self.nx))
         psi_k = (self._decay * self._psi_k
                  + self._response * np.fft.fftn(np.reshape(c, self.nx))
-                 + 1j * self._noise * np.fft.fftn(np.reshape(xi, self.nx)))
+                 + 1j * noise)
         psi_k[(0,) * len(self.nx)] = 0.0
         self._psi_k = psi_k
         self._psi = np.reshape(np.fft.ifftn(psi_k), -1)
@@ -148,13 +165,14 @@ class Electrostatics:
     def checkpoint_data(self):
         return {"psi_real": np.real(self.psi), "psi_imag": np.imag(self.psi),
                 "psi_k_real": np.real(self._psi_k), "psi_k_imag": np.imag(self._psi_k),
-                "psi_rng_state_json": json.dumps(self.random_bg.state)}
+                "psi_rng_state_json": json.dumps(self.random_bg.state), "psi_noise_prev": self.previous_noise}
 
     def restore(self, data):
         """ψ and its noise stream from a checkpoint.
 
         ψ(k) is restored as stored, because transforming ψ back does not reproduce it bit
-        for bit; checkpoints written before ψ(k) was stored fall back to the transform.
+        for bit; checkpoints written before ψ(k) was stored fall back to the transform, and
+        those written before the previous noise was stored start from zero noise.
         """
         missing = [key for key in ("psi_real", "psi_imag", "psi_rng_state_json") if key not in data]
         if missing:
@@ -165,3 +183,7 @@ class Electrostatics:
             self._psi_k = np.reshape(np.asarray(data["psi_k_real"]) + 1j * np.asarray(data["psi_k_imag"]),
                                      self.nx).astype(np.complex128)
         self.random_bg.state = json.loads(str(data["psi_rng_state_json"]))
+
+        previous = data.get("psi_noise_prev")
+        self.previous_noise = (np.zeros(self.psi.size) if previous is None
+                               else np.asarray(previous, dtype=np.float64).reshape(-1).copy())

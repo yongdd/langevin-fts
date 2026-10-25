@@ -368,6 +368,6 @@ Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT 
 
 CL-FTS uses complex fields, so its files differ from those of L-FTS:
 - They hold full FFT arrays of shape `[nx, ny, nz]`, with the parts `structure_function_A_B_real` and `structure_function_A_B_imag`.
-- With electrostatics they also hold `charge_structure_function_real` and `_imag`: the structure function of the smeared charge density. At each wavevector it combines the mixed and the field-field estimators of the electrostatic potential with the weight of least variance; the weight is stored as `charge_structure_function_weight`. It is less noisy than $`\sum_{ij} z_i z_j S_{ij}`$, by orders of magnitude where screening is strong.
+- With electrostatics they also hold `charge_structure_function_real` and `_imag`: the structure function of the smeared charge density. At each wavevector it combines the mixed and the field-field estimators of the electrostatic potential with the weight of least variance; the weight is stored as `charge_structure_function_weight`. It is less noisy than $`\sum_{ij} z_i z_j S_{ij}`$, by orders of magnitude where screening is strong. The two forms alone are stored as `charge_structure_function_mixed_*` and `charge_structure_function_field_field_*`: in the Gaussian regime only they show how well ψ is sampled.
 
 See [Structure Function Estimators](../theory/StructureFunctionEstimators.md) for all three estimators.

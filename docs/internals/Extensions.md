@@ -96,6 +96,11 @@ CLFTS uses real exchange-field noise and imaginary pressure-field noise. LM
 averages `noise` and `previous_noise`; Euler uses only `noise`. At a fresh run,
 previous noise is zero, preserving the existing LM initialization.
 
+With `electrostatics`, the integrator does not receive the electrostatic potential ψ.
+CLFTS advances ψ after the auxiliary fields with its own exponential LM step, which
+averages two noises from the ψ stream; only the built-in `euler` integrator gives ψ
+fresh noise ([L-FTS and CL-FTS theory, Section 5.6](../theory/LangevinFieldTheoreticSimulation.md#56-charged-systems)).
+
 The loop draws noise once per proposal and maintains previous noise after
 acceptance. Intermediate stages reuse that noise. `evaluate_force(candidate)`
 evaluates the force at new active fields: LFTS solves the corresponding imaginary

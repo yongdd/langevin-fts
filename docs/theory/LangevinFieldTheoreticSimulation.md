@@ -251,19 +251,27 @@ The second form uses $`\rho_0 R_0^3 = N C = N \bar{N}^{1/2}`$, which follows fro
 
 The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
 
-**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 5.1) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`\nabla^2 \psi / E`$ relaxes at the rate $`s k^2/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing:
+**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 5.1) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`\nabla^2 \psi / E`$ relaxes at the rate $`\gamma_k = s k^2/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing. Like the Leimkuhler-Matthews integrator of the auxiliary fields (Section 3.4), $`\psi`$ takes the mean of the current and the previous noise; it does so with every integrator except the Euler integrator, and also with custom integrators, which do not receive $`\psi`$:
 
 ```math
-\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k^2}{2 (k^2/E) \, \delta\tau N}} \, \hat{\xi}_{\mathbf{k}}, \qquad a_k = e^{-s (k^2/E) \delta\tau N}
+\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k}{4 (k^2/E) \, \delta\tau N}} \, \big(\hat{\xi}_{\mathbf{k}} + \hat{\xi}'_{\mathbf{k}}\big), \qquad a_k = e^{-\gamma_k \delta\tau N}
 ```
 
 In this step:
 
-- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream.
+- $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of Section 3.2, drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream. $`\hat\xi'_{\mathbf{k}}`$ is the noise of the previous step (zero at the first step); checkpoints store it as `psi_noise_prev`.
 - $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
-- As $`k \to 0`$, the step becomes the Euler step with mobility $`s`$.
+- The step is the Leimkuhler-Matthews step of $`\psi`$ with the time step $`(1 - a_k)/\gamma_k < \delta\tau N`$ of each mode, so it is stable for any $`\delta\tau`$. As $`k \to 0`$ it becomes the Leimkuhler-Matthews step with mobility $`s`$.
 
-The stationary variance of the linear modes does not depend on $`\delta\tau`$, while the response to the charge density stays explicit.
+The Leimkuhler-Matthews step samples a Gaussian distribution exactly for any stable time step and any mobilities. For Gaussian fluctuations, the statistics of $`\psi`$ and of the auxiliary fields therefore do not depend on $`\delta\tau`$, although the charge density is explicit.
+
+With the Euler integrator, $`\psi`$ takes fresh noise, $`i \sqrt{(1 - a_k^2)/(2 (k^2/E)\, \delta\tau N)}\, \hat\xi_{\mathbf{k}}`$. The linear modes alone then keep their exact variance, but the explicit charge density changes it at first order in $`\gamma_k \delta\tau N`$. Where the charge density follows $`\psi`$ as $`\hat c = -R \hat\psi`$, the variance is too large by the factor
+
+```math
+\frac{1 + \epsilon}{1 + \frac{2 a_k}{1 + a_k} \epsilon - \frac{1 - a_k}{1 + a_k} \epsilon^2} \approx 1 + \epsilon \tanh\frac{\gamma_k \delta\tau N}{2}, \qquad \epsilon = \frac{R E}{k^2}
+```
+
+Before the Leimkuhler-Matthews noise was introduced, this was the step of every integrator. In the polyampholyte of `TestChargedStructureFunctionRPA` ($`E = 300`$, $`\delta\tau N = 1`$) it put the charge structure functions from $`\psi`$ about 2 % above the RPA; with the averaged noise they agree within 0.5 % ([Structure Function Estimators, Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
 
 **Observables.**
 - **H:** the recorded $`H`$ includes $`H_{el}`$.
@@ -274,6 +282,7 @@ The stationary variance of the linear modes does not depend on $`\delta\tau`$, w
 - `TestClftsElectrostatics` checks:
   - that zero valences, or zero coupling, reproduce CL-FTS without charges bit for bit;
   - that the forces of $`\psi`$ and of the auxiliary fields are the derivatives of $`H`$;
+  - that the step of $`\psi`$ without its noise is the exact flow of its force, and that its stationary variance is exact, also with a linear charge response and far beyond the stability limit of Euler steps;
   - that a continued run reproduces an uninterrupted one bit for bit.
 - `TestChargedStructureFunctionRPA` compares two systems with the RPA:
   - a charged diblock with counterions;

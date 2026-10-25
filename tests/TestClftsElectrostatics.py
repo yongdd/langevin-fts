@@ -3,13 +3,20 @@
 
 1. Neutral reductions: with all valences zero, the auxiliary fields and concentrations
    equal those of CL-FTS without electrostatics (psi draws its own noise); with
-   charges but coupling E = 0, H and the measurements are equal as well.
+   charges but coupling E = 0, H and the measurements are equal as well. Per-type
+   smearing lengths that are all equal reproduce one common length bit for bit.
 2. Forces: the force of psi, lap(psi)/E + c, and the forces of the auxiliary fields
    are the derivatives of H, by central differences around random complex fields
    (standard deviation 5 for the real parts).
-3. Restart: a run continued from a checkpoint with pending measurements reproduces
+3. Step of psi: without its noise, one step is the exact flow of
+   d psi/d tau = s dH/d psi over dt (fine RK4 steps of the force). The stationary variance
+   of every mode is that of exp(-H), V Nbar^(1/2) (k^2/E + R) <|psi(k)|^2> = 1, without
+   charges and, with the averaged noise of the LM integrator, also for a charge density
+   c = -R psi held fixed during each step; at time steps far beyond the stability limit of
+   Euler steps too.
+4. Restart: a run continued from a checkpoint with pending measurements reproduces
    the uninterrupted run bit for bit, including psi and its noise stream.
-4. Input checks: electroneutrality, monomer types, coupling, smearing, boundaries,
+5. Input checks: electroneutrality, monomer types, coupling, smearing, boundaries,
    random copolymers and the methods other than CL-FTS.
 """
 import contextlib
@@ -97,6 +104,15 @@ def neutral_reductions(root):
     assert max_difference(mat(root / "plain", "structure_function_000006.mat"),
                           mat(root / "unscreened", "structure_function_000006.mat"), ("structure_function_",)) == 0.0
 
+    # Per-type smearing lengths that are all equal: the run of one common length
+    common, per_type = parameters(root / "common"), parameters(root / "per_type")
+    common["smearing"]["a_int"] = 0.15
+    per_type["smearing"]["a_int"] = dict.fromkeys(("A", "B", "C"), 0.15)
+    run(common), run(per_type)
+    for name, prefixes in (("fields_000006.mat", ("w_", "phi_", "psi_real", "psi_imag", "psi_k_")),
+                           ("structure_function_000006.mat", ("structure_function_", "charge_structure_function"))):
+        assert max_difference(mat(root / "common", name), mat(root / "per_type", name), prefixes) == 0.0
+
 
 def hamiltonian(sim, w_aux):
     phi, _ = sim.compute_concentrations(w_aux)
@@ -148,6 +164,84 @@ def forces(root):
         assert abs((h_plus - h_minus) / (2 * eps) - expected) < 1e-6 * max(1.0, abs(expected)), f"aux force {i}"
 
 
+def psi_step(root):
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(parameters(root / "step"), random_seed=5)
+    es, n_grid = sim.electrostatics, int(np.prod(NX))
+    dt, s = sim.langevin["dt"], es.psi_dt_scaling
+    rng = np.random.default_rng(31)
+
+    def zero_mean(x):
+        return x - np.mean(x)
+    psi0 = zero_mean(rng.normal(0.0, 1.0, n_grid) + 1j * rng.normal(0.0, 1.0, n_grid))
+    c = zero_mean(rng.normal(0.0, 1.0, n_grid) + 1j * rng.normal(0.0, 1.0, n_grid))
+
+    # The same noise from psi = 0 and c = 0: the difference is the deterministic part of the step
+    state, previous = es.random_bg.state, rng.normal(0.0, es.sigma, n_grid)
+    es.psi, es.previous_noise = psi0, previous.copy()
+    es.step(c)
+    stepped = es.psi.copy()
+    es.random_bg.state = state
+    es.psi, es.previous_noise = np.zeros(n_grid), previous.copy()
+    es.step(np.zeros(n_grid))
+    noise = es.psi.copy()
+
+    def drift(psi):
+        es.psi = psi
+        return s * es.force(c)
+    flow, n_sub = psi0.copy(), 200
+    h = dt / n_sub
+    for _ in range(n_sub):
+        k1 = drift(flow)
+        k2 = drift(flow + h / 2 * k1)
+        k3 = drift(flow + h / 2 * k2)
+        k4 = drift(flow + h * k3)
+        flow = flow + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+    assert np.max(np.abs(stepped - noise - flow)) < 1e-10 * np.max(np.abs(flow)), "deterministic part of the psi step"
+
+    # Stationary variance against exp(-H) of psi with a charge density that follows it linearly,
+    # c = -R psi (the Gaussian response of the chains; R = 0: no charges):
+    # V Nbar^(1/2) (k^2/E + R) <|psi(k)/n|^2> = 1 for every mode. The mean over the modes uses 20
+    # blocks of 1000 steps after 10 relaxation times of the slowest free mode. At dt = 20 the
+    # fastest modes have gamma dt = 5, beyond 2, where Euler steps diverge. The averaged noise of
+    # the LM integrator is exact also with R > 0; fresh noise (Euler integrator) is exact for R = 0
+    # only (with R = 0.1 its variance is 9 % too large at dt = 2 and 3 times at dt = 20)
+    for dt, integrator, response in ((2.0, "lm", 0.0), (20.0, "lm", 0.0), (20.0, "euler", 0.0),
+                                     (2.0, "lm", 0.1), (20.0, "lm", 0.1)):
+        params = parameters(root / "equipartition")
+        params["langevin"].update(dt=dt, integrator=integrator)
+        params["electrostatics"]["charges"] = {"A": 0.0, "C": 0.0}
+        with contextlib.redirect_stdout(io.StringIO()):
+            sim = CLFTS(params, random_seed=5)
+        es = sim.electrostatics
+        rate = es.k_sq / es.coupling
+        scale = sim.prop_solver.get_volume() * np.sqrt(sim.langevin["nbar"]) * (rate + response) / n_grid ** 2
+        gamma_dt = rate * es.psi_dt_scaling * dt
+        for _ in range(int(np.ceil(10 / gamma_dt[rate > 0].min()))):
+            es.step(-response * es.psi)
+        blocks = np.zeros(20)
+        for b in range(len(blocks)):
+            total = np.zeros(NX)
+            for _ in range(1000):
+                es.step(-response * es.psi)
+                total += np.abs(es.psi_k) ** 2
+            blocks[b] = np.mean((scale * total / 1000)[rate > 0])
+        mean, error = np.mean(blocks), np.std(blocks, ddof=1) / np.sqrt(len(blocks))
+        assert abs(mean - 1.0) < 0.02 and 3 * error < 0.02, \
+            f"stationary variance of psi ({integrator}, dt = {dt}, R = {response}): {mean:.4f} +- {error:.4f} of exp(-H)"
+
+    # Every integrator but Euler, custom ones included, gives psi the averaged noise
+    class Custom:
+        name, settings = "custom", {}
+
+        def step(self, fields, force, **kwargs):
+            return fields
+    for integrator, averaged in (("lm", True), (Custom(), True), ("euler", False)):
+        with contextlib.redirect_stdout(io.StringIO()):
+            sim = CLFTS(parameters(root / "integrators"), random_seed=5, integrator=integrator)
+        assert sim.electrostatics.averaged_noise == averaged, f"averaged psi noise with the integrator {integrator}"
+
+
 def restart(root):
     sim = run(parameters(root / "full"))
     # psi draws from the jumped stream of the auxiliary fields, recorded in the run metadata
@@ -159,7 +253,7 @@ def restart(root):
     run(parameters(root / "part", steps=3))
     run(parameters(root / "part"), continue_from=root / "part" / "fields_000003.mat")
     a, b = mat(root / "full", "fields_000006.mat"), mat(root / "part", "fields_000006.mat")
-    assert max_difference(a, b, ("w_", "phi_", "psi_real", "psi_imag", "normal_noise_prev")) == 0.0
+    assert max_difference(a, b, ("w_", "phi_", "psi_real", "psi_imag", "normal_noise_prev", "psi_noise_prev")) == 0.0
     assert str(a["psi_rng_state_json"]) == str(b["psi_rng_state_json"])
     for name in ("dH_000006.mat", "structure_function_000006.mat"):
         assert max_difference(mat(root / "full", name), mat(root / "part", name),
@@ -254,7 +348,7 @@ def main():
         return 77
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        for name, check in (("neutral reductions", neutral_reductions), ("forces", forces),
+        for name, check in (("neutral reductions", neutral_reductions), ("forces", forces), ("psi step", psi_step),
                             ("restart", restart), ("input checks", input_checks)):
             check(root)
             print(f"[PASS] {name}")
