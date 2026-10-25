@@ -14,8 +14,10 @@
 """
 import contextlib
 import io
+import json
 import os
 import tempfile
+import warnings
 from pathlib import Path
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -113,6 +115,9 @@ def forces(root):
     w_aux = rng.normal(0.0, 5.0, (M, n_grid)) + 1j * rng.normal(0.0, 1.0, (M, n_grid))
     sim.mpt.pin_dropped_fields(w_aux)
     es.psi = rng.normal(0.0, 1.0, n_grid) + 1j * rng.normal(0.0, 1.0, n_grid)
+    # psi is complex: psi(-k) is the index-reversed psi(k), FFT[conj psi](k) conjugated
+    psi_grid = np.reshape(es.psi, NX)
+    assert np.allclose(es.psi_minus_k(), np.conj(np.fft.fftn(np.conj(psi_grid))), rtol=0, atol=1e-10), "psi(-k)"
     _, phi_smeared = hamiltonian(sim, w_aux)
     psi_force = es.force(es.charge_density(phi_smeared))
     aux_force = sim.mpt.compute_func_deriv(w_aux, phi_smeared, range(M))
@@ -144,7 +149,13 @@ def forces(root):
 
 
 def restart(root):
-    run(parameters(root / "full"))
+    sim = run(parameters(root / "full"))
+    # psi draws from the jumped stream of the auxiliary fields, recorded in the run metadata
+    metadata = json.loads(str(mat(root / "full", "dH_000006.mat")["simulation_metadata_json"]))
+    assert metadata["initial_psi_rng_state"] == np.random.PCG64(5).jumped().state
+    # A checkpoint without psi is rejected
+    expect_validation_error(lambda: sim.electrostatics.restore({"psi_real": np.zeros(int(np.prod(NX)))}),
+                            "no electrostatic potential")
     run(parameters(root / "part", steps=3))
     run(parameters(root / "part"), continue_from=root / "part" / "fields_000003.mat")
     a, b = mat(root / "full", "fields_000006.mat"), mat(root / "part", "fields_000006.mat")
@@ -153,6 +164,32 @@ def restart(root):
     for name in ("dH_000006.mat", "structure_function_000006.mat"):
         assert max_difference(mat(root / "full", name), mat(root / "part", name),
                               ("H_history", "dH_history", "structure_function_", "charge_structure_function")) == 0.0
+    # The drift of psi is recorded apart, and its pending samples continue after a restart
+    a, b = mat(root / "full", "dH_000006.mat"), mat(root / "part", "dH_000006.mat")
+    assert np.size(a["psi_drift_max_history"]) == 6 and np.all(a["psi_drift_max_history"] > 0)
+    assert max_difference(a, b, ("psi_drift_max_history",)) == 0.0
+
+    # A run continued by hand takes psi through initial_psi; without it psi restarts at zero
+    fields = mat(root / "part", "fields_000003.mat")
+    psi = fields["psi_real"] + 1j * fields["psi_imag"]
+    initial = {m: fields["w_" + m + "_real"] + 1j * fields["w_" + m + "_imag"] for m in ("A", "B", "C")}
+    for given in (psi, None):
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sim = CLFTS(parameters(root / "manual", steps=4), random_seed=5)
+            es, first = sim.electrostatics, []
+
+            def step(c, step=es.step):
+                first.append(es.psi.copy())
+                step(c)
+            es.step = step
+            sim.run(initial, normal_noise_prev=fields["normal_noise_prev"], start_langevin_step=4, initial_psi=given)
+        assert np.array_equal(first[0], np.zeros_like(psi) if given is None else psi), "psi at the start of step 4"
+        assert any("initial_psi" in str(w.message) for w in caught) == (given is None), "warning without initial_psi"
+    expect_validation_error(lambda: CLFTS(parameters(root / "manual", steps=4)).run(
+        initial, start_langevin_step=4, initial_psi=np.zeros(3)), "initial_psi")
+    expect_validation_error(lambda: CLFTS(parameters(root / "manual", steps=4, electrostatics=False)).run(
+        initial, initial_psi=psi), "needs 'electrostatics'")
 
 
 def expect_validation_error(make, message):
@@ -179,6 +216,7 @@ def input_checks(root):
     expect_validation_error(changed(lambda p: p["electrostatics"].update(psi_dt_scaling=0.0)), "psi_dt_scaling")
     expect_validation_error(changed(lambda p: p["electrostatics"].update(psi_dt_scale=0.2)), "unknown keys")
     expect_validation_error(changed(lambda p: p.pop("smearing")), "needs 'smearing'")
+    expect_validation_error(changed(lambda p: p["smearing"]["a_int"].update(C=0.0)), "positive smearing length")
     expect_validation_error(changed(lambda p: p.update(bc=["reflecting"] * 4)), "periodic boxes only")
     expect_validation_error(changed(lambda p: p["smearing"]["a_int"].pop("C")), "one length for each monomer type")
 

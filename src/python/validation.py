@@ -337,8 +337,16 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
             raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
     _finite_number(electrostatics.get("psi_dt_scaling", 1.0), "electrostatics.psi_dt_scaling", positive=True)
     # Point charges have a grid-dependent self-energy; the charges are smeared
-    if params.get("smearing") is None:
+    smearing = params.get("smearing")
+    if smearing is None:
         raise ValidationError("'electrostatics' needs 'smearing' (the smeared charge distribution)")
+    if smearing.get("type", "gaussian") == "gaussian":
+        a_int = smearing.get("a_int")
+        lengths = a_int if isinstance(a_int, dict) else dict.fromkeys(charges, a_int)
+        point_charges = sorted(name for name, valence in charges.items() if valence != 0 and not lengths[name] > 0)
+        if point_charges:
+            raise ValidationError(f"'electrostatics' needs a positive smearing length 'a_int' for the charged "
+                                  f"types {point_charges}; a_int = 0 leaves point charges")
     if any(str(b).lower() != "periodic" for b in params.get("bc") or []):
         raise ValidationError("'electrostatics' supports periodic boxes only")
     if _has_random_copolymer(params):

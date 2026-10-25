@@ -191,6 +191,8 @@ def checkpoint_data(sim):
     if state is not None:
         data["record_H_history"] = np.asarray(state["H_history"])
         data["record_drift_history"] = np.asarray(state.get("drift_history", []))
+        if "psi_drift_history" in state:
+            data["record_psi_drift_history"] = np.asarray(state["psi_drift_history"])
         data["record_sample_count"] = state["sample_count"]
         for key, values in state["dH_history"].items():
             data[_measurement_key("dH", key)] = np.asarray(values)
@@ -291,6 +293,11 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
             raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
+        if "record_psi_drift_history" in data:
+            psi_drift = data["record_psi_drift_history"]
+            if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
+                    or np.any(psi_drift < 0)):
+                raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
         for monomer in sim.monomer_types:
             names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
                      (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
@@ -325,13 +332,19 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
         raise ValidationError(f"Invalid checkpoint: {exc}") from exc
 
 
-def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None):
+def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
     H_history.extend(np.atleast_1d(data["record_H_history"]).tolist())
     if drift_history is not None and "record_drift_history" in data:
         drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())
+    if psi_drift_history is not None:
+        # Checkpoints written before the drift of ψ was recorded leave it unknown (NaN)
+        if "record_psi_drift_history" in data:
+            psi_drift_history.extend(np.atleast_1d(data["record_psi_drift_history"]).tolist())
+        else:
+            psi_drift_history.extend([float("nan")] * int(data["record_sample_count"]))
     for key in dH_history:
         dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
     for key, array in sf_average.items():

@@ -26,6 +26,8 @@ import json
 
 import numpy as np
 
+from .validation import ValidationError
+
 
 class Electrostatics:
     """Electrostatic potential ψ, its Langevin step and its Hamiltonian term.
@@ -86,6 +88,17 @@ class Electrostatics:
         self._psi = np.array(value, dtype=np.complex128).reshape(-1)
         self._psi_k = np.fft.fftn(np.reshape(self._psi, self.nx))
 
+    @property
+    def psi_k(self):
+        """ψ(k) on the grid shape (unnormalized FFT, read-only)."""
+        view = self._psi_k.view()
+        view.flags.writeable = False
+        return view
+
+    def psi_minus_k(self):
+        """ψ(-k): the index-reversed ψ(k). ψ is complex, so this is not the conjugate of ψ(k)."""
+        return np.roll(np.flip(self._psi_k), 1, axis=tuple(range(len(self.nx))))
+
     def add_potential(self, w_input):
         """Add z_i ψ to the monomer fields {type: w_i} of the charged types (in place)."""
         for name, z in self.charges.items():
@@ -122,13 +135,11 @@ class Electrostatics:
         """Electrostatic term (1/(2E V)) ∫ ψ ∇²ψ dr of the current ψ.
 
         By Parseval's theorem, mean(ψ ∇²ψ) = -Σ_k k² ψ(k) ψ(-k) / n² (unnormalized FFT, n grid
-        points); ψ is complex, so ψ(-k) is the index-reversed array, not the conjugate.
+        points).
         """
         if self.coupling <= 0:
             return 0.0
-        axes = tuple(range(len(self.nx)))
-        psi_mk = np.roll(np.flip(self._psi_k), 1, axis=axes)
-        return -0.5 * np.sum(self.k_sq * self._psi_k * psi_mk) / self.psi.size ** 2 / self.coupling
+        return -0.5 * np.sum(self.k_sq * self._psi_k * self.psi_minus_k()) / self.psi.size ** 2 / self.coupling
 
     def settings(self):
         """Settings that define a continuation (checkpoint hash)."""
@@ -145,6 +156,10 @@ class Electrostatics:
         ψ(k) is restored as stored, because transforming ψ back does not reproduce it bit
         for bit; checkpoints written before ψ(k) was stored fall back to the transform.
         """
+        missing = [key for key in ("psi_real", "psi_imag", "psi_rng_state_json") if key not in data]
+        if missing:
+            raise ValidationError(f"The checkpoint has no electrostatic potential ({', '.join(missing)}); "
+                                  "it was not written with 'electrostatics'")
         self.psi = np.asarray(data["psi_real"]) + 1j * np.asarray(data["psi_imag"])
         if "psi_k_real" in data:
             self._psi_k = np.reshape(np.asarray(data["psi_k_real"]) + 1j * np.asarray(data["psi_k_imag"]),

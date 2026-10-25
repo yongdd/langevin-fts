@@ -38,10 +38,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     integrated exactly for each wavevector.
   - Charged block copolymers and counterions are ordinary polymers and one-segment
     molecules in `polymers`; the input must be electroneutral.
-  - Smearing is required with charges, and Gaussian smearing in CL-FTS accepts one length
-    per monomer type.
+  - Smearing is required with charges, with a positive Gaussian length for each charged
+    type, and Gaussian smearing in CL-FTS accepts one length per monomer type.
   - Checkpoints store ψ, its Fourier transform (for bitwise continuation) and its noise
-    stream.
+    stream; a checkpoint without ψ raises `ValidationError`. The run metadata records the
+    initial state of the ψ stream (`initial_psi_rng_state`). A run continued by hand takes ψ
+    through `run(..., initial_psi=...)` and warns without it, since ψ then restarts at zero.
+  - `psi_drift_max_history` records the largest drift of ψ apart from `drift_max_history`,
+    whose maximum the exactly integrated linear part of ψ would dominate.
   - Some composition modes have a zero eigenvalue and therefore no auxiliary field, for
     example two types that differ only in charge. The structure functions along these
     modes come from ψ; without this, S_ij would miss the charge correlations of such

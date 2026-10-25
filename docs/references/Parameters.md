@@ -369,7 +369,7 @@ Charged monomer types interact through the smeared charge density $`c = \sum_i z
 
 **Requirements:**
 - The system must be electroneutral: $`\sum_i z_i \phi_i = 0`$ with the overall segment fraction $`\phi_i`$ of each type (to $`10^{-10}`$). The counterion fraction therefore follows from the polymer charge.
-- `smearing` must be given; with per-type Gaussian lengths $`a_i`$ (Born radii) each type has its own $`\Gamma_i(k)`$.
+- `smearing` must be given; with per-type Gaussian lengths $`a_i`$ (Born radii) each type has its own $`\Gamma_i(k)`$. Charged types need a positive Gaussian length, since $`a_i = 0`$ leaves point charges.
 - Periodic boxes only; no random copolymers.
 - `zeta_n` is finite, as always in CL-FTS.
 
@@ -378,7 +378,7 @@ params["smearing"] = {"type": "gaussian", "a_int": {"A": 0.1, "B": 0.1, "C": 0.1
 params["electrostatics"] = {"charges": {"A": 0.2, "C": -1.0}, "bjerrum_length": 0.01}
 ```
 
-The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
+The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file; without it $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
 
 ---
 

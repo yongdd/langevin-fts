@@ -13,6 +13,7 @@ and examples/clfts/ChargedDiblock.py.
 import os
 import time
 import pathlib
+import warnings
 import copy
 import json
 import numpy as np
@@ -484,11 +485,17 @@ class CLFTS:
             start_langevin_step=load_data["langevin_step"] + 1, _restart_data=load_data
         )
 
-    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
+    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, initial_psi=None,
+            _restart_data=None):
         """Run complex Langevin dynamics and return a status dict; errors are persisted and raised."""
         first_step = 1 if start_langevin_step is None else start_langevin_step
         if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
             raise ValidationError("start_langevin_step must be a positive integer")
+        if initial_psi is not None:
+            if self.electrostatics is None:
+                raise ValidationError("initial_psi needs 'electrostatics'")
+            if np.size(initial_psi) != self.prop_solver.n_grid or not np.all(np.isfinite(initial_psi)):
+                raise ValidationError("initial_psi must hold one finite value per grid point")
         self.run_status = {"status": "running", "last_completed_step": first_step - 1,
                            "requested_last_step": self.langevin["max_step"]}
         self.metadata["initial_fields_hash" if _restart_data is None else "restart_fields_hash"] = fields_hash(initial_fields)
@@ -498,11 +505,14 @@ class CLFTS:
                 if key in self.run_status:
                     self.run_status[key] = previous_status.get(key, 0)
         self.metadata["initial_rng_state"] = self.random_bg.state
+        if self.electrostatics is not None:
+            self.metadata["initial_psi_rng_state"] = self.electrostatics.random_bg.state
         write_run_status(self)
         try:
             if _restart_data is None:
                 restore_extensions(self)
-            self._run(initial_fields, normal_noise_prev, start_langevin_step, _restart_data=_restart_data)
+            self._run(initial_fields, normal_noise_prev, start_langevin_step, initial_psi=initial_psi,
+                      _restart_data=_restart_data)
             self.run_status["status"] = "completed"
         except (KeyboardInterrupt, SystemExit):
             self.run_status.update(status="interrupted", reason="Run interrupted")
@@ -514,7 +524,8 @@ class CLFTS:
             write_run_status(self)
         return dict(self.run_status)
 
-    def _run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, _restart_data=None):
+    def _run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, initial_psi=None,
+             _restart_data=None):
         """Run the Complex Langevin FTS simulation.
 
         Parameters
@@ -526,6 +537,10 @@ class CLFTS:
             Previous noise array for continuing simulation.
         start_langevin_step : int, optional
             Starting step number for continuing simulation.
+        initial_psi : numpy.ndarray, optional
+            Initial electrostatic potential (with `electrostatics`), e.g. psi_real + 1j psi_imag
+            of a fields file; zero if omitted. A continuation by hand does not restore the
+            random-number streams; continue_run() continues a checkpoint exactly.
         """
         print("---------- Run ----------")
 
@@ -554,13 +569,21 @@ class CLFTS:
         if not np.all(np.isfinite(w_aux)):
             raise ValidationError("Initial fields must be finite")
 
-        # The electrostatic potential starts at zero; a continuation has restored it
+        # The electrostatic potential starts from initial_psi or at zero; continue_run() has
+        # restored it with its noise stream
         if self.electrostatics is not None and _restart_data is None:
-            self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
+            if initial_psi is not None:
+                self.electrostatics.psi = initial_psi
+            else:
+                if start_langevin_step is not None and start_langevin_step > 1:
+                    warnings.warn("The run continues without initial_psi: the electrostatic potential restarts "
+                                  "at zero and relaxes again", RuntimeWarning)
+                self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
 
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
         drift_history = []
+        psi_drift_history = []
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
@@ -582,7 +605,9 @@ class CLFTS:
             charge_sums = {key: np.zeros(self.prop_solver.nx, dtype=np.complex128)
                            for key in ("charge_mixed", "charge_difference", "charge_mixed_difference", "charge_difference_squared")}
             recorded.update(charge_sums)
-        sf_sample_count = restore_recording_state(_restart_data, H_history, dH_history, recorded, drift_history)
+        sf_sample_count = restore_recording_state(
+            _restart_data, H_history, dH_history, recorded, drift_history,
+            psi_drift_history=psi_drift_history if self.electrostatics is not None else None)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -638,6 +663,11 @@ class CLFTS:
             # Charge density of the same state, for the step of the electrostatic potential
             if self.electrostatics is not None:
                 charge_density = self.electrostatics.charge_density(phi_for_force)
+                # Largest drift of ψ, s |δH/δψ|, recorded apart from drift_max: its linear part
+                # ∇²ψ/E is integrated exactly and would dominate the maximum at large k
+                if langevin_step % self.recording["sample_interval"] == 0:
+                    es = self.electrostatics
+                    psi_drift_max = float(np.max(np.abs(es.psi_dt_scaling * es.force(charge_density))))
 
             # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
@@ -704,6 +734,8 @@ class CLFTS:
             if langevin_step % self.recording["sample_interval"] == 0:
                 H_history.append(hamiltonian)
                 drift_history.append(drift_max)
+                if self.electrostatics is not None:
+                    psi_drift_history.append(psi_drift_max)
                 sf_sample_count += 1
                 dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux, phi=phi_for_force)
                 for key in self.chi_n:
@@ -715,6 +747,8 @@ class CLFTS:
                 mdic = {"H_history_real": np.real(H_history_array), "H_history_imag": np.imag(H_history_array),
                         "sample_count": sf_sample_count, "drift_max_history": np.asarray(drift_history),
                         "simulation_metadata_json": json.dumps(self.metadata)}
+                if self.electrostatics is not None:
+                    mdic["psi_drift_max_history"] = np.asarray(psi_drift_history)
                 for key in self.chi_n:
                     dH_array = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
@@ -727,6 +761,7 @@ class CLFTS:
                 # Reset dictionary
                 H_history = []
                 drift_history = []
+                psi_drift_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
 
@@ -756,7 +791,7 @@ class CLFTS:
                 # Zero-eigenvalue modes along u: μ_i += u_i [(k²/E) ψ(k) - Σ_l z_l μ_l(k)] / |u|²
                 if self._psi_probe is not None:
                     es = self.electrostatics
-                    probe = np.fft.fftn(np.reshape(es.psi, self.prop_solver.nx)) * es.k_sq / es.coupling / self.prop_solver.n_grid
+                    probe = es.psi_k * es.k_sq / es.coupling / self.prop_solver.n_grid
                     for name in self.monomer_types:
                         probe -= es.charges[name] * mu_fourier[name]
                     for i, name in enumerate(self.monomer_types):
@@ -769,9 +804,8 @@ class CLFTS:
                     es = self.electrostatics
                     n_grid, nx = self.prop_solver.n_grid, self.prop_solver.nx
                     norm = self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
-                    psi = np.reshape(es.psi, nx)
-                    psi_k = np.fft.fftn(psi) / n_grid
-                    psi_mk = np.conj(np.fft.fftn(np.conj(psi))) / n_grid
+                    psi_k = es.psi_k / n_grid
+                    psi_mk = es.psi_minus_k() / n_grid
                     charge = np.reshape(es.charge_density(phi_for_force), nx)
                     charge_mk = np.conj(np.fft.fftn(np.conj(charge))) / n_grid
                     rate = es.k_sq / es.coupling
@@ -853,6 +887,8 @@ class CLFTS:
             if langevin_step % self.recording["checkpoint_interval"] == 0:
                 self._recording_state = {"H_history": H_history, "dH_history": dH_history,
                                          "sf_average": recorded, "sample_count": sf_sample_count, "drift_history": drift_history}
+                if self.electrostatics is not None:
+                    self._recording_state["psi_drift_history"] = psi_drift_history
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),
