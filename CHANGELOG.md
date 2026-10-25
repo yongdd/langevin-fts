@@ -23,9 +23,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `_core.pyd` and defines `FFTW_DLL`, without which `fftw_version` came from MKL's FFTW
   wrappers. LAPACKE uses `std::complex` under MSVC, the package adds the spglib DLL
   directory before importing `_core`, and the tests no longer use variable-length arrays
-  or POSIX-only calls. `TestCudaDeviceBuffer` skips its out-of-memory check (exit code 77)
-  when the driver backs device allocations with system memory once the device memory is
-  full, the default sysmem fallback of WDDM drivers; the construction then cannot run out.
+  or POSIX-only calls. The out-of-memory check of `TestCudaDeviceBuffer` runs as its own
+  ctest entry, `TestCudaDeviceBufferOutOfMemory`, which is skipped (exit code 77) when the
+  driver backs device allocations with system memory once the device memory is full, the
+  default sysmem fallback of WDDM drivers; the construction then cannot run out
+  (2026-10-26: before, the skip covered the whole test).
+- CI builds and runs the basic tests on Windows with MSVC and Ninja (MKL + FFTW) besides
+  Linux (2026-10-26).
 
 ### Added
 
@@ -211,7 +215,32 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   used the full-grid FFT. The transform is the one of the z-mirror basis, which SCFT
   enables on these cells, so SCFT is unchanged; on small CUDA grids it remains slower
   than the full-grid FFT (see above). `TestSpaceGroupPlatformEquivalence` adds a
-  monoclinic P2/m cell (γ = 100°, odd n_x).
+  monoclinic P2/m cell (γ = 100°, odd n_x). `TestCrysFFTSelector` checks the CrysFFT
+  each space group, grid and cell takes: the equivalence tests pass whatever is chosen.
+
+### Tests
+
+Tests that passed with the code they guard reverted, or paths no test reached
+(2026-10-26):
+- `TestCnAdiLongLines`: CN-ADI lines of 4000 to 6000 points in 1D, 2D and 3D, reflecting
+  and absorbing, CUDA against the CPU; the shared-memory-only solver fails it.
+- `TestCrysFFTCellChange`: Pmmm DCT and recursive 3m CrysFFT solvers after cell changes
+  of one axis alone against fresh solvers, stress included, on every platform; a CUDA
+  cell comparison that ignores L_y fails it.
+- `TestExamples`: every script under `examples/` builds its simulation, in a copy of its
+  directory, with platforms the build lacks replaced by a CPU platform.
+- `TestSpaceGroupPlatformEquivalence` checks masks with RK2 and CN-ADI too;
+  `TestComputationSafety` checks the messages of the method checks of the factory on
+  every platform; `TestInputChecks` runs the reduced-basis single step for discrete
+  chains and with `reduce_memory`, on fields rescaled to a standard deviation of 5.
+- `TestClftsElectrostatics` recomputes the recorded S_ij (per-type smearing) and the ψ
+  drift from the saved state, and checks that a second `run()` starts without previous
+  ψ noise.
+- `TestChargedStructureFunctionRPA` discards its first block, checks the S_CC bound at
+  n = 1..4 again (the error margin at n = 1..3), and requires the polyampholyte charge
+  structure functions within 1.5 % of the RPA on average, which the former ψ step fails.
+- `TestConsoleEncoding`, `TestCrysFFTObliqueZCuda` and `TestCrysFFTSelector` carry the
+  `basic` label; `TestCnAdiLongLines` and `TestCrysFFTCellChange` the `numerical` one.
 
 ## [0.10.0] - 2026-10-23
 

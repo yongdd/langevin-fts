@@ -138,7 +138,8 @@ ctest --test-dir build-tests --output-on-failure
 - By default the NVIDIA driver on Windows lets CUDA allocations fall back to system
   memory ("CUDA - Sysmem Fallback Policy" in the NVIDIA Control Panel). A calculation
   larger than the GPU memory then runs slowly instead of failing, and the
-  out-of-memory check of `TestCudaDeviceBuffer` fails. The policy can be set to
+  out-of-memory check of `TestCudaDeviceBuffer`, the ctest entry
+  `TestCudaDeviceBufferOutOfMemory`, is skipped. The policy can be set to
   "Prefer No Sysmem Fallback".
 - Checked with Visual Studio 2026 (MSVC 19.51) and CUDA 13.4 from conda-forge.
 

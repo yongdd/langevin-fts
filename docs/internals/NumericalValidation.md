@@ -9,19 +9,21 @@ Keep the existing calibrated test parameters and tolerances. A passing solver co
 | Forward/backward consistency | `TestPartitionFunctionCheck`, propagator tests | Every contour pairing yields the same partition function |
 | Material conservation | Propagator tests, `TestSpaceGroupPlatformEquivalence` | Volume-averaged total concentration; expand reduced fields or use orbit weights |
 | Analytical-limit structure factors | `TestStructureFunctionRPA`, `TestChargedStructureFunctionRPA` | Disordered Gaussian-fluctuation regime, L-FTS/CL-FTS with and without smearing, and charged CL-FTS with counterions; RPA formulas in [Section 6.4 of the L-FTS and CL-FTS theory](../theory/LangevinFieldTheoreticSimulation.md#64-rpa-reference) |
-| Electrostatics | `TestClftsElectrostatics` | Neutral reductions and equal per-type smearing lengths (bitwise), forces of ψ and the auxiliary fields against finite differences of H, the ψ step against the exact flow of its force and the stationary variance of ψ (without charges and with a linear charge response), restarts with ψ and its noise stream |
+| Electrostatics | `TestClftsElectrostatics` | Neutral reductions and equal per-type smearing lengths (bitwise), forces of ψ and the auxiliary fields against finite differences of H, the ψ step against the exact flow of its force and the stationary variance of ψ (without charges and with a linear charge response), recorded S_ij (per-type smearing) and ψ drift against a recomputation from the saved state, restarts with ψ and its noise stream |
 | Stress derivatives | `TestStress1D`, `TestStressSpaceGroup`, `TestStressNonPeriodic*`, `TestStressAliasTies` | Lengths, angles, constrained cell deformations and boundary conditions |
-| CPU/GPU agreement | `TestSpaceGroupPlatformEquivalence`, `TestStressComplexPlatforms` | Same input fields, not independently translated/rotated converged phases |
+| CPU/GPU agreement | `TestSpaceGroupPlatformEquivalence`, `TestStressComplexPlatforms`, `TestCnAdiLongLines`, `TestCrysFFTCellChange` | Same input fields, not independently translated/rotated converged phases; masks with every continuous method; CN-ADI lines beyond the CUDA shared-memory limit; CrysFFT solvers after a cell change (one axis alone) against fresh solvers |
+| CrysFFT selection | `TestCrysFFTSelector` | The CrysFFT each space group, grid and cell takes; equivalence tests alone pass whatever is chosen |
+| Examples | `TestExamples` | Every script under `examples/` reads its inputs and builds its simulation (stopped at its first run) |
 | Restart equivalence | `TestLftsRun`, `TestLftsDetails`, `TestFtsReliability` | RNG, previous noise, fields, WTMD and pending measurements across recording boundaries |
 | Failure handling and compatibility | `TestFtsReliability`, `TestCheckpointValidation` | Initial/terminal failure, unchanged RNG/extension/WTMD state on corrupt restarts, atomic-write failure, earlier WTMD checkpoints loaded into a reused simulation |
 | Extension contracts | `TestExtensions` | Harmonic stochastic moments, read-only observers and sampling intervals, multistage forces, extension-state restart and method registry on available backends |
 | Sampling error estimates | `TestSamplingStatistics` | Independent Gaussian draws and an AR(1) process with known asymptotic variance |
 
-The Python sampling/restart tests do not replace long statistical checks. Existing RPA tolerances remain unchanged. Its continuum reference applies in its specified weak-fluctuation regime; finite contour/grid errors and finite fluctuation corrections must be distinguished from sampling uncertainty.
+The Python sampling/restart tests do not replace long statistical checks. Existing RPA tolerances remain unchanged, except that the polyampholyte charge structure function of `TestChargedStructureFunctionRPA` must lie within 1.5 % of the RPA on average (it was 5 %), so that the former ψ step, 2 % above, fails; that test estimates standard errors from block means and requires its tolerances to exceed 2 of them. Its continuum reference applies in its specified weak-fluctuation regime; finite contour/grid errors and finite fluctuation corrections must be distinguished from sampling uncertainty.
 
 ## Running regression validation
 
-After building, `ctest --test-dir build -L numerical --output-on-failure` runs the selected numerical regressions. Basic and full test selections remain available. Missing CPU backends can skip CPU-specific tests. The GitHub-hosted workflow builds without CUDA; its class-name consistency check does not execute GPU numerics.
+After building, `ctest --test-dir build -L numerical --output-on-failure` runs the selected numerical regressions. Basic and full test selections remain available. Missing CPU backends can skip CPU-specific tests. The GitHub-hosted workflow builds without CUDA, on Linux (all tests) and on Windows with MSVC (the basic tests); its class-name consistency check does not execute GPU numerics.
 
 Run the selected tests and the unmodified continuous-chain Gyroid example on
 allocated compute resources. Set up the environment and GPU allocation using

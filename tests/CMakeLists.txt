@@ -19,6 +19,7 @@ SET(BASIC_TESTS
     TestInputChecks
     TestMoleculesValidation
     # Platform & utilities
+    TestConsoleEncoding
     TestDisplayArchitecture
     TestCircularBuffer
     TestScheduler
@@ -51,6 +52,8 @@ SET(BASIC_TESTS
     TestCudaCubReduceSumClass
     TestCrysFFT
     TestCrysFFTObliqueZGlide
+    TestCrysFFTObliqueZCuda
+    TestCrysFFTSelector
     TestCudaCrysTablesAllocation
 
     # Propagator solvers
@@ -129,6 +132,7 @@ SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation
     TestStructureFunctionRPA TestChargedStructureFunctionRPA TestClftsElectrostatics
     TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
+    TestCnAdiLongLines TestCrysFFTCellChange
     APPEND PROPERTY LABELS numerical)
 
 # Generate files named "Test*.cpp"
@@ -206,11 +210,15 @@ IF(POLYMERFTS_BUILD_CUDA)
             SET_TEST_DLL_PATH(${TEST_NAME})
         ENDIF()
     ENDFOREACH()
-    # Its out-of-memory check holds most of the free device memory for a moment
-    # (a ballast buffer); keep it away from the other tests under ctest -j
+    # Its out-of-memory check (--out-of-memory) holds most of the free device memory
+    # for a moment (a ballast buffer): a separate entry, kept away from the other
+    # tests under ctest -j, so that its skip does not hide the other checks
     IF(TARGET TestCudaDeviceBuffer)
-        # Exit code 77: the out-of-memory check could not hold the device memory
-        SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        ADD_TEST(TestCudaDeviceBufferOutOfMemory ${CMAKE_CURRENT_BINARY_DIR}/TestCudaDeviceBuffer --out-of-memory)
+        SET_TEST_DLL_PATH(TestCudaDeviceBufferOutOfMemory)
+        # Exit code 77: the device memory could not be held, or the driver backs it with
+        # system memory (the WDDM sysmem fallback), so no construction can run out
+        SET_TESTS_PROPERTIES(TestCudaDeviceBufferOutOfMemory PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         # NVML gives this process's device memory for the end-to-end check
         # (other processes on the GPU then do not disturb it)
         IF(TARGET CUDA::nvml)

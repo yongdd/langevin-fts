@@ -155,6 +155,50 @@ jobs:
             raise RuntimeError("Uninstall left package metadata")
         PY
 
+  build-windows:
+    name: Build and Test (Windows, MSVC, MKL + FFTW)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: cmd /C CALL {0}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install the conda environment
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-version: latest
+        activate-environment: polymerfts
+        auto-activate-base: false
+        environment-file: environment.yml
+        channels: conda-forge
+        channel-priority: strict
+        conda-remove-defaults: "true"
+
+    - name: Install MKL and FFTW
+      run: conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel fftw
+
+    # docs/getting-started/Installation.md, Windows. vcvars64 runs after the conda
+    # activation, so that MSVC's link.exe comes before the MSYS link of Library\usr\bin;
+    # CMake and Ninja are those of the environment (MSVC builds need CMake 3.30+), and
+    # VSLANG keeps the /showIncludes text of cl in English for Ninja's dependencies.
+    - name: Build and run the basic tests
+      run: |
+        set VSLANG=1033
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+        call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+        set "BIN=%CONDA_PREFIX%\Library\bin"
+        "%BIN%\cmake.exe" --version || exit /b 1
+        "%BIN%\cmake.exe" -S . -B build-tests -G Ninja -DCMAKE_MAKE_PROGRAM="%BIN%\ninja.exe" ^
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" ^
+          -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CUDA=OFF ^
+          -DPOLYMERFTS_BUILD_TESTS=ON -DPOLYMERFTS_WERROR=ON || exit /b 1
+        "%BIN%\cmake.exe" --build build-tests --parallel || exit /b 1
+        "%BIN%\ctest.exe" --test-dir build-tests -L basic --output-on-failure --timeout 900 || exit /b 1
+
   lint:
     name: Code Quality Checks
     runs-on: ubuntu-latest

@@ -7,7 +7,10 @@
    smearing lengths that are all equal reproduce one common length bit for bit.
 2. Forces: the force of psi, lap(psi)/E + c, and the forces of the auxiliary fields
    are the derivatives of H, by central differences around random complex fields
-   (standard deviation 5 for the real parts).
+   (standard deviation 5 for the real parts). Recorded measurements, recomputed from
+   the saved state of the same step: S_ij = V Nbar^(1/2) mu_i(k) phi_j(-k)/Gamma_i(k)
+   with unequal smearing lengths (Gamma of the first type of the pair), and the psi
+   drift s max|lap(psi)/E + c|; a second run() starts without previous psi noise.
 3. Step of psi: without its noise, one step is the exact flow of
    d psi/d tau = s dH/d psi over dt (fine RK4 steps of the force). The stationary variance
    of every mode is that of exp(-H), V Nbar^(1/2) (k^2/E + R) <|psi(k)|^2> = 1, without
@@ -163,6 +166,61 @@ def forces(root):
         h_minus, _ = hamiltonian(sim, shifted)
         expected = sign * np.mean(aux_force[i] * direction)
         assert abs((h_plus - h_minus) / (2 * eps) - expected) < 1e-6 * max(1.0, abs(expected)), f"aux force {i}"
+
+
+def recorded_measurements(root):
+    # Every step recorded, with unequal smearing lengths: Gamma_C differs from Gamma_A = Gamma_B
+    params = parameters(root / "measured", steps=2)
+    params["recording"].update(checkpoint_interval=1, sample_interval=1, statistics_save_interval=1)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(params, random_seed=5)
+    es, states = sim.electrostatics, []
+
+    def step(c, step=es.step):
+        states.append((es.psi_k.copy(), np.array(c), es.previous_noise.copy()))
+        step(c)
+    es.step = step
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim.run(initial_fields=initial_fields())
+
+    # S_ij = V Nbar^(1/2) mu_i(k) phi_j(-k) / Gamma_i(k), mu_i = sum_k A_ik Omega_k / lambda_k,
+    # recomputed from the saved fields of the same step (one sample per file)
+    n_grid, M = int(np.prod(NX)), 3
+    fields, measured = mat(root / "measured", "fields_000002.mat"), mat(root / "measured", "structure_function_000002.mat")
+    w_aux = np.reshape(fields["w_aux"], (M, n_grid))
+    norm = sim.prop_solver.get_volume() * np.sqrt(params["langevin"]["nbar"])
+    k_sq = np.reshape(sim.smearing.k_sq, NX)
+    gamma = {m: np.exp(-a ** 2 * k_sq / 2) for m, a in params["smearing"]["a_int"].items()}
+    types = ["A", "B", "C"]
+    mu, phi_mk = {}, {}
+    for i, m in enumerate(types):
+        phi = np.reshape(fields["phi_" + m + "_real"] + 1j * fields["phi_" + m + "_imag"], NX)
+        phi_mk[m] = np.conj(np.fft.fftn(np.conj(phi))) / n_grid
+        mu[m] = sum(np.fft.fftn(np.reshape(w_aux[k], NX)) * sim.mpt.matrix_a[i, k] / sim.mpt.eigenvalues[k] / n_grid
+                    for k in range(M) if not np.isclose(sim.mpt.eigenvalues[k], 0.0))
+    for a, i in enumerate(types):
+        for j in types[a:]:
+            recorded = measured[f"structure_function_{i}_{j}_real"] + 1j * measured[f"structure_function_{i}_{j}_imag"]
+            expected = norm * mu[i] * phi_mk[j] / gamma[i]
+            scale = np.max(np.abs(expected))
+            assert np.max(np.abs(recorded - expected)) < 1e-10 * scale, f"S_{i}{j} from mu_{i} phi_{j} / Gamma_{i}"
+            if i != j and params["smearing"]["a_int"][i] != params["smearing"]["a_int"][j]:
+                wrong = norm * mu[i] * phi_mk[j] / gamma[j]
+                assert np.max(np.abs(recorded - wrong)) > 1e-3 * scale, f"S_{i}{j} tells Gamma_{i} from Gamma_{j}"
+
+    # The drift of psi, s max|lap(psi)/E + c|, of the state before each step
+    for n, (psi_k, c, _) in enumerate(states, start=1):
+        laplacian = np.reshape(np.fft.ifftn(-k_sq * psi_k), -1) / es.coupling
+        expected = es.psi_dt_scaling * np.max(np.abs(laplacian + c))
+        drift = np.atleast_1d(mat(root / "measured", "dH_%06d.mat" % n)["psi_drift_max_history"])
+        assert drift.size == 1 and abs(drift[0] - expected) < 1e-12 * expected, f"psi drift of step {n}"
+
+    # A second run() of the same object starts again without previous psi noise
+    assert np.all(states[0][2] == 0.0) and np.any(states[1][2] != 0.0), "previous psi noise of the first run"
+    states.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim.run(initial_fields=initial_fields())
+    assert np.all(states[0][2] == 0.0), "a second run() starts without previous psi noise"
 
 
 def psi_step(root):
@@ -388,7 +446,8 @@ def main():
         return 77
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        for name, check in (("neutral reductions", neutral_reductions), ("forces", forces), ("psi step", psi_step),
+        for name, check in (("neutral reductions", neutral_reductions), ("forces", forces),
+                            ("recorded measurements", recorded_measurements), ("psi step", psi_step),
                             ("restart", restart), ("input checks", input_checks)):
             check(root)
             print(f"[PASS] {name}")

@@ -16,9 +16,10 @@ Gamma_i(k) = exp(-a_i^2 k^2/2) and the valences z. S(k) is averaged over the she
 mean ratio to the RPA must lie within 5 % of 1 and every shell within 20 %. Screening
 lowers S_CC at the first four shells to 0.16-0.72 of the RPA without charges, which
 makes its estimator noisy (a standard error of 0.3 at n = 1 from 4 x 40000 steps in
-1D); only its mean over n = 2..8 is checked, within 10 %, and the first three shells
-must lie below 0.85 of the RPA without charges (at n = 4 the RPA ratio, 0.72, lies only
-two standard errors below this bound). S_BC (n = 1..5, where it is not small) must lie
+1D); only its mean over n = 2..8 is checked, within 10 %, and the first four shells
+must lie below 0.85 of the RPA without charges (the margin check of the errors below
+covers n = 1..3: at n = 4 the RPA ratio, 0.72, lies only two standard errors below the
+bound). S_BC (n = 1..5, where it is not small) must lie
 within 10 % of the RPA on average and 30 % at every shell: Gamma_B/Gamma_C grows to
 1.47 there, so dividing a pair by the smearing function of the wrong type fails.
 
@@ -26,30 +27,33 @@ A melt of polyampholytes E5K5E5K5 (valences -1 and +1, no chi, zeta N = 10, E = 
 has a composition mode E - K with zero eigenvalue and no auxiliary field; its
 structure function comes from the electrostatic potential (Section 6.1 of the L-FTS
 theory). The density and the charge structure functions, S_EE + S_KK +- 2 S_EK, must
-meet the criteria of S_AA above, and the charge structure function must lie below the
-RPA without charges at the first three shells.
+meet the criteria of S_AA above, the charge structure function with a mean within
+1.5 % of the RPA, and the charge structure function must lie below the RPA without
+charges at the first three shells.
 
 In both systems the structure function S_c of the smeared charge density is also
 recorded from psi alone (Section 6 of docs/theory/StructureFunctionEstimators.md):
 - The combination of least variance (charge_structure_function) must meet the criteria
   of S_AA. In the Gaussian regime it follows from the linear response of the chains and
   hardly depends on the sampling of psi: a psi noise scaled by 2 leaves it at the RPA.
-- The mixed form tests the sampling (the same noise error gives 4 times the RPA). It
-  must meet the criteria of S_AA in the polyampholyte; in the diblock, where it is
-  noisier (standard errors up to 0.07 per shell), within 10 % on average and 30 % per
-  shell.
+- The mixed form tests the sampling (the same noise error gives 4 times the RPA). In
+  the polyampholyte its mean must lie within 1.5 % of the RPA and every shell within
+  20 %; in the diblock, where it is noisier (standard errors up to 0.07 per shell),
+  within 10 % on average and 30 % per shell.
 - The field-field form tests it too, at the shells of strong screening,
   (E/k^2) S_c > 0.5 (n = 1..3 and 1..2), with the criteria of S_AA. Elsewhere it is the
   small difference of two large terms and too noisy for them.
 Before psi took the averaged noise of the LM integrator, the explicit charge density of
 its step put the mixed form (1.023) and S_EE + S_KK - 2 S_EK (1.020) of the polyampholyte
 above the RPA and the field-field form up to 30 % below it at large k; both forms now
-agree with the RPA within their errors. TestClftsElectrostatics checks that step directly.
+agree with the RPA within their errors (mixed form 1.005 +- 0.004, S_EE + S_KK - 2 S_EK
+1.002 +- 0.005). The 1.5 % criteria of the polyampholyte fail with the former step;
+TestClftsElectrostatics checks the step directly.
 
 Errors: the runs record their statistics in BLOCKS blocks of STEPS/BLOCKS steps, far
 longer than the correlation times (at most a few hundred steps, the screened psi modes).
-The means are those of the whole runs, and the standard errors follow from the spread
-of the block means. Every tolerance must exceed 2 standard errors, so that a pass is not
+The first block, which starts from zero fields, is discarded; the means are those of the
+other blocks, and the standard errors follow from the spread of the block means. Every tolerance must exceed 2 standard errors, so that a pass is not
 one by chance; the printed errors give the actual margins. For the bounds against the
 RPA without charges, the margin between the bound and the RPA ratio must exceed 2
 standard errors.
@@ -115,14 +119,15 @@ def check_ratio(name, blocks, reference, mean_tol=0.05, shell_tol=0.2):
     check(resolved, f"{name}: the tolerances exceed {ERRORS:g} standard errors")
 
 
-def check_below(name, blocks, neutral, expected, bound):
+def check_below(name, blocks, neutral, expected, bound, margin_shells=None):
     """Every shell of S/S_neutral below bound, where the RPA gives `expected`; then that the margin
-    of the bound exceeds ERRORS standard errors."""
+    of the bound exceeds ERRORS standard errors (at the first margin_shells shells, or all)."""
     ratio, error = estimate(blocks / neutral)
     check(np.all(ratio < bound), f"{name} below {bound} of the RPA without charges: ratios "
           f"{np.array2string(ratio, precision=3)} +- {np.array2string(error, precision=3)}")
-    check(np.all(ERRORS * error < bound - expected), f"{name}: the margins to {bound} exceed {ERRORS:g} standard "
-          f"errors (RPA ratios {np.array2string(expected, precision=3)})")
+    n = len(ratio) if margin_shells is None else margin_shells
+    check(np.all(ERRORS * error[:n] < bound - expected[:n]), f"{name}: the margins to {bound} exceed {ERRORS:g} "
+          f"standard errors at n = 1..{n} (RPA ratios {np.array2string(expected, precision=3)})")
 
 
 def strong_screening(s_charge, coupling):
@@ -219,7 +224,7 @@ def shells(s):
 
 def run(make_params, seed):
     """Shell-averaged S of all pairs and of the smeared charge density from psi (keys of CHARGE_FORMS)
-    in each block of STEPS/BLOCKS steps, shape (BLOCKS, N_MODES)."""
+    in each block of STEPS/BLOCKS steps after the first (burn-in), shape (BLOCKS - 1, N_MODES)."""
     root = tempfile.mkdtemp()
     try:
         work = os.path.join(root, "charged")
@@ -231,7 +236,7 @@ def run(make_params, seed):
         assert len(files) == BLOCKS, files
         names = sorted(p["segment_lengths"])
         result = {}
-        for file_name in files:
+        for file_name in files[1:]:
             data = loadmat(file_name)
             assert int(np.squeeze(data["sample_count"])) == STEPS // BLOCKS
             keys = {i + "," + j: "structure_function_" + i + "_" + j for a, i in enumerate(names) for j in names[a:]}
@@ -252,7 +257,8 @@ def main():
                 mean_tol=0.1, shell_tol=0.3)
     check_ratio("charged CL-FTS S_C_C (mean of n = 2..8)", measured["C,C"][:, 1:], reference["C,C"][1:],
                 mean_tol=0.1, shell_tol=None)
-    check_below("S_CC", measured["C,C"][:, :3], neutral["C,C"][:3], reference["C,C"][:3] / neutral["C,C"][:3], 0.85)
+    check_below("S_CC", measured["C,C"][:, :4], neutral["C,C"][:4], reference["C,C"][:4] / neutral["C,C"][:4], 0.85,
+                margin_shells=3)
     strong = strong_screening(reference["charge"], COUPLING)
     check_ratio("charge structure function from psi, combination", measured["charge"], reference["charge"])
     check_ratio("charge structure function from psi, mixed form", measured["charge_mixed"], reference["charge"],
@@ -266,10 +272,11 @@ def main():
     density = measured["E,E"] + measured["K,K"] + 2 * measured["E,K"]
     charge = measured["E,E"] + measured["K,K"] - 2 * measured["E,K"]
     check_ratio("polyampholyte density S", density, reference[0])
-    check_ratio("polyampholyte charge S", charge, reference[1])
+    # 1.5 %: the former psi step put both 2 % above the RPA
+    check_ratio("polyampholyte charge S", charge, reference[1], mean_tol=0.015)
     strong = strong_screening(reference[2], PA_COUPLING)
     check_ratio("polyampholyte charge S from psi, combination", measured["charge"], reference[2])
-    check_ratio("polyampholyte charge S from psi, mixed form", measured["charge_mixed"], reference[2])
+    check_ratio("polyampholyte charge S from psi, mixed form", measured["charge_mixed"], reference[2], mean_tol=0.015)
     check_ratio(f"polyampholyte charge S from psi, field-field form (n = 1..{np.sum(strong)})",
                 measured["charge_field_field"][:, strong], reference[2][strong])
     check_below("polyampholyte charge S", charge[:, :3], neutral[1][:3], reference[1][:3] / neutral[1][:3], 0.9)

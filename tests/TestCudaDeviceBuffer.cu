@@ -30,7 +30,9 @@
  *    device memory cannot be held, or the driver backs device allocations with
  *    system memory once it is full (the default sysmem fallback of WDDM drivers on
  *    Windows; "Prefer No Sysmem Fallback" in the NVIDIA control panel turns it off),
- *    the test exits with code 77 (a ctest skip). It runs serially (tests/CMakeLists.txt).
+ *    it exits with code 77 (a ctest skip). Section 4 runs only with --out-of-memory,
+ *    as the separate, serial ctest entry TestCudaDeviceBufferOutOfMemory, so its skip
+ *    does not hide sections 1-3 (tests/CMakeLists.txt).
  */
 #include <algorithm>
 #include <complex>
@@ -340,8 +342,173 @@ static std::vector<Case> cases()
     return list;
 }
 
-int main()
+//------------------------------------------------------------------------------
+// 4. A construction that really runs out of device memory (--out-of-memory)
+//------------------------------------------------------------------------------
+static bool out_of_memory_check(bool& oom_skipped)
 {
+    bool ok = true;
+    printf("--- out of device memory ---\n");
+    {
+        ComputationSpec spec;
+        spec.nx = {64, 64, 64};
+        spec.lx = {4.0, 4.0, 4.0};
+
+        // What one construction and run take, measured once while the objects
+        // are alive: at least the counted bytes, and by device free memory also
+        // cuFFT's plan work areas (unless another process changed it meanwhile)
+        size_t need = 0;
+        bool measured = false;
+        const Live live_before_measurement = Live::now();
+        const size_t free_before = free_bytes();
+        try
+        {
+            const long long counted_before = live_device_bytes();
+            std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
+            std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box(spec.nx, spec.lx, {}));
+            std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
+            molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
+            std::unique_ptr<PropagatorComputationOptimizer> optimizer(factory->create_propagator_computation_optimizer(molecules.get(), true));
+            std::unique_ptr<PropagatorComputation<double>> computation(
+                factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4"));
+            std::vector<double> w(cb->get_n_basis(), 0.1);
+            computation->compute_propagators({{"A", w.data()}, {"B", w.data()}});
+            computation->compute_concentrations();
+            computation->compute_stress();
+            const size_t free_during = free_bytes();
+            const size_t counted = static_cast<size_t>(live_device_bytes() - counted_before);
+            need = std::max(counted, free_before > free_during ? free_before - free_during : size_t(0));
+            measured = true;
+        }
+        catch (const std::exception& e)
+        {
+            // Only a lack of device memory makes the section impossible; any
+            // other failure of this ordinary computation is a test failure
+            const std::string message = one_line(e.what());
+            const bool memory = message.find("out of memory") != std::string::npos
+                             || message.find("cuFFT error code 2") != std::string::npos   // CUFFT_ALLOC_FAILED
+                             || free_before < (size_t(1) << 30);
+            printf("  the 64^3 computation failed: %s\n", message.c_str());
+            ok &= check(memory, "the 64^3 computation fails only for lack of device memory");
+        }
+        ok &= check(no_cuda_error("the measurement"), "the measurement leaves no release failure or pending error");
+        const Live live_after_measurement = Live::now();
+        if (!(live_after_measurement == live_before_measurement))
+            printf("  the measurement left %s\n", live_after_measurement.minus(live_before_measurement).c_str());
+        ok &= check(live_after_measurement == live_before_measurement, "the 64^3 computation releases everything");
+
+        // Device memory after the measurement (modules loaded, cuFFT's retained
+        // per-plan memory included), for the end-to-end check below: this
+        // process's usage from NVML when it is available, else the device's
+        // free memory (which other processes also change)
+        const long long process_start = process_device_bytes();
+        const size_t free_start = free_bytes();
+        const Live live_start = Live::now();
+
+        // Leave a fraction of that free; the rest of the free memory is held by a
+        // ballast for the moment of the construction. The last case leaves (almost)
+        // nothing, so one construction runs out even if another process changed the
+        // free memory while `need` was measured.
+        int ran_out = 0, tried = 0;
+        if (measured)
+        {
+            printf("  a 64^3 computation takes about %.1f MiB of device memory\n", need / 1048576.0);
+            for (double fraction : {0.9, 0.6, 0.3, 0.1, 0.02, 0.0})
+            {
+                const size_t leftover = static_cast<size_t>(fraction * need);
+                const size_t free_now = free_bytes();
+                if (free_now <= leftover)
+                    continue;
+                const Live before = Live::now();
+                std::vector<CudaDeviceBuffer<char>> ballast = hold_device_memory(free_now - leftover);
+                const size_t free_left = free_bytes();
+                if (free_left > leftover + need)
+                {
+                    printf("  [SKIP] leftover %.1f MiB: could hold only part of the device memory (%.1f MiB left free)\n",
+                           leftover / 1048576.0, free_left / 1048576.0);
+                    continue;
+                }
+                // A driver that backs device allocations with system memory once the
+                // device memory is full (the default sysmem fallback of WDDM drivers on
+                // Windows) never runs out: an allocation larger than the free memory
+                // must fail for the construction to be able to fail
+                bool oversubscribed = false;
+                try
+                {
+                    CudaDeviceBuffer<char> probe(free_left + need);
+                    oversubscribed = true;
+                }
+                catch (const std::exception&) {}
+                if (oversubscribed)
+                {
+                    printf("  [SKIP] leftover %.1f MiB: %.1f MiB could be allocated with %.1f MiB free "
+                           "(device memory backed by system memory)\n",
+                           leftover / 1048576.0, (free_left + need) / 1048576.0, free_left / 1048576.0);
+                    continue;
+                }
+                ++tried;
+                std::string message;
+                bool threw = false;
+                try { run_computation<double>(spec); }
+                catch (const std::exception& e) { threw = true; message = e.what(); }
+                const bool no_error = no_cuda_error("an out-of-memory construction");
+                ballast.clear();
+                if (threw)
+                    ++ran_out;
+                // The innermost failure is at the end of the message (outer frames prepend theirs)
+                message = one_line(message);
+                if (message.size() > 240)
+                    message = "..." + message.substr(message.size() - 240);
+                const Live after = Live::now();
+                if (!(after == before))
+                    printf("  left %s\n", after.minus(before).c_str());
+                ok &= check(no_error && after == before,
+                            "free " + std::to_string(free_left >> 20) + " MiB: "
+                            + (threw ? "ran out (" + message + ")" : "fit") + "; everything released");
+            }
+        }
+        if (tried > 0)
+        {
+            ok &= check(ran_out > 0, "at least one construction ran out of device memory");
+            // End to end, for memory the counters do not see (cuFFT's internal
+            // allocations; the plan counter catches a leaked plan). 8 MiB covers the
+            // 2 MiB allocation pages and cuFFT's retained per-plan memory.
+            const long long process_end = process_device_bytes();
+            const size_t free_end = free_bytes();
+            const bool per_process = (process_start >= 0 && process_end >= 0);
+            const double drift_mib = per_process
+                ? static_cast<double>(process_end - process_start) / 1048576.0
+                : (static_cast<double>(free_start) - static_cast<double>(free_end)) / 1048576.0;
+            ok &= check(Live::now() == live_start && drift_mib <= 8.0,
+                        std::string("the device memory ") + (per_process ? "of this process (NVML)" : "free on the device")
+                        + " returns to its level before these constructions (" + std::to_string(drift_mib)
+                        + " MiB more in use; 8 MiB allowed)");
+        }
+        else
+        {
+            printf("  [SKIP] the out-of-memory check could not run (device memory could not be held, "
+                   "or the driver backs it with system memory)\n");
+            oom_skipped = true;
+        }
+    }
+    return ok;
+}
+
+int main(int argc, char** argv)
+{
+    // --out-of-memory runs only section 4, as its own ctest entry (run serially,
+    // skipped with code 77 where it cannot run), so that a skip there does not
+    // hide the result of sections 1-3
+    if (argc > 1 && std::string(argv[1]) == "--out-of-memory")
+    {
+        bool oom_skipped = false;
+        const bool ok = out_of_memory_check(oom_skipped);
+        printf("TestCudaDeviceBuffer --out-of-memory: %s\n", ok ? (oom_skipped ? "SKIPPED" : "PASSED") : "FAILED");
+        if (!ok)
+            return 1;
+        return oom_skipped ? 77 : 0;   // 77: SKIP_RETURN_CODE in tests/CMakeLists.txt
+    }
+
     bool ok = true;
 
     //--------------------------------------------------------------------------
@@ -530,156 +697,6 @@ int main()
         }
     }
 
-    //--------------------------------------------------------------------------
-    // 4. A construction that really runs out of device memory
-    //--------------------------------------------------------------------------
-    printf("--- out of device memory ---\n");
-    bool oom_skipped = false;
-    {
-        ComputationSpec spec;
-        spec.nx = {64, 64, 64};
-        spec.lx = {4.0, 4.0, 4.0};
-
-        // What one construction and run take, measured once while the objects
-        // are alive: at least the counted bytes, and by device free memory also
-        // cuFFT's plan work areas (unless another process changed it meanwhile)
-        size_t need = 0;
-        bool measured = false;
-        const Live live_before_measurement = Live::now();
-        const size_t free_before = free_bytes();
-        try
-        {
-            const long long counted_before = live_device_bytes();
-            std::unique_ptr<AbstractFactory<double>> factory(make_factory<double>(false));
-            std::unique_ptr<ComputationBox<double>> cb(factory->create_computation_box(spec.nx, spec.lx, {}));
-            std::unique_ptr<Molecules> molecules(factory->create_molecules_information("continuous", 0.05, {{"A", 1.0}, {"B", 1.0}}));
-            molecules->add_polymer(1.0, {{"A", 0.4, 0, 1}, {"B", 0.6, 1, 2}});
-            std::unique_ptr<PropagatorComputationOptimizer> optimizer(factory->create_propagator_computation_optimizer(molecules.get(), true));
-            std::unique_ptr<PropagatorComputation<double>> computation(
-                factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4"));
-            std::vector<double> w(cb->get_n_basis(), 0.1);
-            computation->compute_propagators({{"A", w.data()}, {"B", w.data()}});
-            computation->compute_concentrations();
-            computation->compute_stress();
-            const size_t free_during = free_bytes();
-            const size_t counted = static_cast<size_t>(live_device_bytes() - counted_before);
-            need = std::max(counted, free_before > free_during ? free_before - free_during : size_t(0));
-            measured = true;
-        }
-        catch (const std::exception& e)
-        {
-            // Only a lack of device memory makes the section impossible; any
-            // other failure of this ordinary computation is a test failure
-            const std::string message = one_line(e.what());
-            const bool memory = message.find("out of memory") != std::string::npos
-                             || message.find("cuFFT error code 2") != std::string::npos   // CUFFT_ALLOC_FAILED
-                             || free_before < (size_t(1) << 30);
-            printf("  the 64^3 computation failed: %s\n", message.c_str());
-            ok &= check(memory, "the 64^3 computation fails only for lack of device memory");
-        }
-        ok &= check(no_cuda_error("the measurement"), "the measurement leaves no release failure or pending error");
-        const Live live_after_measurement = Live::now();
-        if (!(live_after_measurement == live_before_measurement))
-            printf("  the measurement left %s\n", live_after_measurement.minus(live_before_measurement).c_str());
-        ok &= check(live_after_measurement == live_before_measurement, "the 64^3 computation releases everything");
-
-        // Device memory after the measurement (modules loaded, cuFFT's retained
-        // per-plan memory included), for the end-to-end check below: this
-        // process's usage from NVML when it is available, else the device's
-        // free memory (which other processes also change)
-        const long long process_start = process_device_bytes();
-        const size_t free_start = free_bytes();
-        const Live live_start = Live::now();
-
-        // Leave a fraction of that free; the rest of the free memory is held by a
-        // ballast for the moment of the construction. The last case leaves (almost)
-        // nothing, so one construction runs out even if another process changed the
-        // free memory while `need` was measured.
-        int ran_out = 0, tried = 0;
-        if (measured)
-        {
-            printf("  a 64^3 computation takes about %.1f MiB of device memory\n", need / 1048576.0);
-            for (double fraction : {0.9, 0.6, 0.3, 0.1, 0.02, 0.0})
-            {
-                const size_t leftover = static_cast<size_t>(fraction * need);
-                const size_t free_now = free_bytes();
-                if (free_now <= leftover)
-                    continue;
-                const Live before = Live::now();
-                std::vector<CudaDeviceBuffer<char>> ballast = hold_device_memory(free_now - leftover);
-                const size_t free_left = free_bytes();
-                if (free_left > leftover + need)
-                {
-                    printf("  [SKIP] leftover %.1f MiB: could hold only part of the device memory (%.1f MiB left free)\n",
-                           leftover / 1048576.0, free_left / 1048576.0);
-                    continue;
-                }
-                // A driver that backs device allocations with system memory once the
-                // device memory is full (the default sysmem fallback of WDDM drivers on
-                // Windows) never runs out: an allocation larger than the free memory
-                // must fail for the construction to be able to fail
-                bool oversubscribed = false;
-                try
-                {
-                    CudaDeviceBuffer<char> probe(free_left + need);
-                    oversubscribed = true;
-                }
-                catch (const std::exception&) {}
-                if (oversubscribed)
-                {
-                    printf("  [SKIP] leftover %.1f MiB: %.1f MiB could be allocated with %.1f MiB free "
-                           "(device memory backed by system memory)\n",
-                           leftover / 1048576.0, (free_left + need) / 1048576.0, free_left / 1048576.0);
-                    continue;
-                }
-                ++tried;
-                std::string message;
-                bool threw = false;
-                try { run_computation<double>(spec); }
-                catch (const std::exception& e) { threw = true; message = e.what(); }
-                const bool no_error = no_cuda_error("an out-of-memory construction");
-                ballast.clear();
-                if (threw)
-                    ++ran_out;
-                // The innermost failure is at the end of the message (outer frames prepend theirs)
-                message = one_line(message);
-                if (message.size() > 240)
-                    message = "..." + message.substr(message.size() - 240);
-                const Live after = Live::now();
-                if (!(after == before))
-                    printf("  left %s\n", after.minus(before).c_str());
-                ok &= check(no_error && after == before,
-                            "free " + std::to_string(free_left >> 20) + " MiB: "
-                            + (threw ? "ran out (" + message + ")" : "fit") + "; everything released");
-            }
-        }
-        if (tried > 0)
-        {
-            ok &= check(ran_out > 0, "at least one construction ran out of device memory");
-            // End to end, for memory the counters do not see (cuFFT's internal
-            // allocations; the plan counter catches a leaked plan). 8 MiB covers the
-            // 2 MiB allocation pages and cuFFT's retained per-plan memory.
-            const long long process_end = process_device_bytes();
-            const size_t free_end = free_bytes();
-            const bool per_process = (process_start >= 0 && process_end >= 0);
-            const double drift_mib = per_process
-                ? static_cast<double>(process_end - process_start) / 1048576.0
-                : (static_cast<double>(free_start) - static_cast<double>(free_end)) / 1048576.0;
-            ok &= check(Live::now() == live_start && drift_mib <= 8.0,
-                        std::string("the device memory ") + (per_process ? "of this process (NVML)" : "free on the device")
-                        + " returns to its level before these constructions (" + std::to_string(drift_mib)
-                        + " MiB more in use; 8 MiB allowed)");
-        }
-        else
-        {
-            printf("  [SKIP] the out-of-memory check could not run (device memory could not be held, "
-                   "or the driver backs it with system memory)\n");
-            oom_skipped = true;
-        }
-    }
-
-    printf("TestCudaDeviceBuffer: %s\n", ok ? (oom_skipped ? "PASSED (out-of-memory check skipped)" : "PASSED") : "FAILED");
-    if (!ok)
-        return 1;
-    return oom_skipped ? 77 : 0;   // 77: SKIP_RETURN_CODE in tests/CMakeLists.txt
+    printf("TestCudaDeviceBuffer: %s\n", ok ? "PASSED" : "FAILED");
+    return ok ? 0 : 1;
 }

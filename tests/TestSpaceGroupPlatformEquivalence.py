@@ -51,7 +51,8 @@ or expand it back to the full grid (non-CrysFFT SG paths).
 
   - continuous + SG + mask: SUPPORTED and numerically correct on cpu-mkl,
     cpu-fftw, and cuda (Q and pointwise phi match the SG-off masked control
-    to machine precision). Asserted below.
+    to machine precision), with rqm4, rk2 and (orthogonal cells) cn-adi2.
+    Asserted below.
   - discrete + SG + mask: SUPPORTED and numerically correct on cpu-mkl,
     cpu-fftw, and cuda. Asserted below.
   - The mask subtests go through the public PropagatorSolver wrapper's
@@ -283,14 +284,15 @@ def run_grafted(platform, chain_model, nx, lx, sg, w_full, w_reduced, q_full,
 
 
 def run_masked(platform, chain_model, nx, lx, sg, w_full, w_reduced, mask,
-               use_sg, angles=None):
+               use_sg, angles=None, numerical_method="rqm4"):
     """Masked run through the public PropagatorSolver wrapper, exercising the
     `mask=` constructor argument (masks are always passed on the full grid;
     ComputationBox reduces the stored mask when the space group is set)."""
     solver = PropagatorSolver(
         nx=list(nx), lx=list(lx), ds=DS,
         bond_lengths=dict(BOND_LENGTHS), bc=list(BC),
-        chain_model=chain_model, numerical_method="rqm4",
+        chain_model=chain_model,
+        numerical_method=numerical_method if chain_model == "continuous" else None,
         platform=platform, mask=np.asarray(mask).flatten(), angles=angles,
         space_group=sg if use_sg else None)
     solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
@@ -458,12 +460,21 @@ def main():
                 # ---- mask + SG (supported for both chain models on all
                 # ---- platforms; factory API, see module docstring) ----
                 blocked = np.asarray(mask).flatten() == 0.0
-                for platform in platforms:
+                # Each continuous method applies the mask itself (RK2 through the
+                # shared multiply_mask helper, CN-ADI after its reduction to the basis)
+                methods = ["rqm4"]
+                if chain_model == "continuous":
+                    methods += ["rk2"] + (["cn-adi2"] if angles is None else [])
+                for platform, method in ((p, m) for p in platforms for m in methods):
                     tag = f"{case_name}/{mode}/{chain_model}/{platform}/mask"
+                    if chain_model == "continuous":
+                        tag += f"/{method}"
                     control = run_masked(platform, chain_model, nx, lx, sg,
-                                         w_full, w_reduced, mask, use_sg=False, angles=angles)
+                                         w_full, w_reduced, mask, use_sg=False, angles=angles,
+                                         numerical_method=method)
                     sg_run = run_masked(platform, chain_model, nx, lx, sg,
-                                        w_full, w_reduced, mask, use_sg=True, angles=angles)
+                                        w_full, w_reduced, mask, use_sg=True, angles=angles,
+                                        numerical_method=method)
                     check(control["chk"], f"{tag}: SG-off check_total_partition()")
                     check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
                     compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,
