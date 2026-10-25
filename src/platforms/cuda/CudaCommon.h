@@ -129,24 +129,18 @@ std::map<std::string, const To*> reinterpret_map(const std::map<std::string, con
  * @class CudaCommon
  * @brief Singleton class for CUDA GPU configuration.
  *
- * Manages GPU settings including:
- * - Number of thread blocks for kernel launches
- * - Number of threads per block
- * - GPU device selection
+ * Manages the launch configuration of the grid-stride kernels:
+ * - Number of thread blocks (default 1024, LFTS_GPU_NUM_BLOCKS)
+ * - Number of threads per block (default 256, LFTS_GPU_NUM_THREADS)
+ *
+ * The kernels run on the CUDA runtime's current device; select the GPU with
+ * CUDA_VISIBLE_DEVICES.
  *
  * Uses Scott Meyer's singleton pattern for thread-safe initialization.
- *
- * **Typical Configuration:**
- *
- * - n_blocks: ceil(n_grid / n_threads)
- * - n_threads: 256-512 (depends on GPU architecture)
  *
  * @example
  * @code
  * CudaCommon& cuda = CudaCommon::get_instance();
- * cuda.set(128, 256, 0);  // 128 blocks, 256 threads, GPU 0
- *
- * // Launch kernel
  * my_kernel<<<cuda.get_n_blocks(), cuda.get_n_threads()>>>(...);
  * @endcode
  */
@@ -158,8 +152,6 @@ private:
 
     /// Throw unless n_threads <= 1024 and 1 <= n_blocks * n_threads <= MAX_GRID_THREADS
     static void check_launch(int n_blocks, int n_threads);
-
-    // int n_gpus;
 
     CudaCommon();
     ~CudaCommon();
@@ -184,29 +176,17 @@ public:
         }
     };
 
-    /**
-     * @brief Configure GPU settings.
-     * @param n_blocks    Number of thread blocks
-     * @param n_threads   Threads per block
-     * @param process_idx GPU device index
-     */
-    void set(int n_blocks, int n_threads, int process_idx);
-
     /// Get number of thread blocks.
     int get_n_blocks();
 
     /// Get threads per block.
     int get_n_threads();
-    // int get_n_gpus();
 
     /// Set number of thread blocks.
     void set_n_blocks(int n_blocks);
 
     /// Set threads per block.
     void set_n_threads(int n_threads);
-
-    /// Set GPU device index.
-    void set_idx(int process_idx);
 };
 
 /**

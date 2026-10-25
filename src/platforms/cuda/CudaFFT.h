@@ -48,6 +48,11 @@ class CudaRealTransform3D;
  * that the transforms are issued on the propagator's stream, like the kernels
  * around them. The FFT<T> forward()/backward() methods run on the legacy
  * default stream and serialize with every other stream.
+ *
+ * An object runs one transform at a time: its cuFFT plans take the stream of
+ * each call and its work buffer holds that transform's intermediate data. Use
+ * a separate object for each stream that transforms concurrently, as the
+ * solvers do (one per stream).
  */
 template <typename T>
 class CudaFFTBase : public FFT<T>
@@ -74,7 +79,7 @@ public:
  *
  * - For periodic: cuFFT plans
  * - For non-periodic: Delegates to CudaRealTransform
- * - Stream-aware for concurrent execution
+ * - Stream-aware; one object per concurrent stream (see CudaFFTBase)
  */
 template <typename T, int DIM>
 class CudaFFT : public CudaFFTBase<T>

@@ -101,7 +101,6 @@ void CudaFactory<T>::display_info()
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    // const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
     // Get GPU info
     CUDA_CHECK(cudaGetDeviceCount(&devices_count));

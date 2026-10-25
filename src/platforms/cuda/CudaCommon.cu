@@ -106,19 +106,6 @@ CudaCommon::CudaCommon()
         throw_without_line_number(exc.what());
     }
 }
-void CudaCommon::set(int n_blocks, int n_threads, int process_idx)
-{
-    int devices_count;
-
-    // Check the pair together (set_n_blocks alone would check it against the old n_threads)
-    check_launch(n_blocks, n_threads);
-    this->n_blocks = n_blocks;
-    this->n_threads = n_threads;
-
-    // Change GPU setting
-    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
-    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
-}
 int CudaCommon::get_n_blocks()
 {
     return n_blocks;
@@ -127,10 +114,6 @@ int CudaCommon::get_n_threads()
 {
     return n_threads;
 }
-// int CudaCommon::get_n_gpus()
-// {
-//     return n_gpus;
-// }
 // The grid-stride kernels launched with n_blocks x n_threads rely on at most
 // MAX_GRID_THREADS threads (see GridLimits.h)
 void CudaCommon::check_launch(int n_blocks, int n_threads)
@@ -150,14 +133,6 @@ void CudaCommon::set_n_threads(int n_threads)
 {
     check_launch(this->n_blocks, n_threads);
     this->n_threads = n_threads;
-}
-void CudaCommon::set_idx(int process_idx)
-{
-    int devices_count;
-
-    // Change GPU setting
-    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
-    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
 }
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M)
