@@ -3,6 +3,7 @@
  * @brief FFTW implementation of crystallographic FFT for z-mirror symmetry.
  */
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -48,14 +49,6 @@ void FftwCrysFFTObliqueZ::release()
     plan_dct_forward_z_ = plan_dct_backward_z_ = nullptr;
     plan_fft_forward_xy_ = plan_fft_backward_xy_ = nullptr;
     plan_fft_z_forward_ = plan_fft_z_backward_ = nullptr;
-
-    if (io_buffer_) fftw_free(io_buffer_);
-    if (temp_buffer_) fftw_free(temp_buffer_);
-    if (complex_buffer_) fftw_free(complex_buffer_);
-    if (fft_z_real_) fftw_free(fft_z_real_);
-    if (fft_z_complex_) fftw_free(fft_z_complex_);
-    io_buffer_ = temp_buffer_ = fft_z_real_ = nullptr;
-    complex_buffer_ = fft_z_complex_ = nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -77,11 +70,14 @@ void FftwCrysFFTObliqueZ::initFFTPlans()
     if (wisdom_file && wisdom_file[0] != '\0')
         fftw_import_wisdom_from_filename(wisdom_file);
 
-    io_buffer_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_));
-    temp_buffer_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_));
-    complex_buffer_ = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_));
+    // Planning arrays only, freed on return: the transforms run on the
+    // thread-local buffers of get_thread_buffers() (new-array execute)
+    std::unique_ptr<double, RealDeleter> io_buffer(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+    std::unique_ptr<double, RealDeleter> temp_buffer(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+    std::unique_ptr<fftw_complex, ComplexDeleter> complex_buffer(
+        static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_)));
 
-    if (!io_buffer_ || !temp_buffer_ || !complex_buffer_)
+    if (!io_buffer || !temp_buffer || !complex_buffer)
         throw_with_line_number("Failed to allocate FFTW buffers for FftwCrysFFTObliqueZ.");
 
     // DCT-II/III along Z for each (x,y) column
@@ -99,14 +95,14 @@ void FftwCrysFFTObliqueZ::initFFTPlans()
 
     plan_dct_forward_z_ = fftw_plan_many_r2r(
         1, n_z, howmany_z,
-        io_buffer_, inembed_z, istride_z, idist_z,
-        temp_buffer_, onembed_z, ostride_z, odist_z,
+        io_buffer.get(), inembed_z, istride_z, idist_z,
+        temp_buffer.get(), onembed_z, ostride_z, odist_z,
         kind_forward, plan_flags);
 
     plan_dct_backward_z_ = fftw_plan_many_r2r(
         1, n_z, howmany_z,
-        temp_buffer_, inembed_z, istride_z, idist_z,
-        io_buffer_, onembed_z, ostride_z, odist_z,
+        temp_buffer.get(), inembed_z, istride_z, idist_z,
+        io_buffer.get(), onembed_z, ostride_z, odist_z,
         kind_backward, plan_flags);
 
     // Real-to-complex FFT along X,Y for each Z slice (batched, strided)
@@ -121,14 +117,14 @@ void FftwCrysFFTObliqueZ::initFFTPlans()
 
     plan_fft_forward_xy_ = fftw_plan_many_dft_r2c(
         2, n_xy, howmany_xy,
-        temp_buffer_, inembed_xy, istride_xy, idist_xy,
-        complex_buffer_, onembed_xy, ostride_xy, odist_xy,
+        temp_buffer.get(), inembed_xy, istride_xy, idist_xy,
+        complex_buffer.get(), onembed_xy, ostride_xy, odist_xy,
         plan_flags);
 
     plan_fft_backward_xy_ = fftw_plan_many_dft_c2r(
         2, n_xy, howmany_xy,
-        complex_buffer_, onembed_xy, ostride_xy, odist_xy,
-        temp_buffer_, inembed_xy, istride_xy, idist_xy,
+        complex_buffer.get(), onembed_xy, ostride_xy, odist_xy,
+        temp_buffer.get(), inembed_xy, istride_xy, idist_xy,
         plan_flags);
 
     use_fft_dct_ = (std::getenv("FTS_CRYSFFT_HEX_DCT_FFT") != nullptr);
@@ -148,9 +144,11 @@ void FftwCrysFFTObliqueZ::initFFTPlansZ(unsigned plan_flags)
     const int howmany = nx_logical_[0] * nx_logical_[1];
     M_complex_z_ = nx_logical_[0] * nx_logical_[1] * (Nz / 2 + 1);
 
-    fft_z_real_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_logical_));
-    fft_z_complex_ = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_z_));
-    if (!fft_z_real_ || !fft_z_complex_)
+    // Planning arrays only, freed on return (see initFFTPlans())
+    std::unique_ptr<double, RealDeleter> fft_z_real(static_cast<double*>(fftw_malloc(sizeof(double) * M_logical_)));
+    std::unique_ptr<fftw_complex, ComplexDeleter> fft_z_complex(
+        static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_complex_z_)));
+    if (!fft_z_real || !fft_z_complex)
         throw_with_line_number("Failed to allocate FFTW buffers for ObliqueZ FFT-DCT.");
 
     int n_z[1] = {Nz};
@@ -163,14 +161,14 @@ void FftwCrysFFTObliqueZ::initFFTPlansZ(unsigned plan_flags)
 
     plan_fft_z_forward_ = fftw_plan_many_dft_r2c(
         1, n_z, howmany,
-        fft_z_real_, inembed_z, istride_z, idist_z,
-        fft_z_complex_, onembed_z, ostride_z, odist_z,
+        fft_z_real.get(), inembed_z, istride_z, idist_z,
+        fft_z_complex.get(), onembed_z, ostride_z, odist_z,
         plan_flags);
 
     plan_fft_z_backward_ = fftw_plan_many_dft_c2r(
         1, n_z, howmany,
-        fft_z_complex_, onembed_z, ostride_z, odist_z,
-        fft_z_real_, inembed_z, istride_z, idist_z,
+        fft_z_complex.get(), onembed_z, ostride_z, odist_z,
+        fft_z_real.get(), inembed_z, istride_z, idist_z,
         plan_flags);
 
     const int N = nx_physical_[2];
@@ -327,8 +325,8 @@ void FftwCrysFFTObliqueZ::apply_spectral_multiplier(const double* q_in, double* 
 //------------------------------------------------------------------------------
 void FftwCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
 {
-    ThreadState& state = get_thread_state();
-    if (!state.boltz_current)
+    const double* boltz = current_boltzmann();
+    if (!boltz)
         throw_with_line_number("FftwCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
     static const bool do_profile = (std::getenv("FTS_PROFILE_CRYSFFT_HEX_CPU_DETAIL") != nullptr);   // read once
@@ -351,8 +349,8 @@ void FftwCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
 
         for (int i = 0; i < M_complex_; ++i)
         {
-            buffers.complex.get()[i][0] *= state.boltz_current[i];
-            buffers.complex.get()[i][1] *= state.boltz_current[i];
+            buffers.complex.get()[i][0] *= boltz[i];
+            buffers.complex.get()[i][1] *= boltz[i];
         }
         auto t5 = std::chrono::steady_clock::now();
 
@@ -376,7 +374,7 @@ void FftwCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
         return;
     }
 
-    apply_spectral_multiplier(q_in, q_out, state.boltz_current);
+    apply_spectral_multiplier(q_in, q_out, boltz);
 }
 
 void FftwCrysFFTObliqueZ::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)

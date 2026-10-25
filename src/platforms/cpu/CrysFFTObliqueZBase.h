@@ -13,16 +13,10 @@
 #define CRYS_FFT_OBLIQUEZ_BASE_H_
 
 #include <array>
-#include <atomic>
-#include <mutex>
-#include <thread>
 #include <cmath>
-#include <cstdint>
-#include <limits>
-#include <map>
 #include <memory>
-#include <unordered_map>
 
+#include "CrysFFTSharedTables.h"
 #include "Exception.h"
 #include "MinimalFormAlias.h"
 #include "ReciprocalMetric.h"
@@ -38,7 +32,7 @@
  * Provides common functionality:
  * - Reciprocal metric tensor computation
  * - Boltzmann factor generation and caching
- * - Per-thread state (owned by the object)
+ * - Boltzmann factors shared by the calling threads (CrysFFTSharedTables.h)
  *
  * The derived classes (FftwCrysFFTObliqueZ, MklCrysFFTObliqueZ) provide the
  * transforms: initFFTPlans(), diffusion(), apply_multiplier().
@@ -60,49 +54,15 @@ protected:
 
     double norm_factor_{1.0};
 
-    struct ThreadState
-    {
-        std::map<double, std::unique_ptr<double[]>> boltzmann;
-        const double* boltz_current = nullptr;
-        double ds_current = std::numeric_limits<double>::quiet_NaN();
-        uint64_t epoch = 0;
-    };
-    mutable std::atomic<uint64_t> cache_epoch_{1};   ///< bumped to invalidate every thread's cache
-    /// Unique per object, never reused: lets a thread recognise the object its
-    /// remembered cache slot belongs to (see get_thread_state()).
-    inline static std::atomic<uint64_t> next_instance_id_{1};
-    const uint64_t instance_id_{next_instance_id_.fetch_add(1, std::memory_order_relaxed)};
-    mutable std::mutex thread_states_mutex_;
-    /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
-    /// owned by this object so that they are released together with it.
-    mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
+    /// Boltzmann factors per ds, shared by the threads that call the engine
+    SharedTableCache<double, std::unique_ptr<double[]>> boltzmann_;
 
-    /// Cache of the calling thread (owned by this object, see thread_states_).
-    ThreadState& get_thread_state() const
+    /// Boltzmann factors of the calling thread's last set_contour_step(); nullptr
+    /// when it has called none since the last cell change.
+    const double* current_boltzmann() const
     {
-        // Each thread remembers the slot it used last, tagged with the object's
-        // id, so the usual case (one object per thread) takes no lock. The slot
-        // is looked up under the lock only when the thread switches object; the
-        // map keeps references valid across insertions, and a stale remembered
-        // pointer is never followed because ids are not reused.
-        struct LastSlot { uint64_t instance_id = 0; ThreadState* state = nullptr; };
-        thread_local LastSlot last;
-        if (last.instance_id != instance_id_)
-        {
-            std::lock_guard<std::mutex> lock(thread_states_mutex_);
-            last.state = &thread_states_[std::this_thread::get_id()];
-            last.instance_id = instance_id_;
-        }
-        ThreadState* state = last.state;
-        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
-        if (state->epoch != epoch)
-        {
-            state->boltzmann.clear();
-            state->boltz_current = nullptr;
-            state->ds_current = std::numeric_limits<double>::quiet_NaN();
-            state->epoch = epoch;
-        }
-        return *state;
+        const std::unique_ptr<double[]>* boltz = boltzmann_.current();
+        return boltz ? boltz->get() : nullptr;
     }
 
     std::unique_ptr<double[]> generateBoltzmann(double ds) const
@@ -163,7 +123,7 @@ protected:
 
     void freeBoltzmann()
     {
-        cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
+        boltzmann_.invalidate();
     }
 
 public:
@@ -203,19 +163,7 @@ public:
 
     void set_contour_step(double ds)
     {
-        ThreadState& state = get_thread_state();
-        if (state.boltz_current != nullptr && state.ds_current == ds)
-            return;
-
-        auto it = state.boltzmann.find(ds);
-        if (it == state.boltzmann.end())
-        {
-            std::unique_ptr<double[]> boltz = generateBoltzmann(ds);
-            it = state.boltzmann.emplace(ds, std::move(boltz)).first;
-        }
-
-        state.ds_current = ds;
-        state.boltz_current = it->second.get();
+        boltzmann_.select(ds, [&] { return generateBoltzmann(ds); });
     }
 
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

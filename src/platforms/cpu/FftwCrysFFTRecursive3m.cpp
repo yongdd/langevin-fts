@@ -70,6 +70,9 @@ void FftwCrysFFTRecursive3m::init_fft_plans()
         static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
     std::unique_ptr<fftw_complex, AlignedDeleter> dummy_out(
         static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_physical_)));
+    // FFTW_PATIENT runs trial transforms on these arrays
+    if (!dummy_in || !dummy_out)
+        throw_with_line_number("Failed to allocate the FFTW planning buffers of FftwCrysFFTRecursive3m.");
 
     fftw_iodim dims[3];
     dims[0].n = nx_physical_[0];
@@ -99,8 +102,10 @@ void FftwCrysFFTRecursive3m::init_fft_plans()
 void FftwCrysFFTRecursive3m::apply_with_cache(
     const KCache& cache, const double* q_in, double* q_out) const
 {
+    // fftw_malloc'd like the planning arrays: the new-array execute functions
+    // need the alignment the plans were made with
     struct ThreadBuffers {
-        std::vector<double> iomat;
+        std::unique_ptr<double, AlignedDeleter> iomat;
         std::unique_ptr<fftw_complex, AlignedDeleter> step1;
         std::unique_ptr<fftw_complex, AlignedDeleter> step2;
         int size = 0;
@@ -109,20 +114,21 @@ void FftwCrysFFTRecursive3m::apply_with_cache(
     thread_local ThreadBuffers buffers;
     if (buffers.size != M_physical_)
     {
-        buffers.iomat.resize(M_physical_);
+        buffers.size = 0;
+        buffers.iomat.reset(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
         buffers.step1.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_physical_)));
         buffers.step2.reset(static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * M_physical_)));
-        if (!buffers.step1 || !buffers.step2)
+        if (!buffers.iomat || !buffers.step1 || !buffers.step2)
         {
             throw_with_line_number("Failed to allocate FFTW work buffers.");
         }
         buffers.size = M_physical_;
     }
 
-    std::memcpy(buffers.iomat.data(), q_in, sizeof(double) * M_physical_);
+    std::memcpy(buffers.iomat.get(), q_in, sizeof(double) * M_physical_);
 
     // Forward r2c FFT
-    fftw_execute_dft_r2c(plan_forward_, buffers.iomat.data(), buffers.step1.get());
+    fftw_execute_dft_r2c(plan_forward_, buffers.iomat.get(), buffers.step1.get());
 
     const int Nx2 = nx_physical_[0];
     const int Ny2 = nx_physical_[1];
@@ -167,7 +173,7 @@ void FftwCrysFFTRecursive3m::apply_with_cache(
     }
 
     // Backward c2r FFT
-    fftw_execute_dft_c2r(plan_backward_, buffers.step2.get(), buffers.iomat.data());
+    fftw_execute_dft_c2r(plan_backward_, buffers.step2.get(), buffers.iomat.get());
 
-    std::memcpy(q_out, buffers.iomat.data(), sizeof(double) * M_physical_);
+    std::memcpy(q_out, buffers.iomat.get(), sizeof(double) * M_physical_);
 }

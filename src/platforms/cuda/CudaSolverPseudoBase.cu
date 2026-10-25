@@ -615,52 +615,15 @@ void CudaSolverPseudoBase<T>::init_crysfft()
         (angles.size() >= 3 &&
          std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
          std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-    const auto selection = select_crysfft_mode(
+    // Engine choice and its basis map, shared with the CPU solver
+    const CrysFFTPlan plan = plan_crysfft(
         space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
-        return;
-
-    const int M_reduced = space_group_->get_n_reduced_basis();
-    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-    const bool use_m3_basis = space_group_->using_m3_physical_basis();
-    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
-
-    // Recursive 3m: octant sampled at even full-grid indices
-    if (selection.mode == CrysFFTChoice::Recursive3m)
-    {
-        if (use_pmmm_basis)
-            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/true);
-        if (crysfft_mapping_usable(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::Recursive3m, map, selection.m3_translations);
-    }
-
-    // ObliqueZ: lower z half (z-mirror)
-    if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
-    {
-        if (use_m3_basis || use_pmmm_basis)
-            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-        if (!selection.can_oblique_z)
-            throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
-        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                          : selection.oblique_z_shift;
-        if (use_hex_basis && z_shift != selection.oblique_z_shift)
-            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-        const auto map = build_crysfft_mapping_z_mirror(nx_logical, full_to_reduced, M_reduced, z_shift);
-        if (crysfft_mapping_usable(map, use_hex_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::ObliqueZ, map, selection.m3_translations);
-    }
-
-    // Pmmm DCT: octant at consecutive indices
-    if (!use_crysfft_ && selection.can_pmmm)
-    {
-        if (use_m3_basis)
-            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/false);
-        if (crysfft_mapping_usable(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::PmmmDct, map, selection.m3_translations);
-    }
+    if (plan.mode == CrysFFTChoice::Recursive3m)
+        setup_crysfft(CudaCrysFFTMode::Recursive3m, plan.map, plan.m3_translations);
+    else if (plan.mode == CrysFFTChoice::PmmmDct)
+        setup_crysfft(CudaCrysFFTMode::PmmmDct, plan.map, plan.m3_translations);
+    else if (plan.mode == CrysFFTChoice::ObliqueZ)
+        setup_crysfft(CudaCrysFFTMode::ObliqueZ, plan.map, plan.m3_translations);
 }
 
 template <typename T>

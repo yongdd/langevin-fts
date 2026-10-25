@@ -129,8 +129,8 @@ void MklCrysFFTObliqueZ::initFFTPlans()
     mkl_dfti_check(DftiCreateDescriptor(&plan_fft_forward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy forward)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy forward)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy forward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_input_distance, 1), "DftiSetValue (xy forward input distance)");
-    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_output_distance, 1), "DftiSetValue (xy forward output distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_input_distance, static_cast<MKL_LONG>(1)), "DftiSetValue (xy forward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_output_distance, static_cast<MKL_LONG>(1)), "DftiSetValue (xy forward output distance)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_input_strides, input_strides_xy), "DftiSetValue (xy forward input strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, mkl_dfti::forward_output_strides, output_strides_xy), "DftiSetValue (xy forward output strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_forward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy forward)");
@@ -139,8 +139,8 @@ void MklCrysFFTObliqueZ::initFFTPlans()
     mkl_dfti_check(DftiCreateDescriptor(&plan_fft_backward_xy_, DFTI_DOUBLE, DFTI_REAL, 2, dims_xy), "DftiCreateDescriptor (xy backward)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_PLACEMENT, DFTI_NOT_INPLACE), "DftiSetValue(DFTI_PLACEMENT, xy backward)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_NUMBER_OF_TRANSFORMS, static_cast<MKL_LONG>(howmany_xy)), "DftiSetValue(DFTI_NUMBER_OF_TRANSFORMS, xy backward)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_input_distance, 1), "DftiSetValue (xy backward input distance)");
-    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_output_distance, 1), "DftiSetValue (xy backward output distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_input_distance, static_cast<MKL_LONG>(1)), "DftiSetValue (xy backward input distance)");
+    mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_output_distance, static_cast<MKL_LONG>(1)), "DftiSetValue (xy backward output distance)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_input_strides, output_strides_xy), "DftiSetValue (xy backward input strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, mkl_dfti::backward_output_strides, input_strides_xy), "DftiSetValue (xy backward output strides)");
     mkl_dfti_check(DftiSetValue(plan_fft_backward_xy_, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX), "DftiSetValue(DFTI_CONJUGATE_EVEN_STORAGE, xy backward)");
@@ -326,11 +326,11 @@ void MklCrysFFTObliqueZ::apply_spectral_multiplier(const double* q_in, double* q
 //------------------------------------------------------------------------------
 void MklCrysFFTObliqueZ::diffusion(double* q_in, double* q_out)
 {
-    ThreadState& state = get_thread_state();
-    if (!state.boltz_current)
+    const double* boltz = current_boltzmann();
+    if (!boltz)
         throw_with_line_number("MklCrysFFTObliqueZ::set_contour_step must be called before diffusion().");
 
-    apply_spectral_multiplier(q_in, q_out, state.boltz_current);
+    apply_spectral_multiplier(q_in, q_out, boltz);
 }
 
 void MklCrysFFTObliqueZ::apply_multiplier(const double* q_in, double* q_out, const double* multiplier)

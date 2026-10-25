@@ -22,31 +22,14 @@
 #include <cufft.h>
 
 #include "CudaCrysFFT.h"
+#include "Recursive3mHelpers.h"
 
 class CudaCrysFFTRecursive3m : public CudaCrysFFTBase
 {
 public:
-    /**
-     * @brief Multiplier selection for the stress fast path.
-     *
-     * Mirrors the CPU CrysFFTRecursive3mBase::MultiplierType:
-     * - Kx2/Ky2/Kz2, Kxy2 (x and y), K2 (all): Cartesian k_d² summed over
-     *   those axes (continuous chains)
-     * - Exp...: the same times exp(-k²·coeff) (discrete chains)
-     */
-    enum class MultiplierType
-    {
-        Kx2,
-        Ky2,
-        Kz2,
-        ExpKx2,
-        ExpKy2,
-        ExpKz2,
-        Kxy2,
-        K2,
-        ExpKxy2,
-        ExpK2
-    };
+    /// Multiplier selection for the stress fast path, shared with the CPU
+    /// engine (crys_recursive_3m::MultiplierType in Recursive3mHelpers.h)
+    using MultiplierType = crys_recursive_3m::MultiplierType;
 
     CudaCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,

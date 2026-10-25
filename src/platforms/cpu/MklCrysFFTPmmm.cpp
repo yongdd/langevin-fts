@@ -8,173 +8,8 @@
 #include <cstring>
 #include <numbers>
 #include "MklCrysFFTPmmm.h"
+#include "MklDctLines.h"
 #include "MklStatusCheck.h"
-
-//------------------------------------------------------------------------------
-// Static helper: Apply DCT-II forward along one dimension
-//------------------------------------------------------------------------------
-static void applyDCT2Forward1D(
-    double* data, double* temp,
-    int n, int stride, int num_transforms,
-    DFTI_DESCRIPTOR_HANDLE fft_backward,
-    const double* cos_tbl, const double* sin_tbl)
-{
-    if (n == 1)
-    {
-        // REDFT10 of a singleton is 2*x; no FFT or neighboring sample is needed.
-        for (int i = 0; i < num_transforms * stride; ++i)
-            data[i] *= 2.0;
-        return;
-    }
-    int complex_size = n / 2 + 1;
-
-    thread_local std::vector<double> slice;
-    thread_local std::vector<std::complex<double>> fft_in;
-    thread_local std::vector<double> fft_out;
-
-    if (static_cast<int>(slice.size()) < n)
-    {
-        slice.resize(n);
-        fft_in.resize(complex_size);
-        fft_out.resize(n);
-    }
-
-    for (int batch = 0; batch < num_transforms; ++batch)
-    {
-        for (int s = 0; s < stride; ++s)
-        {
-            int offset = batch * n * stride + s;
-
-            // Extract 1D slice (strided)
-            for (int j = 0; j < n; ++j)
-                slice[j] = data[offset + j * stride];
-
-            // DCT-II preprocessing
-            fft_in[0] = std::complex<double>(slice[0], 0.0);
-            for (int k = 1; k < complex_size - 1; ++k)
-            {
-                double x_2k = slice[2 * k];
-                double x_2k_1 = slice[2 * k - 1];
-                fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
-            }
-            if (n % 2 == 0)
-                fft_in[n / 2] = std::complex<double>(slice[n - 1], 0.0);
-            else
-            {
-                int k = n / 2;
-                double x_2k = slice[2 * k];
-                double x_2k_1 = slice[2 * k - 1];
-                fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
-            }
-
-            // Inverse FFT (c2r)
-            mkl_dfti_check(DftiComputeBackward(fft_backward,
-                                               reinterpret_cast<double*>(fft_in.data()),
-                                               fft_out.data()),
-                           "DftiComputeBackward (Pmmm DCT-II)");
-
-            // DCT-II postprocessing
-            // Scaled to match FFTW's unnormalized REDFT10 convention:
-            //   X_k = 2 * sum_j x_j cos(pi*(j+0.5)*k/n)
-            // CrysFFTPmmmBase applies norm_factor_ = 1/M_logical afterwards,
-            // which assumes a REDFT10/REDFT01 round-trip gain of 2n per
-            // dimension. (Without the factor 2 here and with the 1/n in the
-            // DCT-III below, the round trip was unity and every diffusion()
-            // call shrank the field by 1/M_logical.)
-            temp[offset] = 2.0 * fft_out[0];
-            for (int k = 1; k <= n / 2; ++k)
-            {
-                double Ta = fft_out[k] + fft_out[n - k];
-                double Tb = fft_out[k] - fft_out[n - k];
-
-                double result_k = Ta * cos_tbl[k] + Tb * sin_tbl[k];
-                double result_nk = Ta * sin_tbl[k] - Tb * cos_tbl[k];
-
-                temp[offset + k * stride] = result_k;
-                if (k < n - k)
-                    temp[offset + (n - k) * stride] = result_nk;
-            }
-        }
-    }
-
-    int total = num_transforms * n * stride;
-    std::memcpy(data, temp, total * sizeof(double));
-}
-
-//------------------------------------------------------------------------------
-// Static helper: Apply DCT-III backward along one dimension
-//------------------------------------------------------------------------------
-static void applyDCT3Backward1D(
-    double* data, double* temp,
-    int n, int stride, int num_transforms,
-    DFTI_DESCRIPTOR_HANDLE fft_forward,
-    const double* cos_tbl, const double* sin_tbl)
-{
-    if (n == 1)
-        return;  // REDFT01 of a singleton is the identity.
-    int complex_size = n / 2 + 1;
-
-    thread_local std::vector<double> slice;
-    thread_local std::vector<double> fft_in;
-    thread_local std::vector<std::complex<double>> fft_out;
-
-    if (static_cast<int>(slice.size()) < n)
-    {
-        slice.resize(n);
-        fft_in.resize(n);
-        fft_out.resize(complex_size);
-    }
-
-    for (int batch = 0; batch < num_transforms; ++batch)
-    {
-        for (int s = 0; s < stride; ++s)
-        {
-            int offset = batch * n * stride + s;
-
-            // Extract 1D slice
-            for (int j = 0; j < n; ++j)
-                slice[j] = data[offset + j * stride];
-
-            // DCT-III preprocessing
-            fft_in[0] = slice[0];
-            for (int k = 0; k < n / 2; ++k)
-            {
-                double val_k = slice[k + 1];
-                double val_nk = slice[n - k - 1];
-
-                double Ta = val_k + val_nk;
-                double Tb = val_k - val_nk;
-
-                fft_in[k + 1] = Ta * sin_tbl[k + 1] + Tb * cos_tbl[k + 1];
-                fft_in[n - k - 1] = Ta * cos_tbl[k + 1] - Tb * sin_tbl[k + 1];
-            }
-
-            // Forward FFT (r2c)
-            mkl_dfti_check(DftiComputeForward(fft_forward, fft_in.data(), fft_out.data()),
-                           "DftiComputeForward (Pmmm DCT-III)");
-
-            // DCT-III postprocessing
-            // No 1/n scaling: matches FFTW's unnormalized REDFT01 convention,
-            //   x_j = X_0 + 2 * sum_{k>=1} X_k cos(pi*k*(j+0.5)/n),
-            // so that REDFT01(REDFT10(x)) = 2n*x per dimension and the
-            // norm_factor_ = 1/M_logical applied by CrysFFTPmmmBase yields a
-            // unit round trip (identical to FftwCrysFFTPmmm).
-            temp[offset] = fft_out[0].real();
-            for (int k = 1; k <= n / 2; ++k)
-            {
-                double re = fft_out[k].real();
-                double im = fft_out[k].imag();
-
-                temp[offset + (2 * k - 1) * stride] = re - im;
-                if (2 * k < n)
-                    temp[offset + (2 * k) * stride] = re + im;
-            }
-        }
-    }
-
-    int total = num_transforms * n * stride;
-    std::memcpy(data, temp, total * sizeof(double));
-}
 
 //------------------------------------------------------------------------------
 // Constructor
@@ -268,6 +103,10 @@ void MklCrysFFTPmmm::precomputeTwiddleFactors()
 
 //------------------------------------------------------------------------------
 // Apply DCT-II forward along all dimensions
+//
+// post_scale 1: FFTW's unnormalized REDFT10 here and REDFT01 below, as in
+// FftwCrysFFTPmmm. Their round trip gains 2n per dimension, which the
+// norm_factor_ = 1/M_logical of CrysFFTPmmmBase removes.
 //------------------------------------------------------------------------------
 void MklCrysFFTPmmm::dct_forward_impl(double* io, double* temp)
 {
@@ -276,19 +115,19 @@ void MklCrysFFTPmmm::dct_forward_impl(double* io, double* temp)
     int nz = nx_physical_[2];
 
     // Dimension 0: stride = ny*nz, num_transforms = 1
-    applyDCT2Forward1D(io, temp, nx, ny * nz, 1,
-                       dct_fft_backward_[0],
-                       cos_tables_[0].data(), sin_tables_[0].data());
+    mkl_dct2_lines(io, temp, nx, ny * nz, 1,
+                   dct_fft_backward_[0],
+                   cos_tables_[0].data(), sin_tables_[0].data(), 1.0);
 
     // Dimension 1: stride = nz, num_transforms = nx
-    applyDCT2Forward1D(io, temp, ny, nz, nx,
-                       dct_fft_backward_[1],
-                       cos_tables_[1].data(), sin_tables_[1].data());
+    mkl_dct2_lines(io, temp, ny, nz, nx,
+                   dct_fft_backward_[1],
+                   cos_tables_[1].data(), sin_tables_[1].data(), 1.0);
 
     // Dimension 2: stride = 1, num_transforms = nx*ny
-    applyDCT2Forward1D(io, temp, nz, 1, nx * ny,
-                       dct_fft_backward_[2],
-                       cos_tables_[2].data(), sin_tables_[2].data());
+    mkl_dct2_lines(io, temp, nz, 1, nx * ny,
+                   dct_fft_backward_[2],
+                   cos_tables_[2].data(), sin_tables_[2].data(), 1.0);
 }
 
 //------------------------------------------------------------------------------
@@ -301,17 +140,17 @@ void MklCrysFFTPmmm::dct_backward_impl(double* io, double* temp)
     int nz = nx_physical_[2];
 
     // Dimension 2: stride = 1, num_transforms = nx*ny
-    applyDCT3Backward1D(io, temp, nz, 1, nx * ny,
-                        dct_fft_forward_[2],
-                        cos_tables_[2].data(), sin_tables_[2].data());
+    mkl_dct3_lines(io, temp, nz, 1, nx * ny,
+                   dct_fft_forward_[2],
+                   cos_tables_[2].data(), sin_tables_[2].data(), 1.0);
 
     // Dimension 1: stride = nz, num_transforms = nx
-    applyDCT3Backward1D(io, temp, ny, nz, nx,
-                        dct_fft_forward_[1],
-                        cos_tables_[1].data(), sin_tables_[1].data());
+    mkl_dct3_lines(io, temp, ny, nz, nx,
+                   dct_fft_forward_[1],
+                   cos_tables_[1].data(), sin_tables_[1].data(), 1.0);
 
     // Dimension 0: stride = ny*nz, num_transforms = 1
-    applyDCT3Backward1D(io, temp, nx, ny * nz, 1,
-                        dct_fft_forward_[0],
-                        cos_tables_[0].data(), sin_tables_[0].data());
+    mkl_dct3_lines(io, temp, nx, ny * nz, 1,
+                   dct_fft_forward_[0],
+                   cos_tables_[0].data(), sin_tables_[0].data(), 1.0);
 }

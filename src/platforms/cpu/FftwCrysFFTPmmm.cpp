@@ -20,11 +20,12 @@ FftwCrysFFTPmmm::FftwCrysFFTPmmm(
 {
     try
     {
-        // Allocate work buffers for plan creation
-        io_buffer_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_));
-        temp_buffer_ = static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_));
+        // Planning arrays only, freed on return: the transforms run on the
+        // thread-local buffers of get_thread_local_buffers() (new-array execute)
+        std::unique_ptr<double, AlignedDeleter> io_buffer(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
+        std::unique_ptr<double, AlignedDeleter> temp_buffer(static_cast<double*>(fftw_malloc(sizeof(double) * M_physical_)));
 
-        if (!io_buffer_ || !temp_buffer_)
+        if (!io_buffer || !temp_buffer)
         {
             throw_with_line_number("Failed to allocate work buffer memory");
         }
@@ -32,13 +33,13 @@ FftwCrysFFTPmmm::FftwCrysFFTPmmm(
         // DCT-II (REDFT10) forward, DCT-III (REDFT01) backward
         plan_forward_ = fftw_plan_r2r_3d(
             nx_physical_[0], nx_physical_[1], nx_physical_[2],
-            io_buffer_, temp_buffer_,
+            io_buffer.get(), temp_buffer.get(),
             FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10,
             FFTW_MEASURE);
 
         plan_backward_ = fftw_plan_r2r_3d(
             nx_physical_[0], nx_physical_[1], nx_physical_[2],
-            io_buffer_, temp_buffer_,
+            io_buffer.get(), temp_buffer.get(),
             FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01,
             FFTW_MEASURE);
 
@@ -67,10 +68,6 @@ void FftwCrysFFTPmmm::release()
 {
     if (plan_forward_) fftw_destroy_plan(plan_forward_);
     if (plan_backward_) fftw_destroy_plan(plan_backward_);
-    if (io_buffer_) fftw_free(io_buffer_);
-    if (temp_buffer_) fftw_free(temp_buffer_);
     plan_forward_ = nullptr;
     plan_backward_ = nullptr;
-    io_buffer_ = nullptr;
-    temp_buffer_ = nullptr;
 }

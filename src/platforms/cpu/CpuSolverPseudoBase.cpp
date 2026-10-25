@@ -133,11 +133,8 @@ void CpuSolverPseudoBase<T>::reset_crysfft()
 }
 
 template <typename T>
-bool CpuSolverPseudoBase<T>::adopt_crysfft_mapping(
-    const CrysFFTBasisMapping& map, bool physical_basis_enabled, const char* mismatch_message)
+void CpuSolverPseudoBase<T>::adopt_crysfft_mapping(const CrysFFTBasisMapping& map, bool physical_basis_enabled)
 {
-    if (!crysfft_mapping_usable(map, physical_basis_enabled, mismatch_message))
-        return false;
     if (physical_basis_enabled)
     {
         // The fields already live on the physical grid: no index maps needed.
@@ -151,7 +148,6 @@ bool CpuSolverPseudoBase<T>::adopt_crysfft_mapping(
         crysfft_reduced_indices_ = map.phys_to_reduced;
         crysfft_identity_map_ = map.identity;
     }
-    return true;
 }
 
 template <typename T>
@@ -189,81 +185,51 @@ void CpuSolverPseudoBase<T>::init_crysfft()
         (angles.size() >= 3 &&
          std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
          std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-    const auto selection = select_crysfft_mode(
+    // Engine choice and its basis map, shared with the CUDA solver
+    const CrysFFTPlan plan = plan_crysfft(
         space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
+    if (plan.mode == CrysFFTChoice::None)
         return;
 
     const auto lx = cb->get_lx();
     const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-    const int M_reduced = space_group_->get_n_reduced_basis();
-    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-    const bool use_m3_basis = space_group_->using_m3_physical_basis();
-    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
+    adopt_crysfft_mapping(plan.map, plan.physical_basis);
 
-    // Recursive 3m: octant sampled at even full-grid indices
-    if (selection.mode == CrysFFTChoice::Recursive3m)
+    if (plan.mode == CrysFFTChoice::Recursive3m)
     {
-        if (use_pmmm_basis)
-            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/true);
-        if (adopt_crysfft_mapping(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
-        {
 #ifdef USE_CPU_MKL
-            if (fft_backend_ == FFTBackend::MKL)
-                crysfft_recursive_mkl_ = std::make_unique<MklCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
+        if (fft_backend_ == FFTBackend::MKL)
+            crysfft_recursive_mkl_ = std::make_unique<MklCrysFFTRecursive3m>(nx_logical, cell_para, plan.m3_translations);
 #endif
 #ifdef USE_CPU_FFTW
-            if (fft_backend_ == FFTBackend::FFTW)
-                crysfft_recursive_fftw_ = std::make_unique<FftwCrysFFTRecursive3m>(nx_logical, cell_para, selection.m3_translations);
+        if (fft_backend_ == FFTBackend::FFTW)
+            crysfft_recursive_fftw_ = std::make_unique<FftwCrysFFTRecursive3m>(nx_logical, cell_para, plan.m3_translations);
 #endif
-            crysfft_mode_ = CrysFFTMode::Recursive3m;
-        }
+        crysfft_mode_ = CrysFFTMode::Recursive3m;
     }
-
-    // Pmmm DCT: octant at consecutive indices
-    if (crysfft_mode_ == CrysFFTMode::None && selection.can_pmmm)
+    else if (plan.mode == CrysFFTChoice::PmmmDct)
     {
-        if (use_m3_basis)
-            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/false);
-        if (adopt_crysfft_mapping(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
-        {
 #ifdef USE_CPU_MKL
-            if (fft_backend_ == FFTBackend::MKL)
-                crysfft_pmmm_mkl_ = std::make_unique<MklCrysFFTPmmm>(nx_logical, cell_para);
+        if (fft_backend_ == FFTBackend::MKL)
+            crysfft_pmmm_mkl_ = std::make_unique<MklCrysFFTPmmm>(nx_logical, cell_para);
 #endif
 #ifdef USE_CPU_FFTW
-            if (fft_backend_ == FFTBackend::FFTW)
-                crysfft_pmmm_fftw_ = std::make_unique<FftwCrysFFTPmmm>(nx_logical, cell_para);
+        if (fft_backend_ == FFTBackend::FFTW)
+            crysfft_pmmm_fftw_ = std::make_unique<FftwCrysFFTPmmm>(nx_logical, cell_para);
 #endif
-            crysfft_mode_ = CrysFFTMode::PmmmDct;
-        }
+        crysfft_mode_ = CrysFFTMode::PmmmDct;
     }
-
-    // ObliqueZ: lower z half (z-mirror)
-    if (crysfft_mode_ == CrysFFTMode::None && selection.mode == CrysFFTChoice::ObliqueZ)
+    else if (plan.mode == CrysFFTChoice::ObliqueZ)
     {
-        if (use_m3_basis || use_pmmm_basis)
-            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                          : selection.oblique_z_shift;
-        if (use_hex_basis && z_shift != selection.oblique_z_shift)
-            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-        const auto map = build_crysfft_mapping_z_mirror(nx_logical, full_to_reduced, M_reduced, z_shift);
-        if (adopt_crysfft_mapping(map, use_hex_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
-        {
 #ifdef USE_CPU_MKL
-            if (fft_backend_ == FFTBackend::MKL)
-                crysfft_oblique_mkl_ = std::make_unique<MklCrysFFTObliqueZ>(nx_logical, cell_para);
+        if (fft_backend_ == FFTBackend::MKL)
+            crysfft_oblique_mkl_ = std::make_unique<MklCrysFFTObliqueZ>(nx_logical, cell_para);
 #endif
 #ifdef USE_CPU_FFTW
-            if (fft_backend_ == FFTBackend::FFTW)
-                crysfft_oblique_fftw_ = std::make_unique<FftwCrysFFTObliqueZ>(nx_logical, cell_para);
+        if (fft_backend_ == FFTBackend::FFTW)
+            crysfft_oblique_fftw_ = std::make_unique<FftwCrysFFTObliqueZ>(nx_logical, cell_para);
 #endif
-            crysfft_mode_ = CrysFFTMode::ObliqueZ;
-        }
+        crysfft_mode_ = CrysFFTMode::ObliqueZ;
     }
 }
 

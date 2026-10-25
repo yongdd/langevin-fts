@@ -29,12 +29,6 @@ private:
     fftw_plan plan_fft_z_forward_{nullptr};
     fftw_plan plan_fft_z_backward_{nullptr};
 
-    double* io_buffer_{nullptr};
-    double* temp_buffer_{nullptr};
-    fftw_complex* complex_buffer_{nullptr};
-    double* fft_z_real_{nullptr};
-    fftw_complex* fft_z_complex_{nullptr};
-
     bool use_fft_dct_{false};
     int M_complex_z_{0};
     /// The FFT of the mirrored 2N sequence gives 0.5*(Re cos + Im sin) = half of
@@ -65,7 +59,7 @@ private:
     void initFFTPlans();
     void initFFTPlansZ(unsigned plan_flags);
 
-    /// Destroy the plans and free the buffers (also after a failed construction); idempotent.
+    /// Destroy the plans (also after a failed construction); idempotent.
     void release();
 
     /// Thread-local work buffers, (re)allocated to the current grid size.

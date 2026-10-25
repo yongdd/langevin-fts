@@ -223,6 +223,10 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   absorbing axes needs an even length, which its error message now names.
   `TestCudaOddReflecting` compares CUDA with the CPU in 1D, 2D and 3D boxes, and
   `TestCudaFFTMixedBC` checks odd lengths against direct DCT and DST sums.
+- MKL ObliqueZ passed `int` literals where `DftiSetValue` reads `MKL_LONG` (undefined
+  behaviour on LP64). The FFTW recursive 3m engine planned without checking its
+  allocations and executed its plans on `std::vector` storage, whose alignment need not
+  match that of the planning arrays (2026-10-26).
 
 ### Performance
 
@@ -266,6 +270,19 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   than the full-grid FFT (see above). `TestSpaceGroupPlatformEquivalence` adds a
   monoclinic P2/m cell (γ = 100°, odd n_x). `TestCrysFFTSelector` checks the CrysFFT
   each space group, grid and cell takes: the equivalence tests pass whatever is chosen.
+- The CPU CrysFFT engines (Pmmm, recursive 3m, ObliqueZ) share their k-space tables
+  between the OpenMP threads instead of building a copy per thread (2026-10-26). Each
+  table is built once, under a lock, and a thread keeps the pointers it has looked up
+  (`src/platforms/cpu/CrysFFTSharedTables.h`). For a 128³ recursive 3m run with four
+  contour coefficients and eight threads this saves about 0.9 GB and seven of eight table
+  builds after every cell change. The FFTW ObliqueZ and Pmmm engines free their planning
+  arrays after planning. The tables are the same, so results are unchanged.
+- Code shared between backends, results unchanged (2026-10-26): MklFFT and the MKL Pmmm
+  engine share one DCT-II/III implementation (`MklDctLines.h`); the CPU and CUDA
+  recursive 3m engines share the fold, twiddle and multiplier helpers
+  (`src/common/Recursive3mHelpers.h`), and the CPU and CUDA ObliqueZ engines the
+  reciprocal metric (`src/common/ReciprocalMetric.h`); both solvers choose their CrysFFT
+  engine through `plan_crysfft()` in `CrysFFTSelector.h`.
 
 ### Tests
 

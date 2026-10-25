@@ -34,7 +34,7 @@ private:
     fftw_plan plan_forward_;    ///< Forward DCT-II (REDFT10)
     fftw_plan plan_backward_;   ///< Backward DCT-III (REDFT01)
 
-    /// Destroy the plans and free io_buffer_/temp_buffer_ (also after a failed construction); idempotent.
+    /// Destroy the plans (also after a failed construction); idempotent.
     void release();
 
     /// Thread-local buffer structure for FFTW.

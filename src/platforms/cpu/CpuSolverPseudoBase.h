@@ -356,8 +356,8 @@ protected:
     void reset_crysfft();
     /// Select and build the CrysFFT fast path for the current space group (3D periodic, real fields).
     void init_crysfft();
-    /// Store a physical-grid <-> reduced-basis map when it is usable (see crysfft_mapping_usable()).
-    bool adopt_crysfft_mapping(const CrysFFTBasisMapping& map, bool physical_basis_enabled, const char* mismatch_message);
+    /// Store the physical-grid <-> reduced-basis map of the chosen CrysFFT (see plan_crysfft()).
+    void adopt_crysfft_mapping(const CrysFFTBasisMapping& map, bool physical_basis_enabled);
 
     // ---- update_dw() helper --------------------------------------------------
     /**

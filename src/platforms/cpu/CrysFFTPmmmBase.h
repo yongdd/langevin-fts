@@ -8,7 +8,7 @@
  * **Common Functionality:**
  *
  * - Grid dimension validation and setup
- * - Per-thread Boltzmann factor caching (owned by the object)
+ * - Boltzmann factors shared by the calling threads (CrysFFTSharedTables.h)
  * - Cell parameter management
  * - Contour step management
  *
@@ -27,18 +27,12 @@
 #define CRYS_FFT_PMMM_BASE_H_
 
 #include <array>
-#include <atomic>
-#include <mutex>
-#include <thread>
-#include <cstdint>
 #include <cstring>
 #include <cmath>
-#include <limits>
-#include <map>
 #include <memory>
-#include <unordered_map>
 #include <numbers>
 
+#include "CrysFFTSharedTables.h"
 #include "Exception.h"
 
 #ifndef M_PI
@@ -66,59 +60,8 @@ protected:
     // Normalization factor for DCT-II/III round trip: 1/M_logical
     double norm_factor_;
 
-    // Work buffers (allocated by derived class)
-    double* io_buffer_;
-    double* temp_buffer_;
-
-    //--------------------------------------------------------------------------
-    // Per-thread Boltzmann factor caching (owned by the object)
-    //--------------------------------------------------------------------------
-
-    struct ThreadState
-    {
-        std::map<double, std::unique_ptr<double[]>> boltzmann;
-        const double* boltz_current = nullptr;
-        double ds_current = std::numeric_limits<double>::quiet_NaN();
-        uint64_t epoch = 0;
-    };
-
-    mutable std::atomic<uint64_t> cache_epoch_{1};   ///< bumped to invalidate every thread's cache
-    /// Unique per object, never reused: lets a thread recognise the object its
-    /// remembered cache slot belongs to (see get_thread_state()).
-    inline static std::atomic<uint64_t> next_instance_id_{1};
-    const uint64_t instance_id_{next_instance_id_.fetch_add(1, std::memory_order_relaxed)};
-    mutable std::mutex thread_states_mutex_;
-    /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
-    /// owned by this object so that they are released together with it.
-    mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
-
-    /// Cache of the calling thread (owned by this object, see thread_states_).
-    ThreadState& get_thread_state() const
-    {
-        // Each thread remembers the slot it used last, tagged with the object's
-        // id, so the usual case (one object per thread) takes no lock. The slot
-        // is looked up under the lock only when the thread switches object; the
-        // map keeps references valid across insertions, and a stale remembered
-        // pointer is never followed because ids are not reused.
-        struct LastSlot { uint64_t instance_id = 0; ThreadState* state = nullptr; };
-        thread_local LastSlot last;
-        if (last.instance_id != instance_id_)
-        {
-            std::lock_guard<std::mutex> lock(thread_states_mutex_);
-            last.state = &thread_states_[std::this_thread::get_id()];
-            last.instance_id = instance_id_;
-        }
-        ThreadState* state = last.state;
-        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
-        if (state->epoch != epoch)
-        {
-            state->boltzmann.clear();
-            state->boltz_current = nullptr;
-            state->ds_current = std::numeric_limits<double>::quiet_NaN();
-            state->epoch = epoch;
-        }
-        return *state;
-    }
+    /// Boltzmann factors per ds, shared by the threads that call the engine
+    SharedTableCache<double, std::unique_ptr<double[]>> boltzmann_;
 
     /// Generate Boltzmann factors for given ds.
     std::unique_ptr<double[]> generateBoltzmann(double ds) const
@@ -162,7 +105,7 @@ protected:
     /// Invalidate all Boltzmann factor caches.
     void freeBoltzmann()
     {
-        cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
+        boltzmann_.invalidate();
     }
 
     /// Access derived class (CRTP).
@@ -180,9 +123,7 @@ public:
         std::array<int, 3> nx_logical,
         std::array<double, 6> cell_para)
         : nx_logical_(nx_logical),
-          cell_para_(cell_para),
-          io_buffer_(nullptr),
-          temp_buffer_(nullptr)
+          cell_para_(cell_para)
     {
         // Validate even grid sizes
         for (int d = 0; d < 3; ++d)
@@ -232,19 +173,7 @@ public:
     /// Set contour step size and prepare Boltzmann factors.
     void set_contour_step(double ds)
     {
-        ThreadState& state = get_thread_state();
-        if (state.boltz_current != nullptr && state.ds_current == ds)
-            return;
-
-        auto it = state.boltzmann.find(ds);
-        if (it == state.boltzmann.end())
-        {
-            std::unique_ptr<double[]> boltz = generateBoltzmann(ds);
-            it = state.boltzmann.emplace(ds, std::move(boltz)).first;
-        }
-
-        state.ds_current = ds;
-        state.boltz_current = it->second.get();
+        boltzmann_.select(ds, [&] { return generateBoltzmann(ds); });
     }
 
     /**
@@ -254,8 +183,8 @@ public:
      */
     void diffusion(double* q_in, double* q_out)
     {
-        ThreadState& state = get_thread_state();
-        if (!state.boltz_current)
+        const std::unique_ptr<double[]>* boltz = boltzmann_.current();
+        if (!boltz)
         {
             throw_with_line_number("CrysFFTPmmm::set_contour_step must be called before diffusion().");
         }
@@ -271,7 +200,7 @@ public:
 
         // Step 3: Apply Boltzmann factor
         for (int i = 0; i < M_physical_; ++i)
-            io_local[i] *= state.boltz_current[i];
+            io_local[i] *= (*boltz)[i];
 
         // Step 4: Backward DCT-III
         derived().dct_backward_impl(io_local, temp_local);
