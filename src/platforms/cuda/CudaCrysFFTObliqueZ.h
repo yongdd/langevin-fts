@@ -9,6 +9,8 @@
 #include <array>
 #include <memory>
 #include <map>
+#include <mutex>
+#include <vector>
 #include <cuda_runtime.h>
 #include <cufft.h>
 
@@ -28,9 +30,19 @@ private:
     std::array<double, 6> cell_para_;
     std::array<double, 6> recip_metric_;
 
-    std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
-    std::vector<CudaDeviceBuffer<double>> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
-    double* d_boltz_current_{nullptr};   ///< Table of ds_current_ in d_boltzmann_ (not owning)
+    /// Device tables shared with the clones (see CudaCrysFFTBase); members other
+    /// than the mutex are accessed with it held
+    struct Tables
+    {
+        std::mutex mutex;
+        std::array<double, 6> cell_para;                       ///< Cell of the tables
+        std::map<double, CudaDeviceBuffer<double>> boltzmann;  ///< exp(-k² ds)/M_logical per ds
+        std::vector<CudaDeviceBuffer<double>> spare;           ///< Buffers of the tables dropped by the last cell change
+    };
+    std::shared_ptr<Tables> tables_;
+
+    std::map<double, const double*> boltz_seen_;   ///< Tables of tables_->boltzmann this object has looked up (no lock per step)
+    const double* d_boltz_current_{nullptr};   ///< Table of ds_current_ (not owning)
     double ds_current_{0.0};
 
     std::unique_ptr<CudaRealTransform3D> dct_forward_z_;
@@ -46,11 +58,16 @@ private:
     double norm_factor_{1.0};
     cudaStream_t stream_{0};
 
+    /// Clone of `other` sharing its tables (see clone_sharing_tables()).
+    CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other, std::shared_ptr<Tables> tables);
+
     static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
+    /// Create the DCT objects, the work buffers and the xy plans.
+    void init_transforms();
     void init_fft_xy();
     void free_fft_xy();
-    void generateBoltzmann(double ds);
-    void freeBoltzmann();
+    /// Boltzmann factors for given ds (tables_->mutex held).
+    CudaDeviceBuffer<double> generateBoltzmann(double ds);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
 
@@ -67,6 +84,7 @@ public:
     void diffusion(double* d_q_in, double* d_q_out) override;
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) override;
     void set_stream(cudaStream_t stream) override;
+    std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const override;
 
     int get_M_physical() const { return M_physical_; }
 };

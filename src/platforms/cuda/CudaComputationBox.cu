@@ -34,11 +34,11 @@
 #include <iostream>
 #include <complex>
 #include <cuda_runtime.h>
-#include <cub/device/device_reduce.cuh>
 #include <cuComplex.h>
 
 #include "CudaComputationBox.h"
 #include "CudaCommon.h"
+#include "CudaTypeDispatch.h"
 #include "SpaceGroup.h"
 
 /**
@@ -70,19 +70,22 @@ void CudaComputationBox<T>::initialize()
     d_dv.allocate(this->total_grid);
     CUDA_CHECK(cudaMemcpy(d_dv, this->dv.data(), sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 
-    // Temporal storage
-    d_multiple.allocate(this->total_grid);
-
     // Allocate memory for cub reduction sum
     d_sum.allocate(this->total_grid);
     d_sum_out.allocate(1);
 
     // Determine temporary storage size for cub reduction (the first call only queries the size)
-    if constexpr (std::is_same<T, double>::value)
-        CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid));
-    else
-        CUDA_CHECK(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+    CUDA_CHECK(cuda_reduce_sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid, 0));
     d_temp_storage.allocate(temp_storage_bytes);
+}
+//-----------------------------------------------------------
+template <typename T>
+T CudaComputationBox<T>::reduce_sum_to_host(int n)
+{
+    T sum{0.0};
+    CUDA_CHECK(cuda_reduce_sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), n, 0));
+    CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+    return sum;
 }
 //----------------- Destructor -----------------------------
 template <typename T>
@@ -141,12 +144,7 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
 
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(N);
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -155,12 +153,7 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, this->total_grid);
         CUDA_CHECK_LAUNCH();
 
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(this->total_grid);
         return sum;
     }
 }
@@ -189,12 +182,7 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
 
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(N);
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -204,12 +192,7 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
         CUDA_CHECK_LAUNCH();
 
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(this->total_grid);
         return sum;
     }
 }
@@ -232,12 +215,7 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
         CUDA_CHECK_LAUNCH();
         ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_basis_weights_, 1.0, N);
         CUDA_CHECK_LAUNCH();
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(N);
         return sum * static_cast<T>(dv_base);
     }
     else
@@ -248,12 +226,7 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
         CUDA_CHECK_LAUNCH();
         ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, this->total_grid);
         CUDA_CHECK_LAUNCH();
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+        sum = reduce_sum_to_host(this->total_grid);
         return sum;
     }
 }
@@ -274,11 +247,7 @@ T CudaComputationBox<T>::multi_inner_product_device(int n_comp, const CuDeviceDa
     CUDA_CHECK_LAUNCH();
     ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_weight, 1.0, N);
     CUDA_CHECK_LAUNCH();
-    if constexpr (std::is_same<T, double>::value)
-        CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));
-    else
-        CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-    CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
+    sum = reduce_sum_to_host(N);
     if (reduced)
         return sum * static_cast<T>(this->volume / this->total_grid);
     return sum;
@@ -289,7 +258,6 @@ void CudaComputationBox<T>::zero_mean_device(CuDeviceData<T>* d_g)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    CuDeviceData<T> sum{0.0};
 
     // Mean = Σ dv g / V; in reduced basis mode Σ weight g / total_grid (as in ComputationBox::zero_mean)
     const bool reduced = this->space_group_ != nullptr;
@@ -300,20 +268,13 @@ void CudaComputationBox<T>::zero_mean_device(CuDeviceData<T>* d_g)
     ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_weight, 1.0, N);
     CUDA_CHECK_LAUNCH();
 
+    const T shift = -reduce_sum_to_host(N)/norm;
+    CuDeviceData<T> d_shift;
     if constexpr (std::is_same<T, double>::value)
-    {
-        CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N));
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
-        sum = -sum/norm;
-    }
+        d_shift = shift;
     else
-    {
-        CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), N, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
-        CUDA_CHECK(cudaMemcpy(&sum, d_sum_out, sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost));
-        sum.x = -sum.x/norm;
-        sum.y = -sum.y/norm;
-    }
-    ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, sum, N);
+        d_shift = stdToCuDoubleComplex(shift);
+    ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, d_shift, N);
     CUDA_CHECK_LAUNCH();
 }
 

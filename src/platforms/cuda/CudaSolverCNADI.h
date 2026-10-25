@@ -181,7 +181,7 @@ __global__ void compute_crank_3d_step_3(
  * @brief CUDA kernel: Parallel tridiagonal solver (Thomas algorithm).
  *
  * Solves multiple independent tridiagonal systems in parallel.
- * Uses shared memory for high performance.
+ * Caches the coefficients in 3*M doubles of dynamic shared memory.
  *
  * @param d_xl      Lower diagonal (subdiagonal)
  * @param d_xd      Main diagonal
@@ -195,6 +195,22 @@ __global__ void compute_crank_3d_step_3(
  * @param M         System size
  */
 __global__ void tridiagonal(
+    const double* __restrict__ d_xl,
+    const double* __restrict__ d_xd,
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star,
+    const double* __restrict__ d_d,
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset,
+    const int REPEAT, const int INTERVAL, const int M);
+
+/**
+ * @brief CUDA kernel: tridiagonal() reading the coefficients from global memory.
+ *
+ * Used for lines whose 3*M coefficients do not fit in shared memory; the
+ * arithmetic is the same as in tridiagonal(). Parameters as for tridiagonal().
+ */
+__global__ void tridiagonal_global(
     const double* __restrict__ d_xl,
     const double* __restrict__ d_xd,
     const double* __restrict__ d_xh,
@@ -322,6 +338,20 @@ private:
     CudaDeviceBuffer<int> d_offset_y;   ///< 2D: Y-direction offsets
     CudaDeviceBuffer<int> d_offset;     ///< 1D: System offsets
     /// @}
+
+    size_t max_tridiagonal_shmem_;      ///< Dynamic shared memory allowed for tridiagonal()
+
+    /**
+     * @brief Solve REPEAT non-periodic tridiagonal systems of size M on the stream.
+     *
+     * Uses tridiagonal() when the 3*M coefficients fit in shared memory and
+     * tridiagonal_global() otherwise.
+     */
+    void solve_tridiagonal(
+        const int STREAM,
+        const double *d_xl, const double *d_xd, const double *d_xh,
+        const double *d_d, double *d_x, const int *d_offset,
+        const int REPEAT, const int INTERVAL, const int M);
 
 
     /**

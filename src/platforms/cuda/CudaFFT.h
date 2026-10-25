@@ -179,6 +179,8 @@ public:
     /**
      * @brief Backward FFT (complex input interface, periodic BC only) with explicit stream.
      *
+     * The input is preserved (real fields transform a copy of it).
+     *
      * @param d_cdata Input complex data on device
      * @param d_rdata Output real data on device
      * @param stream  CUDA stream for async execution

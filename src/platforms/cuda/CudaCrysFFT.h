@@ -21,6 +21,7 @@
 #include <array>
 #include <memory>
 #include <map>
+#include <mutex>
 #include <utility>
 #include <vector>
 #include <cuda_runtime.h>
@@ -43,16 +44,26 @@ enum class CudaCrysFFTMode
 /**
  * @class CudaCrysFFTBase
  * @brief Abstract base for CUDA crystallographic FFT implementations.
+ *
+ * A solver keeps one object per stream. The k-space tables (Boltzmann factors,
+ * stress multipliers) depend only on the grid, the cell and the coefficient, so
+ * the objects made by clone_sharing_tables() share them: a table is built once,
+ * by the first object that needs it, and read by all. Building and looking up
+ * a table hold a mutex; set_cell_para() must not run while any stream computes.
  */
 class CudaCrysFFTBase
 {
 public:
     virtual ~CudaCrysFFTBase() = default;
     virtual void set_cell_para(const std::array<double, 6>& cell_para) = 0;
+    /// Select the Boltzmann table of this coefficient, building it when it is missing.
     virtual void set_contour_step(double ds) = 0;
     virtual void diffusion(double* d_q_in, double* d_q_out) = 0;
     virtual void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) = 0;
     virtual void set_stream(cudaStream_t stream) = 0;
+    /// A transform of the same grid and cell for another stream: its own plans and
+    /// work buffers, the tables of this object (it starts on the legacy default stream).
+    virtual std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const = 0;
 };
 
 /**
@@ -72,38 +83,40 @@ private:
     // Cell parameters (Lx, Ly, Lz, alpha, beta, gamma)
     std::array<double, 6> cell_para_;
 
-    // Boltzmann factors - per ds value (device memory)
-    std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
-    double* d_boltz_current_;     ///< Table of ds_current_ in d_boltzmann_ (not owning)
+    /// Device tables shared with the clones (see CudaCrysFFTBase); members other
+    /// than the mutex are accessed with it held
+    struct Tables
+    {
+        std::mutex mutex;
+        std::array<double, 6> cell_para;                                         ///< Cell of the tables
+        std::map<double, CudaDeviceBuffer<double>> boltzmann;                    ///< exp(-k² ds)/M_logical per ds
+        std::array<CudaDeviceBuffer<double>, 8> axis_k2;                         ///< Σ k_d² per axis mask
+        std::map<std::pair<int, double>, CudaDeviceBuffer<double>> axis_boltz_k2;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
+        std::vector<CudaDeviceBuffer<double>> spare;                             ///< Buffers of the tables dropped by the last cell change
+    };
+    std::shared_ptr<Tables> tables_;
+
+    std::map<double, const double*> boltz_seen_;   ///< Tables of tables_->boltzmann this object has looked up (no lock per step)
+    const double* d_boltz_current_;   ///< Table of ds_current_ (not owning)
     double ds_current_;
 
     // CudaRealTransform objects for DCT-II (forward) and DCT-III (backward)
     std::unique_ptr<CudaRealTransform3D> dct_forward_;
     std::unique_ptr<CudaRealTransform3D> dct_backward_;
 
-    // Device buffers
-    CudaDeviceBuffer<double> d_work_;    ///< Work buffer (physical grid)
-
     // Normalization factor
     double norm_factor_;
     cudaStream_t stream_{0};      ///< CUDA stream for execution
 
-    // Cached stress multipliers (device memory)
-    std::array<CudaDeviceBuffer<double>, 8> d_axis_k2_;                        ///< Σ k_d² per axis mask
-    std::map<std::pair<int, double>, CudaDeviceBuffer<double>> d_axis_boltz_k2_;   ///< exp(-k²·coeff)·Σ k_d² per (axis mask, coeff)
+    /// Clone of `other` sharing its tables (see clone_sharing_tables()).
+    CudaCrysFFT(const CudaCrysFFT& other, std::shared_ptr<Tables> tables);
 
-    /// Generate Boltzmann factors for given ds.
-    void generateBoltzmann(double ds);
+    /// Boltzmann factors for given ds (tables_->mutex held).
+    CudaDeviceBuffer<double> generateBoltzmann(double ds);
 
-    /// Free Boltzmann factor memory.
-    void freeBoltzmann();
     /// Device table of M_physical_ values from h (a spare buffer when one is left),
-    /// copied on stream_ and complete on return
+    /// copied on stream_ and complete on return (tables_->mutex held)
     CudaDeviceBuffer<double> uploadTable(const std::vector<double>& h);
-    std::vector<CudaDeviceBuffer<double>> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
-
-    /// Free cached stress multiplier arrays.
-    void freeMultiplierCaches();
 
     /// Compute per-axis k² arrays on the physical grid (host).
     void computeAxisK2Host(std::vector<double>& kx2, std::vector<double>& ky2, std::vector<double>& kz2) const;
@@ -138,6 +151,7 @@ public:
     void diffusion(double* d_q_in, double* d_q_out);
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream);
     void set_stream(cudaStream_t stream);
+    std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const;
 
     /**
      * @brief Apply an arbitrary k-space multiplier: DCT-II -> multiply -> DCT-III.

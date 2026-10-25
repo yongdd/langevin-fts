@@ -95,7 +95,8 @@ CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(
     std::array<double, 9> /*trans_part*/)
     : nx_logical_(nx_logical),
       cell_para_(cell_para),
-      recip_metric_(compute_recip_metric(cell_para))
+      recip_metric_(compute_recip_metric(cell_para)),
+      tables_(std::make_shared<Tables>())
 {
     try
     {
@@ -112,20 +113,53 @@ CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(
         M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
         M_complex_xy_ = nx_logical_[0] * (nx_logical_[1] / 2 + 1) * nx_physical_[2];
         norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+        tables_->cell_para = cell_para_;
 
-        dct_forward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
-        dct_backward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
-
-        d_complex_.allocate(M_complex_xy_);
-        d_real_xy_.allocate(M_physical_);
-
-        init_fft_xy();
+        init_transforms();
     }
     catch (...)
     {
         release();
         throw;
     }
+}
+
+CudaCrysFFTObliqueZ::CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other, std::shared_ptr<Tables> tables)
+    : nx_logical_(other.nx_logical_),
+      nx_physical_(other.nx_physical_),
+      M_logical_(other.M_logical_),
+      M_physical_(other.M_physical_),
+      M_complex_xy_(other.M_complex_xy_),
+      cell_para_(other.cell_para_),
+      recip_metric_(other.recip_metric_),
+      tables_(std::move(tables)),
+      norm_factor_(other.norm_factor_)
+{
+    try
+    {
+        init_transforms();
+    }
+    catch (...)
+    {
+        release();
+        throw;
+    }
+}
+
+std::unique_ptr<CudaCrysFFTBase> CudaCrysFFTObliqueZ::clone_sharing_tables() const
+{
+    return std::unique_ptr<CudaCrysFFTBase>(new CudaCrysFFTObliqueZ(*this, tables_));
+}
+
+void CudaCrysFFTObliqueZ::init_transforms()
+{
+    dct_forward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+    dct_backward_z_ = std::make_unique<CudaRealTransform3D>(nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+
+    d_complex_.allocate(M_complex_xy_);
+    d_real_xy_.allocate(M_physical_);
+
+    init_fft_xy();
 }
 
 CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
@@ -137,8 +171,9 @@ CudaCrysFFTObliqueZ::~CudaCrysFFTObliqueZ()
 // explicit free; the tables, transforms and buffers are owning members.
 void CudaCrysFFTObliqueZ::release()
 {
-    freeBoltzmann();
-    spare_tables_.clear();
+    boltz_seen_.clear();
+    d_boltz_current_ = nullptr;
+    tables_.reset();
     free_fft_xy();
     dct_forward_z_.reset();
     dct_backward_z_.reset();
@@ -213,19 +248,7 @@ void CudaCrysFFTObliqueZ::free_fft_xy()
 //------------------------------------------------------------------------------
 // Boltzmann cache
 //------------------------------------------------------------------------------
-void CudaCrysFFTObliqueZ::freeBoltzmann()
-{
-    // Keep the device buffers for the tables the next steps rebuild (as CudaCrysFFT
-    // does): the computations synchronize every stream before a cell change, so no
-    // kernel still reads them
-    for (auto& kv : d_boltzmann_)
-        if (!kv.second.empty()) spare_tables_.push_back(std::move(kv.second));
-    d_boltzmann_.clear();
-    d_boltz_current_ = nullptr;
-    ds_current_ = 0.0;
-}
-
-void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
+CudaDeviceBuffer<double> CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
 {
     std::vector<double> h_boltz(M_complex_xy_);
 
@@ -298,10 +321,10 @@ void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
     // Reuse a dropped table and upload on this object's stream: a cudaMalloc or a
     // default-stream copy here would serialize every stream inside the propagator loop
     CudaDeviceBuffer<double> d_boltz;
-    if (!spare_tables_.empty())
+    if (!tables_->spare.empty())
     {
-        d_boltz = std::move(spare_tables_.back());
-        spare_tables_.pop_back();
+        d_boltz = std::move(tables_->spare.back());
+        tables_->spare.pop_back();
     }
     else
     {
@@ -309,7 +332,7 @@ void CudaCrysFFTObliqueZ::generateBoltzmann(double ds)
     }
     CUDA_CHECK(cudaMemcpyAsync(d_boltz, h_boltz.data(), sizeof(double) * M_complex_xy_, cudaMemcpyHostToDevice, stream_));
     CUDA_CHECK(cudaStreamSynchronize(stream_));   // h_boltz is about to go out of scope
-    d_boltzmann_[ds] = std::move(d_boltz);
+    return d_boltz;
 }
 
 //------------------------------------------------------------------------------
@@ -321,21 +344,38 @@ void CudaCrysFFTObliqueZ::set_cell_para(const std::array<double, 6>& cell_para)
         return;
     cell_para_ = cell_para;
     recip_metric_ = compute_recip_metric(cell_para_);
-    freeBoltzmann();
+    boltz_seen_.clear();
+    d_boltz_current_ = nullptr;
+    ds_current_ = 0.0;
+
+    // The first object to see the new cell drops the shared tables, keeping their
+    // device buffers for the tables the next steps rebuild: the computations
+    // synchronize every stream before a cell change, so no kernel still reads them
+    std::lock_guard<std::mutex> lock(tables_->mutex);
+    if (cell_para == tables_->cell_para)
+        return;
+    tables_->cell_para = cell_para;
+    for (auto& kv : tables_->boltzmann)
+        if (!kv.second.empty()) tables_->spare.push_back(std::move(kv.second));
+    tables_->boltzmann.clear();
 }
 
 void CudaCrysFFTObliqueZ::set_contour_step(double ds)
 {
-    if (ds == ds_current_ && d_boltzmann_.count(ds) > 0)
-    {
-        d_boltz_current_ = d_boltzmann_[ds].get();
+    if (ds == ds_current_ && d_boltz_current_ != nullptr)
         return;
+
+    auto seen = boltz_seen_.find(ds);
+    if (seen == boltz_seen_.end())
+    {
+        std::lock_guard<std::mutex> lock(tables_->mutex);
+        auto it = tables_->boltzmann.find(ds);
+        if (it == tables_->boltzmann.end())
+            it = tables_->boltzmann.emplace(ds, generateBoltzmann(ds)).first;
+        seen = boltz_seen_.emplace(ds, it->second.get()).first;
     }
 
-    if (d_boltzmann_.count(ds) == 0)
-        generateBoltzmann(ds);
-
-    d_boltz_current_ = d_boltzmann_[ds].get();
+    d_boltz_current_ = seen->second;
     ds_current_ = ds;
 }
 

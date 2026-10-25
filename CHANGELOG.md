@@ -133,6 +133,21 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `TestMoleculesValidation`, `TestInputChecks` and `TestCudaCrysTablesAllocation` cover
   these fixes.
 
+- CUDA solvers and transforms (2026-10-25):
+  - CN-ADI with reflecting or absorbing boundaries stopped with `cudaErrorInvalidValue` on
+    an axis longer than about 4000 points, whose tridiagonal coefficients did not fit in
+    shared memory. Such lines now read the coefficients from global memory and agree with
+    the CPU solver to 1e-12.
+  - The complex-spectrum `backward_stream()` of `CudaFFT` overwrote its input for real
+    fields (cuFFT Z2D); it now transforms a copy, like the real-coefficient interface.
+  - The CUDA backend raises an error for `cn-adi2` with complex fields instead of leaving
+    its solver null; the method registry already rejects this combination.
+
+  `TestCudaTridiagonal` solves a 6000-point line from global memory and
+  `TestCudaFFTMixedBC` checks that the backward transform keeps its input.
+  `TestObliqueZStress` checks all six stress components and lattice changes, including
+  γ alone, of oblique cells with the ObliqueZ CrysFFT on both bases, CPU against CUDA.
+
 - Console output no longer raises `UnicodeEncodeError` when stdout is redirected to a file
   or pipe whose encoding lacks the Greek letters and subscripts it prints (χN, κ,
   βF/(ρ₀V/N)), such as cp949 or cp1252 on Windows: these streams write such characters as
@@ -142,6 +157,18 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Performance
 
+- CUDA, results unchanged bit for bit (2026-10-25):
+  - The CrysFFT objects of the streams share their k-space tables (Boltzmann factors,
+    stress multipliers and, for Recursive3m, the twiddle factors): each table is built and
+    stored once instead of once per stream, also after every cell change.
+  - With a space group and a mask, the mask multiplies the propagator in the reduced basis
+    after the reduction; it was expanded to the full grid at every step.
+  - `update_dw` uploads or expands each field once per monomer instead of once per contour
+    step size, and reads fields already on the device without a copy.
+  - The discrete-chain CrysFFT steps no longer copy the propagator through work buffers.
+  - The reduced-basis expansion and reduction and the CrysFFT steps of the RQM4, RK2 and
+    discrete solvers are implemented once in `CudaSolverPseudoBase`; unused device buffers
+    are removed.
 - Cells with α = β = 90° and γ ≠ 90° use the ObliqueZ CrysFFT with the irreducible basis
   too, when the space group has a z-mirror, for example a hexagonal or monoclinic
   `SpaceGroup` passed to `PropagatorSolver` without a physical basis (2026-10-25). They

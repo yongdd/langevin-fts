@@ -16,9 +16,10 @@
  *
  * **Tridiagonal Solvers:**
  *
- * - tridiagonal(): Standard Thomas algorithm with shared memory
- * - tridiagonal_periodic(): Sherman-Morrison for periodic boundaries
- * - Both use dynamic shared memory for coefficient caching
+ * - tridiagonal(): Standard Thomas algorithm with the coefficients cached in
+ *   dynamic shared memory (tridiagonal_global() for lines too long for it)
+ * - tridiagonal_periodic(): Sherman-Morrison for periodic boundaries; reads the
+ *   coefficients through the read-only data cache
  *
  * **Boundary Conditions:**
  *
@@ -198,15 +199,15 @@ CudaSolverCNADI::CudaSolverCNADI(
             CUDA_CHECK(cudaMemset(d_offset, 0, sizeof(int)));
         }
 
-        // Allow the tridiagonal solver kernels up to 96000 bytes of dynamic shared
-        // memory, or the device's opt-in limit when that is smaller (a launch that
-        // needs more then fails with a reported launch error)
+        // Allow tridiagonal() up to 96000 bytes of dynamic shared memory, or the
+        // device's opt-in limit when that is smaller; longer lines use
+        // tridiagonal_global() (see solve_tridiagonal())
         int device = 0, optin_shmem = 0;
         CUDA_CHECK(cudaGetDevice(&device));
         CUDA_CHECK(cudaDeviceGetAttribute(&optin_shmem, cudaDevAttrMaxSharedMemoryPerBlockOptin, device));
         const int max_shmem = std::min(96000, optin_shmem);
         CUDA_CHECK(cudaFuncSetAttribute(tridiagonal, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem));
-        CUDA_CHECK(cudaFuncSetAttribute(tridiagonal_periodic, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem));
+        max_tridiagonal_shmem_ = static_cast<size_t>(max_shmem);
 
         update_laplacian_operator();
     }
@@ -317,60 +318,54 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         const int M = this->cb->get_total_grid();
         const bool use_reduced_basis = (space_group_ != nullptr);
 
-        cudaMemcpyKind cudaMemcpyInputToDevice;
-        if (device == "gpu")
-            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
-        else if(device == "cpu")
-            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
-        else
-        {
+        if (device != "gpu" && device != "cpu")
             throw_with_line_number("Invalid device \"" + device + "\".");
-        }
 
         // Get unique ds values from ContourLengthMapping
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
-        // Compute exp_dw for each unique ds value
-        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+        for(const auto& item: w_input)
         {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
+            const std::string& monomer_type = item.first;
+            const double *w = item.second;
 
-            for(const auto& item: w_input)
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
             {
-                std::string monomer_type = item.first;
-                const double *w = item.second;
-
                 if (d_exp_dw[ds_idx].find(monomer_type) == d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+            }
 
-                if (use_reduced_basis && device == "gpu")
+            // The full-grid field on the device: the input itself, or a copy in the
+            // table of the last ds, which is computed last (in place)
+            double* d_stage = d_exp_dw.at(n_unique_ds - 1).at(monomer_type);
+            const double* d_w = w;
+            if (use_reduced_basis && device == "gpu")
+            {
+                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_stage, w, d_full_to_reduced_map_, M);
+                CUDA_CHECK_LAUNCH();
+                d_w = d_stage;
+            }
+            else if (device == "cpu")
+            {
+                const double* w_full = w;
+                std::vector<double> w_full_host;
+                if (use_reduced_basis)
                 {
-                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(
-                        d_exp_dw.at(ds_idx).at(monomer_type), w, d_full_to_reduced_map_, M);
-                    CUDA_CHECK_LAUNCH();
+                    w_full_host.resize(M);
+                    space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                    w_full = w_full_host.data();
                 }
-                else
-                {
-                    const double* w_full = w;
-                    std::vector<double> w_full_host;
-                    if (use_reduced_basis)
-                    {
-                        w_full_host.resize(M);
-                        space_group_->from_reduced_basis(w, w_full_host.data(), 1);
-                        w_full = w_full_host.data();
-                    }
+                CUDA_CHECK(cudaMemcpyAsync(d_stage, w_full, sizeof(double)*M, cudaMemcpyHostToDevice));
+                d_w = d_stage;
+            }
 
-                    // Copy field configurations from host to device
-                    CUDA_CHECK(cudaMemcpyAsync(
-                        d_exp_dw.at(ds_idx).at(monomer_type), w_full,
-                        sizeof(double)*M, cudaMemcpyInputToDevice));
-                }
-
-                // Compute d_exp_dw
-                ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    ((double*) d_exp_dw.at(ds_idx).at(monomer_type),
-                     (double*) d_exp_dw.at(ds_idx).at(monomer_type),      1.0, -0.50*local_ds, M);
+            // d_exp_dw = exp(-w*local_ds/2) for each unique ds value
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+            {
+                const double local_ds = mapping.get_ds_from_index(ds_idx);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>(
+                    d_exp_dw.at(ds_idx).at(monomer_type).get(), d_w, 1.0, -0.50*local_ds, M);
                 CUDA_CHECK_LAUNCH();
             }
         }
@@ -429,26 +424,18 @@ void CudaSolverCNADI::advance_propagator(
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out_full, d_q_out_full, _d_exp_dw, 1.0, M);
         CUDA_CHECK_LAUNCH();
 
-        // Multiply mask
-        if (d_q_mask != nullptr)
-        {
-            double* d_q_mask_full = d_q_mask;
-            if (use_reduced_basis)
-            {
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                CUDA_CHECK_LAUNCH();
-                d_q_mask_full = d_q_full_in_[STREAM];
-            }
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out_full, d_q_out_full, d_q_mask_full, 1.0, M);
-            CUDA_CHECK_LAUNCH();
-        }
-
         if (use_reduced_basis)
         {
             ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_q_out, d_q_out_full, d_reduced_basis_indices_, n_basis_);
+            CUDA_CHECK_LAUNCH();
+        }
+
+        // Multiply mask (stored in the reduced basis when a space group is set)
+        if (d_q_mask != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, d_q_out, d_q_mask, 1.0, use_reduced_basis ? n_basis_ : M);
             CUDA_CHECK_LAUNCH();
         }
     }
@@ -481,11 +468,6 @@ void CudaSolverCNADI::advance_propagator_3d(
         double *_d_zd = d_zd.at(ds_index).at(monomer_type);
         double *_d_zh = d_zh.at(ds_index).at(monomer_type);
 
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-        size_t shmem_y = 3 * nx[1] * sizeof(double);
-        size_t shmem_z = 3 * nx[2] * sizeof(double);
-
         // Calculate q_star
         compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1], bc[2], bc[3], bc[4], bc[5], 
@@ -505,13 +487,9 @@ void CudaSolverCNADI::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<line_blocks(nx[1]*nx[2]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
+            solve_tridiagonal(STREAM, _d_xl, _d_xd, _d_xh, d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
-            CUDA_CHECK_LAUNCH();
         }
-        CUDA_CHECK_LAUNCH();
 
         // Calculate q_dstar
         compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -530,13 +508,9 @@ void CudaSolverCNADI::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<line_blocks(nx[0]*nx[2]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
+            solve_tridiagonal(STREAM, _d_yl, _d_yd, _d_yh, d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
-            CUDA_CHECK_LAUNCH();
         }
-        CUDA_CHECK_LAUNCH();
 
         // Calculate q^(n+1)
         compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -555,13 +529,9 @@ void CudaSolverCNADI::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<line_blocks(nx[0]*nx[1]), LINE_THREADS, shmem_z, streams[STREAM][0]>>>(
-                _d_zl, _d_zd, _d_zh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_out,
+            solve_tridiagonal(STREAM, _d_zl, _d_zd, _d_zh, d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
-            CUDA_CHECK_LAUNCH();
         }
-        CUDA_CHECK_LAUNCH();
     }
     catch(std::exception& exc)
     {
@@ -588,10 +558,6 @@ void CudaSolverCNADI::advance_propagator_2d(
         double *_d_yd = d_yd.at(ds_index).at(monomer_type);
         double *_d_yh = d_yh.at(ds_index).at(monomer_type);
 
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-        size_t shmem_y = 3 * nx[1] * sizeof(double);
-
         // Calculate q_star
         compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1], bc[2], bc[3],
@@ -612,13 +578,9 @@ void CudaSolverCNADI::advance_propagator_2d(
         }
         else
         {
-            tridiagonal<<<line_blocks(nx[1]), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
+            solve_tridiagonal(STREAM, _d_xl, _d_xd, _d_xh, d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
-            CUDA_CHECK_LAUNCH();
         }
-        CUDA_CHECK_LAUNCH();
 
         // Calculate q_dstar
         compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -637,13 +599,9 @@ void CudaSolverCNADI::advance_propagator_2d(
         }
         else
         {
-            tridiagonal<<<line_blocks(nx[0]), LINE_THREADS, shmem_y, streams[STREAM][0]>>>(
-                _d_yl, _d_yd, _d_yh,
-                d_c_star[STREAM], d_temp[STREAM], d_q_out,
+            solve_tridiagonal(STREAM, _d_yl, _d_yd, _d_yh, d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
-            CUDA_CHECK_LAUNCH();
         }
-        CUDA_CHECK_LAUNCH();
     }
     catch(std::exception& exc)
     {
@@ -666,9 +624,6 @@ void CudaSolverCNADI::advance_propagator_1d(
         double *_d_xd = d_xd.at(ds_index).at(monomer_type);
         double *_d_xh = d_xh.at(ds_index).at(monomer_type);
 
-        // Shared memory size for 3 arrays of doubles
-        size_t shmem_x = 3 * nx[0] * sizeof(double);
-
         compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1],
             _d_xl, _d_xd, _d_xh,
@@ -676,20 +631,38 @@ void CudaSolverCNADI::advance_propagator_1d(
         CUDA_CHECK_LAUNCH();
 
         if (bc[0] == BoundaryCondition::PERIODIC)
+        {
             tridiagonal_periodic<<<line_blocks(1), LINE_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
                 d_offset, 1, 1, nx[0]);
+            CUDA_CHECK_LAUNCH();
+        }
         else
-            tridiagonal<<<line_blocks(1), LINE_THREADS, shmem_x, streams[STREAM][0]>>>(
-                _d_xl, _d_xd, _d_xh,
-                d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
-        CUDA_CHECK_LAUNCH();
+        {
+            solve_tridiagonal(STREAM, _d_xl, _d_xd, _d_xh, d_q_star[STREAM], d_q_out,
+                d_offset, 1, 1, nx[0]);
+        }
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
+}
+void CudaSolverCNADI::solve_tridiagonal(
+    const int STREAM,
+    const double *d_xl, const double *d_xd, const double *d_xh,
+    const double *d_d, double *d_x, const int *d_offset,
+    const int REPEAT, const int INTERVAL, const int M)
+{
+    const size_t shmem = 3 * static_cast<size_t>(M) * sizeof(double);
+    if (shmem <= max_tridiagonal_shmem_)
+        tridiagonal<<<line_blocks(REPEAT), LINE_THREADS, shmem, streams[STREAM][0]>>>(
+            d_xl, d_xd, d_xh, d_c_star[STREAM], d_d, d_x, d_offset, REPEAT, INTERVAL, M);
+    else
+        tridiagonal_global<<<line_blocks(REPEAT), LINE_THREADS, 0, streams[STREAM][0]>>>(
+            d_xl, d_xd, d_xh, d_c_star[STREAM], d_d, d_x, d_offset, REPEAT, INTERVAL, M);
+    CUDA_CHECK_LAUNCH();
 }
 void CudaSolverCNADI::compute_single_segment_stress(
     [[maybe_unused]] const int STREAM,
@@ -952,14 +925,77 @@ __global__ void compute_crank_1d(
 // and utilize the Read-Only Data Cache (__ldg).
 #define FETCH(arr, i) __ldg(&arr[i])
 
-__global__ void tridiagonal(
-    const double* __restrict__ d_xl, 
-    const double* __restrict__ d_xd, 
-    const double* __restrict__ d_xh,
-    double* __restrict__ d_c_star,   
-    const double* __restrict__ d_d, 
+// Thomas algorithm for the lines of this thread. FROM_SHARED: the coefficients are
+// in shared memory; otherwise they are read through the read-only data cache.
+template <bool FROM_SHARED>
+__device__ __forceinline__ double tridiagonal_coeff(const double* __restrict__ arr, const int i)
+{
+    if constexpr (FROM_SHARED)
+        return arr[i];
+    else
+        return __ldg(&arr[i]);
+}
+
+template <bool FROM_SHARED>
+__device__ __forceinline__ void tridiagonal_solve_lines(
+    const double* __restrict__ xl,
+    const double* __restrict__ xd,
+    const double* __restrict__ xh,
+    double* __restrict__ d_c_star,
+    const double* __restrict__ d_d,
     double* __restrict__ d_x,
-    const int* __restrict__ d_offset, 
+    const int* __restrict__ d_offset,
+    const int REPEAT, const int INTERVAL, const int M)
+{
+    int n = blockIdx.x * blockDim.x + threadIdx.x;
+    while (n < REPEAT)
+    {
+        const int start_idx = d_offset[n];
+        const double* _d_d = &d_d[start_idx];
+        double*       _d_x = &d_x[start_idx];
+        double*  _d_c_star = &d_c_star[start_idx];
+
+        // Forward sweep
+        double inv_temp = 1.0 / tridiagonal_coeff<FROM_SHARED>(xd, 0);
+        double c_prev = tridiagonal_coeff<FROM_SHARED>(xh, 0) * inv_temp;
+        double x_prev = _d_d[0] * inv_temp;
+
+        _d_c_star[0] = c_prev;
+        _d_x[0] = x_prev;
+
+        for (int i = 1; i < M; i++)
+        {
+            double xl_i = tridiagonal_coeff<FROM_SHARED>(xl, i);
+            double temp = tridiagonal_coeff<FROM_SHARED>(xd, i) - xl_i * c_prev;
+            inv_temp = 1.0 / temp;
+
+            if (i < M - 1) {
+                c_prev = tridiagonal_coeff<FROM_SHARED>(xh, i) * inv_temp;
+                _d_c_star[i * INTERVAL] = c_prev;
+            }
+
+            x_prev = (_d_d[i * INTERVAL] - xl_i * x_prev) * inv_temp;
+            _d_x[i * INTERVAL] = x_prev;
+        }
+
+        // Backward substitution
+        for (int i = M - 2; i >= 0; i--)
+        {
+            x_prev = _d_x[i * INTERVAL] - _d_c_star[i * INTERVAL] * x_prev;
+            _d_x[i * INTERVAL] = x_prev;
+        }
+        n += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void tridiagonal(
+    const double* __restrict__ d_xl,
+    const double* __restrict__ d_xd,
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star,
+    const double* __restrict__ d_d,
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset,
     const int REPEAT, const int INTERVAL, const int M)
 {
     // Shared memory layout: [xl (M), xd (M), xh (M)]
@@ -976,45 +1012,20 @@ __global__ void tridiagonal(
     }
     __syncthreads();
 
-    int n = blockIdx.x * blockDim.x + threadIdx.x;
-    while (n < REPEAT)
-    {
-        const int start_idx = d_offset[n];
-        const double* _d_d = &d_d[start_idx];
-        double*       _d_x = &d_x[start_idx];
-        double*  _d_c_star = &d_c_star[start_idx];
+    tridiagonal_solve_lines<true>(s_xl, s_xd, s_xh, d_c_star, d_d, d_x, d_offset, REPEAT, INTERVAL, M);
+}
 
-        // Forward sweep using shared memory
-        double inv_temp = 1.0 / s_xd[0];
-        double c_prev = s_xh[0] * inv_temp;
-        double x_prev = _d_d[0] * inv_temp;
-
-        _d_c_star[0] = c_prev;
-        _d_x[0] = x_prev;
-
-        for (int i = 1; i < M; i++)
-        {
-            double xl_i = s_xl[i];
-            double temp = s_xd[i] - xl_i * c_prev;
-            inv_temp = 1.0 / temp;
-
-            if (i < M - 1) {
-                c_prev = s_xh[i] * inv_temp;
-                _d_c_star[i * INTERVAL] = c_prev;
-            }
-
-            x_prev = (_d_d[i * INTERVAL] - xl_i * x_prev) * inv_temp;
-            _d_x[i * INTERVAL] = x_prev;
-        }
-
-        // Backward substitution
-        for (int i = M - 2; i >= 0; i--)
-        {
-            x_prev = _d_x[i * INTERVAL] - _d_c_star[i * INTERVAL] * x_prev;
-            _d_x[i * INTERVAL] = x_prev;
-        }
-        n += blockDim.x * gridDim.x;
-    }
+__global__ void tridiagonal_global(
+    const double* __restrict__ d_xl,
+    const double* __restrict__ d_xd,
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star,
+    const double* __restrict__ d_d,
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset,
+    const int REPEAT, const int INTERVAL, const int M)
+{
+    tridiagonal_solve_lines<false>(d_xl, d_xd, d_xh, d_c_star, d_d, d_x, d_offset, REPEAT, INTERVAL, M);
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition

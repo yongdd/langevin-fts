@@ -127,74 +127,16 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
             {
                 const double coeff_full = this->crysfft_coeff(monomer_type, ds_index, 6.0);
 
-                const int M_phys = crysfft_physical_size_;
-                if (crysfft_identity_map_)
-                {
-                    CUDA_CHECK(cudaMemcpyAsync(
-                        d_crysfft_in_[STREAM], d_q_in,
-                        sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-                    crysfft_[STREAM]->set_contour_step(coeff_full);
-                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_q_out, d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
-                    CUDA_CHECK_LAUNCH();
-
-                    if (d_q_mask != nullptr)
-                    {
-                        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                            d_q_out, d_q_out, d_q_mask, 1.0, M_phys);
-                        CUDA_CHECK_LAUNCH();
-                    }
-                    return;
-                }
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                crysfft_[STREAM]->set_contour_step(coeff_full);
-                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                CUDA_CHECK_LAUNCH();
-
-                if (d_q_mask != nullptr)
-                {
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
-                    CUDA_CHECK_LAUNCH();
-                }
+                // Bond convolution, then the full-segment weight exp(-w*ds)
+                this->crysfft_diffuse(STREAM, d_q_in, d_q_out, coeff_full, nullptr, nullptr, _d_exp_dw);
+                this->multiply_mask(STREAM, d_q_out, d_q_mask);
                 return;
             }
         }
 
-        // Determine input/output pointers based on space group
-        CuDeviceData<T> *fft_in = d_q_in;
-        CuDeviceData<T> *fft_out = d_q_out;
-
-        if (space_group_ != nullptr)
-        {
-            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
-            if constexpr (std::is_same_v<T, double>)
-            {
-                // Expand reduced basis → full grid
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                CUDA_CHECK_LAUNCH();
-                fft_in = d_q_full_in_[STREAM];
-                fft_out = d_q_full_out_[STREAM];
-            }
-            else
-            {
-                throw_with_line_number("Space group reduced basis is only supported for real fields.");
-            }
-        }
+        // Full-grid input/output (expanded from / reduced to the basis with a space group)
+        CuDeviceData<T> *fft_in = this->expand_to_full_grid(STREAM, d_q_in);
+        CuDeviceData<T> *fft_out = this->full_grid_output(STREAM, d_q_out);
 
         if (this->is_periodic_)
         {
@@ -235,36 +177,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
             CUDA_CHECK_LAUNCH();
         }
 
-        // Multiply mask (on full grid)
-        if (d_q_mask != nullptr)
-        {
-            double* d_q_mask_full = d_q_mask;
-            if (space_group_ != nullptr)
-            {
-                // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
-                if constexpr (std::is_same_v<T, double>)
-                {
-                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                    CUDA_CHECK_LAUNCH();
-                    d_q_mask_full = d_q_full_in_[STREAM];
-                }
-                else
-                {
-                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                }
-            }
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
-            CUDA_CHECK_LAUNCH();
-        }
-
-        // Reduce full grid → reduced basis
-        if (space_group_ != nullptr)
-        {
-            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            CUDA_CHECK_LAUNCH();
-        }
+        // Reduce to the basis (with a space group) and multiply the mask
+        this->store_full_grid(STREAM, fft_out, d_q_out, d_q_mask);
     }
     catch(std::exception& exc)
     {
@@ -298,56 +212,14 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             {
                 const double coeff_half = this->crysfft_coeff(monomer_type, 0, 12.0);
 
-                const int M_phys = crysfft_physical_size_;
-                if (crysfft_identity_map_)
-                {
-                    CUDA_CHECK(cudaMemcpyAsync(
-                        d_crysfft_in_[STREAM], d_q_in,
-                        sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-                    crysfft_[STREAM]->set_contour_step(coeff_half);
-                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                    CUDA_CHECK(cudaMemcpyAsync(
-                        d_q_out, d_crysfft_out_[STREAM],
-                        sizeof(double) * M_phys, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-                    return;
-                }
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                crysfft_[STREAM]->set_contour_step(coeff_half);
-                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_out, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                CUDA_CHECK_LAUNCH();
+                this->crysfft_diffuse(STREAM, d_q_in, d_q_out, coeff_half, nullptr, nullptr, nullptr);
                 return;
             }
         }
 
-        // Determine input/output pointers based on space group
-        CuDeviceData<T> *fft_in = d_q_in;
-        CuDeviceData<T> *fft_out = d_q_out;
-
-        if (space_group_ != nullptr)
-        {
-            // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
-            if constexpr (std::is_same_v<T, double>)
-            {
-                // Expand reduced basis → full grid
-                ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-                CUDA_CHECK_LAUNCH();
-                fft_in = d_q_full_in_[STREAM];
-                fft_out = d_q_full_out_[STREAM];
-            }
-            else
-            {
-                throw_with_line_number("Space group reduced basis is only supported for real fields.");
-            }
-        }
+        // Full-grid input/output (expanded from / reduced to the basis with a space group)
+        CuDeviceData<T> *fft_in = this->expand_to_full_grid(STREAM, d_q_in);
+        CuDeviceData<T> *fft_out = this->full_grid_output(STREAM, d_q_out);
 
         if (this->is_periodic_)
         {
@@ -378,13 +250,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             fft_[STREAM]->backward_stream(d_rk_in_1_one[STREAM], reinterpret_cast<T*>(fft_out), streams[STREAM][0]);
         }
 
-        // Reduce full grid → reduced basis
-        if (space_group_ != nullptr)
-        {
-            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            CUDA_CHECK_LAUNCH();
-        }
+        // Reduce full grid → reduced basis (no mask on the half bond)
+        this->store_full_grid(STREAM, fft_out, d_q_out, nullptr);
     }
     catch(std::exception& exc)
     {

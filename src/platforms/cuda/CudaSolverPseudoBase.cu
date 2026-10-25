@@ -433,6 +433,128 @@ void CudaSolverPseudoBase<T>::cleanup_crysfft()
 }
 
 template <typename T>
+CuDeviceData<T>* CudaSolverPseudoBase<T>::expand_to_full_grid(int STREAM, CuDeviceData<T>* d_q_in)
+{
+    if (space_group_ == nullptr)
+        return d_q_in;
+    // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+    if constexpr (!std::is_same_v<T, double>)
+    {
+        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+    }
+    else
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, cb->get_total_grid());
+        CUDA_CHECK_LAUNCH();
+        return d_q_full_in_[STREAM];
+    }
+}
+
+template <typename T>
+CuDeviceData<T>* CudaSolverPseudoBase<T>::full_grid_output(int STREAM, CuDeviceData<T>* d_q_out)
+{
+    return (space_group_ != nullptr) ? d_q_full_out_[STREAM].get() : d_q_out;
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::store_full_grid(
+    int STREAM, CuDeviceData<T>* d_full, CuDeviceData<T>* d_q_out, const double* d_q_mask)
+{
+    if (space_group_ != nullptr)
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_out, d_full, d_reduced_basis_indices_, n_basis_);
+        CUDA_CHECK_LAUNCH();
+    }
+    // The mask is stored in the basis of d_q_out, so it applies after the reduction
+    multiply_mask(STREAM, d_q_out, d_q_mask);
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::multiply_mask(int STREAM, CuDeviceData<T>* d_q, const double* d_q_mask)
+{
+    if (d_q_mask == nullptr)
+        return;
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int n = (space_group_ != nullptr) ? n_basis_ : cb->get_total_grid();
+    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q, d_q, d_q_mask, 1.0, n);
+    CUDA_CHECK_LAUNCH();
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::crysfft_diffuse(
+    int STREAM, double* d_q_in, double* d_q_out, double coeff,
+    const double* pre, const double* mid, const double* post)
+{
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int M_phys = crysfft_physical_size_;
+    const cudaStream_t stream = streams[STREAM][0];
+    CudaCrysFFTBase* crysfft = crysfft_[STREAM].get();
+    crysfft->set_contour_step(coeff);
+
+    if (crysfft_identity_map_)
+    {
+        // The physical grid is the reduced basis: diffuse into d_q_out and apply
+        // the factors there (diffusion() preserves its input when out of place)
+        double* d_src = d_q_in;
+        if (pre != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_crysfft_in_[STREAM], d_q_in, pre, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+            d_src = d_crysfft_in_[STREAM];
+        }
+        crysfft->diffusion(d_src, d_q_out, stream);
+        if (mid != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_out, mid, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+            crysfft->diffusion(d_q_out, d_q_out, stream);
+        }
+        if (post != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_out, post, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+        }
+        return;
+    }
+
+    // Expand to the physical grid, diffuse there and reduce back
+    if (pre != nullptr)
+        ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_crysfft_in_[STREAM], d_q_in, pre, d_crysfft_phys_to_reduced_, M_phys);
+    else
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_crysfft_in_[STREAM], d_q_in, d_crysfft_phys_to_reduced_, M_phys);
+    CUDA_CHECK_LAUNCH();
+
+    crysfft->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], stream);
+    double* d_result = d_crysfft_out_[STREAM];
+    if (mid != nullptr)
+    {
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_result, mid, d_crysfft_phys_to_reduced_, M_phys);
+        CUDA_CHECK_LAUNCH();
+        crysfft->diffusion(d_crysfft_out_[STREAM], d_crysfft_in_[STREAM], stream);
+        d_result = d_crysfft_in_[STREAM];
+    }
+    if (post != nullptr)
+    {
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_result, post, d_crysfft_phys_to_reduced_, M_phys);
+        CUDA_CHECK_LAUNCH();
+    }
+
+    ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+        d_q_out, d_result, d_crysfft_reduced_to_phys_, n_basis_);
+    CUDA_CHECK_LAUNCH();
+}
+
+template <typename T>
 void CudaSolverPseudoBase<T>::set_space_group(
     SpaceGroup* sg,
     int* d_reduced_basis_indices,
@@ -567,7 +689,10 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
 
     for (int i = 0; i < n_streams; i++)
     {
-        if (mode == CudaCrysFFTMode::Recursive3m)
+        // One transform per stream; the clones share the read-only k-space tables
+        if (i > 0)
+            crysfft_[i] = crysfft_[0]->clone_sharing_tables();
+        else if (mode == CudaCrysFFTMode::Recursive3m)
             crysfft_[i] = std::make_unique<CudaCrysFFTRecursive3m>(nx_logical, cell_para, m3_translations);
         else if (mode == CudaCrysFFTMode::ObliqueZ)
             crysfft_[i] = std::make_unique<CudaCrysFFTObliqueZ>(nx_logical, cell_para);
@@ -660,75 +785,70 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         const int n_unique_ds = mapping.get_n_unique_ds();
 
-        cudaMemcpyKind cudaMemcpyInputToDevice;
-        if (device == "gpu")
-            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
-        else if(device == "cpu")
-            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
-        else
-        {
+        if (device != "gpu" && device != "cpu")
             throw_with_line_number("Invalid device \"" + device + "\".");
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (!std::is_same_v<T, double>)
+        {
+            if (use_reduced_basis)
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
         }
 
-        // Compute exp_dw for each ds_index and monomer type
-        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+        for(const auto& item: w_input)
         {
-            const double local_ds = mapping.get_ds_from_index(ds_idx);
-            for(const auto& item: w_input)
-            {
-                const std::string& monomer_type = item.first;
-                const T *w = item.second;
+            const std::string& monomer_type = item.first;
+            const T *w = item.second;
 
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+            {
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-                CuDeviceData<T>* d_full = this->d_exp_dw.at(ds_idx).at(monomer_type).get();
-                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half.at(ds_idx).at(monomer_type).get() : nullptr;
+            }
 
-                if (use_reduced_basis && device == "gpu" && !use_crysfft)
+            // The field on the device (M_use values): the input itself, or a copy in
+            // the table written last below, which is then computed in place
+            CuDeviceData<T>* d_stage = (with_half ? this->d_exp_dw_half : this->d_exp_dw)
+                                       .at(n_unique_ds - 1).at(monomer_type).get();
+            const CuDeviceData<T>* d_w = reinterpret_cast<const CuDeviceData<T>*>(w);
+            if (use_reduced_basis && !use_crysfft)
+            {
+                // [real-only feature] (complex fields were rejected above)
+                if constexpr (std::is_same_v<T, double>)
                 {
-                    if constexpr (std::is_same_v<T, double>)
+                    // Expand reduced basis -> full grid
+                    if (device == "gpu")
                     {
-                        // Expand reduced basis -> full grid on device
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_full, w, d_full_to_reduced_map_, M);
-                        CUDA_CHECK_LAUNCH();
-                        if (with_half)
-                            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_half, w, d_full_to_reduced_map_, M);
+                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_stage, w, d_full_to_reduced_map_, M);
                         CUDA_CHECK_LAUNCH();
                     }
                     else
                     {
-                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                        std::vector<double> w_full_host(M);
+                        space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                        CUDA_CHECK(cudaMemcpyAsync(d_stage, w_full_host.data(), sizeof(double)*M, cudaMemcpyHostToDevice));
                     }
+                    d_w = d_stage;
                 }
-                else
-                {
-                    const T* w_full = w;
-                    std::vector<T> w_full_host;
-                    if (use_reduced_basis && !use_crysfft)
-                    {
-                        if constexpr (std::is_same_v<T, double>)
-                        {
-                            w_full_host.resize(M);
-                            space_group_->from_reduced_basis(w, w_full_host.data(), 1);
-                            w_full = w_full_host.data();
-                        }
-                        else
-                        {
-                            throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                        }
-                    }
-                    // Copy field configurations to the device
-                    CUDA_CHECK(cudaMemcpyAsync(d_full, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                    if (with_half)
-                        CUDA_CHECK(cudaMemcpyAsync(d_half, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                }
+            }
+            else if (device == "cpu")
+            {
+                CUDA_CHECK(cudaMemcpyAsync(d_stage, w, sizeof(T)*M_use, cudaMemcpyHostToDevice));
+                d_w = d_stage;
+            }
 
-                // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
-                ker_exp<<<N_BLOCKS, N_THREADS>>>(d_full, d_full, 1.0, -factor*local_ds, M_use);
+            // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+            {
+                const double local_ds = mapping.get_ds_from_index(ds_idx);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>(this->d_exp_dw.at(ds_idx).at(monomer_type).get(),
+                                                 d_w, 1.0, -factor*local_ds, M_use);
                 CUDA_CHECK_LAUNCH();
                 if (with_half)
-                    ker_exp<<<N_BLOCKS, N_THREADS>>>(d_half, d_half, 1.0, -factor_half*local_ds, M_use);
-                CUDA_CHECK_LAUNCH();
+                {
+                    ker_exp<<<N_BLOCKS, N_THREADS>>>(this->d_exp_dw_half.at(ds_idx).at(monomer_type).get(),
+                                                     d_w, 1.0, -factor_half*local_ds, M_use);
+                    CUDA_CHECK_LAUNCH();
+                }
             }
         }
         CUDA_CHECK(cudaDeviceSynchronize());

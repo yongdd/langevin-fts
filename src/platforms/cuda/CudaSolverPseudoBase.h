@@ -110,6 +110,34 @@ protected:
     void cleanup_crysfft();
 
     /**
+     * @brief Full-grid input of a spectral step: d_q_in itself, or its expansion
+     *        from the reduced basis into d_q_full_in_ when a space group is set.
+     */
+    CuDeviceData<T>* expand_to_full_grid(int STREAM, CuDeviceData<T>* d_q_in);
+
+    /// Full-grid output of a spectral step: d_q_out itself, or d_q_full_out_ when a space group is set.
+    CuDeviceData<T>* full_grid_output(int STREAM, CuDeviceData<T>* d_q_out);
+
+    /**
+     * @brief Store the full-grid result d_full in d_q_out, reducing it to the
+     *        basis when a space group is set, then apply the mask (if any).
+     */
+    void store_full_grid(int STREAM, CuDeviceData<T>* d_full, CuDeviceData<T>* d_q_out, const double* d_q_mask);
+
+    /// d_q *= mask on the propagator basis (reduced basis with a space group); no-op for nullptr.
+    void multiply_mask(int STREAM, CuDeviceData<T>* d_q, const double* d_q_mask);
+
+    /**
+     * @brief CrysFFT diffusion of reduced-basis propagators on the physical sub-grid.
+     *
+     * d_q_out = post · D · (mid · D ·) pre · d_q_in with D = exp(coeff ∇²): the
+     * factors are reduced-basis Boltzmann factors, nullptr to skip one, and a
+     * non-null mid adds the second diffusion step. d_q_out may alias d_q_in.
+     */
+    void crysfft_diffuse(int STREAM, double* d_q_in, double* d_q_out, double coeff,
+                         const double* pre, const double* mid, const double* post);
+
+    /**
      * @brief Shared body of update_dw(): d_exp_dw = exp(-factor*ds*w) and,
      *        if with_half, d_exp_dw_half = exp(-factor_half*ds*w).
      */

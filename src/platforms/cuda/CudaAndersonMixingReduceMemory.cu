@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <thrust/reduce.h>
 #include "CudaCommon.h"
+#include "CudaTypeDispatch.h"
 #include "CudaComputationBox.h"
 #include "PinnedCircularBuffer.h"
 #include "CudaAndersonMixingReduceMemory.h"
@@ -74,10 +75,7 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
 
         // Allocate memory for cub reduction sum (the first call only queries the size)
         d_sum_out.allocate(1);
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+        CUDA_CHECK(cuda_reduce_sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
         d_temp_storage.allocate(temp_storage_bytes);
 
         // Reset_count
@@ -149,10 +147,7 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                 }
                 ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_deriv_i, 1.0, this->n_var);
                 CUDA_CHECK_LAUNCH();
-                if constexpr (std::is_same<T, double>::value)
-                    CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-                else
-                    CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+                CUDA_CHECK(cuda_reduce_sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
                 CUDA_CHECK(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
             //print_array(this->max_hist+1, w_deriv_dots);

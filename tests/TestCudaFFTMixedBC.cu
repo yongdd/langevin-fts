@@ -298,6 +298,52 @@ int main()
         cudaFree(d_data3d_k);
 #endif  // Disabled: odd N not supported
 
+        //=======================================================================
+        // Periodic complex interface: backward() preserves its input spectrum
+        // (cuFFT Z2D may overwrite its input even out of place)
+        //=======================================================================
+        {
+            std::cout << "\nPeriodic backward(complex) preserves its input" << std::endl;
+            const std::array<int, 3> nx_p = {8, 6, 10};
+            const std::array<BoundaryCondition, 3> bc_p = {
+                BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC};
+            const int MP = nx_p[0] * nx_p[1] * nx_p[2];
+            const int MP_COMPLEX = nx_p[0] * nx_p[1] * (nx_p[2] / 2 + 1);
+            CudaFFT<double, 3> fft_p(nx_p, bc_p);
+
+            std::vector<double> data_p(MP), data_p_back(MP);
+            for (int i = 0; i < MP; ++i)
+                data_p[i] = std::sin(0.37 * i) + 0.1 * i / MP;
+            CudaDeviceBuffer<double> d_p(MP), d_p_back(MP);
+            CudaDeviceBuffer<cuDoubleComplex> d_pk(MP_COMPLEX);
+            std::complex<double>* pk = reinterpret_cast<std::complex<double>*>(d_pk.get());
+            CUDA_CHECK(cudaMemcpy(d_p, data_p.data(), sizeof(double) * MP, cudaMemcpyHostToDevice));
+
+            fft_p.forward(d_p, pk);
+            std::vector<std::complex<double>> spectrum(MP_COMPLEX), spectrum_after(MP_COMPLEX);
+            CUDA_CHECK(cudaMemcpy(spectrum.data(), pk, sizeof(cuDoubleComplex) * MP_COMPLEX, cudaMemcpyDeviceToHost));
+            fft_p.backward(pk, d_p_back);
+            CUDA_CHECK(cudaMemcpy(spectrum_after.data(), pk, sizeof(cuDoubleComplex) * MP_COMPLEX, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(data_p_back.data(), d_p_back, sizeof(double) * MP, cudaMemcpyDeviceToHost));
+
+            if (spectrum != spectrum_after)
+            {
+                std::cout << "  FAILED! backward() changed its input spectrum" << std::endl;
+                return -1;
+            }
+            std::vector<double> diff_p(MP);
+            for (int i = 0; i < MP; ++i)
+                diff_p[i] = std::abs(data_p_back[i] - data_p[i]);
+            error = max_or_nan(diff_p);
+            std::cout << "  Round-trip Error: " << error << std::endl;
+            if (!std::isfinite(error) || error > 1e-12)
+            {
+                std::cout << "  FAILED!" << std::endl;
+                return -1;
+            }
+            std::cout << "  PASSED!" << std::endl;
+        }
+
         std::cout << "\nAll tests passed!" << std::endl;
 
         return 0;

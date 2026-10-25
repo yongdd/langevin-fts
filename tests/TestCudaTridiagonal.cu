@@ -2,6 +2,8 @@
 #include <cmath>
 #include <numbers>
 #include <algorithm>
+#include <array>
+#include <vector>
 #include <CudaCommon.h>
 #include "CudaSolverCNADI.h"
 #include "TestNanSafe.h"
@@ -94,6 +96,55 @@ int main()
 
         std::cout<< "Inverse error: "<< error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)
+            return -1;
+
+        // Tridiagonal reading the coefficients from global memory (used for lines
+        // too long for shared memory): the same arithmetic as tridiagonal()
+        std::array<double, M> x_shared;
+        tridiagonal<<<256, 256, shmem_size>>>(d_a, d_b, d_c, d_temp, d_y, d_x, d_offset, 1, 1, M);
+        CUDA_CHECK_LAUNCH();
+        CUDA_CHECK(cudaMemcpy(x_shared.data(), d_x, sizeof(double)*M, cudaMemcpyDeviceToHost));
+        tridiagonal_global<<<256, 256>>>(d_a, d_b, d_c, d_temp, d_y, d_x, d_offset, 1, 1, M);
+        CUDA_CHECK_LAUNCH();
+        CUDA_CHECK(cudaMemcpy(x, d_x, sizeof(double)*M, cudaMemcpyDeviceToHost));
+        std::cout << "Tridiagonal from global memory" << std::endl;
+        if (!std::equal(x_shared.begin(), x_shared.end(), x))
+        {
+            std::cout << "tridiagonal_global differs from tridiagonal" << std::endl;
+            return -1;
+        }
+
+        // A line whose 3*L coefficients exceed the shared memory of tridiagonal()
+        const int L = 6000;
+        std::vector<double> la(L), lb(L), lc(L), ly(L), lx(L);
+        for (int i = 0; i < L; i++)
+        {
+            la[i] = -0.5 - 0.1*std::sin(1.0*i);
+            lb[i] =  2.5 + 0.2*std::cos(0.3*i);
+            lc[i] = -0.6 + 0.1*std::sin(0.7*i);
+            ly[i] = std::cos(0.01*i);
+        }
+        CudaDeviceBuffer<double> d_la(L), d_lb(L), d_lc(L), d_ly(L), d_lx(L), d_lc_star(L);
+        CUDA_CHECK(cudaMemcpy(d_la, la.data(), sizeof(double)*L, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_lb, lb.data(), sizeof(double)*L, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_lc, lc.data(), sizeof(double)*L, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_ly, ly.data(), sizeof(double)*L, cudaMemcpyHostToDevice));
+        tridiagonal_global<<<1, 64>>>(d_la, d_lb, d_lc, d_lc_star, d_ly, d_lx, d_offset, 1, 1, L);
+        CUDA_CHECK_LAUNCH();
+        CUDA_CHECK(cudaMemcpy(lx.data(), d_lx, sizeof(double)*L, cudaMemcpyDeviceToHost));
+        std::vector<double> residual(L);
+        for (int i = 0; i < L; i++)
+        {
+            double r = lb[i]*lx[i] - ly[i];
+            if (i > 0)
+                r += la[i]*lx[i-1];
+            if (i < L-1)
+                r += lc[i]*lx[i+1];
+            residual[i] = std::abs(r);
+        }
+        error = max_or_nan(residual);
+        std::cout << "Tridiagonal of " << L << " points from global memory, max residual: " << error << std::endl;
+        if (!std::isfinite(error) || error > 1e-12)
             return -1;
 
         cudaFree(d_a);

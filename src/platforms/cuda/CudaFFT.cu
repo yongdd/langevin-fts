@@ -561,8 +561,13 @@ void CudaFFT<T, DIM>::backward_stream(std::complex<double>* d_cdata, T* d_rdata,
 
         if constexpr (std::is_same<T, double>::value)
         {
+            // Z2D may overwrite its input even out of place: transform a copy
+            // so the caller's spectrum is preserved (as in the double* interface)
+            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_.get());
+            CUDA_CHECK(cudaMemcpyAsync(d_complex, d_cdata_cu, sizeof(cuDoubleComplex) * total_complex_grid_,
+                                       cudaMemcpyDeviceToDevice, stream));
             CUFFT_CHECK(cufftSetStream(plan_backward_, stream));
-            CUFFT_CHECK(cufftExecZ2D(plan_backward_, d_cdata_cu, d_rdata));
+            CUFFT_CHECK(cufftExecZ2D(plan_backward_, d_complex, d_rdata));
 
             ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_rdata, 1.0 / total_grid_, total_grid_);

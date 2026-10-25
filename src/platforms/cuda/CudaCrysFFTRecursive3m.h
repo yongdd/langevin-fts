@@ -12,6 +12,8 @@
 
 #include <array>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -58,6 +60,7 @@ public:
     void diffusion(double* d_q_in, double* d_q_out) override;
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) override;
     void set_stream(cudaStream_t stream) override;
+    std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const override;
 
     /**
      * @brief Apply a k-space multiplier via the 3m pipeline (for stress).
@@ -98,19 +101,26 @@ private:
     /// See Recursive3mFoldParity.h for the derivation.
     std::array<int, 8> fold_perm_{};
 
-    std::array<std::vector<double>, 8> r_re_;
-    std::array<std::vector<double>, 8> r_im_;
+    /// Tables shared with the clones (see CudaCrysFFTBase). The twiddle factors are
+    /// fixed at construction; the other members are accessed with the mutex held.
+    struct Tables
+    {
+        std::mutex mutex;
+        std::array<double, 6> cell_para;                     ///< Cell of the caches
+        std::array<std::vector<double>, 8> r_re;             ///< Twiddle factors (real part)
+        std::array<std::vector<double>, 8> r_im;             ///< Twiddle factors (imaginary part)
+        std::unordered_map<double, KCacheDevice> k_cache;    ///< Boltzmann caches per coefficient
+        /// Multiplier caches for the stress fast path, keyed by (type, coeff)
+        std::map<std::pair<int, double>, KCacheDevice> multiplier_cache;
+        /// Device buffers of the caches dropped by the last cell change; the next
+        /// cache builds reuse them instead of allocating (all caches have one shape)
+        std::vector<KCacheDevice> spare;
+    };
+    std::shared_ptr<Tables> tables_;
 
-    std::unordered_map<double, KCacheDevice> k_cache_;
+    std::unordered_map<double, const KCacheDevice*> k_seen_;   ///< Caches of tables_->k_cache this object has looked up (no lock per step)
     const KCacheDevice* k_current_{nullptr};
     double coeff_current_{0.0};
-
-    /// Multiplier caches for the stress fast path, keyed by (type, coeff)
-    std::map<std::pair<int, double>, KCacheDevice> multiplier_cache_;
-
-    /// Device buffers of the caches dropped by the last cell change; the next
-    /// cache builds reuse them instead of allocating (all caches have one shape)
-    std::vector<KCacheDevice> spare_caches_;
 
     cufftHandle plan_r2c_{};
     cufftHandle plan_c2r_{};
@@ -118,13 +128,16 @@ private:
 
     CudaDeviceBuffer<cufftDoubleComplex> d_step1_;
     CudaDeviceBuffer<cufftDoubleComplex> d_step2_;
-    CudaDeviceBuffer<double> d_work_;
 
     cudaStream_t stream_{0};
+
+    /// Clone of `other` sharing its tables (see clone_sharing_tables()).
+    CudaCrysFFTRecursive3m(const CudaCrysFFTRecursive3m& other, std::shared_ptr<Tables> tables);
 
     void init_plans();
     void free_plans();
     void generate_twiddle_factors();
+    // The cache builders run with tables_->mutex held
     KCacheDevice generate_k_cache(double coeff);
     KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
     KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);

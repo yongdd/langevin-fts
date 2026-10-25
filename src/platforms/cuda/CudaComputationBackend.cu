@@ -142,6 +142,8 @@ CudaComputationBackend<T>::CudaComputationBackend(
         case NumericalMethodId::CNADI2:
             if constexpr (std::is_same_v<T, double>)
                 solver = std::make_unique<CudaSolverCNADI>(cb, molecules, n_streams, streams, false);
+            else
+                throw_with_line_number("The cn-adi2 method is only available for real fields.");
             break;
         }
 
