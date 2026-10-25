@@ -161,6 +161,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     every combination did: with three monomer types and five contour steps, about 1 GB on a
     128³ grid with the recursive 3m CrysFFT. A step whose table was not built raises an
     error instead of building it inside the loop.
+  - The ObliqueZ spectral step updates the half spectrum in place, in mirror pairs, so each
+    stream no longer holds a second spectrum (2026-10-26). The results are bitwise identical.
   - The Anderson mixers no longer make redundant device copies.
   - Every kernel launch of the concentration sum is checked.
 

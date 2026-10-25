@@ -53,8 +53,7 @@ private:
     /// (cos, sin)(pi kz/(Nz/2)) per stored kz; depends only on the grid, shared with the clones
     std::shared_ptr<const CudaDeviceBuffer<double>> d_twiddle_;
     CudaDeviceBuffer<double> d_real_;                  ///< Permuted physical grid
-    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_;  ///< Its half spectrum
-    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_out_;
+    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_;  ///< Its half spectrum (updated in place)
 
     double norm_factor_{1.0};
     cudaStream_t stream_{0};

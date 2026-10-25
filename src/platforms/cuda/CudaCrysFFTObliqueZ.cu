@@ -50,11 +50,27 @@ __global__ void ker_unpermute_z(const double* __restrict__ in, double* __restric
     }
 }
 
+// S p + D w conj(p_m) for one entry, with f = (S, D)
+__device__ inline cufftDoubleComplex obliquez_mode(
+    cufftDoubleComplex p, cufftDoubleComplex p_m, double2 f, double2 w)
+{
+    // w * conj(p_m)
+    const double wc_re = w.x * p_m.x + w.y * p_m.y;
+    const double wc_im = w.y * p_m.x - w.x * p_m.y;
+
+    cufftDoubleComplex out;
+    out.x = f.x * p.x + f.y * wc_re;
+    out.y = f.x * p.y + f.y * wc_im;
+    return out;
+}
+
 // P'(k) = S(k) P(k) + D(k) w(kz) conj(P(-kx, -ky, kz)) on the half spectrum
-// (nz_c = n/2 + 1 stored kz), with sd = (S, D) and w = (cos, sin)(pi kz/n)
+// (nz_c = n/2 + 1 stored kz), with sd = (S, D) and w = (cos, sin)(pi kz/n).
+// In place: k and its mirror (-kx, -ky, kz) need each other's old value, so the
+// thread of the lower index of each pair reads both before it writes both; an
+// entry that is its own mirror is updated once.
 __global__ void ker_obliquez_spectral(
-    const cufftDoubleComplex* __restrict__ src,
-    cufftDoubleComplex* __restrict__ dst,
+    cufftDoubleComplex* __restrict__ spectrum,
     const double2* __restrict__ sd,
     const double2* __restrict__ twiddle,
     int nx, int ny, int nz_c)
@@ -69,18 +85,17 @@ __global__ void ker_obliquez_spectral(
         const int ix = tmp / ny;
         const int ix_m = (nx - ix) % nx;
         const int iy_m = (ny - iy) % ny;
+        const int idx_m = (ix_m * ny + iy_m) * nz_c + kz;
 
-        const cufftDoubleComplex p = src[idx];
-        const cufftDoubleComplex p_m = src[static_cast<size_t>(ix_m * ny + iy_m) * nz_c + kz];
-        const double2 f = sd[idx];
-        const double2 w = twiddle[kz];
-
-        // w * conj(p_m)
-        const double wc_re = w.x * p_m.x + w.y * p_m.y;
-        const double wc_im = w.y * p_m.x - w.x * p_m.y;
-
-        dst[idx].x = f.x * p.x + f.y * wc_re;
-        dst[idx].y = f.x * p.y + f.y * wc_im;
+        if (idx <= idx_m)
+        {
+            const cufftDoubleComplex p = spectrum[idx];
+            const cufftDoubleComplex p_m = spectrum[idx_m];
+            const double2 w = twiddle[kz];
+            spectrum[idx] = obliquez_mode(p, p_m, sd[idx], w);
+            if (idx_m != idx)
+                spectrum[idx_m] = obliquez_mode(p_m, p, sd[idx_m], w);
+        }
 
         idx += blockDim.x * gridDim.x;
     }
@@ -233,7 +248,6 @@ void CudaCrysFFTObliqueZ::init_transforms()
 
     d_real_.allocate(M_physical_);
     d_spectrum_.allocate(M_spectral_);
-    d_spectrum_out_.allocate(M_spectral_);
 
     if (count_cufft_plan(cufftPlan3d(&plan_fwd_, nx_physical_[0], nx_physical_[1], n, CUFFT_D2Z)) != CUFFT_SUCCESS)
         throw_with_line_number("CudaCrysFFTObliqueZ failed to create its cuFFT D2Z plan.");
@@ -263,7 +277,6 @@ void CudaCrysFFTObliqueZ::release()
     d_twiddle_.reset();
     d_real_.release();
     d_spectrum_.release();
-    d_spectrum_out_.release();
 }
 
 void CudaCrysFFTObliqueZ::free_plans()
@@ -440,12 +453,12 @@ void CudaCrysFFTObliqueZ::diffusion(double* d_q_in, double* d_q_out, cudaStream_
     mark(2);
     // Boltzmann factors in the table include the normalization
     ker_obliquez_spectral<<<grid_blocks(M_spectral_, threads), threads, 0, stream_>>>(
-        d_spectrum_, d_spectrum_out_, reinterpret_cast<const double2*>(d_boltz_current_),
+        d_spectrum_, reinterpret_cast<const double2*>(d_boltz_current_),
         reinterpret_cast<const double2*>(d_twiddle_->get()), nx_physical_[0], nx_physical_[1], n / 2 + 1);
     CUDA_CHECK_LAUNCH();
     mark(3);
-    // Z2D overwrites its input, here the scratch d_spectrum_out_
-    CUFFT_CHECK(cufftExecZ2D(plan_bwd_, d_spectrum_out_, d_real_));
+    // Z2D overwrites its input d_spectrum_, which the next step recomputes
+    CUFFT_CHECK(cufftExecZ2D(plan_bwd_, d_spectrum_, d_real_));
     mark(4);
     ker_unpermute_z<<<grid_blocks(M_physical_, threads), threads, 0, stream_>>>(d_real_, d_q_out, M_physical_, n);
     CUDA_CHECK_LAUNCH();
