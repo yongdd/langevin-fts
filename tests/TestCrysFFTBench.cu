@@ -571,7 +571,7 @@ int main(int argc, char** argv)
         cudaFree(d_hex_freq);
         cudaFree(d_boltz);
 
-        std::printf("ObliqueZ DCTz+FFTxy: %.4f ms/iter\n", ms_hex);
+        std::printf("ObliqueZ CrysFFT: %.4f ms/iter\n", ms_hex);
         std::printf("ObliqueZ Full FFT: %.4f ms/iter\n", ms_hex_off);
         std::printf("Speedup (ObliqueZ/off): %.3fx\n", ms_hex_off / ms_hex);
 

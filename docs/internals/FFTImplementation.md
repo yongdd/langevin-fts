@@ -319,7 +319,11 @@ basis on the `SpaceGroup` before passing it (`enable_m3_physical_basis()`,
 - `CudaRealTransform1D/2D/3D`: DCT/DST using FCT/FST algorithms
 - `CudaCrysFFT`: Pmmm DCT via CudaRealTransform
 - `CudaCrysFFTRecursive3m`: Recursive 3m on GPU with stream-aware diffusion
-- `CudaCrysFFTObliqueZ`: DCT-z + FFT-xy
+- `CudaCrysFFTObliqueZ`: DCT-z + FFT-xy as one real 3D FFT of the physical grid
+  after Makhoul's permutation along z (even samples forward, odd samples backward).
+  One kernel forms the DCT coefficients of `kz` and `Nz/2 - kz` from the half
+  spectrum, applies both Boltzmann factors and returns to the half spectrum, so a
+  diffusion step is three kernels and two cuFFT calls
 
 **Backward Compatibility:**
 

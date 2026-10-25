@@ -1,6 +1,18 @@
 /**
  * @file CudaCrysFFTObliqueZ.h
  * @brief CUDA CrysFFT for z-mirror symmetry (DCT-z + FFT-xy, gamma arbitrary).
+ *
+ * The DCT-II along z and the FFT along x, y run as one real 3D FFT of the
+ * physical grid (Nx, Ny, Nz/2) with Makhoul's z permutation (even samples
+ * forward, odd samples backward). One kernel then forms the DCT coefficients
+ * of the pair kz, Nz/2 - kz from the half spectrum, applies their Boltzmann
+ * factors and returns to the half spectrum of the inverse permutation:
+ *
+ *   P'(k) = S(k) P(k) + D(k) e^{i pi kz/(Nz/2)} conj(P(-kx, -ky, kz)),
+ *
+ * with S = B(kz) + B(Nz/2 - kz), D = B(kz) - B(Nz/2 - kz) and B(Nz/2) = 0.
+ * This needs the Boltzmann factors to be even in (kx, ky), which holds for
+ * alpha = beta = 90 degrees.
  */
 
 #ifndef CUDA_CRYS_FFT_OBLIQUEZ_H_
@@ -16,8 +28,6 @@
 
 #include "CudaCrysFFT.h"
 
-class CudaRealTransform3D;
-
 class CudaCrysFFTObliqueZ : public CudaCrysFFTBase
 {
 private:
@@ -25,7 +35,7 @@ private:
     std::array<int, 3> nx_physical_;
     int M_logical_{0};
     int M_physical_{0};
-    int M_complex_xy_{0};
+    int M_spectral_{0};   ///< Nx * Ny * (Nz/4 + 1): half spectrum of the physical grid
 
     std::array<double, 6> cell_para_;
     std::array<double, 6> recip_metric_;
@@ -36,7 +46,7 @@ private:
     {
         std::mutex mutex;
         std::array<double, 6> cell_para;                       ///< Cell of the tables
-        std::map<double, CudaDeviceBuffer<double>> boltzmann;  ///< exp(-k² ds)/M_logical per ds
+        std::map<double, CudaDeviceBuffer<double>> boltzmann;  ///< (S, D) pairs per ds (see the file comment)
         std::vector<CudaDeviceBuffer<double>> spare;           ///< Buffers of the tables dropped by the last cell change
     };
     std::shared_ptr<Tables> tables_;
@@ -45,15 +55,14 @@ private:
     const double* d_boltz_current_{nullptr};   ///< Table of ds_current_ (not owning)
     double ds_current_{0.0};
 
-    std::unique_ptr<CudaRealTransform3D> dct_forward_z_;
-    std::unique_ptr<CudaRealTransform3D> dct_backward_z_;
+    cufftHandle plan_fwd_{};   ///< 3D D2Z of the physical grid
+    cufftHandle plan_bwd_{};   ///< 3D Z2D of the physical grid
+    bool plans_initialized_{false};
 
-    cufftHandle plan_xy_fwd_{};
-    cufftHandle plan_xy_bwd_{};
-    bool plan_xy_initialized_{false};
-
-    CudaDeviceBuffer<cufftDoubleComplex> d_complex_;
-    CudaDeviceBuffer<double> d_real_xy_;
+    CudaDeviceBuffer<double> d_twiddle_;               ///< (cos, sin)(pi kz/(Nz/2)) per stored kz
+    CudaDeviceBuffer<double> d_real_;                  ///< Permuted physical grid
+    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_;  ///< Its half spectrum
+    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_out_;
 
     double norm_factor_{1.0};
     cudaStream_t stream_{0};
@@ -62,11 +71,10 @@ private:
     CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other, std::shared_ptr<Tables> tables);
 
     static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
-    /// Create the DCT objects, the work buffers and the xy plans.
+    /// Create the 3D plans, the twiddle factors and the work buffers.
     void init_transforms();
-    void init_fft_xy();
-    void free_fft_xy();
-    /// Boltzmann factors for given ds (tables_->mutex held).
+    void free_plans();
+    /// (S, D) table for given ds (tables_->mutex held).
     CudaDeviceBuffer<double> generateBoltzmann(double ds);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();

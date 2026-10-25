@@ -157,6 +157,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Performance
 
+- The CUDA ObliqueZ CrysFFT runs the DCT along z and the FFT in the plane as one real 3D
+  FFT of the half grid after Makhoul's permutation along z; one kernel applies the
+  Boltzmann factors of each pair kz, Nz/2 − kz between the two transforms (2026-10-25).
+  A diffusion step takes three kernels and two cuFFT calls instead of eight kernels, four
+  cuFFT calls and a device copy. The propagators of an AB diblock with P6/mmm and the
+  z-mirror basis (continuous chains, RQM4, double precision, RTX 5060 Ti) take 1.2-1.6
+  times less time from 24×24×30 to 96³. Relative to the full-grid FFT this path now takes
+  1.66 times as long at 24×24×30, 0.89 at 48×48×60 and 0.51 at 96³ (before: 2.26, 1.09
+  and 0.69). Results change at round-off (about 1e-15 relative). `TestCrysFFTObliqueZCuda`
+  compares the CUDA and CPU engines on random fields.
 - CUDA, results unchanged bit for bit (2026-10-25):
   - The CrysFFT objects of the streams share their k-space tables (Boltzmann factors,
     stress multipliers and, for Recursive3m, the twiddle factors): each table is built and
@@ -173,8 +183,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   too, when the space group has a z-mirror, for example a hexagonal or monoclinic
   `SpaceGroup` passed to `PropagatorSolver` without a physical basis (2026-10-25). They
   used the full-grid FFT. The transform is the one of the z-mirror basis, which SCFT
-  enables on these cells, so SCFT is unchanged; on CUDA it is slower than the full-grid
-  FFT on small grids, as with that basis. `TestSpaceGroupPlatformEquivalence` adds a
+  enables on these cells, so SCFT is unchanged; on small CUDA grids it remains slower
+  than the full-grid FFT (see above). `TestSpaceGroupPlatformEquivalence` adds a
   monoclinic P2/m cell (γ = 100°, odd n_x).
 
 ## [0.10.0] - 2026-10-23
