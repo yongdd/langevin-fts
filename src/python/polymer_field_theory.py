@@ -623,6 +623,9 @@ class SymmetricPolymerTheory:
         dH : dict
             Derivatives {monomer_pair: dH/dχN_value}.
         """
+        if chi_n is not None and not isinstance(chi_n, dict):
+            raise TypeError("compute_h_deriv_chin: chi_n must be a dict {monomer_pair: value}; pass the "
+                            "fields by keyword, compute_h_deriv_chin(w_aux=w_aux, phi=phi).")
         if w_aux is None:
             raise TypeError("compute_h_deriv_chin needs the auxiliary fields w_aux.")
         if chi_n is not None and {",".join(sorted(key.split(","))): float(value) for key, value in chi_n.items()} != self.chi_n:

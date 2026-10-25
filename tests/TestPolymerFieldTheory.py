@@ -100,6 +100,12 @@ def test_dropped_fields_and_keys():
     with contextlib.redirect_stdout(io.StringIO()):
         mpt = SymmetricPolymerTheory(["A", "B"], {"B,A": 15.0}, None)
     check(np.isclose(mpt.eigenvalues[0], -15.0) and mpt.chi_n == {"A,B": 15.0}, "chi N key 'B,A' is read as 'A,B'")
+    try:
+        mpt.compute_h_deriv_chin(np.zeros((2, 10)), {"A": np.ones(10), "B": np.zeros(10)})
+        message = ""
+    except TypeError as exc:
+        message = str(exc)
+    check("by keyword" in message, "positional fields in compute_h_deriv_chin raise a TypeError that names the keywords")
 
 
 def test_saddle_point_model(chi0):

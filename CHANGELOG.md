@@ -76,12 +76,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   k ≲ 1/R₀.
 - `SymmetricPolymerTheory.compute_h_deriv_chin()` no longer needs `chi_n`: call it as
   `compute_h_deriv_chin(w_aux=..., phi=...)`. The older call with `chi_n` first still works
-  and checks it against the object's χN, as before (2026-10-24).
+  and checks it against the object's χN, as before; fields passed in its place raise a
+  `TypeError` that names the keywords (2026-10-24).
 - `SymmetricPolymerTheory` exposes its χN matrix as `matrix_chi`; `SCFT.matrix_chi` is the
   same array, so the matrix is built in one place, and `compute_eigen_system(matrix_chi,
   zeta_n)` takes the matrix instead of the pair dictionary (2026-10-24).
 - `parse_chi_n` moved from `polymerfts.utils` to `polymerfts.validation`, next to the other
-  input checks (2026-10-24).
+  input checks; `polymerfts.utils` still imports it for existing scripts (2026-10-24).
 
 ## [0.10.0] - 2026-10-23
 

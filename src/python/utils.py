@@ -23,7 +23,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 import numpy as np
 import yaml
 
-from .validation import normalize_params, ValidationError
+from .validation import normalize_params, ValidationError, parse_chi_n  # noqa: F401 (parse_chi_n: former utils API)
 
 
 def json_ready(value):
