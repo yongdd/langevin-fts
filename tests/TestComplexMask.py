@@ -7,11 +7,14 @@
    reads them, so they give the same result as contiguous copies.
 3. Objects created by the factory keep the objects they point to alive
    (dropping the Python references to the molecules, optimizer and box
-   before computing must not crash).
+   before computing must not crash). Weak references check every keep_alive
+   of the bindings, including those of the space group: each object lives as
+   long as the objects that point to it and is released after them.
 """
 
 import gc
 import sys
+import weakref
 
 import numpy as np
 from polymerfts import _core
@@ -99,6 +102,66 @@ def main():
     gc.collect()
     if cb_from_solver.get_total_grid() != n:
         print("FAILED: computation box returned by the solver outlived it incorrectly")
+        ok = False
+
+    # ---- each keep_alive, through weak references: an object that a C++ object
+    # points to stays alive with it and is released after it
+    def alive(refs):
+        gc.collect()
+        return sorted(name for name, ref in refs.items() if ref() is not None)
+
+    def make_molecules():
+        molecules = factory.create_molecules_information("continuous", 0.1, {"A": 1.0, "B": 1.0})
+        molecules.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+        return molecules
+
+    molecules = make_molecules()
+    optimizer = factory.create_propagator_computation_optimizer(molecules, True)
+    refs = {"molecules": weakref.ref(molecules)}
+    del molecules
+    if alive(refs) != ["molecules"]:
+        print("FAILED: the optimizer does not keep its molecules alive")
+        ok = False
+    del optimizer
+    if alive(refs):
+        print("FAILED: the molecules outlive their optimizer")
+        ok = False
+
+    def make_solver_with_space_group():
+        cb = factory.create_computation_box(nx, lx)
+        molecules = make_molecules()
+        optimizer = factory.create_propagator_computation_optimizer(molecules, True)
+        space_group = _core.SpaceGroup(nx, "Im-3m", 529)
+        solver = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4", space_group)
+        refs = {"box": weakref.ref(cb), "molecules": weakref.ref(molecules),
+                "optimizer": weakref.ref(optimizer), "space group": weakref.ref(space_group)}
+        return solver, cb, refs
+
+    solver, cb, refs = make_solver_with_space_group()
+    if alive(refs) != sorted(refs):
+        print(f"FAILED: the solver keeps only {alive(refs)} alive")
+        ok = False
+    del solver
+    if alive(refs) != ["box", "space group"]:
+        print(f"FAILED: without the solver, alive objects are {alive(refs)}; "
+              "the box must keep only its space group")
+        ok = False
+    del cb
+    if alive(refs):
+        print(f"FAILED: {alive(refs)} outlive the box and the solver")
+        ok = False
+
+    cb = factory.create_computation_box(nx, lx)
+    space_group = _core.SpaceGroup(nx, "Im-3m", 529)
+    cb.set_space_group(space_group)
+    refs = {"space group": weakref.ref(space_group)}
+    del space_group
+    if alive(refs) != ["space group"]:
+        print("FAILED: set_space_group does not keep the space group alive")
+        ok = False
+    del cb
+    if alive(refs):
+        print("FAILED: the space group outlives its box")
         ok = False
 
     if ok:

@@ -23,8 +23,12 @@
  *
  * **NumPy Integration:**
  *
- * All array parameters use py::array_t for zero-copy NumPy interoperability.
- * Size validation is performed to ensure array dimensions match grid size.
+ * An input array is read in place when it is C-contiguous and of the expected
+ * dtype; other arrays (strided views, float32, ...) are first copied into a
+ * converted temporary (see array_in). Functions that modify an array in place
+ * (ComputationBox.zero_mean, SpaceGroup.symmetrize_reduced_basis) reject arrays
+ * that would need such a copy. Results are returned as new NumPy arrays.
+ * Array sizes are checked against the grid.
  *
  * **Usage from Python:**
  *
