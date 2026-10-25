@@ -157,6 +157,8 @@ public:
 
     /// Scratch buffers lent to CudaSolverPseudoBase::compute_single_segment_stress()
     typename Base::StressScratch stress_scratch(int STREAM) override;
+    /// CrysFFT steps: full bonds and half bonds
+    std::vector<double> crysfft_step_divisors() const override { return {6.0, 12.0}; }
     /// Boltzmann bond factor of the stress integrand (see CudaSolverPseudoBase)
     const double* get_stress_boltz_bond(
         const std::string& monomer_type, bool is_half_bond_length) const override;

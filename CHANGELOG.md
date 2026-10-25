@@ -96,6 +96,35 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   zeta_n)` takes the matrix instead of the pair dictionary (2026-10-24).
 - `parse_chi_n` moved from `polymerfts.utils` to `polymerfts.validation`, next to the other
   input checks; `polymerfts.utils` still imports it for existing scripts (2026-10-24).
+- With a space group, the internal `advance_propagator_single_segment()` binding takes and
+  returns fields in the reduced basis, like `compute_propagators()`. Before, it expected
+  full-grid arrays but read and wrote only their first `n_basis` entries. The C++ method
+  `PropagatorComputation::compute_propagators_reduced()` is removed;
+  `compute_propagators()` already accepts reduced-basis fields (2026-10-25).
+
+### Fixed
+
+- Native input checks (2026-10-25):
+  - A monomer name that ends with an underscore, which the name check allows, no longer
+    stops the propagator key parser with "invalid stoi argument".
+  - `Molecules.get_solvent()` and `Polymer.get_n_segment()` raise an error for an index
+    out of range instead of reading past the end of their arrays.
+  - A polymer that `add_polymer()` rejects no longer leaves its contour lengths in the
+    contour length mapping, where every solver built tables for them.
+  - NaN box lengths, angles, segment lengths and contour lengths are rejected like
+    non-positive ones.
+- Anderson mixing skips the least-squares solve when the history products are not finite
+  and uses no history then, as before. An infinite product had made OpenBLAS print DLASCL
+  warnings to stdout. The stderr redirection that was meant to hide them is removed: it
+  missed them, and on Windows it could end a process that has no console (2026-10-25).
+- CUDA (2026-10-25):
+  - The CrysFFT Boltzmann tables are built when the computation is created and when the
+    cell changes, not with allocations and synchronous uploads inside the propagator loop.
+  - The Anderson mixers no longer make redundant device copies.
+  - Every kernel launch of the concentration sum is checked.
+
+  `TestMoleculesValidation`, `TestInputChecks` and `TestCudaCrysTablesAllocation` cover
+  these fixes.
 
 ## [0.10.0] - 2026-10-23
 

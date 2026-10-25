@@ -416,22 +416,5 @@ public:
      * @return Current flag value (default false)
      */
     bool get_force_off_diagonal_stress() const { return force_off_diagonal_stress_; }
-
-    /**
-     * @brief Compute propagators using reduced basis input fields.
-     *
-     * Uses reduced basis fields directly. When a space group is set, the
-     * solver handles expand/reduce internally around FFT operations.
-     *
-     * If you are unsure how reduced basis works, see docs/theory/SpaceGroup.md.
-     *
-     * @param w_reduced Map from monomer type to reduced basis field
-     *                  (size: n_basis per field)
-     * @param q_init    Optional: initial conditions for grafted chains
-     */
-    virtual void compute_propagators_reduced(
-        std::map<std::string, const T*> w_reduced,
-        std::map<std::string, const T*> q_init = {});
-
 };
 #endif

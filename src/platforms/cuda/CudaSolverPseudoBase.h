@@ -144,6 +144,22 @@ protected:
     virtual const double* get_stress_boltz_bond(
         const std::string& monomer_type, bool is_half_bond_length) const;
 
+    /**
+     * @brief CrysFFT diffusion coefficient b²·Δs/divisor of one propagator step.
+     *
+     * @param divisor 6 for a full step, 12 for a half step
+     */
+    double crysfft_coeff(const std::string& monomer_type, int ds_index, double divisor) const;
+
+    /**
+     * @brief Divisors (see crysfft_coeff()) of the CrysFFT steps the method takes.
+     *
+     * Their Boltzmann tables are built for every monomer type and contour step
+     * when the CrysFFT objects are created and when the cell changes, so the
+     * propagator loop only selects them.
+     */
+    virtual std::vector<double> crysfft_step_divisors() const = 0;
+
 private:
     bool plan_for_created_[MAX_STREAMS][2];  ///< plan_for_[i][b] exists (cufftHandle has no null value)
     bool plan_bak_created_[MAX_STREAMS][2];  ///< plan_bak_[i][b] exists
@@ -157,6 +173,8 @@ private:
     /// Upload the index maps and create the per-stream CrysFFT objects for `mode`.
     void setup_crysfft(CudaCrysFFTMode mode, const CrysFFTBasisMapping& map,
                        const std::array<double, 9>& m3_translations);
+    /// Pass the current cell to the CrysFFT objects and build the Boltzmann tables of all steps.
+    void update_crysfft_tables();
 
 public:
     virtual ~CudaSolverPseudoBase();

@@ -104,6 +104,10 @@ void Molecules::add_polymer(
         }
     }
 
+    // Validate the polymer before registering anything, so that a rejected
+    // polymer leaves no contour lengths in the mapping
+    Polymer polymer(ds, bond_lengths, volume_fraction, block_inputs, chain_end_to_q_init);
+
     // Register block contour lengths in the mapping
     for (const auto& block : block_inputs)
     {
@@ -111,8 +115,7 @@ void Molecules::add_polymer(
     }
 
     // Add new polymer type
-    polymer_types.push_back(Polymer(ds, bond_lengths,
-        volume_fraction, block_inputs, chain_end_to_q_init));
+    polymer_types.push_back(std::move(polymer));
 }
 
 /**
@@ -159,6 +162,9 @@ int Molecules::get_n_solvent_types() const
 }
 std::tuple<double, std::string> Molecules::get_solvent(const int s) const
 {
+    if (s < 0 || s >= static_cast<int>(solvent_types.size()))
+        throw_with_line_number("Solvent index (" + std::to_string(s) + ") must be in range [0, " +
+            std::to_string(static_cast<int>(solvent_types.size()) - 1) + "]");
     return solvent_types[s];
 }
 

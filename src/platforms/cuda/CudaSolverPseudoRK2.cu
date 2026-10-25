@@ -112,11 +112,7 @@ void CudaSolverPseudoRK2<T>::advance_propagator(
             }
             else
             {
-                const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-                double local_ds = mapping.get_ds_from_index(ds_index);
-                const double bond_length = this->molecules->get_bond_lengths().at(monomer_type);   // no map copy per step
-                double bond_length_sq = bond_length * bond_length;
-                double coeff_full = bond_length_sq * local_ds / 6.0;
+                const double coeff_full = this->crysfft_coeff(monomer_type, ds_index, 6.0);
 
                 const int M_phys = crysfft_physical_size_;
                 if (crysfft_identity_map_)

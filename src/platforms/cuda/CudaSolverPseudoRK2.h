@@ -145,5 +145,7 @@ public:
 
     /// Scratch buffers lent to CudaSolverPseudoBase::compute_single_segment_stress()
     typename Base::StressScratch stress_scratch(int STREAM) override;
+    /// CrysFFT steps: full steps only
+    std::vector<double> crysfft_step_divisors() const override { return {6.0}; }
 };
 #endif

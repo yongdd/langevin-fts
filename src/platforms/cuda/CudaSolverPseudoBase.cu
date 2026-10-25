@@ -573,12 +573,45 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
             crysfft_[i] = std::make_unique<CudaCrysFFTObliqueZ>(nx_logical, cell_para);
         else
             crysfft_[i] = std::make_unique<CudaCrysFFT>(nx_logical, cell_para);
+        // Its transforms and table uploads run on the stream of the propagators
+        crysfft_[i]->set_stream(streams[i][0]);
 
         d_crysfft_in_[i].allocate(map.M_phys);
         d_crysfft_out_[i].allocate(map.M_phys);
     }
     crysfft_mode_ = mode;
     use_crysfft_ = true;
+    update_crysfft_tables();
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::update_crysfft_tables()
+{
+    const auto lx = cb->get_lx();
+    const auto angles = cb->get_angles();
+    const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
+
+    // Building a table allocates and uploads it: do it here, outside the propagator loop
+    const int n_unique_ds = molecules->get_contour_length_mapping().get_n_unique_ds();
+    const std::vector<double> divisors = crysfft_step_divisors();
+    for (int i = 0; i < n_streams; ++i)
+    {
+        if (crysfft_[i] == nullptr)
+            continue;
+        crysfft_[i]->set_cell_para(cell_para);
+        for (const auto& item : molecules->get_bond_lengths())
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+                for (double divisor : divisors)
+                    crysfft_[i]->set_contour_step(crysfft_coeff(item.first, ds_idx, divisor));
+    }
+}
+
+template <typename T>
+double CudaSolverPseudoBase<T>::crysfft_coeff(const std::string& monomer_type, int ds_index, double divisor) const
+{
+    const double local_ds = molecules->get_contour_length_mapping().get_ds_from_index(ds_index);
+    const double bond_length = molecules->get_bond_lengths().at(monomer_type);   // no map copy per step
+    return bond_length * bond_length * local_ds / divisor;
 }
 
 template <typename T>
@@ -601,16 +634,7 @@ void CudaSolverPseudoBase<T>::update_laplacian_operator()
             this->cb->get_recip_vec());
 
         if (use_crysfft_)
-        {
-            auto lx = cb->get_lx();
-            auto angles = cb->get_angles();
-            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-            for (int i = 0; i < n_streams; ++i)
-            {
-                if (crysfft_[i] != nullptr)
-                    crysfft_[i]->set_cell_para(cell_para);
-            }
-        }
+            update_crysfft_tables();
     }
     catch(std::exception& exc)
     {

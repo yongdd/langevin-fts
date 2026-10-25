@@ -261,6 +261,9 @@ int Polymer::get_n_blocks() const
 }
 int Polymer::get_n_segment(const int idx) const
 {
+    if (idx < 0 || idx >= static_cast<int>(blocks.size()))
+        throw_with_line_number("Block index (" + std::to_string(idx) + ") must be in range [0, " +
+            std::to_string(static_cast<int>(blocks.size()) - 1) + "]");
     return blocks[idx].n_segment;
 }
 int Polymer::get_n_segment_total() const

@@ -66,7 +66,6 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
         // Temporary fields arrays
         d_w_hist1.allocate(this->n_var);
         d_w_hist2.allocate(this->n_var);
-        d_w_deriv_hist1.allocate(this->n_var);
         d_w_deriv_hist2.allocate(this->n_var);
 
         d_w_new.allocate(this->n_var);
@@ -141,8 +140,14 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
             for(int i=0; i<= this->n_anderson; i++)
             {
-                CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, this->n_var);
+                // The newest residual (i = 0) is already on the device
+                const CuDeviceData<T>* d_w_deriv_i = d_w_deriv;
+                if (i > 0)
+                {
+                    CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+                    d_w_deriv_i = d_w_hist1;
+                }
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_deriv_i, 1.0, this->n_var);
                 CUDA_CHECK_LAUNCH();
                 if constexpr (std::is_same<T, double>::value)
                     CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
@@ -188,12 +193,10 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             //exit(-1);
             this->find_an(u_nm.data(), v_n.data(), a_n.data(), this->n_anderson);
 
-            // Calculate the new field
-            CUDA_CHECK(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+            // Calculate the new field; the newest residual is d_w_deriv
+            CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
 
-            CUDA_CHECK(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(T)*this->n_var, cudaMemcpyDeviceToDevice));
-            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
+            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv, this->n_var);
             CUDA_CHECK_LAUNCH();
             for(int i=0; i<this->n_anderson; i++)
             {
@@ -203,14 +206,14 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
                     CUDA_CHECK_LAUNCH();
-                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv,       this->n_var);
                     CUDA_CHECK_LAUNCH();
                 }
                 else
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_hist2,       stdToCuDoubleComplex(-a_n[i]), d_w_hist1,       this->n_var);
                     CUDA_CHECK_LAUNCH();
-                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv_hist1, this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv,       this->n_var);
                     CUDA_CHECK_LAUNCH();
                 }
             }

@@ -16,6 +16,8 @@ SET(BASIC_TESTS
     TestComplexMask
     TestComputationSafety
     TestComputationState
+    TestInputChecks
+    TestMoleculesValidation
     # Platform & utilities
     TestDisplayArchitecture
     TestCircularBuffer
@@ -49,6 +51,7 @@ SET(BASIC_TESTS
     TestCudaCubReduceSumClass
     TestCrysFFT
     TestCrysFFTObliqueZGlide
+    TestCudaCrysTablesAllocation
 
     # Propagator solvers
     TestCrankNicolson1D

@@ -266,7 +266,6 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         {
             try{
                 const int N = obj.get_cb()->get_n_basis();
-                const bool use_reduced = (obj.get_space_group() != nullptr);
 
                 std::map<std::string, const T*> map_buf_w_input;
                 std::map<std::string, const T*> map_buf_q_init;
@@ -299,11 +298,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                     }
                 }
 
-                if (use_reduced) {
-                    obj.compute_propagators_reduced(map_buf_w_input, map_buf_q_init);
-                } else {
-                    obj.compute_propagators(map_buf_w_input, map_buf_q_init);
-                }
+                obj.compute_propagators(map_buf_w_input, map_buf_q_init);
             }
             catch(std::exception& exc)
             {
@@ -317,16 +312,16 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 py::buffer_info buf_q_in = q_in.request();
                 T* q_in_ptr = static_cast<T*>(buf_q_in.ptr);
 
-                // Allocate output buffer
-                const int M = obj.get_cb()->get_total_grid();
-                py::array_t<T> q_out(M);
+                // Allocate output buffer: reduced basis with a space group, as in compute_propagators
+                const int N = obj.get_cb()->get_n_basis();
+                py::array_t<T> q_out(N);
                 py::buffer_info buf_q_out = q_out.request();
                 T* q_out_ptr = static_cast<T*>(buf_q_out.ptr);
 
                 // Call C++ implementation
-                if (buf_q_in.size != M)
+                if (buf_q_in.size != N)
                 {
-                    throw_with_line_number("Size of input q_in (" + std::to_string(buf_q_in.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+                    throw_with_line_number("Size of input q_in (" + std::to_string(buf_q_in.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
                 }
                 else
                 {

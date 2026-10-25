@@ -663,8 +663,10 @@ void CudaComputationBackend<T>::sum_to_host(
 
     CUDA_CHECK(cudaMemset(d_sum, 0, sizeof(T)*n_basis));
     for (size_t a = 0; a < arrays.size(); a++)
+    {
         ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_sum, to_device_scalar(weights[a]), raw(arrays[a]), 1.0, d_sum, n_basis);
-    CUDA_CHECK_LAUNCH();
+        CUDA_CHECK_LAUNCH();
+    }
     CUDA_CHECK(cudaMemcpy(out, d_sum, sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
 }
 

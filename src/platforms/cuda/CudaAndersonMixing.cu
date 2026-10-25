@@ -198,7 +198,6 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             // Calculate the new field
             d_w_hist1 = d_cb_w_hist->get_array(0);
             d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
-            CUDA_CHECK(cudaMemcpy(d_w_new, d_w_hist1, sizeof(T)*this->n_var,cudaMemcpyDeviceToDevice));
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
             CUDA_CHECK_LAUNCH();
             for(int i=0; i<this->n_anderson; i++)

@@ -177,25 +177,6 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
     this->cb->set_space_group(sg);
 }
 
-/**
- * @brief Compute propagators using reduced basis input fields.
- *
- * Uses reduced basis fields directly. The solver handles expand/reduce
- * internally around FFT operations.
- */
-template <typename T>
-void PropagatorComputation<T>::compute_propagators_reduced(
-    std::map<std::string, const T*> w_reduced,
-    std::map<std::string, const T*> q_init)
-{
-    if (space_group_ == nullptr) {
-        throw_with_line_number("Space group not set. Create a computation with a space group.");
-    }
-
-    // Call the standard compute_propagators with reduced basis fields
-    compute_propagators(w_reduced, q_init);
-}
-
 // Explicit template instantiation
 template class PropagatorComputation<double>;
 template class PropagatorComputation<std::complex<double>>;

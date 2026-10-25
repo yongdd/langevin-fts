@@ -29,12 +29,13 @@ namespace validation {
  * @tparam T Numeric type (int, double, etc.)
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value <= 0
+ * @throws Exception if value <= 0 or is NaN
  */
 template<typename T>
 inline void require_positive(T value, const std::string& name)
 {
-    if (value <= 0)
+    // Negated so that NaN, for which every comparison is false, is rejected
+    if (!(value > 0))
     {
         throw_with_line_number(name + " must be a positive number, got: " + std::to_string(value));
     }
@@ -46,12 +47,12 @@ inline void require_positive(T value, const std::string& name)
  * @tparam T Numeric type
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value < 0
+ * @throws Exception if value < 0 or is NaN
  */
 template<typename T>
 inline void require_non_negative(T value, const std::string& name)
 {
-    if (value < 0)
+    if (!(value >= 0))
     {
         throw_with_line_number(name + " must be a non-negative number, got: " + std::to_string(value));
     }
@@ -65,12 +66,12 @@ inline void require_non_negative(T value, const std::string& name)
  * @param min_val Minimum allowed value (inclusive)
  * @param max_val Maximum allowed value (inclusive)
  * @param name    Variable name for error message
- * @throws Exception if value < min_val or value > max_val
+ * @throws Exception if value < min_val, value > max_val or value is NaN
  */
 template<typename T>
 inline void require_in_range(T value, T min_val, T max_val, const std::string& name)
 {
-    if (value < min_val || value > max_val)
+    if (!(value >= min_val && value <= max_val))
     {
         throw_with_line_number(name + " (" + std::to_string(value) +
             ") must be in range [" + std::to_string(min_val) +
@@ -84,7 +85,7 @@ inline void require_in_range(T value, T min_val, T max_val, const std::string& n
  * @tparam T Numeric type
  * @param values Vector of values to check
  * @param name   Variable name for error message
- * @throws Exception if any value <= 0
+ * @throws Exception if any value <= 0 or is NaN
  */
 template<typename T>
 inline void require_all_positive(const std::vector<T>& values, const std::string& name)
@@ -98,7 +99,7 @@ inline void require_all_positive(const std::vector<T>& values, const std::string
 
     for (const auto& v : values)
     {
-        if (v <= 0)
+        if (!(v > 0))
         {
             throw_with_line_number(name + " (" + str_values + ") must contain only positive numbers");
         }

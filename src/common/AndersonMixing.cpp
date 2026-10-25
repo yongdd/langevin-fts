@@ -24,13 +24,7 @@
 #include <complex>
 #include <vector>
 #include <type_traits>
-#include <cstdio>
-#include <fcntl.h>
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
+#include <cmath>
 
 // MSVC has no C99 _Complex, the default complex type of LAPACKE: use
 // std::complex there. lapacke.h then declares lapack_make_complex_* with C
@@ -51,28 +45,6 @@
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-// RAII helper to suppress stderr (LAPACK xerbla warnings)
-struct SuppressStderr {
-#ifdef _WIN32
-    static constexpr const char* NULL_DEVICE = "NUL";
-#else
-    static constexpr const char* NULL_DEVICE = "/dev/null";
-#endif
-    int saved_fd;
-    SuppressStderr() {
-        fflush(stderr);
-        saved_fd = dup(fileno(stderr));
-        int devnull = open(NULL_DEVICE, O_WRONLY);
-        dup2(devnull, fileno(stderr));
-        close(devnull);
-    }
-    ~SuppressStderr() {
-        fflush(stderr);
-        dup2(saved_fd, fileno(stderr));
-        close(saved_fd);
-    }
-};
 
 #include "AndersonMixing.h"
 #include "GridLimits.h"
@@ -134,12 +106,22 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
         return;
     }
 
-    // Check max element to avoid LAPACK warnings on zero/tiny matrices
+    // Skip LAPACK for zero/tiny matrices and for non-finite input (a diverged
+    // iteration). An infinite element makes xerbla print DLASCL warnings to
+    // stdout, and a NaN makes LAPACKE return an error; both give no mixing.
+    auto is_finite = [](const T& x) { return std::isfinite(std::real(x)) && std::isfinite(std::imag(x)); };
     double max_elem = 0.0;
+    bool finite = true;
     for (int i = 0; i < n; i++)
+    {
+        finite = finite && is_finite(v[i]);
         for (int j = 0; j < n; j++)
+        {
+            finite = finite && is_finite(u[i][j]);
             max_elem = std::max(max_elem, std::abs(u[i][j]));
-    if (max_elem < 1e-20)
+        }
+    }
+    if (max_elem < 1e-20 || !finite)
     {
         for (int i = 0; i < n; i++)
             a[i] = static_cast<T>(0.0);
@@ -162,12 +144,9 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        {
-            SuppressStderr guard;
-            info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                                  A.data(), n, b.data(), 1,
-                                  s.data(), 1e-10, &rank);
-        }
+        info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              A.data(), n, b.data(), 1,
+                              s.data(), 1e-10, &rank);
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : 0.0;
@@ -183,13 +162,10 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        {
-            SuppressStderr guard;
-            info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                                  reinterpret_cast<lapack_complex_double*>(A.data()), n,
-                                  reinterpret_cast<lapack_complex_double*>(b.data()), 1,
-                                  s.data(), 1e-10, &rank);
-        }
+        info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              reinterpret_cast<lapack_complex_double*>(A.data()), n,
+                              reinterpret_cast<lapack_complex_double*>(b.data()), 1,
+                              s.data(), 1e-10, &rank);
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : std::complex<double>(0.0, 0.0);
