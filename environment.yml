@@ -15,8 +15,10 @@ dependencies:
   - scipy=1.18.1
   - pandas=3.1.0
   - matplotlib=3.11.2
-  # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS.
-  - libblas=3.11.0=*openblas
+  # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS. libblas
+  # only selects the implementation and openblas fixes the version: with a version
+  # in the libblas spec, the MKL install on Linux fails in conda's retried solve.
+  - libblas=*=*openblas
   - openblas=0.3.34
   # The spglib package includes the C library and headers.
   - spglib=2.8.0

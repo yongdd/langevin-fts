@@ -342,7 +342,7 @@ L-FTS simulations save structure function data in `structure_function_XXXXXX.mat
 | `structure_function_A_B` | $`S_{AB}(\mathbf{k}) = V \sqrt{\bar{N}} \langle \tilde{\mu}_A(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 | `structure_function_B_B` | $`S_{BB}(\mathbf{k}) = V \sqrt{\bar{N}} \langle \tilde{\mu}_B(\mathbf{k}) \tilde{\phi}_B(-\mathbf{k}) \rangle`$ |
 
-$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; $`ar{N}`$ is `nbar`; see the [estimator](../theory/LangevinFieldTheoreticSimulation.md#42-estimator). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
+$`\tilde{\mu}_i`$ is the Fourier transform of the chemical potential field of monomer $`i`$, $`\mu_i = \sum_k A_{ik}\Omega_k/\lambda_k`$, and the average runs over the steps at which the structure function is computed within one recording period; $`\bar{N}`$ is `nbar`; see the [estimator](../theory/LangevinFieldTheoreticSimulation.md#42-estimator). With smearing in a periodic box the recorded $`S`$ is divided by $`\Gamma(\mathbf{k})`$ (modes with $`\Gamma < 10^{-12}`$ are recorded as 0); with walls, where $`\Gamma`$ is defined in the cosine basis, the estimator is recorded as it is.
 
 Fields are stored in Fourier space with dimensions `[nx, ny, nz/2+1]` (real FFT format).
 
