@@ -18,6 +18,22 @@ if _sys.platform == "win32":
     if _spglib_spec is not None and _spglib_spec.origin:
         _os.add_dll_directory(_os.path.dirname(_spglib_spec.origin))
 
+# The console output names quantities with Greek letters and subscripts (χN, κ,
+# βF/(ρ₀V/N)). A stream redirected to a file or pipe uses the locale encoding,
+# e.g. cp949 or cp1252 on Windows, which cannot encode all of them, and print()
+# raised UnicodeEncodeError. Such a stream writes the characters it cannot
+# encode as backslash escapes; everything it can encode is written unchanged.
+for _stream in (_sys.stdout, _sys.stderr):
+    try:
+        "βκμξρχΔΨ₀".encode(_stream.encoding, _stream.errors)
+    except UnicodeEncodeError:
+        try:
+            _stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass   # not a reconfigurable text stream
+    except (AttributeError, LookupError, TypeError):
+        pass       # no stream, or one without a text encoding
+
 # Core C++ bindings (re-export all for user convenience)
 from ._core import *
 

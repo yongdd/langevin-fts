@@ -133,6 +133,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `TestMoleculesValidation`, `TestInputChecks` and `TestCudaCrysTablesAllocation` cover
   these fixes.
 
+- Console output no longer raises `UnicodeEncodeError` when stdout is redirected to a file
+  or pipe whose encoding lacks the Greek letters and subscripts it prints (χN, κ,
+  βF/(ρ₀V/N)), such as cp949 or cp1252 on Windows: these streams write such characters as
+  backslash escapes (2026-10-25). Under cp949, SCFT stopped at the end of every run;
+  under code pages without Greek letters, SCFT, L-FTS and CL-FTS stopped at their start.
+  `TestConsoleEncoding` runs a short SCFT with an ASCII stdout.
+
 ### Performance
 
 - Cells with α = β = 90° and γ ≠ 90° use the ObliqueZ CrysFFT with the irreducible basis
