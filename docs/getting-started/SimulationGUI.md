@@ -200,7 +200,11 @@ save creates `~/polymer-jobs/simulation.py`. A subfolder of `gyroid/run01` inste
 creates `~/polymer-jobs/gyroid/run01/simulation.py`. New subfolders are created as
 needed. Existing files are never overwritten; choose another filename or folder
 for a new version. Subfolders must stay within the base directory, and symbolic
-links are not followed. The optional `--save-dir` flag overrides the base directory.
+links are not followed. Folder and file names may not contain `:`. On Windows,
+which has no directory descriptors, the editor refuses symbolic links and junctions
+when it checks each folder, but does not catch a folder that another process
+replaces by a link during a save. The optional `--save-dir` flag overrides the
+base directory.
 
 The **Simulation output directory** is separate: the exported script creates it
 when you run the simulation later. Relative input and output paths resolve next

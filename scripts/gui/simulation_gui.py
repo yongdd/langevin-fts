@@ -497,24 +497,33 @@ def build_script(values):
     )
 
 
+# Directory descriptors keep every write inside the root; Windows has none
+DIRECTORY_DESCRIPTORS = (os.open in os.supports_dir_fd and os.mkdir in os.supports_dir_fd
+                         and hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW"))
+
+
 def save_script(script, root, directory, filename):
-    """Create a new script under the configured root, without following symlinks."""
+    """Create a new script under the configured root, without following links."""
     if not isinstance(directory, str) or not isinstance(filename, str):
         raise ValueError("Server folder and filename must be text.")
     filename = filename.strip()
     folder = Path(directory.strip())
     if len(directory) > 512 or len(folder.parts) > 16:
         raise ValueError("Server subfolder must have at most 512 characters and 16 path components.")
-    if (folder.is_absolute() or ".." in folder.parts or "\\" in directory
+    # anchor: a root or a drive. On Windows "/tmp" is not absolute but rooted on the current
+    # drive, and ':' separates a drive ("C:x") or names an alternate data stream
+    if (folder.anchor or ".." in folder.parts or "\\" in directory or ":" in directory
             or any(ord(char) < 32 for char in directory)):
         raise ValueError("Server subfolder must be a relative path without '..'.")
-    if (not filename.lower().endswith(".py") or "/" in filename or "\\" in filename
+    if (not filename.lower().endswith(".py") or "/" in filename or "\\" in filename or ":" in filename
             or any(ord(char) < 32 for char in filename) or len(filename.encode("utf-8")) > 240):
         raise ValueError("Enter a .py filename without path separators.")
     try:
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
     except FileExistsError as exc:
         raise NotADirectoryError(f"Server script directory is not a directory: {root}") from exc
+    if not DIRECTORY_DESCRIPTORS:
+        return save_script_by_path(script, root, folder, filename)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     directory_fd = os.open(root, flags)
     try:
@@ -531,7 +540,7 @@ def save_script(script, root, directory, filename):
         file_fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                           mode=0o600, dir_fd=directory_fd)
         try:
-            with os.fdopen(file_fd, "w", encoding="utf-8") as output:
+            with os.fdopen(file_fd, "w", encoding="utf-8", newline="\n") as output:
                 output.write(script)
         except OSError:
             os.unlink(filename, dir_fd=directory_fd)
@@ -539,6 +548,38 @@ def save_script(script, root, directory, filename):
     finally:
         os.close(directory_fd)
     return root / folder / filename
+
+
+def save_script_by_path(script, root, folder, filename):
+    """Windows: create the folders one at a time and refuse links (symlinks, junctions).
+
+    Without directory descriptors, a folder that another process replaces by a link
+    between this check and the write is not caught.
+    """
+    def refuse_link(path):
+        # A link resolves to another path
+        if not path.is_dir() or os.path.normcase(path.resolve(strict=True)) != os.path.normcase(path.absolute()):
+            raise OSError(f"Server subfolder is a link or not a folder: {path}")
+
+    path = root
+    refuse_link(path)
+    for part in folder.parts:
+        path = path / part
+        try:
+            path.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        refuse_link(path)
+    # O_EXCL also refuses an existing link; O_BINARY keeps the line endings of the script
+    target = path / filename
+    file_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        with os.fdopen(file_fd, "w", encoding="utf-8", newline="\n") as output:
+            output.write(script)
+    except OSError:
+        os.unlink(target)
+        raise
+    return target
 
 
 class ScriptRequestHandler(BaseHTTPRequestHandler):

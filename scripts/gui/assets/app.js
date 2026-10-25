@@ -262,7 +262,7 @@ function loadPreset() {
 }
 
 function exportFilename() {
-  let name = document.getElementById("filename").value.trim().replace(/[\\/]/g, "_") || "simulation.py";
+  let name = document.getElementById("filename").value.trim().replace(/[\\/:]/g, "_") || "simulation.py";
   if (!name.toLowerCase().endsWith(".py")) name += ".py";
   return name;
 }

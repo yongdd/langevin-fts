@@ -205,6 +205,19 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Fixed
 
+- Script tools on Windows (2026-10-26):
+  - Saving a script on the server from the Simulation Script Builder failed on Windows,
+    which has none of the directory descriptors (`os.O_DIRECTORY`, `dir_fd`) that keep a
+    POSIX save inside its base directory. Windows creates the folders one at a time,
+    refuses symbolic links and junctions by their resolved paths, and writes the script
+    with LF line endings. A folder that another process replaces by a link during a save
+    is not caught there, unlike on POSIX.
+  - The editor's server subfolder and the PSCF converter's output paths accepted paths
+    such as `/tmp/x`, which Windows does not count as absolute but roots on the current
+    drive, so they were written outside the target directory. Both now reject any path
+    with a root or a drive, and the editor rejects `:` in folders and filenames.
+  - The Windows CI job runs `tests/scripts`; the symbolic-link tests are skipped where
+    links cannot be created (Windows without Developer Mode).
 - Native state and input checks (2026-10-26):
   - `Molecules.add_solvent()` after a propagator computation was created made the
     computation read past its solvent arrays; `add_solvent()` and `add_polymer()` now

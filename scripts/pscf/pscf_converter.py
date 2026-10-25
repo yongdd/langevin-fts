@@ -790,7 +790,8 @@ def script_commands(text):
             stage = "write"
         elif name in writes and stage == "write":
             source = Path(argument)
-            if (not argument or source.is_absolute() or ".." in source.parts or "\\" in argument
+            # anchor: a root or a drive; on Windows "/tmp/x" is rooted on the current drive
+            if (not argument or source.anchor or ".." in source.parts or "\\" in argument
                     or argument.endswith("/") or source == Path(".")):
                 raise ValueError(f"PSCF output must be a relative file path without '..': {argument!r}.")
             outputs.append({"command": name, "source": argument, "target": source.as_posix() + ".mat"})

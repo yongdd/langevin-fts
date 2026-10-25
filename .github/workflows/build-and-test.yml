@@ -181,6 +181,9 @@ jobs:
         channel-priority: strict
         conda-remove-defaults: "true"
 
+    - name: Test script utilities
+      run: python -m pytest tests/scripts -q
+
     - name: Install MKL and FFTW
       run: conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 
