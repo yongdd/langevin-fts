@@ -211,16 +211,15 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
         }
         else
         {
-            // Check for odd dimensions - DCT-2/DCT-3 only supports even N
-            // The FCT algorithm (Makhoul 1980) requires even N for interleaved decomposition
+            // The DCT-2/DCT-3 of reflecting axes take any length; the DST-2 kernels
+            // of CudaRealTransform need an even one, so absorbing axes must be even
             for (int d = 0; d < DIM; ++d)
             {
-                if (nx_[d] % 2 != 0)
+                if (bc_[d] == BoundaryCondition::ABSORBING && nx_[d] % 2 != 0)
                 {
-                    throw_with_line_number("CudaFFT with non-periodic BC requires even grid sizes. "
-                                          "Dimension " + std::to_string(d) + " has odd size " +
-                                          std::to_string(nx_[d]) + ". DCT-2/DCT-3 implementation "
-                                          "uses FCT algorithm which only supports even N.");
+                    throw_with_line_number("CudaFFT requires an even grid size along absorbing axes "
+                                          "(the CUDA DST-2 needs even lengths). Dimension " + std::to_string(d) +
+                                          " has odd size " + std::to_string(nx_[d]) + "; reflecting axes may be odd.");
                 }
             }
 

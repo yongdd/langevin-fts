@@ -218,6 +218,11 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   (`SpaceGroup.m3_crysfft_feasible()`, which SCFT uses), and the recursive 3m engines,
   exact for nz/2 >= 2, run an enabled m3 basis on any grid it maps.
   `TestCrysFFTM3SmallGrid` compares these runs with full-grid ones on every platform.
+- CUDA runs boxes with reflecting walls on odd grid sizes, like the CPU backends
+  (2026-10-26). It refused every odd non-periodic size, although only the DST-2 of
+  absorbing axes needs an even length, which its error message now names.
+  `TestCudaOddReflecting` compares CUDA with the CPU in 1D, 2D and 3D boxes, and
+  `TestCudaFFTMixedBC` checks odd lengths against direct DCT and DST sums.
 
 ### Performance
 
