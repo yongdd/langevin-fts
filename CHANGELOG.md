@@ -157,6 +157,10 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 - CUDA (2026-10-25):
   - The CrysFFT Boltzmann tables are built when the computation is created and when the
     cell changes, not with allocations and synchronous uploads inside the propagator loop.
+    Only the monomer types and contour steps of the blocks get tables (2026-10-26). Before,
+    every combination did: with three monomer types and five contour steps, about 1 GB on a
+    128³ grid with the recursive 3m CrysFFT. A step whose table was not built raises an
+    error instead of building it inside the loop.
   - The Anderson mixers no longer make redundant device copies.
   - Every kernel launch of the concentration sum is checked.
 

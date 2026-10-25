@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <cufft.h>
 
 #include "Exception.h"
@@ -88,6 +89,7 @@ protected:
     std::unique_ptr<CudaCrysFFTBase> crysfft_[MAX_STREAMS];   ///< Per-stream CrysFFT objects
     CudaDeviceBuffer<double> d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
     CudaDeviceBuffer<double> d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
+    std::set<double> crysfft_coeffs_;   ///< Step coefficients whose tables update_crysfft_tables() built
 
     /**
      * @param max_fft_batch             Largest number of fields the derived solver
@@ -180,13 +182,14 @@ protected:
     double crysfft_coeff(const std::string& monomer_type, int ds_index, double divisor) const;
 
     /**
-     * @brief Divisors (see crysfft_coeff()) of the CrysFFT steps the method takes.
+     * @brief Coefficients (see crysfft_coeff()) of the CrysFFT steps that the
+     *        method takes for a block of this monomer type and contour step.
      *
-     * Their Boltzmann tables are built for every monomer type and contour step
-     * when the CrysFFT objects are created and when the cell changes, so the
-     * propagator loop only selects them.
+     * Their Boltzmann tables are built for every block when the CrysFFT objects
+     * are created and when the cell changes, so the propagator loop only selects
+     * them; crysfft_diffuse() rejects a coefficient whose table was not built.
      */
-    virtual std::vector<double> crysfft_step_divisors() const = 0;
+    virtual std::vector<double> crysfft_block_coeffs(const std::string& monomer_type, int ds_index) const = 0;
 
 private:
     bool plan_for_created_[MAX_STREAMS][2];  ///< plan_for_[i][b] exists (cufftHandle has no null value)

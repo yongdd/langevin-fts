@@ -497,6 +497,11 @@ void CudaSolverPseudoBase<T>::crysfft_diffuse(
     const int M_phys = crysfft_physical_size_;
     const cudaStream_t stream = streams[STREAM][0];
     CudaCrysFFTBase* crysfft = crysfft_[STREAM].get();
+    // A coefficient without a prebuilt table would be built here, inside the
+    // propagator loop: its step is missing from crysfft_block_coeffs()
+    if (!crysfft_coeffs_.contains(coeff))
+        throw_with_line_number("The CrysFFT table of the step coefficient " + std::to_string(coeff) +
+            " was not prebuilt (see crysfft_block_coeffs()).");
     crysfft->set_contour_step(coeff);
 
     if (crysfft_identity_map_)
@@ -716,18 +721,26 @@ void CudaSolverPseudoBase<T>::update_crysfft_tables()
     const auto angles = cb->get_angles();
     const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
 
-    // Building a table allocates and uploads it: do it here, outside the propagator loop
-    const int n_unique_ds = molecules->get_contour_length_mapping().get_n_unique_ds();
-    const std::vector<double> divisors = crysfft_step_divisors();
+    // Building a table allocates and uploads it: do it here, outside the propagator
+    // loop, for the monomer type and contour step of each block (not for every
+    // combination: each table holds up to 16 physical-grid arrays)
+    const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+    std::set<std::pair<std::string, int>> block_steps;
+    for (int p = 0; p < molecules->get_n_polymer_types(); ++p)
+        for (const Block& block : molecules->get_polymer(p).get_blocks())
+            block_steps.insert({block.monomer_type, mapping.get_ds_index(block.contour_length)});
+    crysfft_coeffs_.clear();
+    for (const auto& [monomer_type, ds_idx] : block_steps)
+        for (double coeff : crysfft_block_coeffs(monomer_type, ds_idx))
+            crysfft_coeffs_.insert(coeff);
+
     for (int i = 0; i < n_streams; ++i)
     {
         if (crysfft_[i] == nullptr)
             continue;
         crysfft_[i]->set_cell_para(cell_para);
-        for (const auto& item : molecules->get_bond_lengths())
-            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
-                for (double divisor : divisors)
-                    crysfft_[i]->set_contour_step(crysfft_coeff(item.first, ds_idx, divisor));
+        for (double coeff : crysfft_coeffs_)
+            crysfft_[i]->set_contour_step(coeff);
     }
 }
 
