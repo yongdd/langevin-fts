@@ -3,9 +3,11 @@
 of non-finite histories.
 
 - Monomer names ending with an underscore give the same results as plain names.
-- NaN box lengths and angles are rejected.
+- NaN box lengths and angles, and NaN or infinite contour steps, are rejected.
 - advance_propagator_single_segment works in the reduced basis when the
-  computation has a space group, like compute_propagators.
+  computation has a space group, like compute_propagators, for continuous and
+  discrete chains with and without reduce_memory, on fields rescaled to a
+  standard deviation of 5 after symmetrization.
 - Anderson mixing of a history whose residual products overflow uses no
   history and calls no LAPACK routine, which would print DLASCL warnings.
 """
@@ -60,30 +62,42 @@ def test_nan_box(platform):
     cb = fac.create_computation_box([16], [4.0])
     rejects(lambda: cb.set_lx([nan]))
     assert cb.get_lx() == [4.0]
+    # A NaN contour step used to give one segment per block and a plausible Q
+    for chain_model in ("continuous", "discrete"):
+        for ds in (nan, float("inf")):
+            rejects(lambda: fac.create_molecules_information(chain_model, ds, {"A": 1.0}))
 
 
 def test_single_segment_reduced_basis(platform):
-    fac = _core.PlatformSelector.create_factory(platform, False, "real")
     nx = [8]*3
     sg = _core.SpaceGroup(nx, "Im-3m", 529)
     rng = np.random.default_rng(42)
-    w = {m: sg.symmetrize(rng.normal(0, 5, 512)) for m in "AB"}
-    q_in = sg.symmetrize(rng.normal(0, 5, 512))
-    q_out = []
-    for group in (None, sg):
-        basis = (lambda x: x) if group is None else sg.to_reduced_basis
-        cb = fac.create_computation_box(nx, [3.0]*3)
-        mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0, "B": 1.0})
-        mol.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
-        opt = fac.create_propagator_computation_optimizer(mol, False)
-        pc = fac.create_propagator_computation(cb, mol, opt, "rqm4", group)
-        pc.compute_propagators({m: basis(w[m]) for m in "AB"})
-        out = pc.advance_propagator_single_segment(basis(q_in), 0, 0, 1)
-        assert out.shape == (cb.get_n_basis(),)
-        q_out.append(out)
-    # With a space group the full grid is rejected, like in compute_propagators
-    rejects(lambda: pc.advance_propagator_single_segment(q_in, 0, 0, 1))
-    np.testing.assert_allclose(q_out[1], sg.to_reduced_basis(q_out[0]), rtol=1e-11, atol=1e-11)
+
+    # Symmetrizing averages the random values over the group; rescale to std 5
+    def symmetric_field():
+        x = sg.symmetrize(rng.normal(0, 5, 512))
+        return 5.0 * x / np.std(x)
+    w = {m: symmetric_field() for m in "AB"}
+    q_in = symmetric_field()
+    for chain_model in ("continuous", "discrete"):
+        for reduce_memory in (False, True):
+            fac = _core.PlatformSelector.create_factory(platform, reduce_memory, "real")
+            q_out = []
+            for group in (None, sg):
+                basis = (lambda x: x) if group is None else sg.to_reduced_basis
+                cb = fac.create_computation_box(nx, [3.0]*3)
+                mol = fac.create_molecules_information(chain_model, 0.05, {"A": 1.0, "B": 1.0})
+                mol.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+                opt = fac.create_propagator_computation_optimizer(mol, False)
+                pc = fac.create_propagator_computation(cb, mol, opt, "rqm4", group)
+                pc.compute_propagators({m: basis(w[m]) for m in "AB"})
+                out = pc.advance_propagator_single_segment(basis(q_in), 0, 0, 1)
+                assert out.shape == (cb.get_n_basis(),)
+                q_out.append(out)
+            # With a space group the full grid is rejected, like in compute_propagators
+            rejects(lambda: pc.advance_propagator_single_segment(q_in, 0, 0, 1))
+            np.testing.assert_allclose(q_out[1], sg.to_reduced_basis(q_out[0]), rtol=1e-11, atol=1e-11,
+                                       err_msg=f"{chain_model}, reduce_memory={reduce_memory}")
 
 
 # Run in a child process, whose stdout and stderr capture what LAPACK prints

@@ -5,10 +5,12 @@ import numpy as np
 from polymerfts import _core, PropagatorSolver
 
 
-def rejects(call):
+def rejects(call, message=None):
     try:
         call()
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError) as exc:
+        if message is not None:
+            assert message in str(exc), (message, str(exc))
         return
     raise AssertionError("Invalid operation was accepted")
 
@@ -59,8 +61,10 @@ def test_failed_construction(platform):
     replacement = _core.SpaceGroup([8]*3, "P1", 1)
     for old in (None, previous):
         cb.set_space_group(old)
-        # The real-space backend rejects an oblique cell after group attachment.
-        rejects(lambda: fac.create_propagator_computation(cb, mol, opt, "cn-adi2", replacement))
+        # The factory rejects cn-adi2 on an oblique cell before it attaches the group;
+        # the rollback after an attached group fails is checked with nx = 1 below.
+        rejects(lambda: fac.create_propagator_computation(cb, mol, opt, "cn-adi2", replacement),
+                "cn-adi2 requires an orthogonal computation box")
         assert cb.get_space_group() is old
         assert not replacement.in_use()
         assert cb.get_n_basis() == 512
@@ -83,6 +87,20 @@ def test_failed_construction(platform):
     assert cb.get_space_group() is previous and not replacement.in_use()
     pc.compute_propagators(w)
     np.testing.assert_allclose(pc.get_total_partition(0), reference, rtol=1e-12)
+
+
+def test_method_checks(platform, reduced):
+    # The factory checks the numerical method once for every platform; each case
+    # names its reason (a backend left without a solver would crash instead)
+    mol = molecules(_core.PlatformSelector.create_factory(platform, reduced, "real"))
+    for field_type, angles, method, message in (
+            ("complex", [90.0]*3, "cn-adi2", "cn-adi2 does not support complex fields"),
+            ("real", [90.0]*3, "rk4", "Unknown numerical method 'rk4'"),
+            ("real", [90.0, 90.0, 80.0], "cn-adi2", "cn-adi2 requires an orthogonal computation box")):
+        fac = _core.PlatformSelector.create_factory(platform, reduced, field_type)
+        opt = fac.create_propagator_computation_optimizer(mol, False)
+        cb = fac.create_computation_box([8]*3, [3.0]*3, angles)
+        rejects(lambda: fac.create_propagator_computation(cb, mol, opt, method), message)
 
 
 def test_gce(platform, reduced):
@@ -238,6 +256,7 @@ def main():
         test_box_update_and_cnadi(platform)
         for reduced in (False, True):
             test_basis_lifetime(platform, reduced)
+            test_method_checks(platform, reduced)
             test_gce(platform, reduced)
             test_grafting_conversions(platform, reduced)
             test_cnadi_lattice_update(platform, reduced)

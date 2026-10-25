@@ -119,6 +119,21 @@ int main()
             Molecules molecules("continuous", 0.1, {{"A", nan}});
             ok &= check(throws([&]{ molecules.add_polymer(1.0, {{"A", 1.0, 0, 1}}, {}); }), "a NaN bond length is rejected");
         }
+        // A NaN or infinite contour step used to give one segment per block and a
+        // plausible partition function
+        const double inf = std::numeric_limits<double>::infinity();
+        for (const std::string model : {"continuous", "discrete"})
+        {
+            for (double ds : {nan, inf, -0.1, 0.0})
+                ok &= check(throws([&]{ Molecules molecules(model, ds, {{"A", 1.0}}); }),
+                    model + " chains reject ds = " + std::to_string(ds));
+        }
+        ok &= check(throws([&]{ ContourLengthMapping mapping(0.1, nan); }), "a NaN mapping tolerance is rejected");
+        {
+            ContourLengthMapping mapping(0.1);
+            ok &= check(throws([&]{ mapping.add_block(nan); }) && throws([&]{ mapping.add_block(inf); }),
+                "NaN and infinite contour lengths are rejected by the mapping");
+        }
         ok &= check(throws([&]{ validation::require_positive(nan, "x"); }), "require_positive(NaN) throws");
         ok &= check(throws([&]{ validation::require_non_negative(nan, "x"); }), "require_non_negative(NaN) throws");
         ok &= check(throws([&]{ validation::require_in_range(nan, 0.0, 1.0, "x"); }), "require_in_range(NaN) throws");

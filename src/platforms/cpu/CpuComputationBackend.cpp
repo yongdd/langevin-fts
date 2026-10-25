@@ -36,8 +36,12 @@ CpuComputationBackend<T>::CpuComputationBackend(
         solver = std::make_unique<CpuSolverPseudoRK2<T>>(cb, molecules, fft_backend);
         break;
     case NumericalMethodId::CNADI2:
+        // The factory rejects this combination first (validate_numerical_method);
+        // without a solver the calls below would dereference null
         if constexpr (std::is_same_v<T, double>)
             solver = std::make_unique<CpuSolverCNADI>(cb, molecules);
+        else
+            throw_with_line_number("The cn-adi2 method is only available for real fields.");
         break;
     }
 

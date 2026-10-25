@@ -139,6 +139,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     contour length mapping, where every solver built tables for them.
   - NaN box lengths, angles, segment lengths and contour lengths are rejected like
     non-positive ones.
+  - A NaN or infinite contour step `ds` is rejected (2026-10-26). The contour length
+    mapping compared with `<= 0`, which NaN passes: `PropagatorSolver` then ran with one
+    segment per block and returned a plausible partition function. SCFT, L-FTS and CL-FTS
+    checked `ds` before.
+  - The CPU backend raises an error for `cn-adi2` with complex fields, like the CUDA
+    backend, instead of leaving its solver null (the method registry rejects the
+    combination first).
 - Anderson mixing skips the least-squares solve when the history products are not finite
   and uses no history then, as before. An infinite product had made OpenBLAS print DLASCL
   warnings to stdout. The stderr redirection that was meant to hide them is removed: it
