@@ -66,7 +66,8 @@ def main():
                 shutil.copytree(directory, copies[directory], ignore=shutil.ignore_patterns("__pycache__", "*.png"))
             copy = copies[directory] / script.name
             child = subprocess.run([sys.executable, "-c", DRIVER, str(copy)], cwd=copies[directory],
-                                   capture_output=True, text=True, timeout=600, env=dict(os.environ))
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                   timeout=600, env=dict(os.environ))
             name = script.relative_to(ROOT).as_posix()
             ok = child.returncode == 0 and "EXAMPLE CONSTRUCTED" in child.stdout
             print(f"[{'PASS' if ok else 'FAIL'}] {name}")

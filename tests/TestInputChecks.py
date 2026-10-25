@@ -122,7 +122,7 @@ assert np.array_equal(w_new, w + residuals[-1])
 
 def test_anderson_non_finite(platform):
     child = subprocess.run([sys.executable, "-c", ANDERSON_CHILD, platform],
-                           capture_output=True, text=True, timeout=600)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     output = child.stdout + child.stderr
     assert child.returncode == 0, output
     assert "DLASCL" not in output and "illegal value" not in output, output

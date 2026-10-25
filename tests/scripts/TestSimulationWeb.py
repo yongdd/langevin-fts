@@ -62,7 +62,7 @@ def test_editor_assets_are_not_git_ignored():
     assets = ["index.html", "app.js", "model-editor.js", "style.css", "icon.svg", "space-groups.json"]
     result = subprocess.run(["git", "check-ignore", "--no-index", "--",
                              *["scripts/gui/assets/" + name for name in assets]],
-                            cwd=root, capture_output=True, text=True, timeout=5)
+                            cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
     assert result.returncode == 1, result.stdout + result.stderr
 
 

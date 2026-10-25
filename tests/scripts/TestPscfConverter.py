@@ -409,7 +409,8 @@ def test_command_line_example_and_error_exit(tmp_path):
     subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], check=True, capture_output=True, timeout=15)
     subprocess.run([sys.executable, str(CONVERTER), 'import', str(output / 'in/omega'), '-o', str(tmp_path / 'roundtrip.mat'),
                     '--metadata', str(output / 'metadata.json')], check=True, capture_output=True, timeout=15)
-    failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], capture_output=True, text=True, timeout=15)
+    failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], capture_output=True,
+                            text=True, encoding='utf-8', errors='replace', timeout=15)
     assert failed.returncode == 2 and 'Error:' in failed.stderr and 'Traceback' not in failed.stderr
 
 
@@ -418,6 +419,6 @@ def test_bad_mat_file_has_a_clean_command_line_error(tmp_path):
     source.write_bytes(b'')
     target = tmp_path / 'pscf'
     failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(target)],
-                            capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert failed.returncode == 2 and 'Cannot read MATLAB file' in failed.stderr
     assert 'Traceback' not in failed.stderr and not target.exists()

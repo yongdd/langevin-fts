@@ -64,12 +64,13 @@ def base_params(nx, lx, angles):
 
 def run_pscf(binary, directory, dim, command='command'):
     result = subprocess.run([str(binary), '-d', str(dim), '-p', 'param', '-c', command],
-                            cwd=directory, capture_output=True, text=True, timeout=90)
-    (directory / 'pscf.log').write_text(result.stdout + '\n' + result.stderr)
-    assert result.returncode == 0, (directory / 'pscf.log').read_text()[-6000:]
+                            cwd=directory, capture_output=True, text=True, encoding='utf-8', errors='replace',
+                            timeout=90)
+    (directory / 'pscf.log').write_text(result.stdout + '\n' + result.stderr, encoding='utf-8')
+    assert result.returncode == 0, (directory / 'pscf.log').read_text(encoding='utf-8')[-6000:]
     # PSCF can exit successfully after a failed ITERATE and skip later commands.
     for name in ('omega', 'rho', 'thermo'):
-        assert (directory / 'out' / name).is_file(), (directory / 'pscf.log').read_text()[-6000:]
+        assert (directory / 'out' / name).is_file(), (directory / 'pscf.log').read_text(encoding='utf-8')[-6000:]
 
 
 @pytest.mark.parametrize('backend', ('rpc', 'rpg'))

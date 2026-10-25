@@ -58,9 +58,9 @@ def test_imported_script_converges(tmp_path, case):
                                  metadata=pscf / 'metadata.json', platform=platform)
     # Start outside the bundle; the generated script must resolve its own inputs.
     result = subprocess.run([sys.executable, str(bundle / 'simulation.py')], cwd=tmp_path,
-                            capture_output=True, text=True, timeout=120)
-    (tmp_path / 'polymerfts.log').write_text(result.stdout + '\n' + result.stderr)
-    assert result.returncode == 0, (tmp_path / 'polymerfts.log').read_text()[-6000:]
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+    (tmp_path / 'polymerfts.log').write_text(result.stdout + '\n' + result.stderr, encoding='utf-8')
+    assert result.returncode == 0, (tmp_path / 'polymerfts.log').read_text(encoding='utf-8')[-6000:]
     snapshots = [bundle / 'results/out' / (name + '.mat') for name in ('omega', 'rho', 'thermo')]
     assert all(path.is_file() for path in snapshots)
     fields = loadmat(snapshots[0], simplify_cells=True)

@@ -110,7 +110,8 @@ def write_fields(path, chain_model='discrete', segment_length=.99):
 
 
 def run_cli(*args):
-    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True,
+                          encoding='utf-8', errors='replace')
 
 
 @pytest.mark.parametrize('chain_model', ['discrete', 'continuous'])

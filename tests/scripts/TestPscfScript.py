@@ -261,12 +261,12 @@ def test_cli_and_column_metadata(tmp_path):
     output = tmp_path / 'job'
     command = [sys.executable, str(CONVERTER), 'import-script', str(source / 'param'), '--command',
                str(source / 'command'), '--metadata', str(metadata), '-o', str(output), '--platform', 'cpu-mkl']
-    result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert result.returncode == 0, result.stderr
     np.testing.assert_array_equal(loadmat(output / 'initial.mat')['w_X'].ravel(), fields[0].ravel())
     marker = output / 'keep'
     marker.write_text('original')
-    result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert result.returncode == 2 and 'Error:' in result.stderr and 'Traceback' not in result.stderr
     assert marker.read_text() == 'original'
 
