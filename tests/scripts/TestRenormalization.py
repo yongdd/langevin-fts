@@ -19,18 +19,34 @@ z_inf, bare_segment_ratio = TOOL['z_inf'], TOOL['bare_segment_ratio']
 
 
 def bond_sum_z_inf(m, box, n, nbar, bonds=2000):
-    """Beardsley and Matsen, J. Chem. Phys. 150, 174902 (2019): incompressible, contact."""
-    dx = box / m
+    """Beardsley and Matsen, J. Chem. Phys. 150, 174902 (2019): incompressible, contact.
+
+    m and box are numbers (cubic box) or one value per axis.
+    """
+    dxs = [b / k for k, b in zip(np.broadcast_to(m, 3), np.broadcast_to(box, 3))]
+    dv = math.prod(dxs)
 
     def p(i):
-        return (dx * n ** .5 * (3 / (2 * math.pi * i)) ** .5 * erf(math.pi / dx / n ** .5 * (i / 6) ** .5)) ** 3
-    tail = 2 / math.sqrt(.5 + bonds) * (3 * n / (2 * math.pi)) ** 1.5 * dx ** 3
-    return 1 - (1 + 2 * (sum(p(i) for i in range(1, bonds + 1)) + tail)) / (math.sqrt(nbar) * n * dx ** 3)
+        return math.prod(dx * n ** .5 * (3 / (2 * math.pi * i)) ** .5 * erf(math.pi / dx / n ** .5 * (i / 6) ** .5)
+                         for dx in dxs)
+    tail = 2 / math.sqrt(.5 + bonds) * (3 * n / (2 * math.pi)) ** 1.5 * dv
+    return 1 - (1 + 2 * (sum(p(i) for i in range(1, bonds + 1)) + tail)) / (math.sqrt(nbar) * n * dv)
 
 
 def test_discrete_reduces_to_bond_sum():
     value = z_inf('discrete', [32] * 3, [4.5] * 3, 1e5, 90)
     assert value == pytest.approx(bond_sum_z_inf(32, 4.5, 90, 1e5), abs=5e-7)
+
+
+@pytest.mark.parametrize('m, box, n, nbar', [(32, 4.5, 90, 1e5), (32, 4., 20, 1e4), (64, 4., 16, 1e4),
+                                             (16, 4., 200, 1e4), ([48, 32, 24], [5., 3.5, 2.8], 50, 1e4)])
+def test_singular_term_is_exact(m, box, n, nbar):
+    # The 1/k^2 term is integrated exactly: the default quadrature reproduces the converged bond
+    # sum, and a_b/a, whose integrand approaches 2/k^2, does not change under refinement
+    nx, lx = [int(k) for k in np.broadcast_to(m, 3)], [float(b) for b in np.broadcast_to(box, 3)]
+    assert z_inf('discrete', nx, lx, nbar, n) == pytest.approx(bond_sum_z_inf(m, box, n, nbar, bonds=20000), abs=1e-11)
+    ratio = bare_segment_ratio('discrete', nx, lx, nbar, n)
+    assert bare_segment_ratio('discrete', nx, lx, nbar, n, n_quad=128) == pytest.approx(ratio, abs=1e-12)
 
 
 @pytest.mark.parametrize('m, z_read, ratio_read', [(32, .955, .9930), (40, .945, .9920), (48, .934, .9913)])
@@ -76,6 +92,10 @@ def test_smearing_function():
     assert np.allclose(gaussian, np.exp(-.01 * k2 / 2))
     sigmoidal = TOOL['smearing_function'](k2, {'type': 'sigmoidal', 'k_int': 20.})
     assert sigmoidal[0] == pytest.approx(1.) and np.all(np.diff(sigmoidal) < 0)
+    with pytest.raises(ValueError, match='one number'):
+        TOOL['smearing_function'](k2, {'type': 'gaussian', 'a_int': {'A': .1, 'B': .1}})
+    with pytest.raises(ValueError, match='must be a number'):
+        TOOL['smearing_function'](k2, {'type': 'gaussian'})
 
 
 def write_fields(path, chain_model='discrete', segment_length=.99):
@@ -117,3 +137,10 @@ def test_cli_errors(tmp_path):
     assert out.returncode == 2 and 'number of segments' in out.stderr
     out = run_cli('--chain-model', 'continuous', '--nx', 8, 8, 8, '--lx', 4, 4, 4)
     assert out.returncode == 2 and '--nbar' in out.stderr
+    # Per-type smearing lengths of a CL-FTS fields file
+    p = write_fields(tmp_path / 'fields.mat', segment_length=.99)
+    p['smearing']['a_int'] = {'A': .05, 'B': .08}
+    savemat(tmp_path / 'per_type.mat', {'initial_params': p, 'nx': p['nx'], 'lx': p['lx'],
+                                        'chain_model': 'discrete', 'ds': p['ds'], 'nbar': 1e4})
+    out = run_cli(tmp_path / 'per_type.mat', '--quadrature', 16)
+    assert out.returncode == 2 and 'one number' in out.stderr

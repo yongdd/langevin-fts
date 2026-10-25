@@ -16,7 +16,20 @@ import argparse
 import math
 
 import numpy as np
+from scipy.integrate import quad
 from scipy.io import loadmat
+
+
+def _smearing_number(smearing, key, default=None):
+    """One number of the smearing input; Eqs. (26) and (29) have one Gamma(k) for all types."""
+    value = smearing.get(key, default)
+    if isinstance(value, dict):
+        raise ValueError(f"smearing.{key} must be one number, got per-type values {value}: "
+                         "the renormalization assumes one smearing function for all monomer types")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"smearing.{key} must be a number, got {value!r}") from None
 
 
 def smearing_function(k2, smearing):
@@ -25,16 +38,37 @@ def smearing_function(k2, smearing):
         return np.ones_like(k2)
     kind = str(smearing.get("type", "gaussian")).lower()
     if kind == "gaussian":
-        return np.exp(-smearing["a_int"] ** 2 * k2 / 2)
+        return np.exp(-_smearing_number(smearing, "a_int") ** 2 * k2 / 2)
     if kind == "sigmoidal":
-        k_int, dk_int = smearing["k_int"], smearing.get("dk_int", 5.0)
+        k_int, dk_int = _smearing_number(smearing, "k_int"), _smearing_number(smearing, "dk_int", 5.0)
         c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
         return c0 * (1 - np.tanh((np.sqrt(k2) - k_int) / dk_int))
     raise ValueError(f"Unknown smearing type '{kind}'")
 
 
-def brillouin_integral(integrand, nx, lx, n_quad):
-    """Integral of an even function of k^2 over -pi/dx <= k_i <= pi/dx (Gauss-Legendre)."""
+def inverse_k2_integral(nx, lx):
+    """Integral of 1/k^2 over -pi/dx <= k_i <= pi/dx.
+
+    With 1/k^2 = int_0^inf exp(-s k^2) ds the box integral factorizes into one error function
+    per axis, which leaves a one-dimensional integral over s.
+    """
+    k_max = [math.pi * n / length for n, length in zip(nx, lx)]
+
+    def per_s(s):
+        return math.prod(math.sqrt(math.pi / s) * math.erf(k * math.sqrt(s)) for k in k_max)
+
+    # Constant for s << 1/k_max^2, decaying as s^(-3/2) for s >> 1/k_min^2
+    s_split = 1.0 / min(k_max) ** 2
+    options = {"limit": 200, "epsabs": 0.0, "epsrel": 1e-13}
+    return quad(per_s, 0.0, s_split, **options)[0] + quad(per_s, s_split, math.inf, **options)[0]
+
+
+def brillouin_integral(integrand, nx, lx, n_quad, singular=0.0):
+    """Integral of an even function of k^2 over -pi/dx <= k_i <= pi/dx (Gauss-Legendre).
+
+    An integrand that behaves as singular/k^2 at k = 0 converges slowly; that term is taken out
+    and integrated exactly (inverse_k2_integral), so the quadrature sees a bounded function.
+    """
     nodes, weights = [], []
     x, w = np.polynomial.legendre.leggauss(n_quad)
     for n, length in zip(nx, lx):
@@ -45,8 +79,9 @@ def brillouin_integral(integrand, nx, lx, n_quad):
     yz = nodes[1][:, None] ** 2 + nodes[2][None, :] ** 2
     w_yz = weights[1][:, None] * weights[2][None, :]
     for kx, wx in zip(nodes[0], weights[0]):
-        total += wx * np.sum(w_yz * integrand(kx ** 2 + yz))
-    return 8.0 * total
+        k2 = kx ** 2 + yz
+        total += wx * np.sum(w_yz * (integrand(k2) - singular / k2))
+    return 8.0 * total + (singular * inverse_k2_integral(nx, lx) if singular else 0.0)
 
 
 def _chain(chain_model, n_segments, nx, lx):
@@ -71,14 +106,14 @@ def _compressibility(k2, h, zeta_n, smearing):
     return gamma2, gamma2 / (gamma2 + h / zeta_n)
 
 
-def z_inf(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, smearing=None, n_quad=128):
+def z_inf(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, smearing=None, n_quad=64):
     """Factor z_inf of chi = z_inf chi_b, Eq. (29) of Matsen et al. (2026).
 
     In units of R0 (a^2 = 1/N, rho0 = Nbar^(1/2) N, zeta_n = zeta N):
         z_inf = 1 - 1/((2 pi)^3 Nbar^(1/2)) int Gamma^2 / (h (1 + h/(zeta N Gamma^2))) dk,
     with h = N tanh(k^2/12N) for discrete chains and h = k^2/12 for continuous chains. For
     zeta -> inf and Gamma = 1 the discrete z_inf is the bond sum of Beardsley and Matsen,
-    J. Chem. Phys. 150, 174902 (2019).
+    J. Chem. Phys. 150, 174902 (2019). The integrand approaches 12/k^2 at k = 0 (Gamma(0) = 1).
     """
     h_of, _ = _chain(chain_model, n_segments, nx, lx)
 
@@ -87,14 +122,16 @@ def z_inf(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, smearing=None
         gamma2, factor = _compressibility(k2, h, zeta_n, smearing)
         return gamma2 * factor / h
 
-    return 1.0 - brillouin_integral(integrand, nx, lx, n_quad) / ((2 * math.pi) ** 3 * math.sqrt(nbar))
+    integral = brillouin_integral(integrand, nx, lx, n_quad, singular=12.0)
+    return 1.0 - integral / ((2 * math.pi) ** 3 * math.sqrt(nbar))
 
 
-def bare_segment_ratio(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, smearing=None, n_quad=128):
+def bare_segment_ratio(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, smearing=None, n_quad=64):
     """a_b/a of CL-FTS, Eq. (26) of Matsen et al. (2026); L-FTS and SCFT use a_b = a.
 
         a_b/a = [1 + 1/((2 pi)^3 Nbar^(1/2)) int k^2 / (72 q^2 (1 + h/(zeta N Gamma^2))) dk]^(-1),
-    with q = N sinh(k^2/12N) for discrete chains and q = k^2/12 for continuous chains.
+    with q = N sinh(k^2/12N) for discrete chains and q = k^2/12 for continuous chains. The
+    integrand approaches 2/k^2 at k = 0.
     """
     h_of, q_of = _chain(chain_model, n_segments, nx, lx)
 
@@ -102,7 +139,8 @@ def bare_segment_ratio(chain_model, nx, lx, nbar, n_segments=None, zeta_n=None, 
         _, factor = _compressibility(k2, h_of(k2), zeta_n, smearing)
         return k2 * factor / (72 * q_of(k2) ** 2)
 
-    return 1.0 / (1.0 + brillouin_integral(integrand, nx, lx, n_quad) / ((2 * math.pi) ** 3 * math.sqrt(nbar)))
+    integral = brillouin_integral(integrand, nx, lx, n_quad, singular=2.0)
+    return 1.0 / (1.0 + integral / ((2 * math.pi) ** 3 * math.sqrt(nbar)))
 
 
 def read_simulation(path):
@@ -142,7 +180,7 @@ def main(argv=None):
     parser.add_argument("--k-int", type=float, help="sigmoidal smearing cutoff in 1/R0")
     parser.add_argument("--dk-int", type=float, default=5.0, help="sigmoidal transition width (default 5)")
     parser.add_argument("--target", type=float, help="print chi_b N for this z_inf chi_b N")
-    parser.add_argument("--quadrature", type=int, default=128, help="Gauss-Legendre points per axis")
+    parser.add_argument("--quadrature", type=int, default=64, help="Gauss-Legendre points per axis (default 64)")
     args = parser.parse_args(argv)
     try:
         s = read_simulation(args.fields) if args.fields else {

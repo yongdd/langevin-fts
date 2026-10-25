@@ -71,6 +71,11 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   - It evaluates z∞ and the bare segment length a_b/a of CL-FTS from Eqs. (29) and (26) of
     Matsen et al., *J. Chem. Phys.* **164**, 014905 (2026), with compressibility and smearing.
   - It prints the χ_bN for a target z∞χ_bN.
+  - The 1/k² singularity of both integrands is integrated exactly, so z∞ agrees with the
+    bond sum to 10⁻¹³ with 64 Gauss-Legendre points per axis; integrating it numerically
+    left errors of 10⁻⁷–10⁻⁶ with 128 points.
+  - Smearing lengths must be numbers; the per-type `a_int` of charged CL-FTS is rejected,
+    since the formulas have one Γ(k) for all monomer types.
 
   Discrete chains without compressibility and smearing give the values of the former
   `renormalization_discrete.m`, as `tests/scripts/TestRenormalization.py` checks. Continuous

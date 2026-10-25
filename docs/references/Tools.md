@@ -220,24 +220,26 @@ The script uses NumPy and SciPy and does not need the compiled package.
 | `--zeta-n` | Compressibility $`\zeta N`$; `inf` gives the incompressible model |
 | `--a-int`, or `--k-int` and `--dk-int` | Gaussian or sigmoidal smearing as in [Parameters](Parameters.md#smearing); `--a-int 0` removes smearing |
 | `--target` | Prints the $`\chi_b N`$ that gives this $`z_\infty \chi_b N`$ |
-| `--quadrature` | Gauss-Legendre points per axis (default 128) |
+| `--quadrature` | Gauss-Legendre points per axis (default 64) |
 
 **Output:** the example command above prints
 
 ```
 discrete chains, N = 90, Nbar = 100000, grid [32, 32, 32], box [4.5, 4.5, 4.5], zeta N = 90, smearing: {'type': 'gaussian', 'a_int': 0.02}
-z_inf = 0.9595668
+z_inf = 0.9595665
 a_b/a = 0.9930857  (CL-FTS segment_lengths; L-FTS and SCFT use a_b = a)
-chi_b N for z_inf chi_b N = 9: 9.3792327
+chi_b N for z_inf chi_b N = 9: 9.3792356
 ```
 
 With a fields file, the script also prints $`z_\infty \chi_b N`$ for each `chi_n` pair. For CL-FTS, multiply all `segment_lengths` by $`a_b/a`$.
 
 **Requirements and accuracy:**
 - 3D orthogonal box;
-- conformationally symmetric chains (equal `segment_lengths`).
+- conformationally symmetric chains (equal `segment_lengths`);
+- one smearing function for all monomer types: `a_int` is a number, and the per-type
+  lengths of charged CL-FTS are rejected.
 
-The $`1/k^2`$ singularity of the integrands limits the default quadrature to an accuracy of about $`3 \times 10^{-7}`$ in $`z_\infty`$. `tests/scripts/TestRenormalization.py` checks the results against three references:
+Both integrands approach $`c/k^2`$ at $`k = 0`$ ($`c = 12`$ for $`z_\infty`$, $`c = 2`$ for $`a_b/a`$, since $`\Gamma(0) = 1`$). The script integrates this term exactly, by one-dimensional quadrature of $`\int d\mathbf{k}/k^2 = \int_0^\infty ds \prod_\nu (\pi/s)^{1/2} \operatorname{erf}(\pi s^{1/2}/\Delta_\nu)`$, and the Gauss-Legendre quadrature only sees the bounded remainder. With the default 64 points per axis, $`z_\infty`$ agrees with the bond sum to $`10^{-13}`$. With Gaussian smearing and compressibility, the change on refinement is below $`10^{-12}`$. Sigmoidal smearing depends on $`\vert k \vert`$, so its remainder is not smooth at $`k = 0`$; there the error is below $`10^{-9}`$. `tests/scripts/TestRenormalization.py` checks the results against three references:
 
 - the bond sum of Beardsley and Matsen (2019);
 - the limit $`N \to \infty`$;
