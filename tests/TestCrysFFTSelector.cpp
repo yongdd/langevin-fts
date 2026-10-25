@@ -147,6 +147,21 @@ int main()
             ok &= check(throws([&]{ select(pmmm, {12, 12, 10}, false, true); }),
                 "the Pmmm basis rejects an oblique cell");
         }
+
+        std::cout << "=== An enabled m3 basis below the nz/2 >= 8 heuristic ===" << std::endl;
+        {
+            // The heuristic chooses bases; an m3 basis already enabled needs the
+            // recursive 3m CrysFFT, which is exact for nz/2 >= 2
+            for (int n : {8, 12})
+            {
+                SpaceGroup im3m({n, n, n}, "Im-3m", 529);
+                const std::string grid = "Im-3m " + std::to_string(n) + "^3";
+                ok &= check(!im3m.m3_crysfft_feasible(), grid + ": m3_crysfft_feasible() keeps the heuristic");
+                ok &= expect(select(im3m, {n, n, n}, true, true), CrysFFTChoice::PmmmDct, grid + ", irreducible basis");
+                im3m.enable_m3_physical_basis();
+                ok &= expect(select(im3m, {n, n, n}, true, true), CrysFFTChoice::Recursive3m, grid + ", m3 basis");
+            }
+        }
     }
     catch (std::exception& exc)
     {

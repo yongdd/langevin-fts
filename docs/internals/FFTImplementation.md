@@ -233,9 +233,10 @@ CrysFFT is enabled automatically when:
 - Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis and on cells with γ≠90°)
 
 **Selection order:** an enabled physical basis (Section 6.4) fixes the variant:
-3m recursive for the m3 basis, Pmmm DCT for the Pmmm basis and ObliqueZ for the
-z-mirror basis. With the irreducible basis, a cell with α=β=90° and γ≠90° (e.g.
-hexagonal) uses ObliqueZ when the space group has a z-mirror, and the standard FFT
+3m recursive for the m3 basis (on any grid it maps, since the engines are exact
+for `Nz/2 >= 2`; the `Nz/2 >= 8` size rule below only chooses), Pmmm DCT for the
+Pmmm basis and ObliqueZ for the z-mirror basis. With the irreducible basis, a cell
+with α=β=90° and γ≠90° (e.g. hexagonal) uses ObliqueZ when the space group has a z-mirror, and the standard FFT
 otherwise. An orthogonal cell needs `Nx`, `Ny`, `Nz` all even, and the first
 applicable variant is used:
 
@@ -243,7 +244,9 @@ applicable variant is used:
    translation-parity fold permutation is valid (every generator translation
    must be an integral number of grid cells with a bijective parity map — see
    `Recursive3mFoldParity.h`; e.g. for Fddd's quarter-cell glides at most one
-   of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8`
+   of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8` (a performance rule:
+   smaller grids gain nothing from the fold; `SpaceGroup.m3_crysfft_feasible()`,
+   which SCFT uses to choose the m3 basis, applies it too)
 2. **Pmmm DCT** if space group has mirror planes in x/y/z
 3. **ObliqueZ** if space group has a z-mirror
 4. Fall back to standard FFT

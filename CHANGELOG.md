@@ -211,6 +211,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   (kx, ky), and CUDA and CPU differed by 6e-4 on such grids. `TestMinimalFormAlias`
   checks the search against a brute-force one on 44,000 modes of random oblique and
   triclinic cells; `TestCrysFFTObliqueZCuda` adds two such grids.
+- An m3 physical basis enabled on a grid with nz/2 < 8, such as Im-3m 8³ or 12³, made
+  `PropagatorSolver` fail with "recursive 3m CrysFFT is unavailable" on every platform
+  (2026-10-26). The CrysFFT selector applied the nz/2 >= 8 size rule, meant for choosing
+  a basis, to a basis already enabled. The rule now only chooses
+  (`SpaceGroup.m3_crysfft_feasible()`, which SCFT uses), and the recursive 3m engines,
+  exact for nz/2 >= 2, run an enabled m3 basis on any grid it maps.
+  `TestCrysFFTM3SmallGrid` compares these runs with full-grid ones on every platform.
 
 ### Performance
 

@@ -27,8 +27,9 @@ struct CrysFFTSelection
 };
 
 /// Grid feasibility of the recursive 3m CrysFFT, and therefore of the m3
-/// physical basis that relies on it: even grid, nz/2 >= 8, and a translation-
-/// parity permutation that makes psi bijective (compute_m3_fold_permutation).
+/// physical basis that relies on it: even grid, nz/2 >= 8 (nz/2 >= 2 without
+/// the size heuristic, see below), and a translation-parity permutation that
+/// makes psi bijective (compute_m3_fold_permutation).
 ///
 /// The psi test is exactly m3-basis feasibility. The parity shift of a diagonal
 /// op O, Delta_d(O) = (tau_d + [sign_d = -1]) mod 2 with tau = t*N in grid
@@ -49,7 +50,8 @@ struct CrysFFTSelection
 inline bool crysfft_recursive_3m_feasible(
     const SpaceGroup* sg,
     const std::array<int, 3>& nx,
-    std::array<double, 9>& trans_part)
+    std::array<double, 9>& trans_part,
+    bool size_heuristic = true)
 {
     trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (!sg->get_m3_translations(trans_part))
@@ -58,8 +60,10 @@ inline bool crysfft_recursive_3m_feasible(
     // nz/2 >= 8 is a performance heuristic (small physical grids gain nothing from
     // the fold); the engines are exact for any even grid with nz/2 >= 2 (the Fddd
     // 8x8x16 case of tests/TestSpaceGroupPlatformEquivalence.py checks nx = ny = 8
-    // against the full-grid FFT).
-    if (!even_all || (nx[2] / 2) < 8)
+    // against the full-grid FFT, and tests/TestCrysFFTM3SmallGrid.py Im-3m 8^3 and
+    // 12^3). An m3 physical basis that is already enabled needs these engines
+    // whatever the grid size, so the selector drops the heuristic for it.
+    if (!even_all || (nx[2] / 2) < (size_heuristic ? 8 : 2))
         return false;
     std::array<int, 8> fold_perm{};
     bool fold_ok = compute_m3_fold_permutation(trans_part, nx, fold_perm);
@@ -117,7 +121,8 @@ inline CrysFFTSelection select_crysfft_mode(
     const bool even_z = (nx[2] % 2 == 0);
 
     std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-    const bool recursive_ok = crysfft_recursive_3m_feasible(sg, nx, trans_part);
+    const bool recursive_ok = crysfft_recursive_3m_feasible(
+        sg, nx, trans_part, /*size_heuristic=*/!sg->using_m3_physical_basis());
     const bool has_pmmm = sg->has_mirror_planes_xyz();
 
     // A physical basis enabled by hand (on a SpaceGroup passed to PropagatorSolver,
