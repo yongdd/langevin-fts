@@ -3,21 +3,25 @@ channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - python=3.14
-  - cmake>=3.25.2
-  - pybind11=3.1
-  - numpy=2.5
-  - scipy=1.18
-  - pandas=3.1
-  - matplotlib=3.11
+  # Python 3.15 runs in UTF-8 mode, so redirected output keeps the Greek symbols.
+  # Libraries are not pinned; the minimums are what the build needs (CMake 3.30 for
+  # MSVC, pybind11 3 for Python 3.14+).
+  - python>=3.15
+  - cmake>=3.30
+  - pybind11>=3.0
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
   # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS.
   - libblas=*=*openblas
-  - openblas=0.3.34
+  - openblas
   # The spglib package includes the C library and headers.
-  - spglib=2.8.0
+  - spglib
   - make
   - ninja
-  - git
+  # Git comes from the system (it cloned this repository): conda-forge's Windows git
+  # installs MSYS tools such as link.exe, which shadow the MSVC linker on PATH.
   - pip
   - pyyaml
   - jupyter

@@ -13,8 +13,11 @@ conda env create -f environment.yml
 conda activate polymerfts
 ```
 
-The environment uses the conda-forge channel and Python 3.14, with OpenBLAS for
-LAPACKE and spglib with its C library.
+The environment uses the conda-forge channel and Python 3.15, with OpenBLAS for
+LAPACKE and spglib with its C library. The libraries are not pinned to versions.
+Python 3.15 runs in UTF-8 mode, so output redirected to a file keeps symbols such as
+χN on Windows as well; with Python 3.11-3.14 on Windows, characters the console
+encoding lacks are written as escapes such as `₀` unless `PYTHONUTF8=1` is set.
 
 ## 2. Build a Wheel with MKL or FFTW
 
@@ -156,7 +159,7 @@ from the system, or on Windows from conda-forge (see [Windows](#windows)).
 
 | Dependency | Requirement |
 |------------|-------------|
-| Python | 3.11+; the supplied environment uses 3.14 |
+| Python | 3.11+; the supplied environment uses 3.15 |
 | C++ compiler | C++20 with `std::source_location`, such as GCC 11+ or MSVC from Visual Studio 2022+; CUDA also requires a compatible host compiler |
 | CMake | 3.18+ for CPU-only builds; 3.25.2+ for CUDA |
 | spglib | 2.x; included in the environment |

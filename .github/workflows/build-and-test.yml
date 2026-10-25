@@ -217,7 +217,7 @@ jobs:
         miniforge-version: latest
         activate-environment: lint
         auto-activate-base: false
-        python-version: "3.14"
+        python-version: "3.15"
         channels: conda-forge
         channel-priority: strict
         conda-remove-defaults: "true"

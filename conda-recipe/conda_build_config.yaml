@@ -5,14 +5,12 @@
 python:
   - "3.11"
   - "3.12"
+  - "3.13"
+  - "3.14"
+  - "3.15"
 
-# Use conda-forge's global pybind11 ABI pin
-pybind11_abi:
-  - 4
-
-# NumPy version compatibility
-numpy:
-  - "2.0"
+# NumPy and the pybind11 ABI are not pinned: the extension uses NumPy only through
+# its Python API (pybind11/numpy.h), and each build takes the current pybind11 ABI
 
 # Pin channels
 channel_sources:

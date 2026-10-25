@@ -13,9 +13,15 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 - The Conda environment and CI use conda-forge (Miniforge) instead of Anaconda's
   `defaults` channel, on Linux and Windows (2026-10-24). OpenBLAS is selected with
   `libblas=*=*openblas` and supplies LAPACKE through `openblas`; spglib comes from
-  conda-forge with its C library; the MKL backend installs `mkl-devel`. The pinned
-  versions follow conda-forge for Python 3.14: NumPy 2.5, SciPy 1.18, pandas 3.1,
-  Matplotlib 3.11 and OpenBLAS 0.3.34.
+  conda-forge with its C library; the MKL backend installs `mkl-devel`.
+- The supplied environment uses Python 3.15 and no longer pins library versions
+  (2026-10-26); it keeps only the minimums the build needs (CMake 3.30, pybind11 3).
+  Python 3.15 runs in UTF-8 mode, so output redirected to a file on Windows keeps the
+  Greek symbols of the console output. The conda recipe builds for Python 3.11-3.15 and
+  no longer pins NumPy or the pybind11 ABI, and the CI lint job uses Python 3.15.
+  The environment no longer installs `git`: on Windows, conda-forge's git brings MSYS
+  tools such as `link.exe` that shadow the MSVC linker when conda's paths come first,
+  and a fresh CUDA configuration then failed with a misleading message about nvcc.
 - Windows builds with MSVC (2026-10-24): CMake finds conda's libraries under
   `<prefix>/Library`, uses MSVC warning flags, the conforming preprocessor that the CUDA
   headers need and MSVC's LLVM OpenMP runtime (CMake 3.30+; configuration stops with an
