@@ -145,9 +145,71 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   instead of three identical copies. The numerical method is resolved and validated there,
   once. The CPU and CUDA backend constructors take the resolved `NumericalMethodInfo`
   instead of the method names.
+- `check_total_partition()` no longer prints the error of each polymer, evaluates every
+  polymer instead of stopping at the first failure and takes an optional `tolerance`
+  (2026-10-26). The errors come from the new `PropagatorSolver.partition_errors()`
+  (native `compute_partition_errors()`); the simulation loops print them.
+- Checks move to the layer that owns the state (2026-10-26):
+  - `PropagatorComputation` returns only results of the current fields and box. Before
+    `compute_propagators()`, after a failed computation and after
+    `update_laplacian_operator()` its getters raise "Propagators not computed"; the
+    concentration getters also need `compute_concentrations()`, `get_stress()` needs
+    `compute_stress()`. They returned Q = 0, arrays never written, or the results of the
+    previous box. `PropagatorSolver` relies on these checks instead of its own flag.
+  - The native factory rejects mixed periodic and non-periodic boundaries for the
+    pseudo-spectral methods (`supports_mixed_boundaries`), not only `PropagatorSolver`;
+    an unknown method lists the valid ones, and `PropagatorSolver` resolves the method
+    with the new `resolve_numerical_method()` of the native registry.
+  - While a `cn-adi2` computation uses a box, `set_lattice_parameters()` rejects
+    non-orthogonal angles before changing the box. `PropagatorSolver` checked this in
+    Python, and its constructor used 1e-10 degrees instead of the 1e-10 radians of the
+    box. `PropagatorSolver` creates the box in its constructor and uses its orthogonality.
+  - `SCFT` checks the cell against the space group with the new `SpaceGroup.check_cell()`,
+    the check the computation box applies, instead of a Python copy with other angle
+    tolerances (`ValidationError` as before; monoclinic and triclinic cells are now also
+    checked at construction). The rule against box relaxation in rhombohedral-axes
+    settings stays in Python.
+  - The binding of `create_anderson_mixing()` takes a 64-bit size and rejects too many
+    variables with the native message (`RuntimeError`); `SCFT` and `LFTS` no longer
+    repeat the check. The native binding also checks the sizes of `w` and `q_init`, so
+    `PropagatorSolver.compute_propagators()` raises `RuntimeError` instead of `ValueError`
+    for a wrong size.
+- `SpaceGroup` prints nothing while it is constructed or a physical basis is enabled;
+  `display_info()` prints the summary, which `SCFT` calls, and `PropagatorSolver` reports
+  the active basis with its size (2026-10-26).
+- The CPU z-mirror crystallographic FFT no longer reads the undocumented
+  `FTS_FFTW_EXHAUSTIVE`, `FTS_FFTW_PATIENT`, `FTS_FFTW_ESTIMATE`, `FTS_FFTW_WISDOM_ONLY`,
+  `FTS_FFTW_WISDOM_FILE` and `FTS_CRYSFFT_HEX_DCT_FFT` (2026-10-26). It plans with
+  `FFTW_MEASURE` and the native DCT, the previous default, and the FFT-based DCT path
+  that only the last variable enabled is removed, as are the unused `print_array`
+  helpers of Anderson mixing.
 
 ### Fixed
 
+- Native state and input checks (2026-10-26):
+  - `Molecules.add_solvent()` after a propagator computation was created made the
+    computation read past its solvent arrays; `add_solvent()` and `add_polymer()` now
+    raise once a computation exists.
+  - The CUDA launch configuration is checked against the limits of the current device
+    when it is set (`CudaCommon::check_launch`), not only by `display_info()`. A value of
+    `LFTS_GPU_NUM_BLOCKS` or `LFTS_GPU_NUM_THREADS` that is not an integer names the
+    variable instead of failing in `stoi`.
+  - `PropagatorSolver.get_dv()` and `get_grid_points()` ignored the lattice angles and
+    later box changes; they use the volume and the lattice vectors of the box (new
+    `get_lattice_vectors()`), and the grid points of hexagonal-axes space groups follow
+    their node-centered in-plane convention.
+  - `PropagatorSolver.n_grid` gave the full grid before the first computation even with
+    a space group, so fields sized from it were rejected; it gives the reduced basis.
+- SCFT and L-FTS raise `ValidationError` when a partition function with real fields is
+  not positive and finite at an accepted state: the final SCFT fields, or an L-FTS saddle
+  point whose Hamiltonian is not finite (2026-10-26). A discrete chain grafted next to an
+  absorbing wall in a strong field (TODO.md, item 29) leaves its propagator below the
+  round-off level of the spectral transforms, and Q came out negative (about -3e-19
+  against +4.67e-28) on every platform; SCFT reported no error and L-FTS only a
+  non-finite Hamiltonian. Intermediate iterates are not checked, since `rqm4` and
+  `cn-adi2` can pass through Q <= 0 during saddle iterations. The check cannot detect a
+  positive Q made of round-off noise; `check_total_partition()` reports that
+  inconsistency. `TestPartitionGuard` covers the checks.
 - Native input checks (2026-10-25):
   - A monomer name that ends with an underscore, which the name check allows, no longer
     stops the propagator key parser with "invalid stoi argument".
@@ -321,6 +383,15 @@ Tests that passed with the code they guard reverted, or paths no test reached
   structure functions within 1.5 % of the RPA on average, which the former ψ step fails.
 - `TestConsoleEncoding`, `TestCrysFFTObliqueZCuda` and `TestCrysFFTSelector` carry the
   `basic` label; `TestCnAdiLongLines` and `TestCrysFFTCellChange` the `numerical` one.
+- Computation state (2026-10-26): `TestComputationSafety` checks the getters before,
+  between and after the computations and after a box change, the molecules after a
+  computation exists, the mixed-boundary rule of the factory, the orthogonal box of a
+  `cn-adi2` computation, the grid geometry with angles and `n_grid` with a space group;
+  `TestComputationState` expects the box itself to reject non-orthogonal angles for
+  `cn-adi2`. `TestPartitionGuard` checks that the solver reports a non-positive Q
+  without raising or printing, and that SCFT and L-FTS reject it at accepted states.
+  `TestStressLinear3D` no longer reads concentrations of the previous box in its
+  finite-difference steps: the values were never used, and the getter now rejects them.
 
 ## [0.10.0] - 2026-10-23
 

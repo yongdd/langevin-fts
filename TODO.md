@@ -31,6 +31,17 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 10. GPU bandwidth test.
 11. Check whether two GPUs can be used for `CudaAndersonMixing`, and why two-GPU performance fluctuates on A100.
 13. Reduce the number of splits in the scheduler.
+33. Make the basis of the `PropagatorSolver` field operations explicit (found 2026-10-26).
+    With a physical basis active, `integral()`, `mean()`, `inner_product()`,
+    `multi_inner_product()` and `zero_mean()` take an array with as many entries as the
+    irreducible basis for an irreducible one and convert it. For the primitive
+    orthorhombic settings with the m3 basis (Hall numbers 227-297) both bases have N/8
+    points in a different order, so a reduced-basis array, such as the result of
+    `get_concentration()`, is reordered too. The orbit weights are then uniform, so means
+    and products of two arrays of the same basis are unchanged, but a product of an
+    irreducible and a reduced array is wrong (Pmmm, 16^3: 4.48 instead of -5.11). SCFT
+    keeps every array in the irreducible basis and is not affected. Take the basis as an
+    argument, or accept only the reduced basis and convert in SCFT.
 
 ## Tests
 
@@ -69,6 +80,27 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     the same finite spectral bond operator from a different real-space wall model.
     Reproducer locations and historical experiment archives are recorded in
     private research notes; the model parameters and required checks are given above.
+
+    Guard (2026-10-26): SCFT (final fields) and L-FTS (a saddle point whose Hamiltonian
+    is not finite) raise `ValidationError` when a partition function with real fields
+    is not positive and finite (`TestPartitionGuard`); the native library only reports
+    values. Intermediate iterates are not checked: with `rqm4`, the L-FTS/WTMD run of
+    `TestCheckpointValidation` passes through Q <= 0 during saddle iterations and still
+    converges. With the reproducer Q is about -3e-19 to -7e-19 on CPU-FFTW, CPU-MKL and
+    CUDA (the sign of the noise changes with the FFTW plan). The check cannot catch a
+    positive Q made of round-off noise: at W = 30-50 the platforms give different Q,
+    sometimes positive, and only `check_total_partition()` reports the inconsistency
+    (relative errors 1e-3 to 1 against 1e-11 at W = 10).
+
+    Proposed fix (not implemented): apply the same discrete bond operator in real space,
+    as a banded matrix per axis, K = S^-1 diag(g) S with S the transform of the axis,
+    computed once in extended precision. The round-off of each point is then relative to
+    the values within the kernel width instead of to the largest value on the grid, so
+    the far tails keep their relative accuracy. For orthogonal boxes the operator
+    factorizes over the axes and costs O(N x band) per axis and step. Complex fields
+    keep the localization, though not the positivity argument; non-orthogonal cells and
+    the stress would keep the FFT. Offer it as an optional method, not the default, and
+    pass the checks listed above before using it.
 
 30. Resolve charged CL discrepancies against exact finite-lattice particles (2026-09-07).
 

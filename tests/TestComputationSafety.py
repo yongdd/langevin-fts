@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Basis lifetime, degenerate grids, and ensemble normalization regressions."""
+"""Basis lifetime, degenerate grids, ensemble normalization and computation-state regressions."""
 
 import numpy as np
 from polymerfts import _core, PropagatorSolver
@@ -233,6 +233,81 @@ def test_box_update_and_cnadi(platform):
     assert abs(s.mean(s.get_concentration("A")) - 1) < 1e-10
 
 
+def test_native_guards(platform, reduced):
+    fac = _core.PlatformSelector.create_factory(platform, reduced, "real")
+    mol = molecules(fac)
+    opt = fac.create_propagator_computation_optimizer(mol, False)
+    cb = fac.create_computation_box([8]*3, [3.0]*3)
+    pc = fac.create_propagator_computation(cb, mol, opt, "rqm4")
+    # The computation sized its arrays for these molecules
+    rejects(lambda: mol.add_solvent(0.1, "A"), "Cannot add a solvent")
+    rejects(lambda: mol.add_polymer(0.1, [["A", 1.0, 0, 1]]), "Cannot add a polymer")
+    assert mol.get_n_solvent_types() == 0 and mol.get_n_polymer_types() == 1
+
+    # Results exist only for the fields and the box they were computed for
+    not_computed = "Propagators not computed"
+    for call in (lambda: pc.get_total_partition(0), lambda: pc.get_chain_propagator(0, 0, 1, 2),
+                 pc.compute_concentrations, pc.compute_stress, pc.compute_partition_errors):
+        rejects(call, not_computed)
+    rng = np.random.default_rng(39)
+    w = {m: rng.normal(0, 5, 512) for m in "AB"}
+    pc.compute_propagators(w)
+    rejects(lambda: pc.get_total_concentration("A"), "Concentrations not computed")
+    rejects(pc.get_stress, "Stress not computed")
+    pc.compute_concentrations()
+    pc.compute_stress()
+    assert np.all(np.isfinite(pc.get_total_concentration("A"))) and np.all(np.isfinite(pc.get_stress()))
+    cb.set_lx([3.5]*3)
+    pc.update_laplacian_operator()
+    for call in (lambda: pc.get_total_partition(0), lambda: pc.get_total_concentration("A"), pc.get_stress):
+        rejects(call, not_computed)
+    pc.compute_propagators(w)
+    assert pc.check_total_partition()
+    rejects(lambda: pc.compute_propagators({"A": w["A"]}), 'monomer_type "B"')
+    rejects(lambda: pc.get_total_partition(0), not_computed)
+
+    # Pseudo-spectral methods need every direction periodic or every direction non-periodic
+    mixed = fac.create_computation_box(nx=[8]*3, lx=[3.0]*3, bc=["periodic"]*2 + ["reflecting"]*4)
+    rejects(lambda: fac.create_propagator_computation(mixed, mol, opt, "rqm4"), "cannot mix periodic")
+    fac.create_propagator_computation(mixed, mol, opt, "cn-adi2")
+
+    # A cn-adi2 computation keeps its box orthogonal while it exists
+    box = fac.create_computation_box(nx=[8]*3, lx=[3.0]*3, bc=["periodic"]*6)
+    cn = fac.create_propagator_computation(box, mol, opt, "cn-adi2")
+    rejects(lambda: box.set_lattice_parameters([3.0]*3, [90.0, 90.0, 80.0]), "requires an orthogonal cell")
+    np.testing.assert_allclose(box.get_angles_degrees(), [90.0]*3, rtol=0, atol=1e-12)
+    del cn
+    box.set_lattice_parameters([3.0]*3, [90.0, 90.0, 80.0])
+
+
+def test_grid_geometry(platform):
+    # Coordinates and the cell volume follow the lattice vectors of the box
+    s = PropagatorSolver([8, 8], [4.0, 3.0], 0.05, {"A": 1.0}, ["periodic"]*4, "continuous",
+                         platform=platform, angles=[90.0, 90.0, 60.0])
+    x, y = s.get_grid_points()
+    assert x.shape == (8, 8) and y.shape == (8, 8)
+    np.testing.assert_allclose(s.get_dv(), 4.0*3.0*np.sin(np.pi/3)/64, rtol=1e-14)
+    np.testing.assert_allclose([x[1, 0] - x[0, 0], y[1, 0] - y[0, 0]], [0.5, 0.0], rtol=0, atol=1e-14)
+    np.testing.assert_allclose([x[0, 1] - x[0, 0], y[0, 1] - y[0, 0]],
+                               [3/8*np.cos(np.pi/3), 3/8*np.sin(np.pi/3)], rtol=0, atol=1e-14)
+    np.testing.assert_allclose([x[0, 0], y[0, 0]], [0.25 + 3/16*np.cos(np.pi/3), 3/16*np.sin(np.pi/3)],
+                               rtol=0, atol=1e-14)
+
+
+def test_n_grid(platform):
+    # Fields have the reduced-basis size already before the first computation
+    sg = _core.SpaceGroup([8]*3, "Im-3m", 529)
+    s = PropagatorSolver([8]*3, [3.0]*3, 0.05, {"A": 1.0, "B": 1.0}, ["periodic"]*6, "continuous",
+                         platform=platform, space_group=sg)
+    s.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+    n = s.n_grid
+    assert n == sg.get_n_reduced_basis() and n < s.total_grid, (n, s.total_grid)
+    w = s.to_reduced_basis(sg.symmetrize(np.random.default_rng(40).normal(0, 5, 512)))
+    assert w.size == n
+    s.compute_propagators({"A": w, "B": -w})
+    assert s.n_grid == n and s.check_total_partition()
+
+
 def main():
     for nx in ([0, 8, 8], [-8, -8, 8], [2**31-1]*3):
         rejects(lambda: _core.SpaceGroup(nx, "P1", 1))
@@ -254,7 +329,10 @@ def main():
         test_failed_construction(platform)
         test_pmmm_singleton(platform)
         test_box_update_and_cnadi(platform)
+        test_grid_geometry(platform)
+        test_n_grid(platform)
         for reduced in (False, True):
+            test_native_guards(platform, reduced)
             test_basis_lifetime(platform, reduced)
             test_method_checks(platform, reduced)
             test_gce(platform, reduced)

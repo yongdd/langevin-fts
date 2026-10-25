@@ -187,6 +187,7 @@ import numpy as np
 # Create space group object
 nx = [64, 64, 64]
 sg = SpaceGroup(nx, "Ia-3d", hall_number=530)
+sg.display_info()
 
 # Output:
 # ---------- Space Group ----------
@@ -287,6 +288,8 @@ Metadata is exposed through getter methods (not attributes):
 | `get_spacegroup_number()` | International space group number (1-230) |
 | `get_spacegroup_symbol()` | ITA short symbol |
 | `get_crystal_system()` | Crystal system name |
+| `check_cell(lx, angles)` | Raise unless the cell (lengths, angles in degrees) belongs to the crystal system of the group; the computation box applies the same check |
+| `display_info()` | Print the group, its crystal system and the basis sizes (construction prints nothing) |
 | `uses_hexagonal_axes()` | True for hexagonal/trigonal groups in a hexagonal-axes setting (a = b, γ = 120°); False for rhombohedral-axes R settings (a = b = c, α = β = γ) |
 | `get_n_symmetry_ops()` | Number of symmetry operations |
 | `get_n_reduced_basis()` | Number of reduced-basis points (irreducible mesh points, or the physical sub-grid size when a physical basis is enabled) |

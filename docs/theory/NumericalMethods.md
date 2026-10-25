@@ -306,7 +306,7 @@ Material conservation requires that forward and backward partition functions are
 | **RK2** | Exact | Same symmetric splitting as RQM4 |
 | **CN-ADI2** | Exact | Symmetric Crank-Nicolson time stepping |
 
-The remaining mismatch is round-off and does not depend on the method. For an AB diblock ($`f = 0.4`$) on a 32³ grid with $`ds = 0.01`$ and random fields of standard deviation 5, the largest relative deviation of $`Q`$ along the chain (reported by `check_total_partition()`) is $`2\times10^{-16}`$–$`3\times10^{-15}`$ on CUDA and about $`2\times10^{-14}`$ on cpu-mkl, for all three methods and for periodic, reflecting and absorbing boundaries; the mean of the total concentration differs from 1 by at most $`1.1\times10^{-15}`$ (CUDA) and $`8\times10^{-15}`$ (cpu-mkl).
+The remaining mismatch is round-off and does not depend on the method. For an AB diblock ($`f = 0.4`$) on a 32³ grid with $`ds = 0.01`$ and random fields of standard deviation 5, the largest relative deviation of $`Q`$ along the chain (returned by `partition_errors()`) is $`2\times10^{-16}`$–$`3\times10^{-15}`$ on CUDA and about $`2\times10^{-14}`$ on cpu-mkl, for all three methods and for periodic, reflecting and absorbing boundaries; the mean of the total concentration differs from 1 by at most $`1.1\times10^{-15}`$ (CUDA) and $`8\times10^{-15}`$ (cpu-mkl).
 
 **Reference**: Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312
 

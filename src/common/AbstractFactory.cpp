@@ -17,6 +17,7 @@
  * - AbstractFactory<std::complex<double>>: Factory for complex field simulations
  */
 
+#include <algorithm>
 #include <climits>
 #include <complex>
 #include <memory>
@@ -41,7 +42,11 @@ PropagatorComputation<T>* AbstractFactory<T>::create_propagator_computation(Comp
         // The solver: discrete chains have their own; continuous chains take the numerical method
         const bool discrete = (molecules->get_model_name() == "discrete");
         const NumericalMethodInfo& method_info = resolve_numerical_method(molecules->get_model_name(), numerical_method);
-        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
+        const std::vector<BoundaryCondition> bc = cb->get_boundary_conditions();
+        const bool periodic = std::any_of(bc.begin(), bc.end(), [](BoundaryCondition b) { return b == BoundaryCondition::PERIODIC; });
+        const bool walls = std::any_of(bc.begin(), bc.end(), [](BoundaryCondition b) { return b != BoundaryCondition::PERIODIC; });
+        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal(),
+                                  periodic && walls);
         const std::string solver_type = method_info.solver_type;
 
         // Reduce-memory mode computes one propagator at a time
@@ -60,6 +65,8 @@ PropagatorComputation<T>* AbstractFactory<T>::create_propagator_computation(Comp
             computation = std::make_unique<ComputationContinuous<T>>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, make_backend);
         else
             computation = std::make_unique<ComputationReduceMemoryContinuous<T>>(cb, molecules, propagator_computation_optimizer, solver_type, space_group, make_backend);
+        if (method_info.requires_orthogonal_cell)
+            computation->hold_orthogonal_cell();
         group_change.commit();
         return computation.release();
     }

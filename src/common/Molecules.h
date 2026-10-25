@@ -193,6 +193,9 @@ public:
      * @note For grafted chains, chain_end_to_q_init[v] = "label" means vertex v
      *       uses q_init["label"] as initial condition instead of q(r,0)=1.
      *
+     * @throws Exception after a propagator computation has been created from
+     *         these molecules
+     *
      * @example
      * @code
      * // Grafted chain on surface
@@ -237,6 +240,9 @@ public:
      *
      * @param volume_fraction Volume fraction of solvent
      * @param monomer_type    Monomer type label (e.g., "S")
+     *
+     * @throws Exception after a propagator computation has been created from
+     *         these molecules (it sizes its solvent arrays at construction)
      *
      * @example
      * @code

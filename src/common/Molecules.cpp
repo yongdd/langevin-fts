@@ -83,6 +83,9 @@ void Molecules::add_polymer(
     std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
+    if (contour_length_mapping.finalized())
+        throw_with_line_number("Cannot add a polymer after a propagator computation has been created from these molecules.");
+
     // For discrete chains, validate that contour_length is an integer multiple of ds
     if (model_name == "discrete")
     {
@@ -130,7 +133,10 @@ void Molecules::add_polymer(
 void Molecules::add_solvent(
     double volume_fraction, std::string monomer_type)
 {
-    // Add new polymer type
+    // A propagator computation sizes its solvent arrays when it is created
+    if (contour_length_mapping.finalized())
+        throw_with_line_number("Cannot add a solvent after a propagator computation has been created from these molecules.");
+
     solvent_types.push_back(std::make_tuple(volume_fraction, monomer_type));
 }
 std::string Molecules::get_model_name() const

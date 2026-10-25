@@ -62,10 +62,7 @@ template <typename T>
 AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
 {
-    // The variables are indexed with 32-bit integers (see GridLimits.h)
-    if (n_var < 1 || n_var > MAX_GRID_ARRAY)
-        throw_with_line_number("Anderson mixing of " + std::to_string(n_var) + " variables is not supported: "
-            "between 1 and " + std::to_string(MAX_GRID_ARRAY) + " (32-bit indices).");
+    check_anderson_variables(n_var);
 
     // The number of variables to be determined
     this->n_var = n_var;

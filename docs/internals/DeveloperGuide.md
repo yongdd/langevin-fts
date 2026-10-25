@@ -237,6 +237,8 @@ PropagatorComputation<T>                      [Abstract Base]
 ├── get_total_partition(polymer)              [pure virtual]
 ├── get_chain_propagator(p, v, u, n)          [pure virtual]
 ├── get_total_concentration(monomer)          [pure virtual]
+├── compute_partition_errors()                [pure virtual]
+├── check_total_partition(tolerance)
 └── update_laplacian_operator()               [pure virtual]
         │
         └── ComputationCommon<T>              [backend, scheduler, φ storage, getters, solvents]
@@ -259,6 +261,22 @@ All of these live in `src/common/` except the two backends.
 the backend that the platform factory (`MklFactory`, `FftwFactory`,
 `CudaFactory`) supplies; the Python layer and the C++ tests (through
 `tests/TestComputationFactory.h`) obtain every computation from a factory.
+
+**What has been computed.** The base class records whether the propagators,
+the concentrations and the stress belong to the current fields and box. A new
+`compute_propagators()` and `update_laplacian_operator()` clear all three; each
+computation sets its own when it completes. The getters throw instead of
+returning values of other fields or another box: `get_total_partition()`,
+`get_chain_propagator()`, `compute_concentrations()`, `compute_stress()` and
+`compute_partition_errors()` need the propagators, the concentration getters
+also `compute_concentrations()`, `get_stress()` also `compute_stress()`. A new
+computation class sets the flags at the end of its `compute_*` methods and
+calls the `require_*` checks first in its getters. `compute_partition_errors()`
+returns the forward/backward error of every polymer and prints nothing;
+`check_total_partition()` compares them with a tolerance. The molecules are
+fixed once a computation exists (`add_polymer()` and `add_solvent()` throw), and
+a `cn-adi2` computation keeps its box orthogonal while it exists
+(`ComputationBox::hold_orthogonal_cell()`).
 
 **Who does what.** The computation classes decide *what* is computed and in
 *which order*: the scheduler's groups of propagators, the initial condition of
@@ -702,6 +720,7 @@ If GPU and CPU give different results:
 
 1. Run same test on both `cuda` and CPU platforms - results should match to ~10⁻¹³
 2. Check partition function consistency: `solver.check_total_partition()` should pass
+   (`solver.partition_errors()` returns the relative error of each polymer)
 3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within round-off (10⁻¹⁵–10⁻¹⁴)
 
 ---

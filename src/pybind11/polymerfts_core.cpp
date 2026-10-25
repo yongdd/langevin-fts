@@ -105,7 +105,7 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
  * - get_dv(): Volume element
  * - get_total_grid(): Total grid points
  * - get_volume(): Total box volume
- * - get_angles(), get_angles_degrees(), is_orthogonal(), get_recip_metric(): Cell geometry
+ * - get_angles(), get_angles_degrees(), get_lattice_vectors(), is_orthogonal(), get_recip_metric(): Cell geometry
  * - set_lx(): Update box dimensions
  * - set_lattice_parameters(): Update box dimensions and angles
  * - set_space_group(), get_space_group(), get_n_basis(), get_orbit_counts(): Reduced basis
@@ -140,6 +140,12 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_volume", &ComputationBox<T>::get_volume)
         .def("get_angles", &ComputationBox<T>::get_angles)
         .def("get_angles_degrees", &ComputationBox<T>::get_angles_degrees)
+        .def("get_lattice_vectors", [](const ComputationBox<T>& obj)
+        {
+            // Rows a, b, c in Cartesian coordinates (a along x, b in the xy plane)
+            const std::array<double, 9>& v = obj.get_lattice_vec();
+            return std::vector<std::vector<double>>{{v[0], v[1], v[2]}, {v[3], v[4], v[5]}, {v[6], v[7], v[8]}};
+        })
         .def("is_orthogonal", &ComputationBox<T>::is_orthogonal)
         .def("get_recip_metric", &ComputationBox<T>::get_recip_metric)
         .def("set_lx", &ComputationBox<T>::set_lx)
@@ -242,7 +248,8 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - compute_stress(): Calculate stress tensor
  * - get_stress(): Retrieve computed stress
  * - get_stress_gce(): Grand canonical stress
- * - check_total_partition(): Validate partition function
+ * - compute_partition_errors(): Relative partition function error of each polymer
+ * - check_total_partition(tolerance): Whether every error is within the tolerance
  * - set_force_off_diagonal_stress(), get_force_off_diagonal_stress(): Cross-term stress for orthogonal boxes
  *
  * When space group is set:
@@ -432,7 +439,11 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_force_off_diagonal_stress", &PropagatorComputation<T>::get_force_off_diagonal_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
+        .def("compute_partition_errors", &PropagatorComputation<T>::compute_partition_errors,
+            "Relative partition function error of each polymer (nothing is printed)")
+        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition,
+            py::arg("tolerance") = PARTITION_TOLERANCE,
+            "Whether every error of compute_partition_errors() is finite and at most tolerance");
 }
 
 /**
@@ -576,7 +587,13 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
             py::arg("numerical_method"), py::arg("space_group") = nullptr,
             py::keep_alive<0, 2>(), py::keep_alive<0, 3>(), py::keep_alive<0, 4>(), py::keep_alive<0, 6>(),
             py::keep_alive<2, 6>())  // the constructor also sets the space group on the box
-        .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
+        .def("create_anderson_mixing", [](AbstractFactory<T>& obj, long long n_var, int max_hist,
+                                          double start_error, double mix_min, double mix_init)
+        {
+            // A Python size can exceed int: check it before narrowing
+            check_anderson_variables(n_var);
+            return obj.create_anderson_mixing(static_cast<int>(n_var), max_hist, start_error, mix_min, mix_init);
+        }, py::arg("n_var"), py::arg("max_hist"), py::arg("start_error"), py::arg("mix_min"), py::arg("mix_init"))
         .def("display_info", &AbstractFactory<T>::display_info);
 }
 
@@ -688,6 +705,10 @@ PYBIND11_MODULE(_core, m)
         }
         return result;
     }, "Registered propagator methods and their compiled capabilities.");
+    m.def("resolve_numerical_method", [](const std::string& chain_model, const std::string& numerical_method) {
+        return std::string(resolve_numerical_method(chain_model, numerical_method).name);
+    }, py::arg("chain_model"), py::arg("numerical_method") = "",
+       "The method the factories use: 'discrete' for discrete chains, rqm4 for an empty name.");
     m.def("runtime_info", [](bool include_cuda) {
         py::dict info;
 #ifdef USE_CPU_FFTW
@@ -732,6 +753,8 @@ PYBIND11_MODULE(_core, m)
     // Grid-size limits of the 32-bit grid indices (GridLimits.h)
     m.attr("MAX_GRID_POINTS") = MAX_GRID_POINTS;
     m.attr("MAX_GRID_ARRAY") = MAX_GRID_ARRAY;
+    // Default tolerance of check_total_partition (PropagatorComputation.h)
+    m.attr("PARTITION_TOLERANCE") = PARTITION_TOLERANCE;
 
 
     py::class_<Block>(m, "Block")
@@ -837,6 +860,8 @@ Example:
              "False for rhombohedral-axes settings (a = b = c, alpha = beta = gamma).")
         .def("get_crystal_system", &SpaceGroup::get_crystal_system,
              "Crystal system name.")
+        .def("check_cell", &SpaceGroup::check_cell, py::arg("lx"), py::arg("angles"),
+             "Raise unless the cell (lengths, angles in degrees) belongs to the crystal system of the group.")
         .def("get_nx", &SpaceGroup::get_nx,
              "Grid dimensions [nx, ny, nz].")
         .def("get_total_grid", &SpaceGroup::get_total_grid,
@@ -855,6 +880,8 @@ Example:
              "Number of equivalent points for each reduced-basis point.")
         .def("physical_basis_name", &SpaceGroup::physical_basis_name,
              "Name of the active physical basis: 'irreducible', 'pmmm', 'm3' or 'z-mirror'.")
+        .def("display_info", &SpaceGroup::display_info,
+             "Print the group, its crystal system and the sizes of its bases.")
         .def("in_use", &SpaceGroup::in_use,
              "True once a computation box or solver holds this group; the physical basis is then frozen.")
         .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,

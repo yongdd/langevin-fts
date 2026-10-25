@@ -85,6 +85,7 @@ void ComputationCommon<T>::set_fields(
     const std::map<std::string, const T*>& q_init)
 {
     this->check_box_space_group();
+    this->clear_computed();
     for (const auto& [key, edge] : this->propagator_computation_optimizer->get_computation_propagators())
     {
         if (!w_input.contains(edge.monomer_type))
@@ -260,6 +261,7 @@ template <typename T>
 void ComputationCommon<T>::update_laplacian_operator()
 {
     this->check_box_space_group();
+    this->clear_computed();
     try
     {
         backend->update_laplacian_operator();
@@ -290,6 +292,7 @@ template <typename T>
 T ComputationCommon<T>::get_total_partition(int polymer)
 {
     this->check_box_space_group();
+    this->require_propagators();
     const int P = this->molecules->get_n_polymer_types();
     if (polymer < 0 || polymer > P-1)
         throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -300,6 +303,7 @@ template <typename T>
 T ComputationCommon<T>::get_solvent_partition(int s)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     const int S = this->molecules->get_n_solvent_types();
     if (s < 0 || s > S-1)
         throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
@@ -310,6 +314,7 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         std::vector<BackendArray<T>*> arrays;
@@ -344,6 +349,7 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int P = this->molecules->get_n_polymer_types();
@@ -374,6 +380,7 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int P = this->molecules->get_n_polymer_types();
@@ -405,6 +412,7 @@ template <typename T>
 void ComputationCommon<T>::get_block_concentration(int p, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int N = this->cb->get_n_basis();
@@ -451,6 +459,7 @@ template <typename T>
 void ComputationCommon<T>::get_solvent_concentration(int s, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int S = this->molecules->get_n_solvent_types();

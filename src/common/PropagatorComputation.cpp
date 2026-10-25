@@ -82,7 +82,18 @@ PropagatorComputation<T>::PropagatorComputation(
 template <typename T>
 PropagatorComputation<T>::~PropagatorComputation()
 {
-    // Vectors handle memory cleanup automatically
+    if (holds_orthogonal_cell_)
+        cb->release_orthogonal_cell();
+}
+
+template <typename T>
+void PropagatorComputation<T>::hold_orthogonal_cell()
+{
+    if (!holds_orthogonal_cell_)
+    {
+        cb->hold_orthogonal_cell();
+        holds_orthogonal_cell_ = true;
+    }
 }
 
 template <typename T>
@@ -91,6 +102,40 @@ void PropagatorComputation<T>::check_box_space_group() const
     if (cb->get_space_group() != space_group_)
         throw_with_line_number("The space group of the computation box changed after this computation "
             "was created; create a new computation or give each computation its own box.");
+}
+
+template <typename T>
+void PropagatorComputation<T>::clear_computed()
+{
+    propagators_computed_ = false;
+    concentrations_computed_ = false;
+    stress_computed_ = false;
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_propagators() const
+{
+    if (!propagators_computed_)
+        throw_with_line_number("Propagators not computed for the current fields and box. "
+            "Call compute_propagators() first.");
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_concentrations() const
+{
+    require_propagators();
+    if (!concentrations_computed_)
+        throw_with_line_number("Concentrations not computed for the current propagators. "
+            "Call compute_concentrations() after compute_propagators().");
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_stress() const
+{
+    require_propagators();
+    if (!stress_computed_)
+        throw_with_line_number("Stress not computed for the current propagators. "
+            "Call compute_stress() after compute_propagators().");
 }
 
 /**
@@ -108,6 +153,7 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 {
     this->check_box_space_group();
+    this->require_stress();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
@@ -140,6 +186,7 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 {
     this->check_box_space_group();
+    this->require_stress();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
@@ -175,6 +222,15 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
 
     // Also set space group on ComputationBox for unified field operations
     this->cb->set_space_group(sg);
+}
+
+template <typename T>
+bool PropagatorComputation<T>::check_total_partition(double tolerance)
+{
+    for (const double error : compute_partition_errors())
+        if (!std::isfinite(error) || error > tolerance)
+            return false;
+    return true;
 }
 
 // Explicit template instantiation

@@ -21,6 +21,8 @@ from .utils import (
     process_random_copolymer,
     draw_polymer_architectures,
     simulation_metadata,
+    report_partition_consistency,
+    check_partition_functions,
 )
 from .smearing import Smearing
 
@@ -383,43 +385,20 @@ class SCFT:
 
             # The cell must belong to the crystal system of the space group. Otherwise
             # the symmetry operations are not isometries of the box and the run would
-            # silently converge to a constrained, unphysical state.
-            crystal_system_sg = self.sg.get_crystal_system()
+            # silently converge to a constrained, unphysical state. The native check
+            # (SpaceGroup::check_cell) is the one the computation box applies later.
             lx_sg = [float(v) for v in params["lx"]]
             angles_sg = [float(v) for v in angles] if angles is not None else [90.0, 90.0, 90.0]
-            same = lambda a, b: abs(a - b) <= 1e-6 * max(abs(a), abs(b), 1.0)
-            cell_ok, need = True, ""
-            if crystal_system_sg == "Cubic":
-                cell_ok = same(lx_sg[0], lx_sg[1]) and same(lx_sg[0], lx_sg[2]) and is_orthogonal
-                need = "lx[0] = lx[1] = lx[2] and angles [90, 90, 90]"
-            elif crystal_system_sg == "Tetragonal":
-                cell_ok = same(lx_sg[0], lx_sg[1]) and is_orthogonal
-                need = "lx[0] = lx[1] and angles [90, 90, 90]"
-            elif crystal_system_sg == "Orthorhombic":
-                cell_ok = is_orthogonal
-                need = "angles [90, 90, 90]"
-            elif crystal_system_sg == "Hexagonal":
-                cell_ok = same(lx_sg[0], lx_sg[1]) and z_axis_orthogonal and same(angles_sg[2], 120.0)
-                need = "lx[0] = lx[1] and angles [90, 90, 120]"
-            elif crystal_system_sg == "Trigonal":
-                # the axes setting is a property of the group (P and hexagonal-axes R
-                # settings: z-block-diagonal rotations; rhombohedral-axes R settings:
-                # 3-fold about [111]), not of the cell
-                if self.sg.uses_hexagonal_axes():
-                    cell_ok = same(lx_sg[0], lx_sg[1]) and z_axis_orthogonal and same(angles_sg[2], 120.0)
-                    need = "lx[0] = lx[1] and angles [90, 90, 120] (hexagonal-axes setting)"
-                else:
-                    cell_ok = (same(lx_sg[0], lx_sg[1]) and same(lx_sg[0], lx_sg[2])
-                               and same(angles_sg[0], angles_sg[1]) and same(angles_sg[0], angles_sg[2]))
-                    need = "lx[0] = lx[1] = lx[2] and alpha = beta = gamma (rhombohedral-axes setting)"
-                    if cell_ok and params.get("relax_cell", False):
-                        # a = b = c and alpha = beta = gamma would have to vary together
-                        raise ValidationError("Box relaxation is not supported for rhombohedral-axes settings; "
-                                              "use the hexagonal-axes setting of the space group.")
-            if not cell_ok:
-                raise ValidationError(f"The cell does not match the {crystal_system_sg.lower()} crystal system of "
-                                      f"space group {params['space_group']['symbol']}: it needs {need}. "
-                                      f"Got lx = {lx_sg}, angles = {angles_sg}.")
+            try:
+                self.sg.check_cell(lx_sg, angles_sg)
+            except RuntimeError as exc:
+                raise ValidationError(str(exc)) from None
+            if (self.sg.get_crystal_system() == "Trigonal" and not self.sg.uses_hexagonal_axes()
+                    and params.get("relax_cell", False)):
+                # a = b = c and alpha = beta = gamma would have to vary together
+                raise ValidationError("Box relaxation is not supported for rhombohedral-axes settings; "
+                                      "use the hexagonal-axes setting of the space group.")
+            self.sg.display_info()
 
         else:
             self.sg = None
@@ -524,11 +503,6 @@ class SCFT:
         optimizer = params["optimizer"]
         if optimizer["name"] != "am":
             raise ValueError(f"Invalid optimizer name: {optimizer['name']}. Only 'am' (Anderson mixing) is available.")
-        if n_var > _core.MAX_GRID_ARRAY:
-            raise ValidationError(
-                f"Anderson mixing would adjust {n_var} variables ({len(self.monomer_types)} fields of "
-                f"{n_field_var // len(self.monomer_types)} values); at most {_core.MAX_GRID_ARRAY} are supported "
-                "(32-bit indices). Use fewer grid points or a space group.")
         self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
             optimizer["max_hist"],     # maximum number of history
             optimizer["start_error"],  # when switch to AM from simple mixing
@@ -670,7 +644,7 @@ class SCFT:
         # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
-            if not self.prop_solver.check_total_partition():
+            if not report_partition_consistency(self.prop_solver):
                 raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         # Compute total concentration for each monomer type
@@ -1218,6 +1192,9 @@ class SCFT:
 
             # Irreducible grid remains valid without extra symmetrization.
 
+        # The propagators of the last evaluated fields: Q must be positive for log Q in the free energy
+        check_partition_functions(self.prop_solver, f"the end of the SCFT iteration ({iter} iterations)")
+
         # Print iteration timing
         time_iter_total = time.time() - time_iter_start
         print("Iteration time: %.3f seconds (%.4f sec/iter, %d iterations)" % (time_iter_total, time_iter_total/iter, iter))
@@ -1231,7 +1208,7 @@ class SCFT:
                 print("\tβΔF/n_%d : %12.7f" % (p, energy_total / concentration))
 
         # Final partition consistency check (only once at the end)
-        if not self.prop_solver.check_total_partition():
+        if not report_partition_consistency(self.prop_solver):
             print("Warning: Final partition consistency check failed.")
 
         # Store phi and w

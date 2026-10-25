@@ -11,12 +11,13 @@ from scipy.io import savemat, loadmat
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .integrators import checked_fields
-from . import _core
 from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError, parse_chi_n
 from .utils import (
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
+    report_partition_consistency,
+    check_partition_functions,
     calculate_sigma,
     load_config,
     atomic_savemat,
@@ -342,10 +343,6 @@ class LFTS:
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
             n_am = int(len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]))
-            if n_am > _core.MAX_GRID_ARRAY:
-                raise ValidationError(
-                    f"Anderson mixing would adjust {n_am} variables ({len(self.mpt.aux_fields_imag_idx)} imaginary fields "
-                    f"of {int(np.prod(params['nx']))} points); at most {_core.MAX_GRID_ARRAY} are supported (32-bit indices).")
             am = self.prop_solver.create_anderson_mixing(
                 n_am,                                                      # the number of variables
                 params["compressor"]["max_hist"],                          # maximum number of history
@@ -520,7 +517,7 @@ class LFTS:
         # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
-            if not self.prop_solver.check_total_partition():
+            if not report_partition_consistency(self.prop_solver):
                 raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         return phi, elapsed_time
@@ -784,6 +781,8 @@ class LFTS:
             for attempt in range(self.saddle.get("max_retries", 5) + 1):
                 phi, initial_hamiltonian, _, error_level = self.find_saddle_point(w_aux=w_aux)
                 if not np.isfinite(initial_hamiltonian):
+                    # H contains log Q: name a partition function that is not positive as the cause
+                    check_partition_functions(self.prop_solver, "the initial saddle point")
                     raise ValidationError("Non-finite initial Hamiltonian")
                 if np.isfinite(error_level) and error_level < self.saddle["tolerance"]:
                     break
@@ -883,6 +882,8 @@ class LFTS:
                 # Find saddle point of the pressure field
                 phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
                 if not np.isfinite(hamiltonian):
+                    # H contains log Q: name a partition function that is not positive as the cause
+                    check_partition_functions(self.prop_solver, f"the saddle point of step {langevin_step}")
                     raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
                 total_saddle_iter += saddle_iter
                 total_error_level += error_level

@@ -288,12 +288,22 @@ q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
 
 | Method | Description |
 |--------|-------------|
-| `add_polymer(volume_fraction, blocks)` | Add polymer species |
+| `add_polymer(volume_fraction, blocks)` | Add polymer species (before the first computation) |
 | `compute_propagators(fields)` | Compute all propagators |
 | `get_partition_function(polymer)` | Get $`Q`$ for polymer species |
 | `compute_concentrations()` | Compute all concentrations |
 | `get_concentration(monomer_type)` | Get $`\phi_\alpha(\mathbf{r})`$ |
 | `get_propagator(polymer, v, u, step)` | Get propagator at step |
+| `partition_errors()` | Relative deviation of $`Q`$ along the contour for each polymer |
+| `check_total_partition(tolerance)` | Whether every error of `partition_errors()` is at most `tolerance` (default $`10^{-7}`$) |
+
+Results belong to the fields and the box of the last `compute_propagators()`: the
+getters raise `RuntimeError` before it, after it failed and after a box change
+(`set_lx()`, `set_lattice_parameters()`); the concentrations also need
+`compute_concentrations()` and the stress `compute_stress()`. The solver reports
+values only: with real fields a partition function that is not positive and finite
+is rejected by `SCFT` (final fields) and `LFTS` (saddle points), not by the solver,
+because intermediate iterates can pass through such values.
 
 ---
 

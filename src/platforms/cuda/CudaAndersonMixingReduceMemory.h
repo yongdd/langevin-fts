@@ -100,8 +100,6 @@ private:
     CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;
     /// @}
 
-    void print_array(int n, T *a);
-
 public:
     /**
      * @brief Construct memory-efficient Anderson mixing.

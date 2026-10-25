@@ -257,7 +257,21 @@ protected:
      */
     void compute_recip_metric();
 
+    /// Computations of this box whose numerical method requires an orthogonal cell
+    int orthogonal_cell_holders_ = 0;
+
 public:
+    /**
+     * @brief Keep the cell orthogonal while a computation needs it.
+     *
+     * The factory calls hold_orthogonal_cell() for a computation whose
+     * numerical method requires an orthogonal cell (cn-adi2), and the
+     * computation releases it when it is destroyed. While it is held,
+     * set_lattice_parameters() rejects other angles before changing the box.
+     */
+    void hold_orthogonal_cell() { orthogonal_cell_holders_++; }
+    void release_orthogonal_cell() noexcept { orthogonal_cell_holders_--; }
+
     /**
      * Attach a computation's group while its constructors run. A failed backend
      * or propagator allocation restores the old box and the group's freeze flag
@@ -612,6 +626,10 @@ public:
      *
      * @note After calling set_lattice_parameters(), you should also update the Laplacian
      *       operator in the propagator solver.
+     *
+     * @throws Exception before changing the box for invalid angles, for a
+     *         non-orthogonal cell with walls or while hold_orthogonal_cell()
+     *         is in effect, and for a cell that does not match the space group
      */
     virtual void set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles);
 };

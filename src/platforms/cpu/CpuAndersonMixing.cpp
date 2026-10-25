@@ -26,7 +26,6 @@
  * @see AndersonMixing for base class and algorithm description
  */
 
-#include <iostream>
 #include <algorithm>
 #include "CpuAndersonMixing.h"
 
@@ -170,9 +169,6 @@ void CpuAndersonMixing<T>::calculate_new_fields(
             for(int i=0; i<this->n_anderson; i++)
                 u_nm_ptrs[i] = u_nm[i].data();
             this->find_an(u_nm_ptrs.data(), v_n.data(), a_n.data(), this->n_anderson);
-            //std::cout << "v_n2" << std::endl;
-            //print_array(n_anderson+1, v_n);
-            //exit(-1);
 
             // Calculate the new field
             w_hist1 = cb_w_hist->get_array(0);
@@ -192,20 +188,6 @@ void CpuAndersonMixing<T>::calculate_new_fields(
     {
         throw_without_line_number(exc.what());
     }
-}
-// Print array for debugging
-template <typename T>
-void CpuAndersonMixing<T>::print_array(int n, T *a)
-{
-    #ifndef NDEBUG
-    for(int i=0; i<n-1; i++)
-    {
-        std::cout << a[i] << ", ";
-    }
-    std::cout << a[n-1] << std::endl;
-    #else
-    (void)n; (void)a;  // Suppress unused parameter warnings
-    #endif
 }
 
 // Explicit template instantiation

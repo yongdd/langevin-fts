@@ -107,6 +107,37 @@ def write_run_status(sim):
             os.unlink(temporary)
 
 
+def report_partition_consistency(prop_solver):
+    """Print the forward/backward partition error of each polymer; True if all are within tolerance."""
+    from . import _core
+    errors = prop_solver.partition_errors()
+    print("Relative contour partition error of each polymer: " +
+          ", ".join(f"{p}: {error:.3e}" for p, error in enumerate(errors)))
+    return all(np.isfinite(error) and error <= _core.PARTITION_TOLERANCE for error in errors)
+
+
+def check_partition_functions(prop_solver, state):
+    """Reject an accepted state whose partition functions are not positive and finite.
+
+    With real fields Q is a sum of positive Boltzmann weights. Intermediate iterates can
+    still give Q <= 0 (the Richardson extrapolation of rqm4 or Crank-Nicolson steps on a
+    coarse grid in strong fields), so only accepted states are checked: the final SCFT
+    fields and an L-FTS saddle point whose Hamiltonian, which contains log Q, is not
+    finite. Complex fields (CL-FTS) have no sign to check.
+    """
+    if prop_solver.field_type != "real":
+        return
+    for p in range(prop_solver.get_n_polymer_types()):
+        Q = prop_solver.get_partition_function(p)
+        if not (np.isfinite(Q) and Q > 0):
+            raise ValidationError(
+                f"The partition function of polymer {p} is {Q:.6e} at {state}, but with real fields it must "
+                "be positive and finite. Either the discretization is too coarse for the fields (refine the "
+                "grid or the contour step), or the propagators fell below the round-off level of the spectral "
+                "transforms, which is relative to their largest value on the grid (for example strong fields "
+                "next to absorbing walls or a grafted source).")
+
+
 def simulation_metadata(sim, random_seed=None):
     """Build provenance comes from the loaded extension, never the current cwd."""
     import scipy

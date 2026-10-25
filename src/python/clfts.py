@@ -31,6 +31,7 @@ from .utils import (
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
+    report_partition_consistency,
     calculate_sigma,
     load_config,
     atomic_savemat,
@@ -359,7 +360,7 @@ class CLFTS:
         # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
-            if not self.prop_solver.check_total_partition():
+            if not report_partition_consistency(self.prop_solver):
                 raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         return phi, elapsed_time

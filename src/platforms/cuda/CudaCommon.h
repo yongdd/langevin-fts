@@ -150,7 +150,8 @@ private:
     int n_blocks;
     int n_threads;
 
-    /// Throw unless n_threads <= 1024 and 1 <= n_blocks * n_threads <= MAX_GRID_THREADS
+    /// Throw unless n_threads <= 1024, 1 <= n_blocks * n_threads <= MAX_GRID_THREADS and
+    /// both are within the limits of the current device
     static void check_launch(int n_blocks, int n_threads);
 
     CudaCommon();

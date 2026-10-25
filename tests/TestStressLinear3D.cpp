@@ -313,8 +313,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -337,8 +335,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -377,8 +373,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -401,8 +395,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -442,8 +434,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -466,8 +456,6 @@ int main()
 
                         // For the given fields find the polymer statistics
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                        solver->get_total_concentration("A", phi_a);
-                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)

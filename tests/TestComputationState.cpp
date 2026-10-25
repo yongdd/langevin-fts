@@ -82,11 +82,11 @@ void check_cnadi(const std::string& platform, bool reduced)
     pc->compute_propagators({{"A", w.data()}});
     const double partition = pc->get_total_partition(0);
 
-    // C++ callers can mutate the shared box directly. Both refreshing the
-    // operator and starting another computation must detect unsupported angles.
-    cb->set_lattice_parameters({4.0, 4.0}, {90.0, 90.0, 60.0});
-    rejects([&] { pc->update_laplacian_operator(); });
-    rejects([&] { pc->compute_propagators({{"A", w.data()}}); });
+    // C++ callers can mutate the shared box directly. While this computation
+    // exists, the box rejects unsupported angles before changing anything.
+    rejects([&] { cb->set_lattice_parameters({4.0, 4.0}, {90.0, 90.0, 60.0}); });
+    if (!cb->is_orthogonal() || cb->get_lx(0) != 4.0 || cb->get_lx(1) != 4.0)
+        throw std::runtime_error("A rejected lattice change modified the box.");
     cb->set_lattice_parameters({4.0, 4.0}, {90.0, 90.0, 90.0});
     pc->update_laplacian_operator();
     pc->compute_propagators({{"A", w.data()}});
@@ -95,6 +95,12 @@ void check_cnadi(const std::string& platform, bool reduced)
     if (!(std::abs(pc->get_total_partition(0)/partition - 1.0) <= 1e-12) ||
         !(std::abs(cb->mean(phi.data()) - 1.0) <= 1e-10) || !pc->check_total_partition())
         throw std::runtime_error("CN-ADI did not recover after restoring the orthogonal box.");
+
+    // The box is released with the computation
+    pc.reset();
+    cb->set_lattice_parameters({4.0, 4.0}, {90.0, 90.0, 60.0});
+    if (cb->is_orthogonal())
+        throw std::runtime_error("The box stayed orthogonal after the CN-ADI computation was destroyed.");
 }
 
 int main()

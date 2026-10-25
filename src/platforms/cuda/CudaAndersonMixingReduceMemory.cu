@@ -29,7 +29,6 @@
  * @see PinnedCircularBuffer for host memory storage
  */
 
-#include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>
 #include "CudaCommon.h"
@@ -150,7 +149,6 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                 CUDA_CHECK(cuda_reduce_sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
                 CUDA_CHECK(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
-            //print_array(this->max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots.data());
         }
 
@@ -184,8 +182,6 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                                                     std::abs(i-j));
                 }
             }
-            //print_array(this->max_hist, v_n);
-            //exit(-1);
             this->find_an(u_nm.data(), v_n.data(), a_n.data(), this->n_anderson);
 
             // Calculate the new field; the newest residual is d_w_deriv
@@ -219,19 +215,6 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
     {
         throw_without_line_number(exc.what());
     }
-}
-template <typename T>
-void CudaAndersonMixingReduceMemory<T>::print_array(int n, T *a)
-{
-    #ifndef NDEBUG
-    for(int i=0; i<n-1; i++)
-    {
-        std::cout << a[i] << ", ";
-    }
-    std::cout << a[n-1] << std::endl;
-    #else
-    (void)n; (void)a;  // Suppress unused parameter warnings
-    #endif
 }
 
 // Explicit template instantiation

@@ -60,13 +60,6 @@ private:
      */
     T dot_product(T *a, T *b);
 
-    /**
-     * @brief Debug helper to print array contents.
-     * @param n Array length
-     * @param a Array pointer
-     */
-    void print_array(int n, T *a);
-
 public:
     /**
      * @brief Construct CPU Anderson mixing optimizer.
