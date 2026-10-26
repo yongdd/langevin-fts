@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Every example builds its simulation with the current code and input checks.
 
-Each script under examples/ runs in its own process, in a temporary copy of its
-directory (it finds its input files there and writes nothing into the source
-tree). The SCFT, LFTS and CLFTS classes are wrapped: a platform the build lacks
+Each script under examples/ runs in its own process, in its directory of a
+temporary copy of the examples tree (it finds its input files there, also in a
+neighbouring directory, and writes nothing into the source tree). The SCFT, LFTS
+and CLFTS classes are wrapped: a platform the build lacks
 is replaced by a CPU platform, and the first run() or continue_run() stops the
 script, so the example is checked up to the start of its simulation (inputs,
 parameter validation, construction), not run. The examples of tools that build no
@@ -19,13 +20,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Examples that build no SCFT/LFTS/CLFTS simulation; they must finish without an error
-WITHOUT_SIMULATION = {"examples/fourier/FourierTransform.py"}
+# Examples that build no SCFT/LFTS/CLFTS simulation, and modules of examples; they
+# must finish without an error
+WITHOUT_SIMULATION = {"examples/fourier/FourierTransform.py",
+                      "examples/scft/phase_diagram/phase_diagram.py"}
 
 DRIVER = r"""
 import os, runpy, sys
 import polymerfts
 from polymerfts import PlatformSelector
+
+# The process output, kept for the message below: an example may redirect file
+# descriptor 1 around run(), e.g. to silence the native library
+output = os.dup(1)
 
 platforms = PlatformSelector.avail_platforms()
 fallback = next((p for p in platforms if p.startswith("cpu")), platforms[0])
@@ -42,7 +49,7 @@ def wrap(cls):
     for name in ("run", "continue_run"):
         def stop(self, *args, _name=cls.__name__ + "." + name, **kwargs):
             # Straight to the process output: an example may redirect sys.stdout around run()
-            os.write(1, ("EXAMPLE CONSTRUCTED " + _name + "\n").encode())
+            os.write(output, ("EXAMPLE CONSTRUCTED " + _name + "\n").encode())
             os._exit(0)
         setattr(cls, name, stop)
 
@@ -62,14 +69,11 @@ def main():
         return 1
     failures = []
     with tempfile.TemporaryDirectory() as tmp:
-        copies = {}
+        tree = Path(tmp) / "examples"
+        shutil.copytree(ROOT / "examples", tree, ignore=shutil.ignore_patterns("__pycache__", "*.png"))
         for script in scripts:
-            directory = script.parent
-            if directory not in copies:
-                copies[directory] = Path(tmp) / str(len(copies))
-                shutil.copytree(directory, copies[directory], ignore=shutil.ignore_patterns("__pycache__", "*.png"))
-            copy = copies[directory] / script.name
-            child = subprocess.run([sys.executable, "-c", DRIVER, str(copy)], cwd=copies[directory],
+            copy = tree / script.relative_to(ROOT / "examples")
+            child = subprocess.run([sys.executable, "-c", DRIVER, str(copy)], cwd=copy.parent,
                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
                                    timeout=600, env=dict(os.environ))
             name = script.relative_to(ROOT).as_posix()
