@@ -18,6 +18,7 @@ Mean-field saddle point of the field-theoretic Hamiltonian.
 | `scft/Star9ArmsGyroid.py` | 9-arm star polymer gyroid |
 | `scft/BottleBrushLamella3D.py` | Bottle-brush copolymer |
 | `scft/MixtureBlockRandom.py` | Block + random copolymer mixture |
+| `scft/phase_diagram/` | Phase diagram of a system in two parameters by continuation and boundary root finding; AB diblock and ABA triblock set up (GPU) |
 
 **Phase library** (`scft/phases/`, space-group symmetry):
 
