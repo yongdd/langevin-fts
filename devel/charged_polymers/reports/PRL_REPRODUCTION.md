@@ -1,5 +1,5 @@
 ---
-title: "PRL reproduction: SCFT and planar Monte Carlo"
+title: "Electrostatic SCFT: PRL reproduction and planar Monte Carlo"
 subtitle: "Consolidated results, code map and execution protocols"
 date: "2026-09-15; brush, electrolyte and McCarty bulk Gaussian calculations"
 ---
@@ -801,7 +801,7 @@ main paper and supplementary information stored in the evidence directories.
 # Related electrolyte reproduction: literature Topics 1--4
 
 This section records a new deterministic campaign on 2026-09-14. The term
-"PRL-SCFT" here means the correlation-augmented framework, including its
+"Electrostatic SCFT" here means the correlation-augmented framework, including its
 electrolyte limit. It does not mean that the existing grafted-chain constructor
 can describe every system in the literature collection. The new electrolyte
 module adds finite ion volumes and appropriate bulk/wall boundary conditions.
@@ -1106,7 +1106,7 @@ salt-free bulk model for the five neutral E/K sequences in McCarty et al.,
 The primary mathematical comparison is its
 [Supporting Information](https://doi.org/10.1021/acs.jpclett.9b00099.s001),
 Eqs. S12--S18. This is a deterministic bulk Gaussian approximation.
-**It is not full Duan PRL-SCFT, CL sampling, or an exact reproduction of the
+**It is not the full Duan Electrostatic SCFT, CL sampling, or an exact reproduction of the
 McCarty particle model.** In particular, it does not include the conformation
 feedback in Duan SI S13--S26 or certify the brush implementation's omitted
 nonlocal connectivity term.

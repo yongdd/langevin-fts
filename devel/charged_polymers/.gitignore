@@ -11,6 +11,9 @@ __pycache__/
 # Locally stored reference papers.
 /refs/
 
+# Local seminar decks and rendered presentation assets.
+/presentations/
+
 # Preserve the unique report/archive assets, including archived TeX dependencies.
 !reports/figures/historical/*.png
 !archive/figures/*.png

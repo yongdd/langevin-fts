@@ -155,7 +155,7 @@ Model implementations are in `models/`; run and analysis code remains in `studie
 
 The underlying models are grouped under `models/`:
 
-- `models/prl_scft.py`: approximate PRL-type SCFT; `models/prl_scft2d.py`: earlier experimental 2D/scaling extension, not a validated Fig. 4 reproduction.
+- `models/prl_scft.py`: approximate Electrostatic SCFT with local self-energy; `models/prl_scft2d.py`: earlier experimental 2D/scaling extension, not a validated Fig. 4 reproduction.
 - `models/prl_electrolyte.py`: electrolyte extension of the PRL self-energy, with finite ion volumes, bulk phase equilibrium and charged-wall calculations. The nonlocal interface routine is experimental; its convergence status is recorded in the report.
 - `models/mccarty.py`: salt-free E/K sequences, discrete-chain form factors, three explicitly named Gaussian approximations and bulk phase equilibrium. `sequence_blocks()` maps a sequence to the existing native propagator's block format. This bulk calculation uses analytical form factors and changes no native solver.
 - `models/positive_brush_1d.py`: explicit finite planar MC action and updates.

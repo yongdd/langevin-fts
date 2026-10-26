@@ -383,7 +383,7 @@ chi-subset wrapper of the incompressible draft is no longer needed.
 **(b) Coulomb block — new.** HS on the positive-definite Coulomb quadratic
 form introduces the electrostatic potential $\psi(\mathbf x)$:
 $$e^{-\beta U_C} = \int \mathcal D\psi\;
-  \exp\!\left[ - C \int d\mathbf x\, \frac{|\nabla\psi|^2}{2E}
+  \exp\!\left[ - C \int d\mathbf x\, \frac{\nabla\psi\cdot\nabla\psi}{2E}
                \;+\; i\, C \int d\mathbf x\; c(\mathbf x)\,\psi(\mathbf x) \right]
   \Big/ \mathcal N,$$
 which reproduces $\exp[-\tfrac{C^2E_0}{2}\sum_k |\hat c_k|^2/k^2]$ exactly
@@ -396,38 +396,42 @@ partial-saddled like the positive-eigenvalue SPT fields — see §5.
 ## 4. Hamiltonian and single-chain problem
 
 The per-chain effective Hamiltonian is
-$$\frac{H[\{w_k\}, \psi]}{C\,k_BT V/R_0^3}
- = \underbrace{h_{\rm const} + \sum_k \left[ A_k \langle w_k\rangle + B_k \langle w_k^2\rangle\right]}_{\text{neutral compressible (existing SPT coefficients)}}
- \;+\; \frac{1}{V}\int \frac{|\nabla \psi|^2}{2E} d\mathbf x
- \;-\; \sum_p \frac{\bar\phi_p}{\alpha_p} \ln Q_p[\{W_i\}]$$
+$$\begin{aligned}
+\frac{H[\{w_k\}, \psi]}{C\,k_BT V/R_0^3}
+={}&\underbrace{h_{\rm const} + \sum_k \left[ A_k \langle w_k\rangle + B_k \langle w_k^2\rangle\right]}_{\text{neutral SPT part}}\\
+&+ \frac{1}{V}\int \frac{\nabla\psi\cdot\nabla\psi}{2E} d\mathbf x
+- \sum_p \frac{\bar\phi_p}{\alpha_p} \ln Q_p[\{W_i^{\rm HS}\}],
+\end{aligned}$$
 with the $h$-coefficients of the existing compressible SPT. The one-body
 potential of each species picks up the smearing convolution on EVERY term
 (the interactions couple to $\bar\phi_i = h_i*\phi_i$, so the functional
 derivative w.r.t. $\phi_i$ convolves back with $h_i$):
-$$\boxed{\;W_i(\mathbf x) \;=\; h_i * \Big[ W_i^{\rm SPT}
-   \;+\; i\, z_i\, \psi \Big](\mathbf x)\;}$$
+$$\boxed{\;W_i^{\rm HS}(\mathbf x) \;=\; h_i * \Big[ W_i^{\rm SPT}
+   \;-\; i\, z_i\, \psi \Big](\mathbf x)\;}$$
 where $W_i^{\rm SPT}$ is the usual `matrix_a` mapping of the auxiliary
 fields (now including the pressure-like ζ mode; ion rows couple only to
 that mode and to $\psi$). No explicit $N$ multiplies the electrostatic
 term: $\psi$ is already per-reference-chain and $z_i$ is per-segment — the
 code's $w = N w_{\rm seg}$ convention is carried entirely by $\psi$. The
 smearing is a k-space multiplication
-$\hat h_i(k)\,[\widehat{W^{\rm SPT}_i} + i z_i \hat\psi](k)$ — cheap, per
+$\hat h_i(k)\,[\widehat{W^{\rm SPT}_i} - i z_i \hat\psi](k)$ — cheap, per
 species, applied once per saddle iteration; the propagator solvers are
 untouched.
 
-**Rotated contour / stored real field.** As with the positive-eigenvalue
-SPT modes, the code stores the REAL array $\psi_s = -i\psi$ (the saddle
-lies on the imaginary $\psi$ axis). Under this substitution the one-body
-term becomes $+z_i \psi_s$ (the $i$ disappears — this is what the code
-adds to $W_i^{\rm SPT}$), and the explicit quadratic term flips sign:
-$$\frac{1}{V}\int \frac{|\nabla\psi|^2}{2E}\, d\mathbf x
+**Rotated contour / stored code field.** As with the positive-eigenvalue
+SPT modes, the code stores $\psi_{\rm code}=-i\psi$. It is real at the
+saddle and complex during CL sampling. The HS charge term above then
+becomes $+z_i\psi_{\rm code}$ in the propagator input. The explicit
+electrostatic action becomes
+$$\frac{1}{V}\int \frac{\nabla\psi\cdot\nabla\psi}{2E}\,d\mathbf x
   \;\longrightarrow\;
-  -\frac{1}{V}\int \frac{|\nabla\psi_s|^2}{2E}\, d\mathbf x
-  \;=\; -\frac{1}{2V}\int c\,\psi_s\, d\mathbf x$$
-(the last equality at the Poisson-consistent $\psi_s$). This mirrors the
+  -\frac{1}{V}\int \frac{\nabla\psi_{\rm code}\cdot\nabla\psi_{\rm code}}{2E}\,d\mathbf x
+  \;=\;\frac{1}{2EV}\int\psi_{\rm code}\nabla^2\psi_{\rm code}\,d\mathbf x.$$
+This is an analytic continuation: no complex conjugate or modulus square
+is used off the saddle. Only at a Poisson-consistent saddle does the last
+term equal $-\frac{1}{2V}\int c\psi_{\rm code}\,d\mathbf x$. This mirrors the
 negated $B_k$ coefficients of the imaginary SPT fields. Note the
-$+c\psi_s$ coupling itself lives inside $-\ln Q$ via $W_i$; the explicit
+$+c\psi_{\rm code}$ coupling itself lives inside $-\ln Q$ via $W_i^{\rm HS}$; the explicit
 term recorded in $H$ is only the (negative) gradient piece.
 
 Concentrations: standard $\phi_i$ from propagators; the smeared densities
@@ -443,23 +447,25 @@ in k).
   receive Langevin noise; positive-eigenvalue fields are partial-saddled by
   the existing compressor loop; zero-eigenvalue fields stay zero.
 - Electrostatic field:
-$$\frac{1}{C}\frac{\delta H}{\delta \psi(\mathbf x)}
-  = -\frac{\nabla^2 \psi}{E} \;-\; c(\mathbf x)
+$$\frac{1}{C}\frac{\delta H}{\delta \psi_{\rm code}(\mathbf x)}
+  = \frac{\nabla^2 \psi_{\rm code}}{E} \;+\; c(\mathbf x)
   \qquad\Longrightarrow\qquad
-  \text{saddle: } -\nabla^2\psi^* = E\, c(\mathbf x),$$
+  \text{saddle: } -\nabla^2\psi_{\rm code}^* = E\, c(\mathbf x),$$
 the (smeared) **Poisson equation**; with the ideal-gas ions responding
 through their Boltzmann factors this is the fluctuating-field
 generalization of Poisson–Boltzmann. In k-space the solve is diagonal and
 exact:
-$$\hat\psi^*(\mathbf k) = \frac{E\,\hat c(\mathbf k)}{k^2}, \qquad k \ne 0,$$
+$$\hat\psi_{\rm code}^*(\mathbf k) = \frac{E\,\hat c(\mathbf k)}{k^2}, \qquad k \ne 0,$$
 and the $k=0$ mode is fixed by electroneutrality ($\hat c(0) = 0$ holds
 exactly per configuration in the canonical ensemble once §1's constraint
 holds; set $\hat\psi(0)=0$ as gauge).
+In the remaining update and discretization notes, $\psi$ denotes the stored
+rotated field $\psi_{\rm code}$.
 
 **Debye sanity check** (1-segment ions, $z=\pm1$, ideal): linearizing gives
 $\kappa^2 R_0^2 = E\,\bar\phi_{\rm ion}/N = 4\pi l_B \rho_0
 \bar\phi_{\rm ion} R_0^2$ — the physical Debye constant. Any factor error
-in $E$ or $W_i$ shows up here first; keep this as a unit test.
+in $E$ or $W_i^{\rm HS}$ shows up here first; keep this as a unit test.
 
 **CL-FTS (the real implementation): $\psi$ fluctuates.** L-FTS holds
 imaginary-type fields at partial saddle, so it can never capture $\psi$
@@ -526,17 +532,18 @@ rate, so the segment-fraction estimate suffices for polymeric charges.
 - **No real-space $\nabla\psi$ is ever needed.** The electrostatic energy
   is evaluated by Parseval, and at the saddle the substitution
   $\hat\psi = E\hat c/k^2$ eliminates the gradient entirely:
-  $$\frac{1}{2E}\int |\nabla\psi|^2 d\mathbf x
+  $$\frac{1}{2E}\int \nabla\psi\cdot\nabla\psi\, d\mathbf x
     = \frac{E}{2}\,\frac{V}{M^2}\sum_{\mathbf k \ne 0} w_t\,
       \frac{|\hat c_{\mathbf k}|^2}{k^2}
     = \frac12 \int c\,\psi\, d\mathbf x$$
   (unnormalized `rfftn`; $w_t$ = 2 interior / 1 edge modes, as in
   `wtmd.py`). Only $h_i * \psi$ requires an inverse transform. A real-space
   gradient (component-wise $ik_\alpha \hat\psi$) first becomes necessary
-  for the deferred Maxwell-stress term. The identity above gives the
-  MAGNITUDE; on the rotated contour the term entering the recorded $H$ is
-  $-\tfrac{1}{2V}\int c\,\psi_s$ (see §4) — the code evaluates it as
-  `-0.5*mean(c*psi)`.
+  for the deferred Maxwell-stress term. The identity holds at a Poisson
+  saddle, where $\psi$ is real; the term entering the recorded $H$ is its
+  negative per volume, $-\tfrac{1}{2V}\int c\,\psi$ (see §4). Off the
+  saddle the CL code evaluates the analytic expression
+  `0.5*mean(psi*lap(psi)/E)` instead.
 - Smearing widths must satisfy $a_i \gtrsim dx/2$ **per species** — the
   binding constraint is $\min_i a_i$; below that the regularization becomes
   grid-dependent (same issue class as the bond-function study). With finite
@@ -552,9 +559,9 @@ rate, so the segment-fraction estimate suffices for polymeric charges.
   ($\hat h_i(0) = 1$), which is why it is the safe unit test.
 - Charge–charge structure factor $S_{cc}(k)$ from $\hat c(k)$: record
   alongside the existing $S(k)$.
-- Stress with electrostatics (Maxwell term from
-  $\partial_L \int |\nabla\psi|^2/2E$) and with the $\hat h_i(k)$ cell
-  dependence: defer; raise on `box_is_altering=True`.
+- Stress with electrostatics (Maxwell term from $\partial_L$ of the explicit
+  electrostatic action $-\int \nabla\psi\cdot\nabla\psi/2E$) and with the
+  $\hat h_i(k)$ cell dependence: defer; raise on `box_is_altering=True`.
 
 ## 7. Parameter dictionary (target)
 
@@ -1448,7 +1455,7 @@ and SP densities, the height and the amplitude `field_2`.
 With $\zeta N=4$ the averages differ from the exact sums at every coupling,
 already without charges:
 
-| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10× median) | S(100× median) |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 4 | 0 | 0.192436 | 0.193016 ± 0.000217 | +2.7 | -6.5 | 6.47 | 1.7e-04 | 1.0e-06 |
 | 4 | 1 | 0.193841 | 0.194397 ± 0.000220 | +2.5 | -6.2 | 6.17 | 5.9e-05 | 2.9e-07 |
@@ -1461,7 +1468,7 @@ At $E=100$ the counterion density reproduces the bias of the earlier native and
 reduced campaigns (0.2131–0.2133 against 0.20719). Without charges, a weaker
 excluded-volume coupling removes the bias:
 
-| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10× median) | S(100× median) |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 0.25 | 0 | 0.219145 | 0.219147 ± 0.000033 | +0.0 | -0.7 | 0.66 | 1.1e-06 | 1.2e-08 |
 | 0.5 | 0 | 0.216303 | 0.216305 ± 0.000053 | +0.0 | -0.3 | 0.35 | 2.7e-06 | 1.5e-08 |
@@ -1472,7 +1479,7 @@ excluded-volume coupling removes the bias:
 With weak excluded volume the charged system agrees up to $E=10$ and differs
 from $E=25$ on:
 
-| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) | S(100×median) |
+| ζN | E | C density, exact | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10× median) | S(100× median) |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 0.5 | 1 | 0.217623 | 0.217624 ± 0.000054 | +0.0 | -0.0 | 0.02 | 1.7e-06 | 1.2e-08 |
 | 0.5 | 4 | 0.221057 | 0.221059 ± 0.000067 | +0.0 | -0.4 | 0.36 | 7.4e-06 | 3.4e-08 |
@@ -1485,7 +1492,7 @@ from $E=25$ on:
 The integrator and the time step do not change the agreement at $\zeta N=0.5$,
 $E=0$:
 
-| Integrator | dt | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10×median) |
+| Integrator | dt | C density, CL ± SE | z(C) | z(P) | max \|z\| | S(10× median) |
 |---|---:|---:|---:|---:|---:|---:|
 | Heun | 0.000625 | 0.216305 ± 0.000053 | +0.0 | -0.3 | 0.35 | 2.7e-06 |
 | LM/ETD | 0.000625 | 0.216309 ± 0.000053 | +0.1 | -1.1 | 1.08 | 2.4e-06 |
