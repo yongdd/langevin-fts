@@ -6,7 +6,8 @@ directory (it finds its input files there and writes nothing into the source
 tree). The SCFT, LFTS and CLFTS classes are wrapped: a platform the build lacks
 is replaced by a CPU platform, and the first run() or continue_run() stops the
 script, so the example is checked up to the start of its simulation (inputs,
-parameter validation, construction), not run.
+parameter validation, construction), not run. The examples of tools that build no
+simulation (WITHOUT_SIMULATION) run to the end instead and check their own results.
 """
 
 import os
@@ -17,6 +18,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Examples that build no SCFT/LFTS/CLFTS simulation; they must finish without an error
+WITHOUT_SIMULATION = {"examples/fourier/FourierTransform.py"}
 
 DRIVER = r"""
 import os, runpy, sys
@@ -69,7 +73,8 @@ def main():
                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
                                    timeout=600, env=dict(os.environ))
             name = script.relative_to(ROOT).as_posix()
-            ok = child.returncode == 0 and "EXAMPLE CONSTRUCTED" in child.stdout
+            finished = "EXAMPLE FINISHED WITHOUT A SIMULATION" in child.stdout and name in WITHOUT_SIMULATION
+            ok = child.returncode == 0 and ("EXAMPLE CONSTRUCTED" in child.stdout or finished)
             print(f"[{'PASS' if ok else 'FAIL'}] {name}")
             if not ok:
                 tail = (child.stdout + child.stderr).strip().splitlines()[-6:]

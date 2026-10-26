@@ -32,6 +32,7 @@
 #include "CpuComputationBox.h"
 #include "CpuComputationBackend.h"
 #include "CpuAndersonMixing.h"
+#include "CpuFourierTransform.h"
 #include "MklFactory.h"
 #include "FFT.h"  // For FFTBackend enum
 
@@ -74,6 +75,12 @@ std::unique_ptr<AndersonMixing<T>> MklFactory<T>::create_anderson_mixing(
 {
     return std::make_unique<CpuAndersonMixing<T>>(
         n_var, max_hist, start_error, mix_min, mix_init);
+}
+template <typename T>
+std::unique_ptr<FourierTransform<T>> MklFactory<T>::create_fourier_transform(
+    ComputationBox<T>* cb, std::vector<BoundaryCondition> bc)
+{
+    return std::make_unique<CpuFourierTransform<T>>(cb, bc, FFTBackend::MKL);
 }
 template <typename T>
 void MklFactory<T>::display_info()

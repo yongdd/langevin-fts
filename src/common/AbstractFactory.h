@@ -66,6 +66,7 @@
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "SpaceGroup.h"
+#include "FourierTransform.h"
 
 /**
  * @class AbstractFactory
@@ -87,6 +88,7 @@
  * - PropagatorComputationOptimizer: Computation scheduling
  * - PropagatorComputation: Propagator solver (pseudo-spectral or real-space)
  * - AndersonMixing: SCFT iteration accelerator
+ * - FourierTransform: Fourier multipliers of whole fields
  *
  * **Memory Usage:**
  *
@@ -253,6 +255,17 @@ public :
     virtual std::unique_ptr<AndersonMixing<T>> create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) = 0;
+
+    /**
+     * @brief Create a Fourier transform: Fourier multipliers of whole fields.
+     *
+     * @param cb Computation box; must outlive the transform
+     * @param bc Transform of each axis: PERIODIC for every axis, or REFLECTING
+     *           (cosine series) / ABSORBING (sine series) for every axis
+     * @return Platform-specific FourierTransform (see FourierTransform.h)
+     */
+    virtual std::unique_ptr<FourierTransform<T>> create_fourier_transform(
+        ComputationBox<T>* cb, std::vector<BoundaryCondition> bc) = 0;
 
     /**
      * @brief Display platform and configuration information.

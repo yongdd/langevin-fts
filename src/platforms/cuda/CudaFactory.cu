@@ -43,6 +43,7 @@
 #include "CudaComputationBackend.h"
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
+#include "CudaFourierTransform.h"
 #include "CudaFactory.h"
 
 /**
@@ -91,6 +92,12 @@ std::unique_ptr<AndersonMixing<T>> CudaFactory<T>::create_anderson_mixing(
         return std::make_unique<CudaAndersonMixing<T>>(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
+}
+template <typename T>
+std::unique_ptr<FourierTransform<T>> CudaFactory<T>::create_fourier_transform(
+    ComputationBox<T>* cb, std::vector<BoundaryCondition> bc)
+{
+    return std::make_unique<CudaFourierTransform<T>>(cb, bc);
 }
 template <typename T>
 void CudaFactory<T>::display_info()

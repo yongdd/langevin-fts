@@ -41,6 +41,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- Fourier transforms of whole fields, `PropagatorSolver.fourier` (2026-10-27): the same
+  interface on CPU (FFTW, MKL) and CUDA (cuFFT) for `forward`/`backward` transforms and for
+  Fourier multipliers, `apply([(M, fields), ...])` = backward(Σ M(k) · forward(fields)) with
+  matrix or diagonal multipliers stored once by `set_multiplier` (in GPU memory with
+  CUDA). `k_squared()` gives |k|² in the coefficient layout: the `rfftn` half spectrum for
+  real fields, the full spectrum for complex fields, the cosine series along walls. For real
+  fields a multiplier acts as a real operator, made Hermitian where the half spectrum holds
+  both k and -k, so every backend gives the same result.
+  `AbstractFactory::create_fourier_transform()`; `TestFourierTransform`; explained step
+  by step in `examples/fourier/FourierTransform.py`.
 - CL-FTS integrator `"etd"` (`langevin.integrator`, 2026-10-26): Leimkuhler-Matthews steps
   whose linear part is integrated exactly for each wavevector. Before the run `CLFTS`
   measures the Jacobian of the forces at the homogeneous state with complex-step

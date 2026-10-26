@@ -12,6 +12,7 @@
  * - Polymer: Individual polymer chain data
  * - PropagatorComputation (Real/Complex): Propagator solving
  * - AndersonMixing (Real/Complex): Field mixing acceleration
+ * - FourierTransform (Real/Complex): Fourier multipliers of whole fields
  * - AbstractFactory (Real/Complex): Platform-specific object creation
  * - PlatformSelector: Platform detection and factory creation
  * - PropagatorComputationOptimizer: Propagator computation planning
@@ -506,6 +507,169 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
 }
 
 /**
+ * @brief Bind FourierTransform<T> and its FourierMultiplier<T> handles to Python.
+ *
+ * Creates the Python classes "FourierTransform_{Real|Complex}" and
+ * "FourierMultiplier_{Real|Complex}":
+ * - coefficient_shape, complex_coefficients: Layout of the coefficients of a field
+ * - k_squared(): |k|² in the coefficient shape, from the current box
+ * - set_multiplier(values): Store a multiplier of shape coefficient_shape
+ *   (diagonal: applied to each field) or (n_out, n_in) + coefficient_shape
+ * - apply([(multiplier, fields), ...]): backward(Σ M · forward(fields))
+ * - forward(fields), backward(coefficients): Transforms of one or more fields
+ *
+ * Fields are flat (n_grid,) or (n_fields, n_grid); the output of apply() is flat
+ * when every input is flat and there is one output field.
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module
+ * @param type_name Suffix ("Real" or "Complex")
+ */
+template<typename T>
+void bind_fourier_transform(py::module &m, const std::string &type_name)
+{
+    // Number of fields of a flat (n_grid,) or (n_fields, n_grid) array
+    auto field_count = [](const py::buffer_info& buf, int n_grid) -> int
+    {
+        if ((buf.ndim != 1 && buf.ndim != 2) || buf.shape[buf.ndim - 1] != n_grid || buf.size == 0)
+            throw_with_line_number("Fields must be shaped (" + std::to_string(n_grid) + ",) or (n_fields, "
+                + std::to_string(n_grid) + ").");
+        return buf.ndim == 1 ? 1 : static_cast<int>(buf.shape[0]);
+    };
+    // Number of fields of an array of coefficients: coefficient_shape or (n_fields,) + coefficient_shape
+    auto coefficient_count = [](const py::buffer_info& buf, const std::vector<int>& shape) -> int
+    {
+        const int lead = static_cast<int>(buf.ndim) - static_cast<int>(shape.size());
+        bool ok = (lead == 0 || lead == 1) && buf.size > 0;
+        for (size_t d = 0; ok && d < shape.size(); ++d)
+            ok = buf.shape[lead + d] == shape[d];
+        if (!ok)
+            throw_with_line_number("Coefficients must have the coefficient shape, optionally after the number of fields.");
+        return lead == 0 ? 1 : static_cast<int>(buf.shape[0]);
+    };
+    auto shaped = [](std::vector<py::ssize_t> lead, const std::vector<int>& shape)
+    {
+        for (int n : shape)
+            lead.push_back(n);
+        return lead;
+    };
+    // The conversion to a real array would drop the imaginary part (with only a ComplexWarning)
+    auto reject_complex = [](py::handle values, bool real, const char* what)
+    {
+        if (real && py::module_::import("numpy").attr("iscomplexobj")(values).cast<bool>())
+            throw_with_line_number(std::string(what) + " of this transform are real: got a complex array. "
+                "Complex fields need a solver created with field_type=\"complex\".");
+    };
+    constexpr bool real_fields = std::is_same_v<T, double>;
+
+    py::class_<FourierMultiplier<T>>(m, ("FourierMultiplier_" + type_name).c_str())
+        .def_property_readonly("n_out", &FourierMultiplier<T>::get_n_out)
+        .def_property_readonly("n_in", &FourierMultiplier<T>::get_n_in)
+        .def_property_readonly("diagonal", &FourierMultiplier<T>::is_diagonal);
+
+    py::class_<FourierTransform<T>>(m, ("FourierTransform_" + type_name).c_str())
+        .def_property_readonly("coefficient_shape", [](FourierTransform<T>& obj)
+        {
+            return py::tuple(py::cast(obj.get_coefficient_shape()));
+        })
+        .def_property_readonly("complex_coefficients", &FourierTransform<T>::has_complex_coefficients)
+        .def("k_squared", [](FourierTransform<T>& obj)
+        {
+            const std::vector<double> k_sq = obj.get_k_squared();
+            py::array_t<double> result(obj.get_coefficient_shape());
+            std::copy(k_sq.begin(), k_sq.end(), result.mutable_data());
+            return result;
+        })
+        // The handle keeps its transform alive (it is used only with that transform)
+        .def("set_multiplier", [](FourierTransform<T>& obj, array_in<std::complex<double>> values)
+        {
+            py::buffer_info buf = values.request();
+            const std::vector<int>& shape = obj.get_coefficient_shape();
+            const int lead = static_cast<int>(buf.ndim) - static_cast<int>(shape.size());
+            bool ok = lead == 0 || lead == 2;
+            for (size_t d = 0; ok && d < shape.size(); ++d)
+                ok = buf.shape[lead + d] == shape[d];
+            if (!ok || buf.size == 0)
+                throw_with_line_number("A multiplier is shaped like the coefficients (diagonal) "
+                    "or (n_out, n_in) + coefficient_shape.");
+            const bool diagonal = lead == 0;
+            const int n_out = diagonal ? 1 : static_cast<int>(buf.shape[0]);
+            const int n_in = diagonal ? 1 : static_cast<int>(buf.shape[1]);
+            return obj.create_multiplier(static_cast<const std::complex<double>*>(buf.ptr), n_out, n_in, diagonal);
+        }, py::arg("values"), py::keep_alive<0, 1>())
+        .def("apply", [field_count, reject_complex](FourierTransform<T>& obj, py::list terms)
+        {
+            const int n_grid = obj.get_n_grid();
+            std::vector<array_in<T>> inputs;   // keeps converted inputs alive
+            std::vector<FourierTerm<T>> fourier_terms;
+            bool all_flat = true;
+            for (py::handle item : terms)
+            {
+                py::tuple pair = py::cast<py::tuple>(item);
+                if (pair.size() != 2)
+                    throw_with_line_number("Each term is a (multiplier, fields) pair.");
+                const FourierMultiplier<T>* multiplier = pair[0].cast<const FourierMultiplier<T>*>();
+                if (multiplier == nullptr)
+                    throw_with_line_number("Each term needs a multiplier made by set_multiplier().");
+                reject_complex(pair[1], real_fields, "The fields");
+                inputs.push_back(pair[1].cast<array_in<T>>());
+                py::buffer_info buf = inputs.back().request();
+                const int n_fields = field_count(buf, n_grid);
+                all_flat = all_flat && buf.ndim == 1;
+                fourier_terms.push_back({multiplier, static_cast<const T*>(buf.ptr), n_fields});
+            }
+            if (fourier_terms.empty())
+                throw_with_line_number("apply() needs at least one term.");
+            const FourierTerm<T>& first = fourier_terms[0];
+            const int n_out = first.multiplier->is_diagonal() ? first.n_fields : first.multiplier->get_n_out();
+            py::array_t<T> result = (all_flat && n_out == 1)
+                ? py::array_t<T>(n_grid) : py::array_t<T>({static_cast<py::ssize_t>(n_out), static_cast<py::ssize_t>(n_grid)});
+            obj.apply(fourier_terms, n_out, result.mutable_data());
+            return result;
+        }, py::arg("terms"))
+        .def("forward", [field_count, shaped, reject_complex](FourierTransform<T>& obj, py::object values) -> py::array
+        {
+            reject_complex(values, real_fields, "The fields");
+            array_in<T> fields = values.cast<array_in<T>>();
+            py::buffer_info buf = fields.request();
+            const int n_fields = field_count(buf, obj.get_n_grid());
+            const std::vector<py::ssize_t> lead = buf.ndim == 1 ? std::vector<py::ssize_t>{} : std::vector<py::ssize_t>{n_fields};
+            const std::vector<py::ssize_t> shape = shaped(lead, obj.get_coefficient_shape());
+            if (obj.has_complex_coefficients())
+            {
+                py::array_t<std::complex<double>> result(shape);
+                obj.forward(static_cast<const T*>(buf.ptr), n_fields, reinterpret_cast<double*>(result.mutable_data()));
+                return result;
+            }
+            py::array_t<double> result(shape);
+            obj.forward(static_cast<const T*>(buf.ptr), n_fields, result.mutable_data());
+            return result;
+        }, py::arg("fields"))
+        .def("backward", [coefficient_count, reject_complex](FourierTransform<T>& obj, py::object coefficients)
+        {
+            const int n_grid = obj.get_n_grid();
+            auto run = [&](auto input, const double* values)
+            {
+                py::buffer_info buf = input.request();
+                const int n_fields = coefficient_count(buf, obj.get_coefficient_shape());
+                const bool flat = buf.ndim == static_cast<py::ssize_t>(obj.get_coefficient_shape().size());
+                py::array_t<T> result = flat ? py::array_t<T>(n_grid)
+                    : py::array_t<T>({static_cast<py::ssize_t>(n_fields), static_cast<py::ssize_t>(n_grid)});
+                obj.backward(values, n_fields, result.mutable_data());
+                return result;
+            };
+            if (obj.has_complex_coefficients())
+            {
+                array_in<std::complex<double>> input = coefficients.cast<array_in<std::complex<double>>>();
+                return run(input, reinterpret_cast<const double*>(input.data()));
+            }
+            reject_complex(coefficients, true, "The coefficients");
+            array_in<double> input = coefficients.cast<array_in<double>>();
+            return run(input, input.data());
+        }, py::arg("coefficients"));
+}
+
+/**
  * @brief Bind AbstractFactory<T> class to Python.
  *
  * Creates Python class "AbstractFactory_{Real|Complex}" with factory methods:
@@ -514,6 +678,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
  * - create_propagator_computation_optimizer(): Create optimizer
  * - create_propagator_computation(): Create propagator solver
  * - create_anderson_mixing(): Create Anderson mixing
+ * - create_fourier_transform(cb, bc): Create a Fourier transform (one transform per axis)
  * - display_info(): Print platform information
  *
  * The factory pattern ensures all created objects are compatible with
@@ -598,6 +763,24 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
             check_anderson_variables(n_var);
             return obj.create_anderson_mixing(static_cast<int>(n_var), max_hist, start_error, mix_min, mix_init);
         }, py::arg("n_var"), py::arg("max_hist"), py::arg("start_error"), py::arg("mix_min"), py::arg("mix_init"))
+        .def("create_fourier_transform", [](AbstractFactory<T>& obj, ComputationBox<T>* cb, std::vector<std::string> bc)
+        {
+            // One transform per axis: "periodic", "reflecting" (cosine) or "absorbing" (sine)
+            std::vector<BoundaryCondition> bc_vec;
+            for (std::string name : bc)
+            {
+                std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+                if (name == "periodic")
+                    bc_vec.push_back(BoundaryCondition::PERIODIC);
+                else if (name == "reflecting")
+                    bc_vec.push_back(BoundaryCondition::REFLECTING);
+                else if (name == "absorbing")
+                    bc_vec.push_back(BoundaryCondition::ABSORBING);
+                else
+                    throw_with_line_number("Unknown transform '" + name + "': use periodic, reflecting or absorbing.");
+            }
+            return obj.create_fourier_transform(cb, bc_vec);
+        }, py::arg("cb"), py::arg("bc"), py::keep_alive<0, 2>())
         .def("display_info", &AbstractFactory<T>::display_info);
 }
 
@@ -619,6 +802,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  * - ComputationBoxReal, ComputationBoxComplex
  * - PropagatorComputation_Real, PropagatorComputation_Complex
  * - AndersonMixing_Real, AndersonMixing_Complex
+ * - FourierTransform_Real, FourierTransform_Complex (with FourierMultiplier_*)
  * - AbstractFactory_Real, AbstractFactory_Complex
  *
  * **Platform Selection:**
@@ -966,6 +1150,10 @@ Example:
     // Bind AndersonMixing
     bind_anderson_mixing<double>(m, "Real");
     bind_anderson_mixing<std::complex<double>>(m, "Complex");
+
+    // Bind FourierTransform
+    bind_fourier_transform<double>(m, "Real");
+    bind_fourier_transform<std::complex<double>>(m, "Complex");
 
     // Bind AbstractFactory
     bind_abstract_factory<double>(m, "Real");

@@ -172,6 +172,7 @@ class PropagatorSolver:
             raise ValueError(f"{self.numerical_method} requires an orthogonal computation box")
         self._propagator_computation = None
         self._propagator_optimizer = None
+        self._fourier = None
         if space_group is not None:
             activated = space_group.physical_basis_name()
             size = space_group.get_n_reduced_basis()
@@ -274,6 +275,40 @@ class PropagatorSolver:
     def space_group(self) -> Optional[Any]:
         """The space group in use, or None."""
         return self._space_group
+
+    @property
+    def fourier(self) -> Any:
+        """Fourier transforms and Fourier multipliers of full-grid fields on this platform.
+
+        ``forward(fields)`` and ``backward(coefficients)`` transform one field
+        (shape ``(n_grid,)``) or several (``(n_fields, n_grid)``); ``backward`` includes
+        the normalization. ``set_multiplier(M)`` stores a multiplier, on
+        the GPU with CUDA, and returns its handle: ``M`` has the coefficient shape
+        (one function applied to each field) or ``(n_out, n_in)`` followed by it.
+        ``apply([(handle, fields), ...])`` returns ``backward(Σ M · forward(fields))``.
+
+        Periodic boxes use the FFT: the half spectrum of ``numpy.fft.rfftn`` for
+        real fields, the full ``fftn`` spectrum for complex fields. Boxes with walls
+        use the cosine series Σ_j f_j cos(πm(j+½)/N) along every axis, half of
+        ``scipy.fft.dctn(f, type=2)`` per axis. Real fields need real arrays (complex
+        ones are rejected), and their multipliers act as real operators: on the
+        planes of the half spectrum that hold both k and -k (last index 0 and n/2)
+        ``M`` is replaced by (M(k) + conj M(-k))/2, so an odd derivative i·k loses
+        its Nyquist mode; ``backward`` treats its coefficients the same way.
+
+        ``k_squared()`` gives |k|² in the coefficient shape for the current box; a
+        stored multiplier keeps its values, so store it again after the box
+        changes (``set_lx`` and ``set_lattice_parameters`` need the polymers to be
+        added). See ``examples/fourier/FourierTransform.py``.
+        """
+        if self._fourier is None:
+            periodic = [self.bc[2 * d].lower() == "periodic" and self.bc[2 * d + 1].lower() == "periodic"
+                        for d in range(self.dim)]
+            if any(periodic) and not all(periodic):
+                raise ValueError("The Fourier transform cannot mix periodic and wall axes.")
+            axes = ["periodic" if p else "reflecting" for p in periodic]
+            self._fourier = self._factory.create_fourier_transform(self._computation_box, axes)
+        return self._fourier
 
     def display_platform_info(self) -> None:
         """Print the platform and device information of the backend."""

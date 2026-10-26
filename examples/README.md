@@ -46,6 +46,14 @@ Complex Langevin dynamics, for systems where the partial saddle-point approximat
 |---------|-------------|
 | `clfts/Lamella.py` | Complex Langevin dynamics |
 
+## Fourier transform (`fourier/`)
+
+Fourier transforms and Fourier multipliers of whole fields with the FFT of the platform (`PropagatorSolver.fourier`).
+
+| Example | Description |
+|---------|-------------|
+| `fourier/FourierTransform.py` | `forward`/`backward` transforms, `k_squared`, multipliers stored with `set_multiplier` and applied with `apply`: smearing, the exact step of a linear Langevin equation, a matrix multiplier (screened potential of two species) and complex fields, each checked against NumPy |
+
 ## Running Examples
 
 From the repository root or examples directory:

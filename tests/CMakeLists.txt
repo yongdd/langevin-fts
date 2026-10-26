@@ -40,6 +40,8 @@ SET(BASIC_TESTS
     TestCpuFFTMixedBC
     TestCpuSimulationBox
     TestCpuTridiagonal
+    # Fourier multipliers of whole fields on every platform (Python)
+    TestFourierTransform
 
     # CUDA FFT & utilities
     TestCudaFFT

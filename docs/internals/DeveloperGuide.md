@@ -173,6 +173,7 @@ std::unique_ptr<AbstractFactory<std::complex<double>>> factory_complex =
 | `create_molecules_information(model, ds, bond_lengths)` | `std::unique_ptr<Molecules>` | Polymer/solvent container (concrete method of the base class) |
 | `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `std::unique_ptr<PropagatorComputation<T>>` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry (concrete method of the base class; the platform supplies the backend) |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `std::unique_ptr<AndersonMixing<T>>` | Field update accelerator |
+| `create_fourier_transform(box, bc)` | `std::unique_ptr<FourierTransform<T>>` | Transforms and Fourier multipliers of whole fields (one transform per axis, see Section 3.4) |
 
 The caller owns the created objects. An object created from others keeps raw pointers
 to them (the optimizer to its molecules; the computation to its box, molecules,
@@ -422,6 +423,24 @@ FFT<T>                                        [Abstract Base]
 | Periodic | FFT | IFFT | Complex coefficients |
 | Reflecting | DCT-II | DCT-III | Real coefficients |
 | Absorbing | DST-II | DST-III | Real coefficients |
+
+**Fourier transform of whole fields** (`src/common/FourierTransform.h`,
+`CpuFourierTransform`, `CudaFourierTransform`): the Python layer reaches the platform
+FFT through `PropagatorSolver.fourier`. `FFT<T>` transforms one field in the memory of the
+platform; `FourierTransform<T>` works on host arrays of several fields and keeps multipliers. It transforms host fields (`forward`, `backward`)
+and evaluates `backward(Σ M(k) · forward(fields))` for Fourier multipliers stored once
+(`create_multiplier`, held by a `FourierMultiplier<T>` handle): matrices of
+`n_out × n_in` functions of k, or one function applied to each field. The CUDA version
+keeps the multipliers in device memory and runs a call on its own stream: upload,
+transforms, a grid-stride product kernel, inverse transforms and download. The
+coefficients have the layout of `FFT<T>`, and `get_k_squared()` gives |k|² in it for the
+current box with the alias convention of `Pseudo`. For real fields the multipliers and the
+coefficients given to `backward` are made Hermitian on the planes of the half spectrum that
+hold both k and −k, where the inverse r2c transforms of FFTW, MKL and cuFFT would read
+other values differently; on the device every field starts an even number of doubles from
+the next (cuFFT needs 16-byte aligned real data). Periodic and wall axes cannot be mixed;
+`PropagatorSolver.fourier` uses the cosine series along walls, whose fields have no
+boundary value.
 
 ### 3.5 AndersonMixing Hierarchy
 

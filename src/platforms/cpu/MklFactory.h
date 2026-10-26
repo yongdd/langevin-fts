@@ -121,6 +121,15 @@ public :
         double mix_min, double mix_init) override;
 
     /**
+     * @brief Create a CPU (MKL) Fourier transform.
+     * @param cb Computation box
+     * @param bc Transform of each axis
+     * @return CpuFourierTransform instance
+     */
+    std::unique_ptr<FourierTransform<T>> create_fourier_transform(
+        ComputationBox<T>* cb, std::vector<BoundaryCondition> bc) override;
+
+    /**
      * @brief Display CPU platform information.
      *
      * Prints MKL version, number of threads, and other configuration details.

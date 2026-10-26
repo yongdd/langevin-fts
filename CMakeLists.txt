@@ -264,6 +264,7 @@ ADD_LIBRARY(common
     src/common/AbstractFactory.cpp
     src/common/Scheduler.cpp
     src/common/SpaceGroup.cpp
+    src/common/FourierTransform.cpp
 )
 TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES} ${LAPACKE_LIBRARY})
 
@@ -282,6 +283,7 @@ SET(POLYMERFTS_CPU_COMMON_SOURCES
     src/platforms/cpu/CpuSolverCNADI.cpp
     src/platforms/cpu/CpuComputationBackend.cpp
     src/platforms/cpu/CpuAndersonMixing.cpp
+    src/platforms/cpu/CpuFourierTransform.cpp
 )
 
 # ---- FFTW3 ----
@@ -618,6 +620,7 @@ IF(POLYMERFTS_BUILD_CUDA)
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
+        src/platforms/cuda/CudaFourierTransform.cu
         src/platforms/cuda/CudaFactory.cu
     )
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES ${POLYMERFTS_CUDA_ARCHITECTURES})

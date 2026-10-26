@@ -142,6 +142,15 @@ public :
         double mix_min, double mix_init) override;
 
     /**
+     * @brief Create a GPU Fourier transform.
+     * @param cb Computation box
+     * @param bc Transform of each axis
+     * @return CudaFourierTransform instance
+     */
+    std::unique_ptr<FourierTransform<T>> create_fourier_transform(
+        ComputationBox<T>* cb, std::vector<BoundaryCondition> bc) override;
+
+    /**
      * @brief Display CUDA platform information.
      *
      * Prints GPU device name, compute capability, memory, and
