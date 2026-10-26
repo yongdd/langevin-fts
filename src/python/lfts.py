@@ -317,7 +317,8 @@ class LFTS:
         # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
         periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
         mixed_box = any(periodic_sides) and not all(periodic_sides)
-        periodic_box = all(periodic_sides)   # LR and WTMD transform with rfftn
+        periodic_box = all(periodic_sides)   # LR, WTMD and the structure functions transform with rfftn
+        self._periodic_box = periodic_box
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
@@ -965,19 +966,20 @@ class LFTS:
                     
             # Calculate structure function
             if langevin_step % self.recording["sample_interval"] == 0:
-                # Perform Fourier transforms.
+                # Perform Fourier transforms (all densities in one call, all fields in another).
                 # Shifting the Gaussian integral over Ω_k gives <Ω_k φ_j> = (λ_k/M) Σ_l A_lk <φ_l φ_j>,
                 # and A Aᵀ = M I, so μ_i = Σ_k A_ik Ω_k/λ_k gives <μ_i φ_j> = <δφ_i δφ_j>
+                kept = [k for k in range(M-1) if not np.isclose(self.mpt.eigenvalues[k], 0.0)]
+                phi_k = self._rfft_fields([phi[name] for name in self.monomer_types])/self.prop_solver.n_grid
+                w_k = self._rfft_fields(w_aux[kept])/self.prop_solver.n_grid if kept else None
                 mu_fourier = {}
                 phi_fourier = {}
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))/self.prop_solver.n_grid
+                    phi_fourier[key] = phi_k[i]
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(M-1) :
-                        if np.isclose(self.mpt.eigenvalues[k], 0.0):
-                            continue
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.prop_solver.nx))*self.mpt.matrix_a[i,k]/self.mpt.eigenvalues[k]/self.prop_solver.n_grid
+                    for j, k in enumerate(kept):
+                        mu_fourier[key] += w_k[j]*self.mpt.matrix_a[i,k]/self.mpt.eigenvalues[k]
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -1068,6 +1070,15 @@ class LFTS:
         if not np.all(np.isfinite(force)):
             raise ValidationError("Non-finite intermediate LFTS force")
         return force
+
+    def _rfft_fields(self, fields):
+        """rfftn of each field (n_fields, n_grid) on the grid: with the platform FFT
+        (PropagatorSolver.fourier) in a periodic box, with numpy.fft otherwise."""
+        fields = np.reshape(fields, (-1, self.prop_solver.n_grid))
+        if self._periodic_box:
+            return self.prop_solver.fourier.forward(fields)
+        nx = tuple(self.prop_solver.nx)
+        return np.fft.rfftn(np.reshape(fields, (-1,) + nx), axes=tuple(range(1, len(nx) + 1)))
 
     def find_saddle_point(self, w_aux):
         """Find saddle point of imaginary auxiliary fields.

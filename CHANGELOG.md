@@ -380,7 +380,10 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   the platform FFT, on the GPU with CUDA, instead of NumPy/SciPy on the host (2026-10-27):
   the `etd` step (its matrices are Fourier multipliers, applied in one call), smearing
   (except in boxes that mix periodic and wall axes), the transforms of ψ, the LR compressor
-  of L-FTS and WTMD. Results change at round-off: over 8 steps of the charged diblock of
+  of L-FTS and WTMD; at each sample, the structure functions of L-FTS and CL-FTS (all
+  densities in one call, all fields in another; boxes with walls keep numpy.fft, whose
+  coefficients they record) and the dilation of the smearing for the osmotic pressure.
+  Results change at round-off: over 8 steps of the charged diblock of
   `TestClftsEtd` the Hamiltonians and ψ agree with the previous code to 8e-16 (LM and
   `etd`, CPU and CUDA), an L-FTS run with LRAM, smearing and WTMD to 7e-10, within its
   saddle tolerance, and an SCFT run with smearing and cell relaxation to 3e-11, within its

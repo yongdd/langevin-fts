@@ -257,6 +257,7 @@ class CLFTS:
         # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
         periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
         mixed_box = any(periodic_sides) and not all(periodic_sides)
+        self._periodic_box = all(periodic_sides)   # the structure functions transform with fftn
         self.smearing = Smearing(
             self.prop_solver.nx,
             self.prop_solver.get_lx(),
@@ -328,6 +329,15 @@ class CLFTS:
                                                 noise_direction=self._integrated_noise_direction(),
                                                 fourier=self.prop_solver.fourier)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
+
+    def _fft_fields(self, fields):
+        """fftn of each field (n_fields, n_grid) on the grid: with the platform FFT
+        (PropagatorSolver.fourier) in a periodic box, with numpy.fft otherwise."""
+        fields = np.reshape(fields, (-1, self.prop_solver.n_grid))
+        if self._periodic_box:
+            return self.prop_solver.fourier.forward(fields)
+        nx = tuple(self.prop_solver.nx)
+        return np.fft.fftn(np.reshape(fields, (-1,) + nx), axes=tuple(range(1, len(nx) + 1)))
 
     def _integrated_mobility(self):
         """Mobilities of the fields the integrator advances: dt_scaling, and that of ψ when joint."""
@@ -1016,21 +1026,18 @@ class CLFTS:
                 # fluctuate in CL-FTS; only the incompressible pressure field (λ = 0) is left out.
                 # The fields are complex, so φ(-k) is not the conjugate of φ(k):
                 # φ(-k) = conj(FFT[conj φ](k)).
+                # All densities are transformed in one call, all fields in another
+                kept = [k for k in range(M) if not np.isclose(self.mpt.eigenvalues[k], 0.0)]
+                phi_mk = np.conj(self._fft_fields(np.conj([phi[name] for name in self.monomer_types]))) / self.prop_solver.n_grid
+                w_k = self._fft_fields(w_aux[kept]) / self.prop_solver.n_grid if kept else None
                 mu_fourier = {}
                 phi_fourier = {}   # φ(-k)
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.conj(np.fft.fftn(
-                        np.conj(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))
-                    )) / self.prop_solver.n_grid
+                    phi_fourier[key] = phi_mk[i]
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(M):
-                        if np.isclose(self.mpt.eigenvalues[k], 0.0):
-                            continue
-                        mu_fourier[key] += (
-                            np.fft.fftn(np.reshape(w_aux[k], self.prop_solver.nx)) *
-                            self.mpt.matrix_a[i, k] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
-                        )
+                    for j, k in enumerate(kept):
+                        mu_fourier[key] += w_k[j] * self.mpt.matrix_a[i, k] / self.mpt.eigenvalues[k]
                 # Zero-eigenvalue modes along u: μ_i += u_i [((k² + κ²)/E) ψ(k) - Σ_l z_l μ_l(k)] / |u|²
                 if self._psi_probe is not None:
                     es = self.electrostatics

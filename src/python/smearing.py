@@ -346,6 +346,9 @@ class Smearing:
             dgamma_dk = -c0 / dk_int * (1 - np.tanh((self.k_mag - k_int) / dk_int) ** 2)
             dgamma_dk_sq = np.divide(dgamma_dk, 2 * self.k_mag, out=np.zeros_like(self.k_mag), where=self.k_mag > 0)
         multiplier = -(2.0 / self.dim) * self.k_sq * dgamma_dk_sq
+        result = self._multiply(field, ("dilation", name if self.per_species else None), multiplier)
+        if result is not None:
+            return np.asarray(result, dtype=np.complex128)
         field_grid = np.reshape(np.asarray(field, dtype=np.complex128), self.nx)
         if self.periodic:
             result = np.fft.ifftn(np.fft.fftn(field_grid) * multiplier)
@@ -383,14 +386,8 @@ class Smearing:
             return field
         gamma = self.kernel(name)
 
-        transform = self._transform
-        if transform is not None and (transform.field_type == "complex" or np.isrealobj(field)):
-            key = name if self.per_species else None   # one Γ for all types otherwise
-            if key not in self._multipliers:
-                # Γ on the coefficients of the transform (the rfftn half spectrum for real fields)
-                self._multipliers[key] = transform.set_multiplier(
-                    gamma[tuple(slice(0, n) for n in transform.coefficient_shape)])
-            result = transform.apply([(self._multipliers[key], np.reshape(field, -1))])
+        result = self._multiply(field, name if self.per_species else None, gamma)   # one Γ for all types otherwise
+        if result is not None:
             if np.isrealobj(field) and np.iscomplexobj(result):
                 return np.ascontiguousarray(np.real(result))
             return result
@@ -412,6 +409,23 @@ class Smearing:
         if np.isrealobj(field):
             return np.ascontiguousarray(np.real(result))
         return result
+
+    def _multiply(self, field, key, values):
+        """backward(values(k) · forward(field)) with the Fourier transform of the simulation.
+
+        values is given on the grid of k_sq; its multiplier is stored once under key (until
+        set_box). Returns None where NumPy/SciPy transform instead: without a transform, in a
+        box that mixes periodic and wall axes, and for a complex field and a transform of real
+        fields.
+        """
+        transform = self._transform
+        if transform is None or (transform.field_type == "real" and np.iscomplexobj(field)):
+            return None
+        if key not in self._multipliers:
+            # values on the coefficients of the transform (the rfftn half spectrum for real fields)
+            self._multipliers[key] = transform.set_multiplier(
+                values[tuple(slice(0, n) for n in transform.coefficient_shape)])
+        return transform.apply([(self._multipliers[key], np.reshape(field, -1))])
 
     def _forward(self, field):
         """Orthonormal transform of each axis: FFT (periodic) or DCT-II (walls)."""
