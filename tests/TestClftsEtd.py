@@ -9,6 +9,8 @@
    step; at a wavevector with an unstable homogeneous state only the unstable eigen-direction
    loses its exact step; where the Cholesky factor of phi_1 would be large, the noise factor
    is the symmetric square root, of the size of phi_1^(1/2); an asymmetric Jacobian is rejected.
+   A matrix multiplier of the transform of complex fields acts on real noise as NumPy does
+   (even and odd sizes, 1D to 3D).
 2. Jacobian of CL-FTS: the complex-step columns equal central differences of the forces of all
    fields, psi included, for a charged diblock with counterions (with and without screening)
    and for a diblock on a 67-point grid, whose FFTs leave imaginary rounding errors.
@@ -20,9 +22,12 @@
    wavevectors took the plain LM step for all fields, runs like LM; a field dropped at a zero
    eigenvalue stays fixed; simulations sharing one integrator object keep their own response.
 4. Input checks: L-FTS and walls reject the integrator; a step without the linear
-   response, or with another time step, raises.
+   response, or with another time step, raises, and so does a Fourier transform of another
+   grid, of real fields or of a box with walls; a copy of a prepared integrator keeps its
+   settings but has no linear response.
 """
 import contextlib
+import copy
 import io
 import os
 import tempfile
@@ -33,7 +38,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import scipy.linalg
 from scipy.io import loadmat
-from polymerfts import LFTS, CLFTS, PlatformSelector, ValidationError
+from polymerfts import LFTS, CLFTS, PlatformSelector, PropagatorSolver, ValidationError
 from polymerfts.integrators import ExponentialTimeDifferencing, LeimkuhlerMatthews
 
 Z_A = 0.2
@@ -76,6 +81,14 @@ def quiet(make):
         return make()
 
 
+def transform(shape):
+    """PropagatorSolver.fourier of complex fields on a periodic grid of this shape."""
+    solver = quiet(lambda: PropagatorSolver(nx=list(shape), lx=[1.0] * len(shape), ds=0.1, bond_lengths={"A": 1.0},
+                                            bc=["periodic"] * (2 * len(shape)), chain_model="continuous",
+                                            platform=cpu_platform(), field_type="complex"))
+    return solver.fourier
+
+
 def linear():
     rng = np.random.default_rng(1)
     n = 24
@@ -98,11 +111,12 @@ def linear():
                                noise_direction=direction, evaluate_force=None)
 
     zero = np.zeros((3, n))
+    ft = transform((n,))
     # The largest rate s λ is 31.9 (at the largest k): LM steps diverge beyond dt = 0.063, so both
     # time steps lie beyond the limit, dt = 20 by a factor of 300
     for dt in (0.5, 20.0):
         etd = ExponentialTimeDifferencing()
-        quiet(lambda: etd.set_linear_response(J, dt=dt, mobility=mobility, noise_direction=direction))
+        quiet(lambda: etd.set_linear_response(J, dt=dt, mobility=mobility, noise_direction=direction, fourier=ft))
         w0 = rng.normal(0, 1, (3, n)) + 1j * rng.normal(0, 1, (3, n))
         w0_k = np.fft.fft(w0, axis=1)
         exact = np.fft.ifft(np.stack([scipy.linalg.expm(-dt * mobility[:, None] * J[:, :, q]) @ w0_k[:, q]
@@ -139,23 +153,28 @@ def linear():
     noise, previous = rng.normal(0, 1, (3, n)), rng.normal(0, 1, (3, n))
     lm = step(LeimkuhlerMatthews(), w0, force(w0), noise, previous, dt)
     etd = ExponentialTimeDifferencing()
-    quiet(lambda: etd.set_linear_response(np.zeros_like(J), dt=dt, mobility=mobility, noise_direction=direction))
+    quiet(lambda: etd.set_linear_response(np.zeros_like(J), dt=dt, mobility=mobility, noise_direction=direction,
+                                          fourier=ft))
     assert np.max(np.abs(step(etd, w0, force(w0), noise, previous, dt) - lm)) < 1e-13, "zero Jacobian: LM step"
 
-    # The FFT of real noise from rfftn and conjugate symmetry, for even and odd sizes in 1D to 3D
+    # The step transforms real noise with the transform of complex fields: a matrix multiplier
+    # on real fields against NumPy, for even and odd sizes in 1D to 3D
     for shape in ((8,), (7,), (6, 5), (4, 5, 6), (5, 4, 3)):
-        probe = ExponentialTimeDifferencing()
-        quiet(lambda: probe.set_linear_response(np.zeros((2, 2) + shape), dt=dt, mobility=np.ones(2),
-                                                noise_direction=np.ones(2)))
+        probe = transform(shape)
+        axes = tuple(range(1, len(shape) + 1))
         real = rng.normal(0, 1, (2, int(np.prod(shape))))
-        expected = np.fft.fftn(real.reshape((2,) + shape), axes=tuple(range(1, len(shape) + 1))).reshape(2, -1)
-        assert np.allclose(probe._real_spectrum(real), expected, rtol=0, atol=1e-12), f"spectrum of real noise {shape}"
+        matrix = rng.normal(size=(2, 2) + shape) + 1j * rng.normal(size=(2, 2) + shape)
+        expected = np.fft.ifftn(np.einsum("ij...,j...->i...", matrix, np.fft.fftn(real.reshape((2,) + shape), axes=axes)),
+                                axes=axes).reshape(2, -1)
+        result = probe.apply([(probe.set_multiplier(matrix), real)])
+        assert np.max(np.abs(result - expected)) < 1e-12 * np.max(np.abs(expected)), f"multiplier on real noise {shape}"
 
     # One unstable eigen-direction at q = 3 (and -3): it takes the LM step, the stable
     # directions of that wavevector keep their exact step
     unstable = J.copy()
     unstable[0, 0, 3] = unstable[0, 0, n - 3] = -0.5
-    quiet(lambda: etd.set_linear_response(unstable, dt=dt, mobility=mobility, noise_direction=direction))
+    quiet(lambda: etd.set_linear_response(unstable, dt=dt, mobility=mobility, noise_direction=direction, fourier=ft))
+    drift, _, _ = etd._matrices(unstable, dt=dt, mobility=mobility, noise_direction=direction)
     root = np.sqrt(mobility)
     for q in (3, n - 3):
         kq = root[:, None] * (unstable[:, :, q] * direction[None, :] / direction[:, None]) * root[None, :]
@@ -164,16 +183,17 @@ def linear():
         phi1 = np.where(values.real < 0, 1.0, -np.expm1(-values * dt) / (values * dt))
         expected = vectors @ np.diag(phi1) @ np.linalg.inv(vectors)
         expected = dt * direction[:, None] * root[:, None] * expected * root[None, :] / direction[None, :]
-        assert np.allclose(etd._prepared["drift"][:, :, q], expected, rtol=0, atol=1e-12), "unstable direction alone takes the LM step"
+        assert np.allclose(drift[:, :, q], expected, rtol=0, atol=1e-12), "unstable direction alone takes the LM step"
 
     # phi_1 of K = [[1, ib], [ib, 1]] (real fields, dt = 1) has a small (0,0) element near b = 4.0846; its
     # Cholesky factor would be large, the symmetric square root is not
+    ft1 = transform((1,))
     for b in (4.08, 4.085, 4.0846):
         jac = np.zeros((2, 2, 1), dtype=complex)
         jac[:, :, 0] = [[1.0, 1j * b], [1j * b, 1.0]]
-        quiet(lambda: etd.set_linear_response(jac, dt=1.0, mobility=np.ones(2), noise_direction=np.ones(2)))
-        factor = etd._prepared["noise"][:, :, 0]
-        phi1 = etd._prepared["drift"][:, :, 0]
+        quiet(lambda: etd.set_linear_response(jac, dt=1.0, mobility=np.ones(2), noise_direction=np.ones(2), fourier=ft1))
+        drift, noise, _ = etd._matrices(jac, dt=1.0, mobility=np.ones(2), noise_direction=np.ones(2))
+        factor, phi1 = noise[:, :, 0], drift[:, :, 0]
         assert np.allclose(factor @ factor.T, phi1, rtol=0, atol=1e-10), "noise covariance phi_1"
         assert np.max(np.abs(factor)) < 10 * np.sqrt(np.max(np.abs(phi1))), f"noise factor of size phi_1^(1/2) at b = {b}"
 
@@ -181,7 +201,7 @@ def linear():
     asymmetric = J.copy()
     asymmetric[1, 2] *= 1.01
     expect_validation_error(lambda: etd.set_linear_response(asymmetric, dt=dt, mobility=mobility,
-                                                            noise_direction=direction), "not symmetric")
+                                                            noise_direction=direction, fourier=ft), "not symmetric")
 
 
 def jacobian(root):
@@ -298,7 +318,15 @@ def runs(root):
     second["chi_n"] = {"A,B": 20.0}
     sims = [quiet(lambda: CLFTS(p, random_seed=5, integrator=shared)) for p in (first, second)]
     assert sims[0].integrator is not sims[1].integrator and shared._prepared is None
-    assert not np.allclose(sims[0].integrator._prepared["drift"], sims[1].integrator._prepared["drift"])
+    # Their steps from the same fields and forces, without noise, differ
+    increments = []
+    for sim in sims:
+        prepared = sim.integrator._prepared
+        zero = np.zeros((prepared["mobility"].size, int(np.prod(prepared["nx"]))))
+        force = np.random.default_rng(2).normal(size=zero.shape) + 0j
+        increments.append(sim.integrator.step(zero + 0j, force, dt=prepared["dt"], mobility=prepared["mobility"], noise=zero,
+                                              previous_noise=zero, noise_direction=prepared["direction"], evaluate_force=None))
+    assert not np.allclose(increments[0], increments[1]), "each simulation keeps the response of its own system"
 
     # Polyampholyte without chi: the composition mode of E and K has no field (zero eigenvalue)
     params = parameters(root / "dropped", steps=4)
@@ -343,9 +371,26 @@ def input_checks(root):
     arguments = dict(dt=1.0, mobility=np.ones(2), noise=zero, previous_noise=zero,
                      noise_direction=np.array([1.0, 1j]), evaluate_force=None)
     expect_validation_error(lambda: etd.step(zero, zero, **arguments), "needs the linear response")
+    expect_validation_error(lambda: etd.set_linear_response(np.zeros((2, 2, 8)), dt=0.5, mobility=np.ones(2),
+                                                            noise_direction=np.array([1.0, 1j]), fourier=transform((9,))),
+                            "grid of the Jacobian")
     quiet(lambda: etd.set_linear_response(np.zeros((2, 2, 8)), dt=0.5, mobility=np.ones(2),
-                                          noise_direction=np.array([1.0, 1j])))
+                                          noise_direction=np.array([1.0, 1j]), fourier=transform((8,))))
     expect_validation_error(lambda: etd.step(zero, zero, **arguments), "another time step")
+    for name, wrong in (("real fields", lambda: quiet(lambda: PropagatorSolver(
+                             nx=[8], lx=[1.0], ds=0.1, bond_lengths={"A": 1.0}, bc=["periodic"] * 2,
+                             chain_model="continuous", platform=cpu_platform())).fourier),
+                        ("walls", lambda: quiet(lambda: PropagatorSolver(
+                             nx=[8], lx=[1.0], ds=0.1, bond_lengths={"A": 1.0}, bc=["reflecting"] * 2,
+                             chain_model="continuous", platform=cpu_platform(), field_type="complex")).fourier)):
+        expect_validation_error(lambda: etd.set_linear_response(np.zeros((2, 2, 8)), dt=0.5, mobility=np.ones(2),
+                                                                noise_direction=np.array([1.0, 1j]), fourier=wrong()),
+                                "periodic box")
+    # A copy (each simulation copies its integrator) keeps its settings but not the multipliers
+    etd.settings = {"version": 1, "probe": 0.5}
+    copied = copy.deepcopy(etd)
+    assert copied._prepared is None and copied.settings == {"version": 1, "probe": 0.5} and etd._prepared is not None, \
+        "a copy of a prepared etd integrator keeps its settings but has no linear response"
 
 
 def main():

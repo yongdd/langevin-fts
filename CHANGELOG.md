@@ -376,6 +376,18 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Performance
 
+- The transforms of every Langevin step in the Python layer use `PropagatorSolver.fourier`,
+  the platform FFT, on the GPU with CUDA, instead of NumPy/SciPy on the host (2026-10-27):
+  the `etd` step (its matrices are Fourier multipliers, applied in one call), smearing
+  (except in boxes that mix periodic and wall axes), the transforms of ψ, the LR compressor
+  of L-FTS and WTMD. Results change at round-off: over 8 steps of the charged diblock of
+  `TestClftsEtd` the Hamiltonians and ψ agree with the previous code to 8e-16 (LM and
+  `etd`, CPU and CUDA), an L-FTS run with LRAM, smearing and WTMD to 7e-10, within its
+  saddle tolerance, and an SCFT run with smearing and cell relaxation to 3e-11, within its
+  tolerance. Lamella with Gaussian smearing on an A10, ms per step: CL-FTS 32³ LM 20.8 → 17.1,
+  `etd` 23.7 → 17.3; 64³ LM 172 → 99, `etd` 231 → 99; L-FTS (LRAM) 32³ 136 → 94, 64³
+  808 → 291. `set_linear_response()` of an integrator now also receives `fourier`;
+  `Smearing`, `LR` and `WTMD` take the transform as an optional argument.
 - The CUDA ObliqueZ CrysFFT runs the DCT along z and the FFT in the plane as one real 3D
   FFT of the half grid after Makhoul's permutation along z; one kernel applies the
   Boltzmann factors of each pair kz, Nz/2 − kz between the two transforms (2026-10-25).

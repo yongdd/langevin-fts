@@ -25,7 +25,8 @@ Euler does), ψ takes fresh noise; the explicit charge density then biases its v
 first order in γ δτN. An integrator that declares linear_response (integrators.py) advances
 ψ together with the auxiliary fields instead (draw_noise, accept).
 ψ is kept in Fourier space; its grid values follow from one inverse transform per step,
-and H is evaluated by Parseval's theorem.
+and H is evaluated by Parseval's theorem. The transforms are those of PropagatorSolver.fourier
+(on the GPU with CUDA).
 Without screening the uniform mode of ψ is zero (electroneutrality); with screening it
 fluctuates, and the system may carry a net charge. Periodic boxes only.
 
@@ -63,6 +64,8 @@ class Electrostatics:
         Own noise stream of ψ, the jumped stream of the auxiliary fields
         (`random_bg.jumped()`): the noise of the auxiliary fields is the same as without
         electrostatics, and neighboring seeds do not share streams.
+    fourier : FourierTransform
+        PropagatorSolver.fourier of the simulation (complex fields, periodic box).
     """
 
     # Checkpoint data of ψ (checkpoint_data), and the pending sums of the charge structure
@@ -70,7 +73,7 @@ class Electrostatics:
     CHECKPOINT_KEYS = ("psi_real", "psi_imag", "psi_k_real", "psi_k_imag", "psi_noise_prev", "psi_rng_state_json")
     CHARGE_SUMS = ("charge_mixed", "charge_difference", "charge_mixed_difference", "charge_difference_squared")
 
-    def __init__(self, params, monomer_types, smearing, n_segments, langevin, bit_generator):
+    def __init__(self, params, monomer_types, smearing, n_segments, langevin, bit_generator, *, fourier):
         self.charges = {name: float(params["charges"].get(name, 0.0)) for name in monomer_types}
         if "coupling" in params:
             self.coupling = float(params["coupling"])
@@ -84,6 +87,7 @@ class Electrostatics:
         self.kappa_sq = 0.0 if self.screening_length is None else 1.0 / self.screening_length ** 2
         self.screened_k_sq = self.k_sq + self.kappa_sq
         self.sigma = langevin["sigma"]
+        self._fourier = fourier
         self.psi = np.zeros(int(np.prod(self.nx)), dtype=np.complex128)
 
         self.random_bg = bit_generator
@@ -117,7 +121,7 @@ class Electrostatics:
     @psi.setter
     def psi(self, value):
         self._psi = np.array(value, dtype=np.complex128).reshape(-1)
-        self._psi_k = np.fft.fftn(np.reshape(self._psi, self.nx))
+        self._psi_k = self._fourier.forward(self._psi)
 
     @property
     def psi_k(self):
@@ -148,7 +152,7 @@ class Electrostatics:
         """δH/δψ = (∇² - κ²)ψ/E + c; zero without Coulomb coupling (ψ stays zero)."""
         if self.coupling <= 0:
             return np.zeros_like(self.psi)
-        return np.reshape(np.fft.ifftn(-self.screened_k_sq * self._psi_k), -1) / self.coupling + c
+        return self._fourier.backward(-self.screened_k_sq * self._psi_k) / self.coupling + c
 
     def step(self, c):
         """Advance ψ by one Langevin step with the charge density c of the same state."""
@@ -156,13 +160,12 @@ class Electrostatics:
             return
         xi = self.random.normal(0.0, self.sigma, self.psi.size)
         if self.averaged_noise:
-            noise = self._averaged_noise * np.fft.fftn(np.reshape(xi + self.previous_noise, self.nx))
+            amplitude, noise = self._averaged_noise, xi + self.previous_noise
             self.previous_noise = xi
         else:
-            noise = self._noise * np.fft.fftn(np.reshape(xi, self.nx))
-        psi_k = (self._decay * self._psi_k
-                 + self._response * np.fft.fftn(np.reshape(c, self.nx))
-                 + 1j * noise)
+            amplitude, noise = self._noise, xi
+        noise_k, c_k = self._fourier.forward(np.stack([noise, c]))
+        psi_k = self._decay * self._psi_k + self._response * c_k + 1j * amplitude * noise_k
         self._set_psi_k(psi_k)
 
     def draw_noise(self):
@@ -172,7 +175,7 @@ class Electrostatics:
 
     def accept(self, psi, noise):
         """Take ψ from such an integrator, with the noise of its step as the previous noise."""
-        self._set_psi_k(np.fft.fftn(np.reshape(np.asarray(psi, dtype=np.complex128), self.nx)))
+        self._set_psi_k(self._fourier.forward(np.asarray(psi, dtype=np.complex128)))
         self.previous_noise = np.asarray(noise, dtype=np.float64).copy()
 
     def _set_psi_k(self, psi_k):
@@ -180,7 +183,7 @@ class Electrostatics:
         if self.screening_length is None:
             psi_k[(0,) * len(self.nx)] = 0.0
         self._psi_k = psi_k
-        self._psi = np.reshape(np.fft.ifftn(psi_k), -1)
+        self._psi = self._fourier.backward(psi_k)
 
     @contextlib.contextmanager
     def trial(self, psi):

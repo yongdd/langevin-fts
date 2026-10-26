@@ -433,12 +433,17 @@ class SCFT:
             raise NotImplementedError(
                 "'smearing' is not supported together with 'space_group'. "
                 "Disable one of the two options.")
+        # Γ(k) is applied with the platform FFT (PropagatorSolver.fourier), except in a box
+        # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
+        periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
+        mixed_box = any(periodic_sides) and not all(periodic_sides)
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
             params.get("smearing", None),
             angles=self.prop_solver.get_angles_degrees(),
-            bc=self.prop_solver.bc
+            bc=self.prop_solver.bc,
+            transform=self.prop_solver.fourier if params.get("smearing") is not None and not mixed_box else None
         )
 
         # Scaling factor for stress when the fields and box size are simultaneously computed

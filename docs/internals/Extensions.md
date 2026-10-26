@@ -109,17 +109,22 @@ An integrator that declares `linear_response = True` (CLFTS only, periodic boxes
 the Jacobian of the forces at the homogeneous state before the run:
 
 ```python
-def set_linear_response(self, jacobian, *, dt, mobility, noise_direction):
+def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourier):
     # jacobian[i, j] = dF_i(k)/dw_j(k), shape (m, m, *nx); mobility and noise_direction
-    # are those that step() will receive
+    # are those that step() will receive; fourier is the simulation's PropagatorSolver.fourier
     ...
 ```
+
+`fourier` transforms and multiplies whole fields with the FFT of the platform: matrices of
+functions of k stored once with `set_multiplier` (on the GPU with CUDA) and applied with
+`apply` ([Fourier transform example](../../examples/fourier/FourierTransform.py)).
 
 With Coulomb coupling, CLFTS then passes ψ to `step` as the last of the m fields: its force
 is -δH/δψ, its mobility `psi_dt_scaling`, its noise imaginary and drawn from the ψ stream,
 and `evaluate_force` takes and returns all m fields. Without screening, CLFTS sets the
 uniform mode of the returned ψ to zero. Each simulation keeps its own copy (`copy.deepcopy`) of such
-an integrator, which holds the response of its system. The built-in `etd` integrator is such a method
+an integrator, which holds the response of its system; multipliers of `fourier` cannot be copied, so
+an integrator that stores them defines `__deepcopy__` (the built-in one copies its settings without the response). The built-in `etd` integrator is such a method
 ([CL-FTS theory, Section 2.1](../theory/ComplexLangevinSimulation.md#21-exponential-time-differencing)).
 L-FTS rejects these integrators.
 

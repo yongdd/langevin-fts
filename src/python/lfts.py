@@ -60,6 +60,9 @@ class LR:
     jk : ndarray
         Jacobian (Hessian) matrix in Fourier space. Precomputed from
         finite difference of δH/δw. Shape matches rfft output of nx.
+    fourier : FourierTransform, optional
+        PropagatorSolver.fourier of real fields in the periodic box, which applies 1/J(k)
+        (on the GPU with CUDA); without it the update uses numpy.fft.
 
     Attributes
     ----------
@@ -70,10 +73,12 @@ class LR:
     jk : ndarray
         Jacobian in Fourier space.
     """
-    def __init__(self, nx, lx, jk):
+    def __init__(self, nx, lx, jk, fourier=None):
         self.nx = nx
         self.lx = lx
         self.jk = jk.copy()
+        self._fourier = fourier
+        self._inverse = None if fourier is None else fourier.set_multiplier(1.0 / self.jk)
 
     def reset_count(self,):
         """Reset compressor state (no-op for LR).
@@ -104,6 +109,9 @@ class LR:
         w_new : ndarray
             Updated field values, same shape as w_current.
         """
+        if self._fourier is not None:
+            w_diff = self._fourier.apply([(self._inverse, np.reshape(negative_h_deriv, -1))])
+            return w_current + np.reshape(w_diff, np.shape(w_current))
         nx = self.nx
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.jk
@@ -305,12 +313,18 @@ class LFTS:
         self.prop_solver.display_platform_info()
 
         # Initialize smearing (must be after self.cb is set)
+        # Γ(k) is applied with the platform FFT (PropagatorSolver.fourier), except in a box
+        # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
+        periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
+        mixed_box = any(periodic_sides) and not all(periodic_sides)
+        periodic_box = all(periodic_sides)   # LR and WTMD transform with rfftn
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
             params.get("smearing", None),
             angles=self.prop_solver.get_angles_degrees(),
-            bc=self.prop_solver.bc
+            bc=self.prop_solver.bc,
+            transform=self.prop_solver.fourier if params.get("smearing") is not None and not mixed_box else None
         )
 
         # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
@@ -333,6 +347,7 @@ class LFTS:
                 dpsi=wtmd_params.get("dpsi", 1e-3),
                 update_freq=wtmd_params.get("update_freq", 1000),
                 recording_period=wtmd_params.get("recording_period", 100000),
+                fourier=self.prop_solver.fourier if periodic_box else None,
             )
             print("WTMD enabled: l=%d, sigma_psi=%.4f, dT=%.4f, kc=%.4f, exchange_idx=%d, langevin_idx=%d" % (
                 self.wtmd.l, self.wtmd.sigma_psi, self.wtmd.dT, self.wtmd.kc,
@@ -373,7 +388,8 @@ class LFTS:
             h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
             jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
 
-            lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric)
+            lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric,
+                    fourier=self.prop_solver.fourier if periodic_box else None)
 
         if params["compressor"]["name"] == "am":
             self.compressor = am

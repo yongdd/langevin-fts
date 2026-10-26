@@ -440,7 +440,8 @@ hold both k and −k, where the inverse r2c transforms of FFTW, MKL and cuFFT wo
 other values differently; on the device every field starts an even number of doubles from
 the next (cuFFT needs 16-byte aligned real data). Periodic and wall axes cannot be mixed;
 `PropagatorSolver.fourier` uses the cosine series along walls, whose fields have no
-boundary value.
+boundary value. The Langevin steps use it for smearing, the transforms of ψ, the `etd`
+integrator, the LR compressor of L-FTS and WTMD.
 
 ### 3.5 AndersonMixing Hierarchy
 

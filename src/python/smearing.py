@@ -73,7 +73,7 @@ class Smearing:
         Square of k magnitude at each grid point (with the cell metric).
     """
 
-    def __init__(self, nx, lx, smearing_params, angles=None, bc=None):
+    def __init__(self, nx, lx, smearing_params, angles=None, bc=None, transform=None):
         """Initialize smearing function.
 
         Parameters
@@ -89,6 +89,10 @@ class Smearing:
             None means an orthogonal cell.
         bc : list of str or None
             Boundary conditions, two per axis; None means periodic.
+        transform : FourierTransform or None
+            PropagatorSolver.fourier of the simulation, with which apply() multiplies by
+            Γ(k) (on the GPU with CUDA). Without it, and in a box that mixes periodic and
+            wall axes, apply() transforms with NumPy/SciPy.
         """
         self.nx = list(nx)
         self.lx = list(lx)
@@ -104,6 +108,13 @@ class Smearing:
             raise ValueError(f"bc needs two entries per axis, got {len(bc)} for {self.dim} axes.")
         self.axis_bc = ["periodic" if bc[2 * d].lower() == "periodic" else "wall" for d in range(self.dim)]
         self.periodic = all(b == "periodic" for b in self.axis_bc)
+
+        # apply() multiplies by Γ(k) with the Fourier transform of the simulation
+        # (PropagatorSolver.fourier, on the GPU with CUDA); a box that mixes periodic and wall
+        # axes, which it does not transform, keeps the NumPy transforms
+        mixed = not self.periodic and "periodic" in self.axis_bc
+        self._transform = None if mixed else transform
+        self._multipliers = {}
 
         self.species_fourier = None
         if smearing_params is None:
@@ -151,6 +162,7 @@ class Smearing:
             Cell angles in degrees, [alpha, beta, gamma] (or [gamma] in 2D).
         """
         self.lx = list(lx)
+        self._multipliers = {}   # Γ changes with the box
         if angles is None:
             angles = [90.0, 90.0, 90.0]
         elif len(angles) == 1:
@@ -370,6 +382,18 @@ class Smearing:
         if not self.enabled:
             return field
         gamma = self.kernel(name)
+
+        transform = self._transform
+        if transform is not None and (transform.field_type == "complex" or np.isrealobj(field)):
+            key = name if self.per_species else None   # one Γ for all types otherwise
+            if key not in self._multipliers:
+                # Γ on the coefficients of the transform (the rfftn half spectrum for real fields)
+                self._multipliers[key] = transform.set_multiplier(
+                    gamma[tuple(slice(0, n) for n in transform.coefficient_shape)])
+            result = transform.apply([(self._multipliers[key], np.reshape(field, -1))])
+            if np.isrealobj(field) and np.iscomplexobj(result):
+                return np.ascontiguousarray(np.real(result))
+            return result
 
         # Reshape to grid dimensions
         field_grid = np.reshape(field, self.nx)

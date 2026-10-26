@@ -33,6 +33,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import numpy as np
 from scipy.integrate import quad
+from polymerfts import PlatformSelector, PropagatorSolver
 from polymerfts.integrators import EulerMaruyama, ExponentialTimeDifferencing, LeimkuhlerMatthews
 
 B = 2.0          # strength of the bounded nonlinear part b tanh(x)
@@ -61,9 +62,13 @@ def run(name, scheme, dt, a, chains, relaxation_time, sampling_time, seed):
     integrator = {"euler": EulerMaruyama, "lm": LeimkuhlerMatthews, "etd": ExponentialTimeDifferencing}.get(scheme)
     integrator = integrator() if integrator is not None else None
     if scheme == "etd":
+        # The chains are the grid points of a periodic 1D field; the Jacobian is the same at every k
+        cpu = next(p for p in PlatformSelector.avail_platforms() if p.startswith("cpu"))
         with contextlib.redirect_stdout(io.StringIO()):
+            solver = PropagatorSolver(nx=[chains], lx=[1.0], ds=0.1, bond_lengths={"A": 1.0}, bc=["periodic"] * 2,
+                                      chain_model="continuous", platform=cpu, field_type="complex")
             integrator.set_linear_response(np.full((1, 1, chains), jacobian), dt=dt, mobility=mobility,
-                                           noise_direction=direction)
+                                           noise_direction=direction, fourier=solver.fourier)
     decay = np.exp(-jacobian * dt)
     sigma = np.sqrt(2 * dt)    # unit temperature: the noise of one step has the variance 2 dt
     relax, steps = int(np.ceil(relaxation_time / dt)), int(np.ceil(sampling_time / dt))

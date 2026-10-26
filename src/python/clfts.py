@@ -253,12 +253,17 @@ class CLFTS:
         self.propagator_computation_optimizer = self.prop_solver.propagator_optimizer
 
         # Initialize smearing (must be after self.cb is set)
+        # Γ(k) is applied with the platform FFT (PropagatorSolver.fourier), except in a box
+        # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
+        periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
+        mixed_box = any(periodic_sides) and not all(periodic_sides)
         self.smearing = Smearing(
             self.prop_solver.nx,
             self.prop_solver.get_lx(),
             params.get("smearing", None),
             angles=self.prop_solver.get_angles_degrees(),
-            bc=self.prop_solver.bc
+            bc=self.prop_solver.bc,
+            transform=self.prop_solver.fourier if params.get("smearing") is not None and not mixed_box else None
         )
 
         # Smeared Coulomb interactions (optional): the electrostatic potential ψ, felt by
@@ -266,7 +271,8 @@ class CLFTS:
         self.electrostatics = None
         if params.get("electrostatics", None) is not None:
             self.electrostatics = Electrostatics(params["electrostatics"], self.monomer_types, self.smearing,
-                                                 round(1.0 / params["ds"]), self.langevin, self.random_bg.jumped())
+                                                 round(1.0 / params["ds"]), self.langevin, self.random_bg.jumped(),
+                                                 fourier=self.prop_solver.fourier)
             print("Electrostatics: charges", self.electrostatics.charges,
                   "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
 
@@ -319,7 +325,8 @@ class CLFTS:
             self._joint_psi = self.electrostatics is not None and self.electrostatics.coupling > 0
             self.integrator.set_linear_response(self._force_jacobian(), dt=self.langevin["dt"],
                                                 mobility=self._integrated_mobility(),
-                                                noise_direction=self._integrated_noise_direction())
+                                                noise_direction=self._integrated_noise_direction(),
+                                                fourier=self.prop_solver.fourier)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def _integrated_mobility(self):

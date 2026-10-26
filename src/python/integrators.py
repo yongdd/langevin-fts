@@ -10,14 +10,15 @@ in LFTS. Noise is drawn by the run loop once per proposal; do not draw it here.
 electrostatics gives the electrostatic potential the same scheme and requires it.
 An integrator that declares ``linear_response`` receives the Jacobian of the forces at the
 homogeneous state through ``set_linear_response(jacobian, *, dt, mobility,
-noise_direction)`` before the run (CLFTS only); CLFTS then also passes the electrostatic
-potential, as the last field.
+noise_direction, fourier)`` before the run (CLFTS only), with the simulation's
+PropagatorSolver.fourier to apply it; CLFTS then also passes the electrostatic potential,
+as the last field.
 See docs/internals/Extensions.md for stateful methods and a two-stage example.
 """
-import os
+
+import copy
 
 import numpy as np
-import scipy.fft
 
 from .validation import ValidationError
 
@@ -73,9 +74,9 @@ class ExponentialTimeDifferencing:
     square root keeps B of the size of φ₁^½. Where K' has eigenvalues with a negative real
     part (the homogeneous state is unstable at that wavevector, as near an ordered phase),
     these eigenvalues are set to zero: their directions take the plain LM step, while the
-    other directions keep the exact linear step. Periodic boxes only. The transforms run on the
-    host with scipy.fft (OMP_NUM_THREADS workers); the mean of the two real noises is transformed
-    with rfftn.
+    other directions keep the exact linear step. Periodic boxes only. The drift and noise matrices
+    are stored as Fourier multipliers of the simulation's PropagatorSolver.fourier (on the GPU with
+    CUDA), and a step is one apply() of both.
     """
     name = "etd"
     settings = {"version": 1}
@@ -85,20 +86,47 @@ class ExponentialTimeDifferencing:
     def __init__(self):
         self._prepared = None
 
-    def set_linear_response(self, jacobian, *, dt, mobility, noise_direction):
-        """Precompute the drift and noise matrices of each wavevector.
+    def __deepcopy__(self, memo):
+        # A copy keeps its settings but not the linear response: the multipliers belong to the
+        # transform of one simulation, and every simulation sets its own (CLFTS copies the integrator)
+        copied = type(self).__new__(type(self))
+        memo[id(self)] = copied
+        for key, value in self.__dict__.items():
+            setattr(copied, key, None if key == "_prepared" else copy.deepcopy(value, memo))
+        return copied
+
+    def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourier):
+        """Store the drift and noise matrices of each wavevector as multipliers of fourier.
 
         jacobian has the shape (m, m, *nx): J_ij(k) = dF_i(k)/dw_j(k) for the m integrated
-        fields; mobility and noise_direction are those the step will receive.
+        fields; mobility and noise_direction are those the step will receive. fourier is the
+        PropagatorSolver.fourier of complex fields in the periodic box with the grid nx.
         """
+        jacobian = np.asarray(jacobian, dtype=np.complex128)
+        drift, noise, summary = self._matrices(jacobian, dt=dt, mobility=mobility, noise_direction=noise_direction)
+        m, nx = jacobian.shape[0], tuple(jacobian.shape[2:])
+        if fourier.field_type != "complex" or not fourier.periodic or tuple(fourier.coefficient_shape) != nx:
+            raise ValidationError(f"The linear response needs the Fourier transform of complex fields in a periodic box "
+                                  f"on the grid of the Jacobian {nx}, got one of {fourier.field_type} fields with "
+                                  f"coefficients of shape {tuple(fourier.coefficient_shape)}"
+                                  + ("" if fourier.periodic else " and walls"))
+        # step adds backward(noise · forward(ξ̄) - drift · forward(F)); the multipliers hold the
+        # only copy of the matrices
+        self._prepared = {"nx": nx, "dt": float(dt), "mobility": np.asarray(mobility, dtype=np.float64).copy(),
+                          "direction": np.asarray(noise_direction, dtype=np.complex128).copy(), "fourier": fourier,
+                          "drift_multiplier": fourier.set_multiplier(-drift.reshape((m, m) + nx)),
+                          "noise_multiplier": fourier.set_multiplier(noise.reshape((m, m) + nx))}
+        print(summary)
+
+    def _matrices(self, jacobian, *, dt, mobility, noise_direction):
+        """Drift δt N S^½ φ₁ S^½ N⁻¹ and noise N S^½ B of each wavevector, both (m, m, n_k), and a summary."""
         import scipy.linalg
         jacobian = np.asarray(jacobian, dtype=np.complex128)
         m = jacobian.shape[0]
         mobility = np.asarray(mobility, dtype=np.float64)
         direction = np.asarray(noise_direction, dtype=np.complex128)
-        if jacobian.shape[1] != m or mobility.shape != (m,) or direction.shape != (m,) or np.any(mobility < 0):
+        if jacobian.ndim < 3 or jacobian.shape[1] != m or mobility.shape != (m,) or direction.shape != (m,) or np.any(mobility < 0):
             raise ValidationError("The linear response needs an (m, m, *nx) Jacobian and m mobilities and noise directions")
-        nx = jacobian.shape[2:]
         J = np.moveaxis(jacobian.reshape(m, m, -1), 2, 0)              # (n_k, m, m)
         root = np.sqrt(mobility)
         # K' = S^½ N⁻¹ J N S^½
@@ -165,13 +193,10 @@ class ExponentialTimeDifferencing:
         noise = direction[:, None] * root[:, None] * factor
         if not (np.all(np.isfinite(drift)) and np.all(np.isfinite(noise))):
             raise ValidationError("The linear response of the homogeneous state gives non-finite ETD matrices")
-        # Matrices as (m, m, n_k): each element multiplies a contiguous spectrum in step
-        self._prepared = {"nx": tuple(nx), "dt": float(dt), "mobility": mobility.copy(), "direction": direction.copy(),
-                          "drift": np.ascontiguousarray(np.moveaxis(drift, 0, 2)),
-                          "noise": np.ascontiguousarray(np.moveaxis(noise, 0, 2)), "workers": _fft_workers()}
-        print(f"ETD integrator: linear response of {m} fields at {K.shape[0]} wavevectors; "
-              f"{unstable.size} with an unstable homogeneous state, whose {n_directions} unstable directions "
-              f"take plain LM steps ({n_plain} wavevectors altogether)")
+        summary = (f"ETD integrator: linear response of {m} fields at {K.shape[0]} wavevectors; "
+                   f"{unstable.size} with an unstable homogeneous state, whose {n_directions} unstable directions "
+                   f"take plain LM steps ({n_plain} wavevectors altogether)")
+        return np.ascontiguousarray(np.moveaxis(drift, 0, 2)), np.ascontiguousarray(np.moveaxis(noise, 0, 2)), summary
 
     def step(self, fields, force, *, dt, mobility, noise, previous_noise,
              noise_direction, evaluate_force):
@@ -179,52 +204,14 @@ class ExponentialTimeDifferencing:
         if prepared is None:
             raise ValidationError("The 'etd' integrator needs the linear response of the simulation "
                                   "(set_linear_response); CLFTS provides it")
-        m = fields.shape[0]
         if (dt != prepared["dt"] or not np.array_equal(mobility, prepared["mobility"])
                 or not np.array_equal(np.asarray(noise_direction, dtype=np.complex128), prepared["direction"])):
             raise ValidationError("The 'etd' step received another time step, mobility or noise direction "
                                   "than its linear response")
-        nx, axes, workers = prepared["nx"], tuple(range(1, len(prepared["nx"]) + 1)), prepared["workers"]
-        force_k = scipy.fft.fftn(np.reshape(force, (m,) + nx), axes=axes, workers=workers).reshape(m, -1)
-        noise_k = self._real_spectrum(0.5 * (np.asarray(noise, dtype=np.float64) + previous_noise))
-        drift, factor = prepared["drift"], prepared["noise"]
-        increment = np.empty_like(force_k)
-        for i in range(m):
-            increment[i] = factor[i, 0] * noise_k[0] - drift[i, 0] * force_k[0]
-            for j in range(1, m):
-                increment[i] += factor[i, j] * noise_k[j]
-                increment[i] -= drift[i, j] * force_k[j]
-        return fields + scipy.fft.ifftn(np.reshape(increment, (m,) + nx), axes=axes, workers=workers).reshape(m, -1)
-
-    def _real_spectrum(self, field):
-        """FFT of real fields (m, n_grid) from the half spectrum of rfftn and x(-k) = conj x(k)."""
-        prepared = self._prepared
-        m, nx, workers = field.shape[0], prepared["nx"], prepared["workers"]
-        axes, last = tuple(range(1, len(nx) + 1)), nx[-1]
-        half = scipy.fft.rfftn(np.reshape(field, (m,) + nx), axes=axes, workers=workers)
-        h = half.shape[-1]
-        spectrum = np.empty((m,) + nx, dtype=np.complex128)
-        spectrum[..., :h] = half
-        # Last index j >= h is -(last - j); the other indices are negated by flip and roll
-        tail = half[..., last - h:0:-1]
-        for axis in axes[:-1]:
-            tail = np.roll(np.flip(tail, axis), 1, axis)
-        np.conjugate(tail, out=spectrum[..., h:])
-        return spectrum.reshape(m, -1)
-
-
-def _fft_workers():
-    """Threads of the host FFTs of the etd step: OMP_NUM_THREADS, within the CPUs of this process."""
-    try:
-        available = len(os.sched_getaffinity(0))
-    except AttributeError:
-        available = os.cpu_count() or 1
-    try:
-        # A nested list such as "8,1" gives the threads of the outer level first
-        requested = int(os.environ.get("OMP_NUM_THREADS", "1").split(",")[0])
-    except ValueError:
-        requested = 1
-    return max(1, min(requested, available))
+        mean_noise = 0.5 * (np.asarray(noise, dtype=np.float64) + previous_noise)
+        increment = prepared["fourier"].apply([(prepared["noise_multiplier"], mean_noise),
+                                               (prepared["drift_multiplier"], force)])
+        return fields + increment
 
 
 def make_integrator(method):

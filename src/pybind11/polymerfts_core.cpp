@@ -512,6 +512,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
  * Creates the Python classes "FourierTransform_{Real|Complex}" and
  * "FourierMultiplier_{Real|Complex}":
  * - coefficient_shape, complex_coefficients: Layout of the coefficients of a field
+ * - field_type: "real" or "complex", the fields the transform takes; periodic: FFT (or wall series)
  * - k_squared(): |k|² in the coefficient shape, from the current box
  * - set_multiplier(values): Store a multiplier of shape coefficient_shape
  *   (diagonal: applied to each field) or (n_out, n_in) + coefficient_shape
@@ -573,6 +574,11 @@ void bind_fourier_transform(py::module &m, const std::string &type_name)
             return py::tuple(py::cast(obj.get_coefficient_shape()));
         })
         .def_property_readonly("complex_coefficients", &FourierTransform<T>::has_complex_coefficients)
+        .def_property_readonly("field_type", [](FourierTransform<T>&) { return real_fields ? "real" : "complex"; })
+        .def_property_readonly("periodic", [](FourierTransform<T>& obj)
+        {
+            return obj.get_boundary_conditions()[0] == BoundaryCondition::PERIODIC;   // all axes alike
+        })
         .def("k_squared", [](FourierTransform<T>& obj)
         {
             const std::vector<double> k_sq = obj.get_k_squared();

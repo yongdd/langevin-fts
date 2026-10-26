@@ -15,7 +15,10 @@ from .validation import ValidationError
 class WTMD:
     """Well-Tempered Metadynamics for enhanced sampling in L-FTS.
 
-    This implementation matches deep-langevin-fts exactly.
+    This implementation matches deep-langevin-fts exactly. With `fourier`, the
+    PropagatorSolver.fourier of the simulation (real fields, periodic box), the order
+    parameter and its derivative are transformed on the platform (on the GPU with CUDA)
+    instead of with numpy.fft, in the same rfftn layout.
     """
 
     def __init__(self, nx, lx, nbar,
@@ -29,7 +32,7 @@ class WTMD:
                  dpsi=1e-3,
                  update_freq=1000,
                  recording_period=100000,
-                 u=None, up=None, I0=None, I1=None, angles=None):
+                 u=None, up=None, I0=None, I1=None, angles=None, fourier=None):
 
         self.l = l
         self.kc = kc
@@ -46,6 +49,7 @@ class WTMD:
             raise ValidationError("WTMD requires a 3D grid (nx with three entries)")
         self.nx = nx
         self.lx = lx
+        self._fourier = fourier
         self.M = nx[0] * nx[1] * nx[2]
         self.Mk = nx[0] * nx[1] * (nx[2] // 2 + 1)
 
@@ -127,7 +131,10 @@ class WTMD:
 
     # Compute order parameter Ψ
     def compute_order_parameter(self, langevin_step, w_aux):
-        self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
+        if self._fourier is not None:
+            self.w_aux_k = self._fourier.forward(np.reshape(w_aux[self.exchange_idx], -1))
+        else:
+            self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
         psi = np.sum(np.power(np.absolute(self.w_aux_k), self.l) * self.fk * self.wt)
         psi = np.power(psi, 1.0 / self.l) / self.M
         return psi
@@ -147,7 +154,10 @@ class WTMD:
         # Calculate derivative of order parameter with respect to w_aux_k
         dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
         # Calculate derivative of order parameter with respect to w
-        dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
+        if self._fourier is not None:
+            dpsi_dwr = self._fourier.backward(dpsi_dwk) * np.power(self.M, 2.0 - self.l) / self.V
+        else:
+            dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
 
         # Add bias
         bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)
