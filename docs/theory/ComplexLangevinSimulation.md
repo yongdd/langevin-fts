@@ -10,7 +10,8 @@ This document describes complex Langevin field-theoretic simulation (CL-FTS), wh
 4. [Hot Spots and Dynamical Stabilization](#4-hot-spots-and-dynamical-stabilization)
 5. [Using the CLFTS Class](#5-using-the-clfts-class)
 6. [Charged Systems](#6-charged-systems)
-7. [References](#7-references)
+7. [Chemical Potential and Osmotic Pressure](#7-chemical-potential-and-osmotic-pressure)
+8. [References](#8-references)
 
 ---
 
@@ -34,7 +35,45 @@ As in [PolymerFieldTheory.md](PolymerFieldTheory.md#63-sign-convention-for-imagi
 
 The derivatives are those of [PolymerFieldTheory.md](PolymerFieldTheory.md#32-effective-hamiltonian), evaluated with the complex concentrations (smeared, when smearing is used). $`\mathcal{N}_i`$ is real Gaussian noise of unit variance, and $`\sigma_i`$ is that of [Langevin dynamics, Section 2.2](LangevinFieldTheoreticSimulation.md#22-discretized-equation-per-chain-unit). The mobility $`\lambda_i`$ (`dt_scaling` in `clfts.py`) follows [Langevin dynamics, Section 2.1](LangevinFieldTheoreticSimulation.md#21-continuous-langevin-equation) with the eigenvalues of $`U = X + \zeta N \, \mathbf{e}\mathbf{e}^T`$. A field with a zero eigenvalue does not enter $`H`$; it has $`\lambda_i = 0`$ and stays fixed.
 
-LM ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leimkuhler-matthews-method)) is the default integrator and averages the noise over two steps; `langevin.integrator: "euler"` selects [Langevin dynamics, Section 2.3](LangevinFieldTheoreticSimulation.md#23-euler-method). For an AB diblock, these updates are Eqs. (13)-(16) of Reference 6. The time step is fixed. Reference 6 ran LM with $`\delta\tau N = 2`$ in CL-FTS and $`\delta\tau N = 8`$ in L-FTS.
+LM ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leimkuhler-matthews-method)) is the default integrator and averages the noise over two steps; `langevin.integrator: "euler"` selects [Langevin dynamics, Section 2.3](LangevinFieldTheoreticSimulation.md#23-euler-method) and `"etd"` the exponential time differencing of Section 2.1. For an AB diblock, these updates are Eqs. (13)-(16) of Reference 6. The time step is fixed. Reference 6 ran LM with $`\delta\tau N = 2`$ in CL-FTS and $`\delta\tau N = 8`$ in L-FTS.
+
+### 2.1 Exponential Time Differencing
+
+LM steps diverge when the time step exceeds about twice the inverse of the fastest relaxation rate of the fields. The `etd` integrator removes this limit for the linear response of the homogeneous state: it integrates that part of the forces exactly and keeps the rest explicit (exponential time differencing, Reference 7).
+
+**Linear response.** Write the update of Section 2 as $`\Omega_i \to \Omega_i - \lambda_i F_i \, \delta\tau N + n_i \sigma \mathcal{N}_i`$, with $`F_i = \pm\delta H/\delta\Omega_i`$ and the noise direction $`n_i`$ (1 for real fields, $`i`$ for imaginary fields). Before the run, `CLFTS` measures the Jacobian $`J_{ij}(\mathbf{k}) = \partial \hat F_i(\mathbf{k}) / \partial \hat\Omega_j(\mathbf{k})`$ at the homogeneous state $`\Omega = 0`$ (a uniform shift of the fields does not change the concentrations of canonical chains).
+- A kick $`i\epsilon`$ at one grid point of field $`j`$ has the Fourier amplitude $`i\epsilon`$ at every wavevector. In a homogeneous periodic box the concentrations do not couple different wavevectors at linear order, so the imaginary part of the change of the forces, divided by $`\epsilon`$, gives the column $`j`$ of $`J(\mathbf{k})`$ at all $`\mathbf{k}`$ from one computation of the concentrations (a complex-step derivative, Reference 8, with an error of order $`\epsilon^2`$).
+- The forces of the unkicked state are subtracted. Transforms of real data, for example FFTs of sizes with large prime factors, leave imaginary rounding errors of order $`10^{-15}`$, which a division by $`\epsilon`$ alone would amplify. With $`\epsilon = 10^{-6}`$ the error of $`J`$ stays below about $`10^{-7}`$ of its size.
+- $`J`$ contains the quadratic terms of $`H`$, the response of the chains of any architecture and the smearing, all as the solver computes them, but not the dynamical stabilization of Section 4. With `electrostatics`, $`\psi`$ is one more field, with the force $`-\delta H/\delta\psi`$ (Section 6).
+
+**Step.** In the variables $`x_i = \Omega_i / n_i`$ the noise is real, the force is $`D^{-1} F`$ and its linear part is $`K x`$, with $`D = \mathrm{diag}(n_i)`$ and $`K = D^{-1} J D`$. With the mobilities $`\Lambda = \mathrm{diag}(\lambda_i)`$ and $`K' = \Lambda^{1/2} K \Lambda^{1/2}`$, each wavevector takes the step
+
+```math
+\hat x(\tau + \delta\tau) = \hat x(\tau) - \delta\tau N \, \Lambda^{1/2} \varphi_1(K' \delta\tau N) \Lambda^{1/2} D^{-1} \hat F + \Lambda^{1/2} \varphi_1(K' \delta\tau N)^{1/2} \, \frac{\hat\xi + \hat\xi'}{2}, \qquad \varphi_1(z) = \frac{1 - e^{-z}}{z}
+```
+
+It is the LM step with the effective mobility $`\delta\tau N \, \Lambda^{1/2} \varphi_1(K'\delta\tau N) \Lambda^{1/2}`$ in place of $`\delta\tau N \, \Lambda`$, and $`\hat\xi`$, $`\hat\xi'`$ are the noises of the current and the previous step, as in LM. The full force is used in every step; $`K`$ only sets the mobility, which is constant for a given time step.
+- For a linear force the deterministic part is the exact flow $`e^{-\Lambda K \delta\tau N} \hat x`$, and the stationary covariance is $`\langle \hat x \hat x^T \rangle \propto K^{-1}`$, the Gaussian statistics of $`e^{-H}`$, for any time step. The step of $`\psi`$ in Section 6 is the same construction for one field with $`K = (k^2 + \kappa^2)/E`$.
+- As $`\delta\tau \to 0`$, or for $`J = 0`$, it becomes the LM step, so the stationary averages tend to the same limit. A constant mobility does not change the stationary distribution of the continuous dynamics; at a finite time step the errors are, as for LM, of second order in $`\delta\tau`$, because the noise is averaged over two steps as in LM.
+- $`K'`$ is complex symmetric; the integrator rejects a measured $`J`$ that is not. Real and imaginary fields couple where the chains respond to both, for example in a diblock with unequal blocks, and $`K`$ is then complex rather than real. The exact integral of the linear dynamics over one step then mixes the noises the fields received during the step, so the noise of a real field gets an imaginary part at that wavevector. This is the time integration of the same complex Langevin equations, not a kernel that changes them. Any $`B`$ with $`B B^T = \varphi_1`$ gives the right covariance. The integrator takes the Cholesky factorization without complex conjugation, or the symmetric square root where a small pivot would make the Cholesky factor much larger than $`\varphi_1^{1/2}`$.
+- Where $`K'`$ has eigenvalues with a negative real part, the homogeneous state is unstable at that wavevector, as near the order-disorder transition and in ordered phases. These eigenvalues are set to zero: their directions take the LM step, while the other directions of the wavevector keep the exact step. Along the unstable directions the force is held by the nonlinear response of the fields, which the homogeneous state does not give, so the time step there is limited as for LM.
+
+**Use.** `etd` helps where the linear part of the forces limits the time step: in disordered states, where the fields fluctuate about the homogeneous state, and where fields relax at very different rates, for example at small $`\chi N`$ (the quadratic term $`2/\chi N`$ of the exchange field), for the pressure field at large $`\zeta N`$, and for $`\psi`$. Near the order-disorder transition and in ordered phases, the unstable directions limit the time step, so time-step convergence has to be checked there; at strong coupling too. In a 1D symmetric diblock (continuous chains, 32 grid points, $`L = 4 R_0`$) at $`\chi N = 11`$, $`\zeta N = 100`$ and $`\bar N = 10^4`$, where two wavevectors are unstable, `etd` agrees with LM at $`\delta\tau N = 2`$ and 4 ($`\langle H \rangle = 2.82`$, largest drift 0.6). At $`\delta\tau N = 8`$, beyond the LM limit of 4.9 of this system, two of three runs of 400 steps went to a wrong state ($`\langle H \rangle = -30`$ and $`-15`$) with drifts up to 110; the drift records (Section 3.1) show it. In an ordered lamellar phase (3D, $`32^3`$ grid points, $`L = 4.21 R_0`$, discrete chains with $`N = 90`$, $`\chi N = 15`$, $`\zeta N = 100`$, $`\bar N = 10^5`$, Gaussian smearing $`a = 0.02 R_0`$, $`\alpha_{ds} = 0.01`$, 40000 steps on an A10 GPU) `etd` gave no larger time step than LM: both ran at $`\delta\tau N = 0.5`$, 1 and 2 and diverged within 30 steps at 4, and a step of `etd` took 24 ms against 21 ms for LM (with $`64^3`$ grid points at the same spacing, 240 ms against 180 ms, mostly the transforms of the forces on the host). There the time step is limited by the nonlinear dynamics around the ordered structure, not by the linear part, so LM is the better choice. The forces and the noise of every field are transformed on the host with `scipy.fft` in every step, also with the CUDA backend, with `OMP_NUM_THREADS` threads (`CLFTS` sets it to 1 unless it is set). The integrator needs a periodic box and is not available in L-FTS. Each simulation keeps its own copy of the integrator, which holds the response of its system.
+
+**Tests.** `TestClftsEtd` checks, with a synthetic linear force that couples a real field to two imaginary fields, the exact flow and the exact stationary covariance of every mode at time steps 8 and 300 times the stability limit of LM steps; that a zero Jacobian gives the LM step; that at an unstable wavevector only the unstable direction loses its exact step; the noise factor where the Cholesky pivot is small; the rejection of an asymmetric Jacobian; that the measured Jacobian equals central differences of the forces for a charged diblock with counterions (with and without screening) and on a 67-point grid; the Gaussian statistics of $`\psi`$ in a run at a time step beyond its LM limit; a charged lamella with strong screening that diverged when unstable wavevectors took the LM step for all fields; and that continued runs reproduce uninterrupted ones bit for bit. `TestStructureFunctionRPA` runs the disordered AB diblock of its CL-FTS case with `etd` at $`\delta\tau N = 16`$, where LM steps diverge.
+
+**Validation.** In that diblock (continuous chains, 1D, 32 grid points, $`\chi N = 6`$, $`\bar N = 10^6`$, cpu-fftw, 20000 steps), LM diverges at $`\delta\tau N = 4`$ with $`\zeta N = 100`$, while `etd` gives $`S_{AA}`$ within 1 % of the RPA (mean over the first eight modes) at $`\delta\tau N`$ from 1 to 64, with $`\zeta N = 100`$ and 1000. The order of the time-step error is measured by `tests/validation/validate_etd_order.py`:
+
+overdamped Langevin dynamics of independent trajectories, the grid points of one field, advanced by the integrators of the package, with the stationary density $`e^{-U}`$ as the reference. For $`U = x^2/2 + x^4/4`$ ($`10^6`$ trajectories over 200 time units, standard errors from 20 groups of trajectories), the error of $`\langle x^2 \rangle = 0.4679`$ in units of $`10^{-4}`$ is:
+
+| Integrator | $`\delta\tau = 0.025`$ | 0.05 | 0.1 | 0.2 |
+|---|---:|---:|---:|---:|
+| Euler | 68.5 ± 0.3 | 142.0 ± 0.3 | 313.0 ± 0.2 | diverges |
+| ETD with fresh noise | 28.5 ± 0.2 | 59.2 ± 0.2 | 133.0 ± 0.3 | diverges |
+| LM | −0.4 ± 0.3 | −1.2 ± 0.2 | −6.1 ± 0.3 | diverges |
+| `etd` | −0.2 ± 0.3 | −1.3 ± 0.3 | −5.8 ± 0.2 | −20.6 ± 0.3 |
+
+The errors of Euler and of ETD with fresh noise double with $`\delta\tau`$ (first order), those of LM and `etd` grow by factors of about four (second order) and are 20 to 50 times smaller; "diverges" means that some trajectories run away in the cubic force. With the stiff force $`F = 20x + 2\tanh x`$ ($`2 \times 10^5`$ trajectories, 400 time units), LM diverges from $`\delta\tau = 0.1`$ on, while the error of `etd` stays at the statistical level, $`5 \times 10^{-6}`$ of $`\langle x^2 \rangle = 0.046`$, up to $`\delta\tau = 0.4`$; ETD with fresh noise is off by $`1.7 \times 10^{-4}`$ there.
 
 ---
 
@@ -103,47 +142,52 @@ Two remedies are available:
 
 ## 6. Charged Systems
 
-[Polymer Field Theory, Section 5](PolymerFieldTheory.md#5-electrostatic-interactions) defines the charged model: the valences $`z_i`$ per segment (`electrostatics`), the smeared charge density $`c`$, the coupling $`E`$ and the electrostatic potential $`\psi`$, with
+[Polymer Field Theory, Section 5](PolymerFieldTheory.md#5-electrostatic-interactions) defines the charged model: the valences $`z_i`$ per segment (`electrostatics`), the smeared charge density $`c`$, the coupling $`E`$, the electrostatic potential $`\psi`$ and, optionally, the screening $`\kappa`$ of a background electrolyte (`screening_length` $`= 1/\kappa`$; $`\kappa = 0`$ without it), with
 
 ```math
-\frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, \nabla^2 \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{\nabla^2 \psi}{E} + c
+\frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, (\nabla^2 - \kappa^2) \, \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{(\nabla^2 - \kappa^2) \psi}{E} + c
 ```
 
-CL-FTS samples $`\psi`$ together with the auxiliary fields and stores it on the rotated contour, like the other imaginary-type fields.
+CL-FTS samples $`\psi`$ together with the auxiliary fields and stores it on the rotated contour, like the other imaginary-type fields. Without screening the uniform mode of $`\psi`$ is zero and the system must be electroneutral. With screening the uniform mode fluctuates, and the explicit species may carry a net charge.
 
-**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 2) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`\nabla^2 \psi / E`$ relaxes at the rate $`\gamma_k = s k^2/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing. Like the Leimkuhler-Matthews integrator of the auxiliary fields ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leimkuhler-matthews-method)), $`\psi`$ takes the mean of the current and the previous noise. It follows the noise scheme the integrator declares (`averaged_noise`, see [Extensions](../internals/Extensions.md#langevin-integrators)): averaged with the Leimkuhler-Matthews integrator, fresh with the Euler integrator. A custom integrator, which does not receive $`\psi`$, must declare it:
+**Update of ψ.** $`\psi`$ moves like an imaginary field (Section 2) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`(\nabla^2 - \kappa^2) \psi / E`$ relaxes at the rate $`\gamma_k = s (k^2 + \kappa^2)/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing. Like the Leimkuhler-Matthews integrator of the auxiliary fields ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leimkuhler-matthews-method)), $`\psi`$ takes the mean of the current and the previous noise. It follows the noise scheme the integrator declares (`averaged_noise`, see [Extensions](../internals/Extensions.md#langevin-integrators)): averaged with the Leimkuhler-Matthews integrator, fresh with the Euler integrator. A custom integrator must declare it, even one that declares `linear_response` and so receives $`\psi`$ (below):
 
 ```math
-\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k}{4 (k^2/E) \, \delta\tau N}} \, \big(\hat{\xi}_{\mathbf{k}} + \hat{\xi}'_{\mathbf{k}}\big), \qquad a_k = e^{-\gamma_k \delta\tau N}
+\hat\psi_{\mathbf{k}}(\tau + \delta\tau) = a_k \hat\psi_{\mathbf{k}}(\tau) + (1 - a_k) \frac{E}{k^2 + \kappa^2} \hat c_{\mathbf{k}} + i \sqrt{\frac{1 - a_k}{4 ((k^2 + \kappa^2)/E) \, \delta\tau N}} \, \big(\hat{\xi}_{\mathbf{k}} + \hat{\xi}'_{\mathbf{k}}\big), \qquad a_k = e^{-\gamma_k \delta\tau N}
 ```
 
 In this step:
 
 - $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of [Langevin dynamics, Section 2.2](LangevinFieldTheoreticSimulation.md#22-discretized-equation-per-chain-unit), drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream. $`\hat\xi'_{\mathbf{k}}`$ is the noise of the previous step (zero at the first step); checkpoints store it as `psi_noise_prev`.
 - $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
-- The step is the Leimkuhler-Matthews step of $`\psi`$ with the time step $`(1 - a_k)/\gamma_k < \delta\tau N`$ of each mode, so it is stable for any $`\delta\tau`$. As $`k \to 0`$ it becomes the Leimkuhler-Matthews step with mobility $`s`$.
+- The step is the Leimkuhler-Matthews step of $`\psi`$ with the time step $`(1 - a_k)/\gamma_k < \delta\tau N`$ of each mode, so it is stable for any $`\delta\tau`$. As $`\gamma_k \to 0`$ it becomes the Leimkuhler-Matthews step with mobility $`s`$.
+- Without screening the uniform mode is set to zero after the step.
 
 The Leimkuhler-Matthews step samples a Gaussian distribution exactly for any stable time step and any mobilities. For Gaussian fluctuations, the statistics of $`\psi`$ and of the auxiliary fields therefore do not depend on $`\delta\tau`$, although the charge density is explicit.
 
-With the Euler integrator, $`\psi`$ takes fresh noise, $`i \sqrt{(1 - a_k^2)/(2 (k^2/E)\, \delta\tau N)}\, \hat\xi_{\mathbf{k}}`$. The linear modes alone then keep their exact variance, but the explicit charge density changes it at first order in $`\gamma_k \delta\tau N`$. Where the charge density follows $`\psi`$ as $`\hat c = -R \hat\psi`$, the variance is too large by the factor
+With the Euler integrator, $`\psi`$ takes fresh noise, $`i \sqrt{(1 - a_k^2)/(2 ((k^2 + \kappa^2)/E)\, \delta\tau N)}\, \hat\xi_{\mathbf{k}}`$. The linear modes alone then keep their exact variance, but the explicit charge density changes it at first order in $`\gamma_k \delta\tau N`$. Where the charge density follows $`\psi`$ as $`\hat c = -R \hat\psi`$, the variance is too large by the factor
 
 ```math
-\frac{1 + \epsilon}{1 + \frac{2 a_k}{1 + a_k} \epsilon - \frac{1 - a_k}{1 + a_k} \epsilon^2} \approx 1 + \epsilon \tanh\frac{\gamma_k \delta\tau N}{2}, \qquad \epsilon = \frac{R E}{k^2}
+\frac{1 + \epsilon}{1 + \frac{2 a_k}{1 + a_k} \epsilon - \frac{1 - a_k}{1 + a_k} \epsilon^2} \approx 1 + \epsilon \tanh\frac{\gamma_k \delta\tau N}{2}, \qquad \epsilon = \frac{R E}{k^2 + \kappa^2}
 ```
 
 Before the Leimkuhler-Matthews noise was introduced, this was the step of every integrator. In the polyampholyte of `TestChargedStructureFunctionRPA` ($`E = 300`$, $`\delta\tau N = 1`$) it put the charge structure functions from $`\psi`$ about 2 % above the RPA; with the averaged noise they agree within 0.5 % ([Structure Function Estimators, Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
 
+**With the `etd` integrator.** The integrator of Section 2.1 advances $`\psi`$ together with the auxiliary fields, as the last field with the force $`-\delta H/\delta\psi`$, its mobility $`s`$ and its noise stream. Its Jacobian then contains the screening of $`\psi`$ by the charges and the coupling of $`\psi`$ to the auxiliary fields, which the step above keeps explicit, so the Gaussian statistics of all fields are exact for any time step. Without screening the uniform mode of $`\psi`$ is set to zero after each step.
+
 **Observables.**
 - **H:** the recorded $`H`$ includes $`H_{el}`$.
 - **Structure functions:** The estimator of [Structure functions, Section 4.2](LangevinFieldTheoreticSimulation.md#42-estimator) gives $`S_{ij}`$ of all types, counterions included. For composition modes without an auxiliary field, such as two types that differ only in charge, $`\psi`$ completes the estimator ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)). The charge structure function is $`S_{zz} = \sum_{ij} z_i z_j S_{ij}`$. The files also hold `charge_structure_function`, the structure function of the smeared charge density. It combines two estimators that use $`\psi`$ with the weight of least variance at each wavevector, and it is much less noisy where screening is strong ([Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
-- **RPA:** the RPA of [Structure functions, Section 4.4](LangevinFieldTheoreticSimulation.md#44-rpa-reference) adds $`(E/k^2)\, z z^T`$ to the interaction matrix.
+- **RPA:** the RPA of [Structure functions, Section 4.4](LangevinFieldTheoreticSimulation.md#44-rpa-reference) adds $`E/(k^2 + \kappa^2)\, z z^T`$ to the interaction matrix.
+- **Estimators:** the estimators that use $`\psi`$ ([Structure Function Estimators](StructureFunctionEstimators.md#5-modes-without-an-auxiliary-field)) take $`(k^2 + \kappa^2)/E`$ in place of $`k^2/E`$.
 
 **Tests.**
 - `TestClftsElectrostatics` checks:
   - that zero valences, or zero coupling, reproduce CL-FTS without charges bit for bit;
   - that the forces of $`\psi`$ and of the auxiliary fields are the derivatives of $`H`$;
   - that the step of $`\psi`$ without its noise is the exact flow of its force, and that its stationary variance is exact, also with a linear charge response and far beyond the stability limit of Euler steps;
-  - that a continued run reproduces an uninterrupted one bit for bit.
+  - that a continued run reproduces an uninterrupted one bit for bit;
+  - with screening, that the force of $`\psi`$ is the derivative of $`H`$ along the uniform mode too, that the stationary variance of every mode is exact, the uniform mode included, and that a net charge is accepted and moves the uniform mode only with screening.
 - `TestChargedStructureFunctionRPA` compares two systems with the RPA:
   - a charged diblock with counterions;
   - a polyampholyte melt whose charge mode has no auxiliary field.
@@ -154,7 +198,71 @@ Before the Leimkuhler-Matthews noise was introduced, this was the step of every 
 
 ---
 
-## 7. References
+## 7. Chemical Potential and Osmotic Pressure
+
+The canonical partition function holds the ideal terms $`\prod_p (V Q_p)^{n_p}/n_p!`$ of the chains and the Gaussian integrals over the fields, normalized by the same integrals without the chains (the Hubbard-Stratonovich transformation). Derivatives of $`\ln Z`$ give operators whose averages over the complex Langevin samples are the chemical potentials and the osmotic pressure. They are recorded with $`H`$ at every sample (`sample_interval`) in the `dH` files: the chemical potentials always, the pressure with `recording.pressure`.
+
+**Chemical potential.** $`H`$ depends on the number of chains $`n_p`$ only through $`-n_p \ln Q_p`$, so
+
+```math
+\beta\mu_p = \ln\frac{\bar\phi_p}{\alpha_p} - \ln Q_p
+```
+
+per chain, in the convention of `SCFT.compute_chemical_potentials` ([Phase Equilibrium](PhaseEquilibrium.md#restoring-chemical-potentials)), which leaves out the constant $`\ln(\rho_0/N)`$ common to all species; at the saddle point the operator equals the SCFT value. `chemical_potential_history_real` and `_imag` hold one row of all species per sample. The average of the real part is the chemical potential; it does not depend on the branch of the complex logarithm. A species without chains has $`-\infty`$. With grafted chains (`initial_conditions`) nothing is recorded. Without screening $`\psi`$ has no uniform mode, so for charged species only electroneutral combinations of chemical potentials are physical.
+
+**Osmotic pressure.** $`\beta\Pi = \partial \ln Z / \partial V`$ at fixed $`n_p`$ is evaluated with the grid values of the fields held fixed while the box is dilated in its shape, so every wavevector scales as $`k^2 \propto V^{-2/d}`$. Per $`C/R_0^3 = \rho_0/N`$:
+
+```math
+\frac{\beta\Pi R_0^3}{C} = \sum_p \frac{\bar\phi_p}{\alpha_p} - \frac{1}{d} \sum_a L_a \frac{\partial h}{\partial L_a} - \sum_i \left\langle \phi_i \left( \frac{\partial \Gamma_i}{\partial \ln V} * (w_i + z_i \psi) \right) \right\rangle - h_\Omega + \frac{n_\Omega \, n_g}{2 C V / R_0^3} + \Pi_\psi
+```
+
+The terms are:
+- the ideal gas of the chains;
+- the conformations of the chains, from the stress of the solver: $`h = -\sum_p (\bar\phi_p/\alpha_p) \ln Q_p`$ at fixed smeared fields;
+- the smearing functions, which follow the box, with $`\partial\Gamma/\partial \ln V = -(2/d) \, k^2 \, d\Gamma/dk^2`$ and the unsmeared concentrations $`\phi_i`$;
+- the field part of $`H`$ per reference chain, $`h_\Omega = \sum_i \langle h_{2,i} \Omega_i^2 + h_{1,i} \Omega_i \rangle + h_{\mathrm{const}}`$ (the quadratic, linear and constant terms of [Polymer Field Theory, Section 3.2](PolymerFieldTheory.md#32-effective-hamiltonian)), which scales with $`V`$;
+- the normalization of the Gaussian integral over each of the $`n_\Omega`$ auxiliary fields with a nonzero eigenvalue on $`n_g`$ grid points: it cancels the grid-dependent part of $`h_\Omega`$, which is $`n_g/(2 C V/R_0^3)`$ per field without chains;
+- $`\psi`$: its terms of $`H`$ change by $`(1 - 2/d) H_k + H_\kappa`$, the parts of $`H_{el}`$ from $`k^2`$ and from $`\kappa^2`$, and its normalization adds $`(1 - (2/d) \, k^2/(k^2 + \kappa^2))/2`$ per $`C V/R_0^3`$ chains for every mode with $`k^2 + \kappa^2 > 0`$:
+
+```math
+\Pi_\psi = -\left[\left(1 - \frac{2}{d}\right) H_k + H_\kappa\right] + \frac{1}{2 C V/R_0^3} \sum_{k^2 + \kappa^2 > 0} \left(1 - \frac{2}{d} \frac{k^2}{k^2 + \kappa^2}\right)
+```
+
+At the homogeneous saddle point the operator is the Flory-Huggins osmotic pressure $`\sum_p \bar\phi_p/\alpha_p + \bar{\boldsymbol\phi}^T X \bar{\boldsymbol\phi}/2 + (\zeta N/2)\big((\sum_i \bar\phi_i)^2 - 1\big)`$ as $`C \to \infty`$. A screened system with the net charge $`q = \sum_i z_i \bar\phi_i`$ per segment has $`\psi_0 = E q/\kappa^2`$ there and adds the mean-field Yukawa energy $`E q^2/(2\kappa^2)`$.
+
+`recording.pressure: True` records `pressure_history_real` and `_imag`. Each sample needs the stress of the solver, which costs about as much as one more computation of the propagators. The pressure needs a periodic box and free chains. With continuous chains it carries the contour error of the stress ([Stress Tensor](StressTensor.md)).
+
+**Discretization.** Like $`H`$, both averages depend on the grid and the smearing, which regularize the field theory; compare states computed with the same discretization.
+
+**Restarts.** Checkpoints hold the pending samples. A checkpoint without them, written by an earlier version or by a run without `recording.pressure`, gives NaN for those samples in the next file.
+
+**Tests.** `TestClftsThermodynamics` checks:
+- for random complex fields on a 3D grid with discrete chains, that the pressure operator without the ideal term and the normalizations equals $`-\partial H/\partial V`$ at fixed grid values and numbers of chains to $`10^{-8}`$: without smearing, with Gaussian and sigmoidal smearing, and with smeared charges with and without screening;
+- the Flory-Huggins chemical potentials and pressure at the homogeneous saddle point;
+- that the records equal the operators recomputed from the saved state, and that continued runs reproduce them bit for bit.
+
+**Validation of the pressure.** Where the fluctuations are Gaussian, the average pressure is the Flory-Huggins value plus the one-loop correction $`(1/C)\, \partial \ln Z_1 / \partial V`$ with
+
+```math
+\ln Z_1 = -\frac{1}{2} \sum_{\mathbf{k}} \ln \det \left( I + J_0^{-1} R \right)
+```
+
+where $`J_0`$ is the quadratic part of the Jacobian of Section 2.1 and $`R = J - J_0`$ the response of the chains, which scales as $`1/V`$ at fixed numbers of chains; the derivative is taken by central differences of the measured Jacobians. Two systems were run with `etd` on cpu-fftw, discarding the first fifth of each run:
+- a symmetric AB diblock melt, continuous chains, $`\chi N = 6`$, $`\zeta N = 100`$, 1D with 32 grid points and $`L = 4 R_0`$, $`\delta\tau N = 4`$, 200000 steps;
+- the charged diblock of Section 6 with A valence 0.2 and counterions, discrete chains ($`N = 20`$), $`\chi N = 6`$, $`\zeta N = 50`$, $`E = 300`$, `screening_length` $`1/\kappa = 0.5 R_0`$, Gaussian smearing lengths 0.15, 0.15 and 0.2, 2D with $`16^2`$ grid points and $`L = 3 R_0`$, $`\delta\tau N = 2`$, 100000 steps.
+
+| System | $`\bar N`$ | $`\langle \Pi \rangle - \Pi_{FH}`$ | One-loop | Ratio |
+|---|---:|---:|---:|---:|
+| Diblock | $`10^3`$ | −0.08796 | −0.08772 | 1.003 ± 0.005 |
+| Diblock | $`10^4`$ | −0.02790 | −0.02774 | 1.006 ± 0.003 |
+| Charged | $`10^3`$ | −0.1306 | −0.1291 | 1.011 ± 0.008 |
+| Charged | $`10^4`$ | −0.04107 | −0.04084 | 1.006 ± 0.008 |
+
+The errors are standard errors of eight block means. The normalization terms are larger than the correction itself (0.25 for the diblock at $`\bar N = 10^3`$), so the agreement also checks them.
+
+---
+
+## 8. References
 
 1. Ganesan, V. & Fredrickson, G. H. "Field-theoretic polymer simulations." *Europhys. Lett.* **55**, 814 (2001).
 
@@ -167,3 +275,7 @@ Before the Leimkuhler-Matthews noise was introduced, this was the step of every 
 5. Willis, J. D. & Matsen, M. W. "Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts." *J. Chem. Phys.* **161**, 244903 (2024).
 
 6. Matsen, M. W., Ramírez, J., Willis, J. D. & Pina, P. D. "Accessing the universal phase behavior of block copolymer melts with complex-Langevin field-theoretic simulations." *J. Chem. Phys.* **164**, 014905 (2026).
+
+7. Cox, S. M. & Matthews, P. C. "Exponential time differencing for stiff systems." *J. Comput. Phys.* **176**, 430 (2002).
+
+8. Squire, W. & Trapp, G. "Using complex variables to estimate derivatives of real functions." *SIAM Rev.* **40**, 110 (1998).

@@ -41,6 +41,34 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- CL-FTS integrator `"etd"` (`langevin.integrator`, 2026-10-26): Leimkuhler-Matthews steps
+  whose linear part is integrated exactly for each wavevector. Before the run `CLFTS`
+  measures the Jacobian of the forces at the homogeneous state with complex-step
+  derivatives, one computation of the concentrations per field for all wavevectors, so it
+  holds the response of any chain architecture, the smearing and, with electrostatics, ψ,
+  which this integrator advances together with the auxiliary fields. For a linear force
+  the step is the exact flow and its stationary covariance is exact for any time step; the
+  noise is averaged over two steps as in LM. Eigen-directions that are unstable at the
+  homogeneous state (near the order-disorder transition and in ordered phases) take LM
+  steps and limit the time step there. In the disordered diblock of
+  `TestStructureFunctionRPA`, LM diverges at δτN = 4, while `etd` stays within 1 % of the
+  RPA up to δτN = 64; the test runs it at δτN = 16. Integrators declare the hook with
+  `linear_response` and `set_linear_response()`; each simulation keeps its own copy of such
+  an integrator, and L-FTS rejects them. `TestClftsEtd`; `tests/validation/validate_etd_order.py`
+  measures the order of the time-step error.
+- CL-FTS chemical potentials and osmotic pressure (2026-10-26): every sample records
+  βμ_p = ln(φ_p/α_p) - ln Q_p of all species (`chemical_potential_history`), and with
+  `recording.pressure` the osmotic pressure ∂ln Z/∂V (`pressure_history`): the chain
+  stress, the box dependence of the smearing functions, the field terms of H, the
+  normalizations of the Gaussian field integrals and the terms of ψ. Checkpoints keep the
+  pending samples; one without them gives NaN for those samples.
+  `TestClftsThermodynamics` checks the pressure against -dH/dV at fixed grid values and both
+  operators against Flory-Huggins at the homogeneous saddle point.
+- Screened electrostatics (`electrostatics.screening_length`, 2026-10-26): a background
+  electrolyte that is not simulated explicitly turns the Coulomb kernel into E/(k² + κ²),
+  with the screening length 1/κ, the Debye length of the background alone (explicit ions
+  screen in addition). The uniform mode of ψ then fluctuates and the explicit species may
+  carry a net charge; unscreened runs keep their checkpoint settings.
 - CL-FTS records the largest drift over the grid of every Langevin step, for each auxiliary
   field (`drift_max_step_history`) and for ψ (`psi_drift_max_step_history`), in the `dH`
   files (2026-10-26). Checkpoints keep the steps since the last statistics file, and the

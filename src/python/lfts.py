@@ -444,6 +444,9 @@ class LFTS:
         self.recording = params["recording"].copy()
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        # The linear response of the homogeneous state (the "etd" integrator) is measured by CLFTS only
+        if getattr(self.integrator, "linear_response", False):
+            raise ValidationError(f"The integrator '{self.integrator.name}' (linear_response) is supported in CL-FTS only")
         self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):

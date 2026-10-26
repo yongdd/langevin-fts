@@ -364,6 +364,18 @@ A Hubbard-Stratonovich transformation decouples the interaction with an electros
 
 The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
 
+### 5.4 Screened Coulomb Interaction
+
+An electrolyte that is not simulated explicitly (a background salt) screens the charges, and the kernel becomes the Yukawa interaction $`l_B e^{-\kappa r}/r`$ with the screening length $`1/\kappa`$ (`screening_length`, in units of $`R_0`$):
+
+```math
+\frac{\beta U_{el}}{C V / R_0^3} = \frac{E}{2V} \int c \, (\kappa^2 - \nabla^2)^{-1} c \, d\mathbf{r}, \qquad \frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, (\nabla^2 - \kappa^2) \, \psi \, d\mathbf{r}
+```
+
+The saddle point is the screened Poisson equation $`(\kappa^2 - \nabla^2) \psi = E c`$. The kernel $`E/(k^2 + \kappa^2)`$ is finite at $`k = 0`$, so the uniform mode of $`\psi`$ fluctuates and a net charge of the explicit species is allowed: the background electrolyte neutralizes it. With $`\kappa = 0`$ this is Section 5.1.
+
+In Debye-Hückel theory $`1/\kappa`$ is the Debye length of the background electrolyte alone, $`\kappa^2 = 4\pi l_B \sum_s z_s^2 c_s`$ over its ion species with number concentrations $`c_s`$ (in units of $`R_0`$: $`(\kappa R_0)^2 = 4\pi (l_B/R_0) \sum_s z_s^2 c_s R_0^3`$). It is not the screening length of the system: the explicit ions, molecules in `polymers`, screen in addition through the fluctuations of $`\psi`$, so the total screening length is shorter. The background enters only through its linear response, so the correlations among its ions, their volume and the nonlinear response of multivalent ions are left out; ions for which these matter belong in `polymers`.
+
 ---
 
 ## 6. Implementation

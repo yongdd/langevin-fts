@@ -316,6 +316,31 @@ class Smearing:
                 derivatives[slot][tied] += 8 * np.pi ** 2 * u[a] * u[b] * L[a] * L[b] * self._sin[a, b]
         return {slot: d / n_tied for slot, d in derivatives.items()}
 
+    def dilation(self, field, name=None):
+        """(∂Γ/∂ln V) * field for a uniform dilation of the box at fixed grid values.
+
+        The cell keeps its shape, so every wavevector scales as k² ∝ V^(-2/d) and
+        ∂Γ/∂ln V = -(2/d) k² dΓ/dk² (the osmotic pressure of CL-FTS, clfts.py). Returns a
+        complex array of length n_grid; zero without smearing.
+        """
+        if not self.enabled:
+            return np.zeros(np.size(field), dtype=np.complex128)
+        if self.type == "gaussian":
+            a_int = self.params["a_int"][name] if self.per_species else self.params["a_int"]
+            dgamma_dk_sq = -0.5 * a_int ** 2 * self.kernel(name)
+        else:
+            k_int, dk_int = self.params["k_int"], self.params["dk_int"]
+            c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
+            dgamma_dk = -c0 / dk_int * (1 - np.tanh((self.k_mag - k_int) / dk_int) ** 2)
+            dgamma_dk_sq = np.divide(dgamma_dk, 2 * self.k_mag, out=np.zeros_like(self.k_mag), where=self.k_mag > 0)
+        multiplier = -(2.0 / self.dim) * self.k_sq * dgamma_dk_sq
+        field_grid = np.reshape(np.asarray(field, dtype=np.complex128), self.nx)
+        if self.periodic:
+            result = np.fft.ifftn(np.fft.fftn(field_grid) * multiplier)
+        else:
+            result = self._backward(self._forward(field_grid) * multiplier)
+        return np.reshape(result, self.n_grid)
+
     def kernel(self, name=None):
         """Γ(k) on the grid, of monomer type `name` when the lengths are given per type."""
         if not self.per_species:

@@ -21,6 +21,14 @@
    the uninterrupted run bit for bit, including psi and its noise stream.
 5. Input checks: electroneutrality, monomer types, coupling, smearing, boundaries,
    random copolymers and the methods other than CL-FTS.
+6. Screening (screening_length): the force of psi, (lap - kappa^2) psi/E + c, is the derivative
+   of H also along the uniform mode; the stationary variance of every mode, the uniform one
+   included, is that of exp(-H); a screened system may carry a net charge, and its uniform
+   mode of psi fluctuates while it stays zero without screening; the checkpoint settings of
+   unscreened runs keep their earlier form. Screened estimators: with a net charge, the recorded
+   S_ij of a polyampholyte (completed by psi, without the psi term at k = 0) and the charge
+   structure function (zero at k = 0) equal a recomputation with (k^2 + kappa^2)/E from the
+   saved state.
 """
 import contextlib
 import io
@@ -441,6 +449,130 @@ def input_checks(root):
     assert sim.electrostatics.averaged_noise is False
 
 
+def screening(root):
+    screening_length = 0.3
+    params = parameters(root / "screened")
+    params["electrostatics"]["screening_length"] = screening_length
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(params, random_seed=5)
+    es, n_grid, M = sim.electrostatics, int(np.prod(NX)), 3
+    assert np.isclose(es.kappa_sq, 1 / screening_length ** 2) and es.settings()["screening_length"] == screening_length
+
+    # The force of psi along a direction with a uniform part (psi with a nonzero mean)
+    rng = np.random.default_rng(29)
+    w_aux = rng.normal(0.0, 5.0, (M, n_grid)) + 1j * rng.normal(0.0, 1.0, (M, n_grid))
+    sim.mpt.pin_dropped_fields(w_aux)
+    psi = 0.3 + rng.normal(0.0, 1.0, n_grid) + 1j * rng.normal(0.0, 1.0, n_grid)
+    es.psi = psi
+    _, phi_smeared = hamiltonian(sim, w_aux)
+    expected_force = es.force(es.charge_density(phi_smeared))
+    direction, eps = 1.0 + rng.normal(0.0, 1.0, n_grid), 1e-5
+    es.psi = psi + eps * direction
+    h_plus, _ = hamiltonian(sim, w_aux)
+    es.psi = psi - eps * direction
+    h_minus, _ = hamiltonian(sim, w_aux)
+    es.psi = psi
+    expected = np.mean(expected_force * direction)
+    assert abs((h_plus - h_minus) / (2 * eps) - expected) < 1e-6 * max(1.0, abs(expected)), "screened psi force"
+
+    # Stationary variance of every mode, the uniform one included:
+    # V Nbar^(1/2) ((k^2 + kappa^2)/E) <|psi(k)/n|^2> = 1, without charges, at dt = 20
+    params["electrostatics"]["charges"] = {"A": 0.0, "C": 0.0}
+    params["langevin"]["dt"] = 20.0
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(params, random_seed=5)
+    es = sim.electrostatics
+    rate = es.screened_k_sq / es.coupling
+    scale = sim.prop_solver.get_volume() * np.sqrt(sim.langevin["nbar"]) * rate / n_grid ** 2
+    zero = np.zeros(n_grid)
+    for _ in range(int(np.ceil(10 / (rate.min() * es.psi_dt_scaling * 20.0)))):
+        es.step(zero)
+    blocks = np.zeros((20, 2))
+    for b in range(len(blocks)):
+        total = np.zeros(NX)
+        for _ in range(1000):
+            es.step(zero)
+            total += np.abs(es.psi_k) ** 2
+        variance = scale * total / 1000
+        blocks[b] = np.mean(variance), variance[(0,) * len(NX)]
+    mean, error = np.mean(blocks, axis=0), np.std(blocks, axis=0, ddof=1) / np.sqrt(len(blocks))
+    assert abs(mean[0] - 1.0) < 0.02 and 3 * error[0] < 0.02, f"screened stationary variance {mean[0]:.4f}"
+    assert abs(mean[1] - 1.0) < 3 * error[1] + 0.05, f"uniform mode {mean[1]:.3f} +- {error[1]:.3f}"
+
+    # A net charge with screening; the uniform mode of psi fluctuates only with screening
+    charged = parameters(root / "net_charge", steps=2)
+    charged["electrostatics"]["charges"]["A"] = 0.3
+    expect_validation_error(lambda: CLFTS(charged), "not electroneutral")
+    charged["electrostatics"]["screening_length"] = screening_length
+    for screened in (True, False):
+        if not screened:
+            charged = parameters(root / "net_charge", steps=2)
+        with contextlib.redirect_stdout(io.StringIO()):
+            sim = CLFTS(charged, random_seed=5)
+            sim.run(initial_fields=initial_fields())
+        assert (sim.electrostatics.psi_k[(0,) * len(NX)] != 0.0) == screened, "uniform mode of psi"
+    # Unscreened settings keep their earlier form (continuation of earlier checkpoints)
+    assert set(sim.electrostatics.settings()) == {"charges", "coupling", "psi_dt_scaling"}
+    expect_validation_error(lambda: CLFTS(dict(charged, electrostatics=dict(charged["electrostatics"], screening_length=0.0))),
+                            "electrostatics.screening_length")
+
+
+def screened_measurements(root):
+    # Polyampholyte E-K-E-K without chi, valences -1 and +0.6 (net charge), screened: its E-K mode has
+    # no field, so psi completes S_ij, with (k^2 + kappa^2)/E; one sample per file, recomputed from the
+    # saved state of the same step. At k = 0 the psi term is left out of S_ij (kappa^2 psi(0)/E would add
+    # the net charge), and the charge structure function is zero
+    params = parameters(root / "screened_measured", steps=2)
+    params.update(segment_lengths={"E": 1.0, "K": 1.0}, chi_n={}, smearing={"type": "gaussian", "a_int": 0.15},
+                  polymers=[{"volume_fraction": 1.0, "blocks": [{"type": t, "length": 0.25} for t in "EKEK"]}])
+    params["electrostatics"] = {"charges": {"E": -1.0, "K": 0.6}, "coupling": 300.0, "screening_length": 0.3}
+    params["recording"].update(checkpoint_interval=1, sample_interval=1, statistics_save_interval=1)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sim = CLFTS(params, random_seed=5)
+        sim.run(initial_fields={"E": np.zeros(int(np.prod(NX))), "K": np.zeros(int(np.prod(NX)))})
+    es, n_grid, types = sim.electrostatics, int(np.prod(NX)), ["E", "K"]
+    assert sim.mpt.aux_fields_dropped_idx and sim._psi_probe is not None
+    fields = mat(root / "screened_measured", "fields_000002.mat")
+    measured = mat(root / "screened_measured", "structure_function_000002.mat")
+    w_aux = np.reshape(fields["w_aux"], (2, n_grid))
+    psi_k = np.reshape(fields["psi_k_real"] + 1j * fields["psi_k_imag"], NX) / n_grid
+    psi = np.reshape(fields["psi_real"] + 1j * fields["psi_imag"], NX)
+    psi_mk = np.conj(np.fft.fftn(np.conj(psi))) / n_grid
+    norm = sim.prop_solver.get_volume() * np.sqrt(params["langevin"]["nbar"])
+    k_sq = np.reshape(sim.smearing.k_sq, NX)
+    rate = (k_sq + 1 / 0.3 ** 2) / 300.0
+    gamma = np.exp(-0.15 ** 2 * k_sq / 2)
+    z = np.array([-1.0, 0.6])
+
+    # mu_i from the fields with lambda != 0, completed along u = z - P z by ((k^2 + kappa^2)/E) psi(k) - z.mu
+    phi_mk, mu = {}, {}
+    for i, m in enumerate(types):
+        phi = np.reshape(fields["phi_" + m + "_real"] + 1j * fields["phi_" + m + "_imag"], NX)
+        phi_mk[m] = np.conj(np.fft.fftn(np.conj(phi))) / n_grid
+        mu[m] = sum(np.fft.fftn(np.reshape(w_aux[k], NX)) * sim.mpt.matrix_a[i, k] / sim.mpt.eigenvalues[k] / n_grid
+                    for k in range(2) if not np.isclose(sim.mpt.eigenvalues[k], 0.0))
+    kept = sim.mpt.matrix_a[:, [k for k in range(2) if not np.isclose(sim.mpt.eigenvalues[k], 0.0)]]
+    u = z - kept @ kept.T @ z / 2
+    probe = rate * psi_k
+    probe[0, 0] = 0.0
+    probe = probe - sum(z[i] * mu[m] for i, m in enumerate(types))
+    mu = {m: mu[m] + u[i] / (u @ u) * probe for i, m in enumerate(types)}
+    for a, i in enumerate(types):
+        for j in types[a:]:
+            recorded = measured[f"structure_function_{i}_{j}_real"] + 1j * measured[f"structure_function_{i}_{j}_imag"]
+            expected = norm * mu[i] * phi_mk[j] / gamma
+            assert np.max(np.abs(recorded - expected)) < 1e-10 * np.max(np.abs(expected)), f"screened S_{i}{j}"
+
+    # Charge structure function: the mixed and the field-field forms with (k^2 + kappa^2)/E
+    charge_mk = gamma * sum(z[i] * phi_mk[m] for i, m in enumerate(types))
+    mixed = rate * norm * psi_k * charge_mk
+    field_field = rate ** 2 * (norm * psi_k * psi_mk + 1.0 / rate)
+    mixed[0, 0] = field_field[0, 0] = 0.0
+    for form, expected in (("mixed", mixed), ("field_field", field_field)):
+        recorded = measured[f"charge_structure_function_{form}_real"] + 1j * measured[f"charge_structure_function_{form}_imag"]
+        assert np.max(np.abs(recorded - expected)) < 1e-10 * np.max(np.abs(expected)), f"screened charge S, {form} form"
+
+
 def main():
     if not any(p.startswith("cpu") for p in PlatformSelector.avail_platforms()):
         return 77
@@ -448,7 +580,8 @@ def main():
         root = Path(tmp)
         for name, check in (("neutral reductions", neutral_reductions), ("forces", forces),
                             ("recorded measurements", recorded_measurements), ("psi step", psi_step),
-                            ("restart", restart), ("input checks", input_checks)):
+                            ("restart", restart), ("input checks", input_checks), ("screening", screening),
+                            ("screened measurements", screened_measurements)):
             check(root)
             print(f"[PASS] {name}")
     return 0

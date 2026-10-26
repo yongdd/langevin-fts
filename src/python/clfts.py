@@ -14,6 +14,7 @@ import os
 import time
 import pathlib
 import warnings
+import contextlib
 import copy
 import json
 import numpy as np
@@ -270,7 +271,7 @@ class CLFTS:
                   "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
 
         # Structure functions: composition modes with a zero eigenvalue carry no auxiliary field,
-        # but ψ measures the charge direction z, <(k²/E) ψ(k) φ_j(-k)> = Σ_i z_i <Γ_i φ_i φ_j>.
+        # but ψ measures the charge direction z, <((k² + κ²)/E) ψ(k) φ_j(-k)> = Σ_i z_i <Γ_i φ_i φ_j>.
         # Its part outside the eigenvectors of the auxiliary fields, u = P_0 z (P_0: projector onto
         # the zero-eigenvalue modes), completes the estimator (docs/theory/StructureFunctionEstimators.md,
         # Section 5).
@@ -281,6 +282,19 @@ class CLFTS:
             u = projector @ np.array([self.electrostatics.charges[name] for name in self.monomer_types])
             if u @ u > 1e-12:
                 self._psi_probe = u / (u @ u)
+
+        # Thermodynamic operators, recorded with H: the chemical potential of each species,
+        # βμ_p = ln(φ_p/α_p) - ln Q_p per chain (not with grafted chains), and with
+        # recording.pressure the osmotic pressure (pressure())
+        chains = [self.prop_solver.get_polymer(p) for p in range(self.prop_solver.get_n_polymer_types())]
+        self.chain_densities = np.array([chain.get_volume_fraction() / chain.get_alpha() for chain in chains])
+        self.record_chemical_potentials = not any(polymer.get("initial_conditions") for polymer in self.polymers)
+        self.record_pressure = bool(self.recording.get("pressure", False))
+        if self.record_pressure:
+            if not self.record_chemical_potentials:
+                raise ValidationError("'recording.pressure' needs free chains (no initial_conditions)")
+            if any(b != "periodic" for b in self.prop_solver.bc):
+                raise ValidationError("'recording.pressure' needs a periodic box")
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
         # ψ takes the noise scheme the integrator declares (electrostatics.py): the average of
@@ -292,7 +306,80 @@ class CLFTS:
                                       "it averages the current and the previous noise (Leimkuhler-Matthews), "
                                       "False if it takes fresh noise")
             self.electrostatics.averaged_noise = bool(averaged_noise)
+
+        # An integrator that declares linear_response (the built-in "etd") integrates the linear
+        # response of the homogeneous state exactly; it gets the Jacobian of the forces and, with
+        # Coulomb coupling, also advances ψ as the last field. It holds the response of this
+        # simulation, so each simulation keeps its own copy of the integrator
+        self._joint_psi = False
+        if getattr(self.integrator, "linear_response", False):
+            if any(b != "periodic" for b in self.prop_solver.bc):
+                raise ValidationError(f"The integrator '{self.integrator.name}' (linear_response) needs a periodic box")
+            self.integrator = copy.deepcopy(self.integrator)
+            self._joint_psi = self.electrostatics is not None and self.electrostatics.coupling > 0
+            self.integrator.set_linear_response(self._force_jacobian(), dt=self.langevin["dt"],
+                                                mobility=self._integrated_mobility(),
+                                                noise_direction=self._integrated_noise_direction())
         self.run_status = {"status": "initialized", "last_completed_step": 0}
+
+    def _integrated_mobility(self):
+        """Mobilities of the fields the integrator advances: dt_scaling, and that of ψ when joint."""
+        if self._joint_psi:
+            return np.append(self.dt_scaling, self.electrostatics.psi_dt_scaling)
+        return self.dt_scaling.copy()
+
+    def _integrated_noise_direction(self):
+        """Real noise for the real-type auxiliary fields, imaginary for the others (and ψ)."""
+        direction = np.array([1.0 if i in self.mpt.aux_fields_real_idx else 1j for i in range(len(self.monomer_types))])
+        return np.append(direction, 1j) if self._joint_psi else direction
+
+    def _force_jacobian(self):
+        """Jacobian J(k) = dF/dw of the forces of the integrated fields at the homogeneous state.
+
+        The fields are the auxiliary fields and, when the integrator advances it, ψ with the
+        force -δH/δψ, so that every field steps as w - δt s F. A kick iε at one grid point of
+        field j has the same Fourier amplitude iε at every wavevector; the concentrations
+        respond linearly and in a homogeneous periodic box do not mix wavevectors, so the
+        imaginary part of the change of the forces divided by ε gives column j of J(k) at all k
+        at once (complex-step derivative, error O(ε²)). The forces of the unkicked state are
+        subtracted: transforms of real data, for example FFTs of sizes with large prime factors,
+        leave imaginary rounding errors of order 1e-15 that a division by ε alone would amplify.
+        With ε = 1e-6 the error O(ε²) is about 1e-12 and the rounding error of J below 1e-7 of its
+        size, even on large grids. The
+        homogeneous state is w = 0 with ψ = 0: a uniform shift of the fields does not change
+        the concentrations of canonical chains. Dynamical stabilization is not part of J.
+        """
+        M, n_grid, nx = len(self.monomer_types), self.prop_solver.n_grid, self.prop_solver.nx
+        es = self.electrostatics
+        m = M + int(self._joint_psi)
+        epsilon = 1e-6
+
+        def forces(w_aux, psi):
+            with es.trial(psi) if es is not None else contextlib.nullcontext():
+                phi, _ = self.compute_concentrations(w_aux)
+                phi_smeared = self.smearing.apply_to_dict(phi)
+                force = self.mpt.compute_func_deriv(w_aux, phi_smeared, range(M))
+                if self._joint_psi:
+                    force = np.vstack([force, -es.charge_density(phi_smeared)])
+            return force
+
+        base = forces(np.zeros((M, n_grid), dtype=np.complex128), np.zeros(n_grid, dtype=np.complex128))
+        jacobian = np.zeros((m, m) + tuple(nx), dtype=np.complex128)
+        for j in range(m):
+            if j < M and self.dt_scaling[j] == 0:
+                continue
+            w_aux = np.zeros((M, n_grid), dtype=np.complex128)
+            psi = np.zeros(n_grid, dtype=np.complex128)
+            if j < M:
+                w_aux[j, 0] = 1j * epsilon
+            else:
+                psi[0] = 1j * epsilon
+            change = forces(w_aux, psi) - base
+            for i in range(m):
+                jacobian[i, j] = np.fft.fftn(np.reshape(np.imag(change[i]) / epsilon, nx))
+        if self._joint_psi:
+            jacobian[M, M] += es.screened_k_sq / es.coupling
+        return jacobian
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -379,6 +466,79 @@ class CLFTS:
         if not np.all(np.isfinite(force)):
             raise ValidationError("Non-finite intermediate CLFTS force")
         return force
+
+    def _evaluate_force_with_psi(self, fields):
+        """Intermediate forces when the integrator advances ψ as the last field (-δH/δψ)."""
+        fields = np.asarray(fields, dtype=np.complex128)
+        M, es = len(self.monomer_types), self.electrostatics
+        if fields.shape != (M + 1, self.prop_solver.n_grid) or not np.all(np.isfinite(fields)):
+            raise ValidationError("Intermediate CLFTS fields have an invalid shape or non-finite values")
+        with es.trial(fields[M]):
+            phi, _ = self.compute_concentrations(fields[:M])
+            phi_smeared = self.smearing.apply_to_dict(phi)
+            psi_force = -es.force(es.charge_density(phi_smeared))
+        force = self.mpt.compute_func_deriv(fields[:M], phi_smeared, range(M))
+        if self.alpha_ds > 0:
+            for i in self.mpt.aux_fields_real_idx:
+                force[i] += 1j * self.alpha_ds * np.imag(fields[i])
+        force = np.vstack([force, psi_force])
+        if not np.all(np.isfinite(force)):
+            raise ValidationError("Non-finite intermediate CLFTS force")
+        return force
+
+    def chemical_potentials(self, total_partitions):
+        """Chemical potential operator βμ_p = ln(φ_p/α_p) - ln Q_p of each species (complex).
+
+        H depends on the number of chains n_p only through -n_p ln Q_p, and the ideal term of
+        the chains gives ln(n_p/V), so ∂ln Z/∂n_p yields this operator; its average is the
+        chemical potential per chain in the convention of SCFT.compute_chemical_potentials,
+        which it equals at the saddle point. Its real part does not depend on the branch of
+        the logarithm. A species without chains has -inf.
+        """
+        with np.errstate(divide="ignore"):
+            ideal = np.log(self.chain_densities)
+        return ideal - np.log(np.asarray(total_partitions, dtype=np.complex128))
+
+    def pressure(self, w_aux, phi):
+        """Osmotic pressure operator βΠ R₀³/C of the auxiliary fields w_aux (complex).
+
+        The propagators of the solver must be those of w_aux, as after compute_concentrations,
+        and phi are its concentrations. βΠ = ∂ln Z/∂V at fixed numbers of chains, with the
+        grid values of the fields held fixed while the box is dilated in its shape
+        (k² ∝ V^(-2/d)). The terms, per C/R₀³ = ρ₀/N:
+        - the ideal gas of the chains, Σ_p φ_p/α_p;
+        - the conformations, -(1/d) Σ_a L_a ∂h/∂L_a with h = -Σ_p (φ_p/α_p) ln Q_p (the solver
+          stress, at fixed smeared fields);
+        - the smearing functions, which follow the box: -Σ_i <φ_i ((∂Γ_i/∂ln V) * (w_i + z_i ψ))>;
+        - the field terms of H, which scale with V: -(Σ_i <h2_i Ω_i² + h1_i Ω_i> + h_const);
+        - the Gaussian normalization of each auxiliary field, n_grid/2 per C V/R₀³ chains, which
+          removes the grid-dependent part of the field term;
+        - ψ: its terms of H and its normalization (Electrostatics.pressure).
+        At the homogeneous saddle point this is the Flory-Huggins osmotic pressure
+        Σ_p φ_p/α_p + φᵀXφ/2 + (ζN/2)((Σφ)² - 1) as C → ∞, plus E q²/(2κ²) for a screened system
+        with the net charge q = Σ_i z_i φ_i per segment (ψ₀ = E q/κ² there).
+        """
+        M, dim, es = len(self.monomer_types), self.prop_solver.dim, self.electrostatics
+        n_chains = np.sqrt(self.langevin["nbar"]) * self.prop_solver.get_volume()   # C V/R₀³
+        value = complex(np.sum(self.chain_densities))
+
+        self.prop_solver.compute_stress()
+        stress, lx = self.prop_solver.get_stress(), self.prop_solver.get_lx()
+        value -= sum(lx[a] * stress[a] for a in range(dim)) / dim
+
+        if self.smearing.enabled:
+            w = self.mpt.to_monomer_fields_dict(w_aux)
+            if es is not None:
+                es.add_potential(w)
+            for name in self.monomer_types:
+                value -= np.mean(phi[name] * self.smearing.dilation(w[name], name))
+
+        value -= sum(self.mpt.h_coef_mu2[i] * np.mean(w_aux[i] ** 2) + self.mpt.h_coef_mu1[i] * np.mean(w_aux[i])
+                     for i in range(M)) + self.mpt.h_const
+        value += 0.5 * (self.mpt.R + self.mpt.I) * self.prop_solver.n_grid / n_chains
+        if es is not None:
+            value += es.pressure(dim, n_chains)
+        return value
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev, w_aux=None):
         """Save CL-FTS simulation checkpoint data to MATLAB file.
@@ -609,6 +769,9 @@ class CLFTS:
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
+        # Chemical potentials (one row of all species per sample) and osmotic pressure
+        chemical_potential_history = []
+        pressure_history = []
 
         # Arrays for structure function (use full FFT for complex fields)
         sf_average = {}  # <u(k) phi(-k)>
@@ -618,7 +781,7 @@ class CLFTS:
             sf_average[type_pair] = np.zeros_like(
                 np.fft.fftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128
             )
-        # Charge structure function (with Coulomb coupling): sums of the mixed form M = (k²/E) ψ c, of the
+        # Charge structure function (with Coulomb coupling): sums of the mixed form M = ((k² + κ²)/E) ψ c, of the
         # zero-mean difference D = (field-field form) - M and of their products, for a combination
         # M + w D of least variance (docs/theory/StructureFunctionEstimators.md, Section 6)
         recorded = dict(sf_average)
@@ -631,7 +794,9 @@ class CLFTS:
             _restart_data, H_history, dH_history, recorded, drift_history,
             psi_drift_history=psi_drift_history if self.electrostatics is not None else None,
             drift_step_history=drift_step_history, n_fields=M,
-            psi_drift_step_history=psi_drift_step_history if self.electrostatics is not None else None)
+            psi_drift_step_history=psi_drift_step_history if self.electrostatics is not None else None,
+            chemical_potential_history=chemical_potential_history if self.record_chemical_potentials else None,
+            pressure_history=pressure_history if self.record_pressure else None, n_polymers=len(self.chain_densities))
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -705,24 +870,40 @@ class CLFTS:
             normal_noise_current = self.random.normal(
                 0.0, self.langevin["sigma"], [M, self.prop_solver.n_grid]
             )
-            noise_direction = np.array([1.0 if i in self.mpt.aux_fields_real_idx else 1j for i in range(M)])
-            proposed = self.integrator.step(
-                w_aux.copy(), w_lambda.copy(), dt=self.langevin["dt"], mobility=self.dt_scaling.copy(),
-                noise=normal_noise_current.copy(), previous_noise=normal_noise_prev.copy(),
-                noise_direction=noise_direction,
-                evaluate_force=lambda fields: self.evaluate_force(fields))
-            proposed = checked_fields(proposed, w_aux)
-            if not np.array_equal(proposed[self.dt_scaling == 0], w_aux[self.dt_scaling == 0]):
+            if self._joint_psi:
+                # The integrator advances ψ with the auxiliary fields (linear_response): ψ is the last
+                # field, with the force -δH/δψ, its mobility and imaginary noise from its own stream
+                psi_noise = es.draw_noise()
+                fields = np.vstack([w_aux, es.psi])
+                proposed = self.integrator.step(
+                    fields.copy(), np.vstack([w_lambda, -psi_force]), dt=self.langevin["dt"],
+                    mobility=self._integrated_mobility(),
+                    noise=np.vstack([normal_noise_current, psi_noise]),
+                    previous_noise=np.vstack([normal_noise_prev, es.previous_noise]),
+                    noise_direction=self._integrated_noise_direction(),
+                    evaluate_force=lambda fields: self._evaluate_force_with_psi(fields))
+                proposed = checked_fields(proposed, fields)
+            else:
+                proposed = self.integrator.step(
+                    w_aux.copy(), w_lambda.copy(), dt=self.langevin["dt"], mobility=self.dt_scaling.copy(),
+                    noise=normal_noise_current.copy(), previous_noise=normal_noise_prev.copy(),
+                    noise_direction=self._integrated_noise_direction(),
+                    evaluate_force=lambda fields: self.evaluate_force(fields))
+                proposed = checked_fields(proposed, w_aux)
+            if not np.array_equal(proposed[:M][self.dt_scaling == 0], w_aux[self.dt_scaling == 0]):
                 raise ValidationError("An integrator must preserve fields with zero mobility")
-            w_aux = proposed.copy()
+            w_aux = proposed[:M].copy()
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # Electrostatic potential: one step with its own noise stream, from the charge density
-            # of the state before the step
+            # Electrostatic potential: from the step of the integrator, or one step of its own with
+            # its own noise stream, from the charge density of the state before the step
             if es is not None:
-                es.step(charge_density)
+                if self._joint_psi:
+                    es.accept(proposed[M], psi_noise)
+                else:
+                    es.step(charge_density)
                 if not np.all(np.isfinite(es.psi)):
                     raise ValidationError(f"Non-finite electrostatic potential at step {langevin_step}")
 
@@ -776,6 +957,10 @@ class CLFTS:
                 dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux, phi=phi_for_force)
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
+                if self.record_chemical_potentials:
+                    chemical_potential_history.append(self.chemical_potentials(total_partitions))
+                if self.record_pressure:
+                    pressure_history.append(self.pressure(w_aux, phi))
 
             # Save H and dH/dchi_n
             if langevin_step % self.recording["statistics_save_interval"] == 0:
@@ -792,6 +977,15 @@ class CLFTS:
                     monomer_pair = sorted(key.split(","))
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1] + "_real"] = np.real(dH_array)
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(dH_array)
+                if self.record_chemical_potentials:
+                    mu_array = np.reshape(np.array(chemical_potential_history, dtype=np.complex128),
+                                          (-1, len(self.chain_densities)))
+                    mdic["chemical_potential_history_real"] = np.real(mu_array)
+                    mdic["chemical_potential_history_imag"] = np.imag(mu_array)
+                if self.record_pressure:
+                    pressure_array = np.array(pressure_history, dtype=np.complex128)
+                    mdic["pressure_history_real"] = np.real(pressure_array)
+                    mdic["pressure_history_imag"] = np.imag(pressure_array)
                 savemat(
                     os.path.join(self.recording["dir"], "dH_%06d.mat" % langevin_step),
                     mdic, long_field_names=True, do_compression=True
@@ -802,6 +996,8 @@ class CLFTS:
                 psi_drift_history = []
                 drift_step_history = []
                 psi_drift_step_history = []
+                chemical_potential_history = []
+                pressure_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
 
@@ -828,10 +1024,13 @@ class CLFTS:
                             np.fft.fftn(np.reshape(w_aux[k], self.prop_solver.nx)) *
                             self.mpt.matrix_a[i, k] / self.mpt.eigenvalues[k] / self.prop_solver.n_grid
                         )
-                # Zero-eigenvalue modes along u: μ_i += u_i [(k²/E) ψ(k) - Σ_l z_l μ_l(k)] / |u|²
+                # Zero-eigenvalue modes along u: μ_i += u_i [((k² + κ²)/E) ψ(k) - Σ_l z_l μ_l(k)] / |u|²
                 if self._psi_probe is not None:
                     es = self.electrostatics
-                    probe = es.psi_k * es.k_sq / es.coupling / self.prop_solver.n_grid
+                    probe = es.psi_k * es.screened_k_sq / es.coupling / self.prop_solver.n_grid
+                    # k = 0 is not a structure function in the canonical ensemble; with screening
+                    # κ²ψ(0)/E would carry a net charge there
+                    probe[(0,) * len(self.prop_solver.nx)] = 0.0
                     for name in self.monomer_types:
                         probe -= es.charges[name] * mu_fourier[name]
                     for i, name in enumerate(self.monomer_types):
@@ -849,7 +1048,7 @@ class CLFTS:
                     # c(-k) = Σ_i z_i Γ_i(k) φ_i(-k) from the φ_i(-k) above (Γ_i is even in k)
                     charge_mk = sum(z * self.smearing.kernel(name) * phi_fourier[name]
                                     for name, z in es.charges.items() if z != 0.0)
-                    rate = es.k_sq / es.coupling
+                    rate = es.screened_k_sq / es.coupling
                     with np.errstate(divide="ignore", invalid="ignore"):
                         mixed = rate * norm * psi_k * charge_mk
                         difference = rate ** 2 * (norm * psi_k * psi_mk + 1.0 / rate) - mixed
@@ -937,6 +1136,10 @@ class CLFTS:
                 if self.electrostatics is not None:
                     self._recording_state["psi_drift_history"] = psi_drift_history
                     self._recording_state["psi_drift_step_history"] = psi_drift_step_history
+                if self.record_chemical_potentials:
+                    self._recording_state["chemical_potential_history"] = chemical_potential_history
+                if self.record_pressure:
+                    self._recording_state["pressure_history"] = pressure_history
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),

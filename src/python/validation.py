@@ -239,6 +239,11 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
         raise ValidationError("'recording' needs a 'dir' path")
     for key in ("checkpoint_interval", "sample_interval", "statistics_save_interval"):
         _integer(recording.get(key), "recording." + key)
+    if "pressure" in recording:
+        if not isinstance(recording["pressure"], (bool, np.bool_)):
+            raise ValidationError("'recording.pressure' must be True or False")
+        if recording["pressure"] and not complex_fields:
+            raise ValidationError("'recording.pressure' is supported in CL-FTS only")
     _integer(params.get("verbose_level"), "verbose_level", minimum=0)
     if params["verbose_level"] > 2:
         raise ValidationError("'verbose_level' must be 0, 1 or 2")
@@ -312,7 +317,7 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
     electrostatics = params["electrostatics"]
     if not isinstance(electrostatics, dict):
         raise ValidationError("'electrostatics' must be a dict or None")
-    unknown = set(electrostatics) - {"charges", "bjerrum_length", "coupling", "psi_dt_scaling"}
+    unknown = set(electrostatics) - {"charges", "bjerrum_length", "coupling", "psi_dt_scaling", "screening_length"}
     if unknown:
         raise ValidationError(f"'electrostatics' has unknown keys: {sorted(unknown)}")
     charges = electrostatics.get("charges")
@@ -339,6 +344,8 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
         if abs(n_segments - round(n_segments)) > 1e-9:
             raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
     _finite_number(electrostatics.get("psi_dt_scaling", 1.0), "electrostatics.psi_dt_scaling", positive=True)
+    if electrostatics.get("screening_length") is not None:
+        _finite_number(electrostatics["screening_length"], "electrostatics.screening_length", positive=True)
     # Point charges have a grid-dependent self-energy; the charges are smeared
     smearing = params.get("smearing")
     if smearing is None:
@@ -354,7 +361,10 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
         raise ValidationError("'electrostatics' supports periodic boxes only")
     if _has_random_copolymer(params):
         raise ValidationError("'electrostatics' does not support random copolymers")
-    # Electroneutrality: Σ_i z_i φ_i = 0 with the overall segment fraction φ_i of each type
+    # Electroneutrality: Σ_i z_i φ_i = 0 with the overall segment fraction φ_i of each type. An implicit
+    # electrolyte (screening_length) screens a net charge, so a screened system need not be neutral
+    if electrostatics.get("screening_length") is not None:
+        return
     total = 0.0
     for polymer in params["polymers"]:
         length = sum(block["length"] for block in polymer["blocks"])

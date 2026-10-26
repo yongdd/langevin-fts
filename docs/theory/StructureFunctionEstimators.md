@@ -132,6 +132,8 @@ CL-FTS samples every field.
 
 A composition mode with $`\lambda_k = 0`$ has no field, so the estimator of Section 3 gives $`P \Gamma S`$ with $`P`$ projecting it out. Such modes arise between monomer types that interact identically. An example is a polyampholyte whose types E and K differ only in charge: E − K is such a mode.
 
+With screened charges (`screening_length`, [Polymer Field Theory, Section 5.4](PolymerFieldTheory.md#54-screened-coulomb-interaction)), $`k^2/E`$ becomes $`(k^2 + \kappa^2)/E`$, the inverse of the kernel, in this section and in Section 6.
+
 **Completion with ψ.** With charges, $`\psi`$ measures the component of $`\Gamma S`$ along $`\mathbf{z}`$ (Section 2), while the auxiliary fields measure $`P \Gamma S`$. Subtract from the $`\psi`$ component what $`P`$ already contains. The remainder is the component along
 
 ```math
@@ -148,7 +150,7 @@ makes the estimator of Section 3 give $`(P + \mathbf{u}\mathbf{u}^T/\mathbf{u}\c
 
 **When this is exact.** The result equals $`\Gamma S`$ when the zero-eigenvalue modes are spanned by $`\mathbf{u}`$, e.g. a single such mode with a charge difference. With several zero-eigenvalue modes, only their charge direction is completed.
 
-**When nothing changes.** If $`\mathbf{u} = 0`$, the charges lie along modes that already have fields, and the estimator is unchanged. This is the case without charges, with $`E = 0`$, and when every mode has a field. At $`\mathbf{k} = 0`$ the term $`k^2 \tilde\psi/E`$ vanishes; this mode is not a structure function in the canonical ensemble.
+**When nothing changes.** If $`\mathbf{u} = 0`$, the charges lie along modes that already have fields, and the estimator is unchanged. This is the case without charges, with $`E = 0`$, and when every mode has a field. At $`\mathbf{k} = 0`$ the term with $`\tilde\psi`$ is left out: this mode is not a structure function in the canonical ensemble, and with screening $`\kappa^2 \tilde\psi(0)/E`$ would carry a net charge.
 
 **In polymerfts.** CL-FTS applies the completion when it has electrostatics and $`\mathbf{u} \neq 0`$ (`CLFTS._psi_probe`). The completion follows from the identity of Section 2 and was derived for polymerfts; it is not taken from a publication.
 

@@ -230,6 +230,12 @@ def checkpoint_data(sim):
                                                            (-1, len(sim.monomer_types)))
         if "psi_drift_step_history" in state:
             data["record_psi_drift_step_history"] = np.asarray(state["psi_drift_step_history"], dtype=np.float64)
+        # CL-FTS: the chemical potentials (one row of all species per sample) and the pressure
+        if "chemical_potential_history" in state:
+            data["record_chemical_potential_history"] = np.reshape(
+                np.asarray(state["chemical_potential_history"], dtype=np.complex128), (-1, len(sim.chain_densities)))
+        if "pressure_history" in state:
+            data["record_pressure_history"] = np.asarray(state["pressure_history"], dtype=np.complex128)
         data["record_sample_count"] = state["sample_count"]
         for key, values in state["dH_history"].items():
             data[_measurement_key("dH", key)] = np.asarray(values)
@@ -339,6 +345,15 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 if (np.size(values) != pending_steps * per_step or np.iscomplexobj(values)
                         or not np.all(np.isfinite(values)) or np.any(values < 0)):
                     raise ValidationError(f"Invalid checkpoint measurement '{key}'")
+        # Pending chemical potentials and pressures (absent in checkpoints of earlier versions or
+        # of runs without them; continue_run then records NaN for those samples, which later
+        # checkpoints keep). A species without chains has the chemical potential -inf
+        for key, per_sample in (("record_chemical_potential_history", len(getattr(sim, "chain_densities", []))),
+                                ("record_pressure_history", 1)):
+            if key in data:
+                values = np.atleast_1d(np.asarray(data[key]))
+                if np.size(values) != count * per_sample or np.any(np.isposinf(np.real(values))):
+                    raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         for monomer in sim.monomer_types:
             names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
                      (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
@@ -399,10 +414,25 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
 
 
 def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None,
-                            drift_step_history=None, n_fields=1, psi_drift_step_history=None):
+                            drift_step_history=None, n_fields=1, psi_drift_step_history=None,
+                            chemical_potential_history=None, pressure_history=None, n_polymers=1):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
+    # Chemical potentials and pressures that the checkpoint does not hold are NaN
+    count = int(data["record_sample_count"])
+    if chemical_potential_history is not None:
+        if "record_chemical_potential_history" in data:
+            values = np.reshape(np.asarray(data["record_chemical_potential_history"], dtype=np.complex128), (-1, n_polymers))
+        else:
+            values = np.full((count, n_polymers), np.nan + 0j)
+        chemical_potential_history.extend(values)
+    if pressure_history is not None:
+        if "record_pressure_history" in data:
+            values = np.atleast_1d(np.asarray(data["record_pressure_history"], dtype=np.complex128))
+        else:
+            values = np.full(count, np.nan + 0j)
+        pressure_history.extend(values.tolist())
     H_history.extend(np.atleast_1d(data["record_H_history"]).tolist())
     if drift_history is not None and "record_drift_history" in data:
         drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())

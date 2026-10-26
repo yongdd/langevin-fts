@@ -2,31 +2,38 @@
 
 Monomer type i carries the valence z_i per segment, and the charges interact through
 the smeared charge density c(r) = Σ_i z_i (Γ_i * φ_i)(r) with the Coulomb kernel E/k²,
-where Γ_i is the smearing function of the type (smearing.py). The interaction is
-decoupled with an electrostatic potential ψ on the rotated contour: like the pressure
-field it is an imaginary-type field, and type i feels z_i ψ, so the propagator input is
-Γ_i * (w_i + z_i ψ). Per reference chain (as in polymer_field_theory.py),
+where Γ_i is the smearing function of the type (smearing.py). A background electrolyte
+that is not simulated explicitly screens the kernel to E/(k² + κ²) (a Yukawa interaction),
+with the screening length 1/κ (screening_length); it is the Debye length of that background
+alone, and explicit ions screen in addition through ψ.
+The interaction is decoupled with an electrostatic potential ψ on the rotated contour:
+like the pressure field it is an imaginary-type field, and type i feels z_i ψ, so the
+propagator input is Γ_i * (w_i + z_i ψ). Per reference chain (as in polymer_field_theory.py),
 
-    βH_el / (C V/R₀³) = (1/(2E V)) ∫ ψ ∇²ψ dr,   δH/δψ = ∇²ψ/E + c,
+    βH_el / (C V/R₀³) = (1/(2E V)) ∫ ψ (∇² - κ²) ψ dr,   δH/δψ = (∇² - κ²)ψ/E + c,
 
 with the coupling E = 4π l_B ρ₀ N R₀² = 4π (l_B/R₀) N² N̄^(1/2). At the saddle point
--∇²ψ = E c (Poisson equation). ψ moves like an imaginary field (drift +δH/δψ, imaginary
-noise). Its linear part ∇²ψ/E is stiff at large k and is integrated exactly for each
-wavevector (exponential time differencing); the charge density stays explicit. ψ takes the
-mean of the current and the previous noise, as the Leimkuhler-Matthews integrator of the
-auxiliary fields does: the step is a Leimkuhler-Matthews step of ψ with the time step
-(1 - exp(-γ δτN))/γ of each mode, γ = s k²/E, and the Gaussian statistics of ψ and the
-auxiliary fields are exact for any time step. With an integrator that declares fresh noise
-(averaged_noise = False, as Euler does), ψ takes fresh noise; the explicit charge density
-then biases its variance at first order in γ δτN.
+-(∇² - κ²)ψ = E c (Poisson or screened Poisson equation). ψ moves like an imaginary field
+(drift +δH/δψ, imaginary noise). Its linear part (∇² - κ²)ψ/E is stiff at large k and is
+integrated exactly for each wavevector (exponential time differencing); the charge density
+stays explicit. ψ takes the mean of the current and the previous noise, as the
+Leimkuhler-Matthews integrator of the auxiliary fields does: the step is a
+Leimkuhler-Matthews step of ψ with the time step (1 - exp(-γ δτN))/γ of each mode,
+γ = s (k² + κ²)/E, and the Gaussian statistics of ψ and the auxiliary fields are exact for
+any time step. With an integrator that declares fresh noise (averaged_noise = False, as
+Euler does), ψ takes fresh noise; the explicit charge density then biases its variance at
+first order in γ δτN. An integrator that declares linear_response (integrators.py) advances
+ψ together with the auxiliary fields instead (draw_noise, accept).
 ψ is kept in Fourier space; its grid values follow from one inverse transform per step,
 and H is evaluated by Parseval's theorem.
-The uniform mode of ψ is zero (electroneutrality). Periodic boxes only.
+Without screening the uniform mode of ψ is zero (electroneutrality); with screening it
+fluctuates, and the system may carry a net charge. Periodic boxes only.
 
 References: Riggleman, Kumar & Fredrickson, J. Chem. Phys. 136, 024903 (2012);
 Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016).
 """
 
+import contextlib
 import json
 
 import numpy as np
@@ -41,7 +48,9 @@ class Electrostatics:
     ----------
     params : dict
         The `electrostatics` input: `charges` {type: z}, `bjerrum_length` (l_B/R₀, discrete
-        chains) or `coupling` (E), and optionally `psi_dt_scaling` (mobility of ψ, default 1).
+        chains) or `coupling` (E), and optionally `psi_dt_scaling` (mobility of ψ, default 1)
+        and `screening_length` (1/κ in units of R₀, the screening of a background electrolyte;
+        none: unscreened).
     monomer_types : list of str
         Monomer types; types without a charge are neutral.
     smearing : Smearing
@@ -70,6 +79,10 @@ class Electrostatics:
         self.psi_dt_scaling = float(params.get("psi_dt_scaling", 1.0))
         self.nx = list(smearing.nx)
         self.k_sq = np.reshape(smearing.k_sq, self.nx)
+        # k² + κ²: E divided by the (screened) Coulomb kernel
+        self.screening_length = None if params.get("screening_length") is None else float(params["screening_length"])
+        self.kappa_sq = 0.0 if self.screening_length is None else 1.0 / self.screening_length ** 2
+        self.screened_k_sq = self.k_sq + self.kappa_sq
         self.sigma = langevin["sigma"]
         self.psi = np.zeros(int(np.prod(self.nx)), dtype=np.complex128)
 
@@ -81,14 +94,14 @@ class Electrostatics:
         self.previous_noise = np.zeros(self.psi.size)
 
         # Exact (Ornstein-Uhlenbeck) step of the linear part for each wavevector, rate
-        # γ_k = s k²/E: decay a = exp(-γ_k δτN) and response (1 - a)/(k²/E) to the charge
-        # density. The noise amplitude sqrt((1 - a²)/(2 k²/E δτN)) of fresh noise keeps the
-        # exact variance of the linear part; sqrt((1 - a)/(4 k²/E δτN)) on the sum of two
-        # noises is that of a Leimkuhler-Matthews step of time (1 - a)/γ_k, exact also with
-        # the explicit charge density. All reduce to the Euler (LM) step as k → 0
+        # γ_k = s (k² + κ²)/E: decay a = exp(-γ_k δτN) and response (1 - a)/((k² + κ²)/E) to the
+        # charge density. The noise amplitude sqrt((1 - a²)/(2 (k² + κ²)/E δτN)) of fresh noise
+        # keeps the exact variance of the linear part; sqrt((1 - a)/(4 (k² + κ²)/E δτN)) on the
+        # sum of two noises is that of a Leimkuhler-Matthews step of time (1 - a)/γ_k, exact also
+        # with the explicit charge density. All reduce to the Euler (LM) step as γ_k → 0
         if self.coupling > 0:
             dt, s = float(langevin["dt"]), self.psi_dt_scaling
-            rate = self.k_sq / self.coupling
+            rate = self.screened_k_sq / self.coupling
             with np.errstate(divide="ignore", invalid="ignore"):
                 self._decay = np.exp(-rate * dt * s)
                 self._response = np.where(rate > 0, -np.expm1(-rate * dt * s) / rate, dt * s)
@@ -132,10 +145,10 @@ class Electrostatics:
         return c
 
     def force(self, c):
-        """δH/δψ = ∇²ψ/E + c; zero without Coulomb coupling (ψ stays zero)."""
+        """δH/δψ = (∇² - κ²)ψ/E + c; zero without Coulomb coupling (ψ stays zero)."""
         if self.coupling <= 0:
             return np.zeros_like(self.psi)
-        return np.reshape(np.fft.ifftn(-self.k_sq * self._psi_k), -1) / self.coupling + c
+        return np.reshape(np.fft.ifftn(-self.screened_k_sq * self._psi_k), -1) / self.coupling + c
 
     def step(self, c):
         """Advance ψ by one Langevin step with the charge density c of the same state."""
@@ -150,23 +163,71 @@ class Electrostatics:
         psi_k = (self._decay * self._psi_k
                  + self._response * np.fft.fftn(np.reshape(c, self.nx))
                  + 1j * noise)
-        psi_k[(0,) * len(self.nx)] = 0.0
+        self._set_psi_k(psi_k)
+
+    def draw_noise(self):
+        """Noise of ψ for one step, from its own stream, for an integrator that advances ψ
+        together with the auxiliary fields (accept)."""
+        return self.random.normal(0.0, self.sigma, self.psi.size)
+
+    def accept(self, psi, noise):
+        """Take ψ from such an integrator, with the noise of its step as the previous noise."""
+        self._set_psi_k(np.fft.fftn(np.reshape(np.asarray(psi, dtype=np.complex128), self.nx)))
+        self.previous_noise = np.asarray(noise, dtype=np.float64).copy()
+
+    def _set_psi_k(self, psi_k):
+        # Without screening the uniform mode is zero (electroneutrality)
+        if self.screening_length is None:
+            psi_k[(0,) * len(self.nx)] = 0.0
         self._psi_k = psi_k
         self._psi = np.reshape(np.fft.ifftn(psi_k), -1)
 
-    def hamiltonian(self):
-        """Electrostatic term (1/(2E V)) ∫ ψ ∇²ψ dr of the current ψ.
+    @contextlib.contextmanager
+    def trial(self, psi):
+        """Set ψ for an intermediate evaluation and restore ψ and ψ(k) exactly afterwards."""
+        saved = self._psi, self._psi_k
+        try:
+            self.psi = psi
+            yield
+        finally:
+            self._psi, self._psi_k = saved
 
-        By Parseval's theorem, mean(ψ ∇²ψ) = -Σ_k k² ψ(k) ψ(-k) / n² (unnormalized FFT, n grid
-        points).
+    def hamiltonian(self):
+        """Electrostatic term (1/(2E V)) ∫ ψ (∇² - κ²) ψ dr of the current ψ.
+
+        By Parseval's theorem, mean(ψ (∇² - κ²) ψ) = -Σ_k (k² + κ²) ψ(k) ψ(-k) / n² (unnormalized
+        FFT, n grid points).
         """
         if self.coupling <= 0:
             return 0.0
-        return -0.5 * np.sum(self.k_sq * self._psi_k * self.psi_minus_k()) / self.psi.size ** 2 / self.coupling
+        return (-0.5 * np.sum(self.screened_k_sq * self._psi_k * self.psi_minus_k())
+                / self.psi.size ** 2 / self.coupling)
+
+    def pressure(self, dim, n_chains):
+        """Contribution of ψ to the osmotic pressure βΠ R₀³/C (clfts.py, pressure).
+
+        At fixed grid values of ψ a dilation of the box by V changes k² as V^(-2/d), so the
+        term V H_el changes by (1 - 2/d) H_k + H_κ, the parts of H_el from k² and from κ².
+        The normalization of the Gaussian integral over ψ adds, for every mode it integrates
+        (all modes with k² + κ² > 0), (1 - (2/d) k²/(k² + κ²))/2 per n_chains = C V/R₀³
+        reference chains.
+        """
+        if self.coupling <= 0:
+            return 0.0
+        n = self.psi.size
+        weight = self._psi_k * self.psi_minus_k() / n ** 2 / self.coupling
+        h_k = -0.5 * np.sum(self.k_sq * weight)
+        h_kappa = -0.5 * self.kappa_sq * np.sum(weight)
+        modes = self.screened_k_sq > 0
+        normalization = 0.5 * np.sum(1.0 - (2.0 / dim) * self.k_sq[modes] / self.screened_k_sq[modes]) / n_chains
+        return -((1.0 - 2.0 / dim) * h_k + h_kappa) + normalization
 
     def settings(self):
         """Settings that define a continuation (checkpoint hash)."""
-        return {"charges": self.charges, "coupling": self.coupling, "psi_dt_scaling": self.psi_dt_scaling}
+        settings = {"charges": self.charges, "coupling": self.coupling, "psi_dt_scaling": self.psi_dt_scaling}
+        if self.screening_length is not None:
+            settings["screening_length"] = self.screening_length
+        return settings
 
     def checkpoint_data(self):
         return {"psi_real": np.real(self.psi), "psi_imag": np.imag(self.psi),
