@@ -18,6 +18,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 import numpy as np
 import phase_diagram
+import seeds
 
 # Parameters shared by all phases
 base_params = {
@@ -46,16 +47,16 @@ def set_point(params, f, chi_n):
     params["chi_n"]["A,B"] = chi_n
 
 
-# Candidate phases: seed, the point (f, chi N) of the seed and the parameters of
-# the phase. Each phase uses its cheapest cell: lamellae in 1D, cylinders in a 2D
-# rectangular cell holding two of them, gyroid and BCC spheres in 3D with their
-# space groups.
+# Candidate phases: initial fields (seeds.py), the point (f, chi N) where they are
+# converged and the parameters of the phase. Each phase uses its cheapest cell:
+# lamellae in 1D, cylinders in a 2D rectangular cell holding two of them, gyroid
+# and BCC spheres in 3D with their space groups.
 phases = {
-    "L": {"seed": "L1D.json", "point": (0.5, 13.27), "params": {"nx": [32]}},
-    "C": {"seed": "C2D.json", "point": (1/3, 15.0), "params": {"nx": [48, 32]}},
-    "G": {"seed": "DG.json", "point": (0.4, 15.0),
+    "L": {"seed": seeds.lamellae([32], [1.5]), "point": (0.5, 13.27), "params": {"nx": [32]}},
+    "C": {"seed": seeds.cylinders([48, 32], [2.7, 1.6]), "point": (1/3, 15.0), "params": {"nx": [48, 32]}},
+    "G": {"seed": seeds.double_gyroid([32, 32, 32]), "point": (0.4, 15.0),
           "params": {"nx": [32, 32, 32], "space_group": {"symbol": "Ia-3d", "hall_number": 530}}},
-    "S": {"seed": "BCC.json", "point": (24/90, 18.1),
+    "S": {"seed": seeds.bcc_spheres([32, 32, 32], [1.9, 1.9, 1.9]), "point": (24/90, 18.1),
           "params": {"nx": [32, 32, 32], "space_group": {"symbol": "Im-3m", "hall_number": 529}}},
 }
 
@@ -67,5 +68,4 @@ phase_diagram.run(
     y_grid=np.round(np.arange(10.0, 30.0001, 2.0), 6),
     x_tol=1e-3, y_tol=1e-2,
     derivatives={"y": phase_diagram.chi_derivative("A", "B")},
-    seed_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "phases"),
     labels=("f", r"$\chi N$"), mirror_x=0.5, output="AB_Diblock")

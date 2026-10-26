@@ -1,8 +1,9 @@
 """Phase diagram of a polymer system in the plane of two parameters (x, y).
 
-run() needs a function that puts (x, y) into the simulation parameters and one
-converged solution (seed) of every candidate phase; it makes no other assumption
-about the system. AB_Diblock.py and ABA_Triblock.py in this folder are examples.
+run() needs a function that puts (x, y) into the simulation parameters and initial
+fields (a seed) of every candidate phase; it makes no other assumption about the
+system. AB_Diblock.py and ABA_Triblock.py in this folder are examples, and seeds.py
+builds the initial fields of common AB phases.
 
 Every SCFT solve starts from the nearest converged solution of the same phase
 (continuation), and the boundaries come from root finding, so a coarse grid is
@@ -21,6 +22,8 @@ enough:
   4. Refinement: a cell in which a boundary ends (it crosses the cell edges an odd
      number of times: a triple point or a critical point) is split into four, and
      stage 3 is repeated on the new lines.
+  5. Connection: the boundary points are joined into curves, and their junctions
+     and breaks are checked (see connect).
 
 Phases are compared by their free energy relative to the homogeneous state. That
 decides the phase diagram of a melt of one copolymer, or of any system that
@@ -28,9 +31,10 @@ cannot separate into coexisting phases of different composition. A blend can for
 two-phase regions, which need coexistence conditions instead (see
 docs/theory/PhaseEquilibrium.md).
 
-A seed can come from another system (fields of a diblock phase serve an ABA
-triblock), but its point must lie where the phase exists in this system; a phase
-whose seed melts there is left out. Close to a critical point all ordered phases
+A seed needs only the symmetry and rough shape of its phase, and the same seed can
+serve several systems (seeds.py serves the AB diblock and the ABA triblock), but its
+point must lie where the phase exists in the system; a phase whose seed melts there
+is left out. Close to a critical point all ordered phases
 have F ~ 0 and converge slowly, so the phase that orders first there is not
 resolved, although the transition itself is.
 
@@ -167,8 +171,10 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
 
     base_params    parameters shared by all phases
     set_point      function(params, x, y) that puts (x, y) into params
-    phases         {name: {"seed": file saved by SCFT.save_results (.json or .mat),
-                           "point": (x, y) of the seed,
+    phases         {name: {"seed": initial fields {"w": {monomer: array}, "lx": lx}
+                                   (see seeds.py), or a file in seed_dir saved by
+                                   SCFT.save_results (.json or .mat),
+                           "point": (x, y) where the seed is converged,
                            "params": parameters of this phase (nx, space_group, ...),
                            "region": optional (x_min, x_max, y_min, y_max)}}
     x_grid, y_grid grid values; x_tol, y_tol: accuracy of the boundary points
@@ -196,14 +202,17 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
 
     def solve(phase, x, y, guess, reference):
         """One SCFT solve from the guess. Returns the converged state, or None when it
-        does not converge, melts, or its structure differs from the reference state."""
+        does not converge, melts, or its structure differs from the reference state.
+        Without a reference the guess is a seed, which may need many iterations."""
         errors = []
 
         def stop_when_stalled(info):
-            # Give up on a run whose lowest error has not dropped tenfold during the
-            # last 300 iterations; continue_to then retries with a smaller step
+            # Give up on a continuation step whose lowest error has not dropped tenfold
+            # during the last 300 iterations; continue_to then retries with a smaller
+            # step. A seed can rise and fall for longer before it converges.
             errors.append(info.error_level)
-            if len(errors) > 300 and min(errors[-300:]) > 0.1*min(errors[:-300]):
+            if (reference is not None and len(errors) > 300
+                    and min(errors[-300:]) > 0.1*min(errors[:-300])):
                 return False
             return None
 
@@ -300,7 +309,11 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
 
     def load_seed(phase):
         """Fields and cell of a seed, interpolated to the grid of the phase if needed."""
-        path = os.path.join(seed_dir, phases[phase]["seed"])
+        x, y = phases[phase]["point"]
+        seed = phases[phase]["seed"]
+        if isinstance(seed, dict):
+            return {"x": x, "y": y, "w": seed["w"], "lx": list(seed["lx"])}
+        path = os.path.join(seed_dir, seed)
         data = scipy.io.loadmat(path, squeeze_me=True) if path.endswith(".mat") else json.load(open(path))
         nx_seed = [int(n) for n in np.atleast_1d(data["nx"])]
         nx = phases[phase].get("params", {}).get("nx", base_params.get("nx", nx_seed))
@@ -311,7 +324,6 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
                 if list(nx) != nx_seed:
                     field = scipy.ndimage.zoom(field, np.array(nx)/np.array(nx_seed), mode="grid-wrap")
                 w[key[2:]] = field
-        x, y = phases[phase]["point"]
         return {"x": x, "y": y, "w": w, "lx": [float(v) for v in np.atleast_1d(data["lx"])]}
 
     time_start = time.perf_counter()

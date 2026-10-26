@@ -1,9 +1,9 @@
 """Phase diagram of an ABA triblock copolymer melt in the (f, chi N) plane.
 
 f is the total A fraction; each A block has length f/2. Only the system
-definition differs from AB_Diblock.py. The seeds are the diblock phases, placed
-where each phase exists for the triblock, which orders at higher chi N than the
-diblock (chi N = 18.0 at f = 0.5).
+definition differs from AB_Diblock.py. The seeds are the initial fields of the
+diblock in smaller cells, placed where each phase exists for the triblock, which
+orders at higher chi N than the diblock (chi N = 18.0 at f = 0.5).
 
 Run on a GPU: about 1500 SCFT solves, 45 minutes on an A10. The results are saved
 in ABA_Triblock.json and ABA_Triblock.png.
@@ -17,6 +17,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 import numpy as np
 import phase_diagram
+import seeds
 
 # Parameters shared by all phases
 base_params = {
@@ -44,12 +45,15 @@ def set_point(params, f, chi_n):
     params["chi_n"]["A,B"] = chi_n
 
 
+# The seeds of AB_Diblock.py in cells of 0.63 their size: the triblock behaves like
+# two diblocks of half length, and its period is 2^(-2/3) of the diblock period. A
+# seed in a much larger cell can melt or converge to a supercell.
 phases = {
-    "L": {"seed": "L1D.json", "point": (0.5, 24.0), "params": {"nx": [32]}},
-    "C": {"seed": "C2D.json", "point": (0.34, 24.0), "params": {"nx": [48, 32]}},
-    "G": {"seed": "DG.json", "point": (0.38, 24.0),
+    "L": {"seed": seeds.lamellae([32], [0.95]), "point": (0.5, 24.0), "params": {"nx": [32]}},
+    "C": {"seed": seeds.cylinders([48, 32], [1.7, 1.0]), "point": (0.34, 24.0), "params": {"nx": [48, 32]}},
+    "G": {"seed": seeds.double_gyroid([32, 32, 32], [2.3, 2.3, 2.3]), "point": (0.38, 24.0),
           "params": {"nx": [32, 32, 32], "space_group": {"symbol": "Ia-3d", "hall_number": 530}}},
-    "S": {"seed": "BCC.json", "point": (0.30, 32.0),
+    "S": {"seed": seeds.bcc_spheres([32, 32, 32], [1.2, 1.2, 1.2]), "point": (0.30, 32.0),
           "params": {"nx": [32, 32, 32], "space_group": {"symbol": "Im-3m", "hall_number": 529}}},
 }
 
@@ -59,5 +63,4 @@ phase_diagram.run(
     y_grid=np.round(np.arange(14.0, 34.0001, 2.0), 6),
     x_tol=1e-3, y_tol=1e-2,
     derivatives={"y": phase_diagram.chi_derivative("A", "B")},
-    seed_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "phases"),
     labels=("f (total A fraction)", r"$\chi N$"), mirror_x=0.5, output="ABA_Triblock")

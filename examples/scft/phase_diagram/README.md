@@ -2,12 +2,13 @@
 
 `phase_diagram.py` computes the SCFT phase diagram of a polymer system in the plane
 of two parameters (x, y). It needs a function that puts (x, y) into the simulation
-parameters and one converged solution (seed) of every candidate phase; it makes no
-other assumption about the system.
+parameters and initial fields (a seed) of every candidate phase; it makes no other
+assumption about the system.
 
 | File | Content |
 |------|---------|
 | `phase_diagram.py` | The algorithm: `run()` computes and saves a diagram, `connect()` joins its boundary points into curves, `plot()` draws a saved one |
+| `seeds.py` | Initial fields of lamellae, cylinders, double gyroid and BCC spheres of AB block copolymers |
 | `AB_Diblock.py` | AB diblock melt in the (f, χN) plane |
 | `ABA_Triblock.py` | ABA triblock melt in the (f, χN) plane; only the system definition differs |
 
@@ -87,18 +88,23 @@ Copy a system script and change:
 - `base_params`: the parameters shared by all phases.
 - `set_point(params, x, y)`: puts the two parameters into `params`. Any parameter can be
   an axis: block lengths, χN, segment lengths, volume fractions.
-- `phases`: for every candidate phase a seed saved by `SCFT.save_results` (`.json` or
-  `.mat`), the point (x, y) of the seed, and the parameters of the phase (`nx`,
-  `space_group`, ...). An optional `region` limits a phase to a rectangle.
+- `phases`: for every candidate phase a seed, the point (x, y) where it is converged,
+  and the parameters of the phase (`nx`, `space_group`, ...). A seed is initial fields
+  `{"w": {monomer: array}, "lx": lx}`, as built by `seeds.py`, or a file saved by
+  `SCFT.save_results` (`.json` or `.mat`) in `seed_dir`. An optional `region` limits a
+  phase to a rectangle.
 - The arguments of `run()`: grids, boundary tolerances, derivatives, axis labels and
   `mirror_x` for a diagram symmetric about a vertical line. Pass `homogeneous=False` for
   a system without a homogeneous state, for example with walls or grafted chains. A
   smaller `smallest_step` (for example 1/8) follows a phase closer to the end of its
   existence at the cost of more retries.
 
-A seed can come from another system (the diblock phases serve the triblock), but its
-point must lie where the phase exists in the new system. A phase whose seed melts there
-is left out.
+A seed needs only the symmetry, the rough shape and roughly the period of its phase,
+since its first solve converges it, and the same seed can serve several systems
+(`seeds.py` serves the diblock and, in cells of 0.63 the size, the triblock). Its
+point must lie where the phase exists in the system; a phase whose seed melts there is
+left out. A seed in a much larger cell than the period can melt or converge to a
+supercell.
 
 ## Results
 
