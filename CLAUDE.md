@@ -301,8 +301,9 @@ Guide for detailed transform dispatch, ownership and computation hierarchies.
 
 For GitHub math, use protected inline syntax (`` $`...`$ ``) and unindented fenced
 blocks with the `math` language. Put display blocks outside list indentation.
-Within table math use `\vert` instead of a literal vertical bar. Escape literal
-dollar signs. Check documentation edits with:
+Within table math use `\vert` instead of a literal vertical bar. Write `\lt` for a
+`<` directly before a letter; GitHub can take it as an HTML tag and break the
+formula. Escape literal dollar signs. Check documentation edits with:
 
 ```bash
 python .github/scripts/check_latex.py AGENTS.md CLAUDE.md

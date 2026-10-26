@@ -23,7 +23,11 @@ This script reports
      unindented (a numbered list continues with "2." as before);
   3. '|' in inline math in a table row: GitHub ends the cell there even inside
      the code span, so write \\vert (and \\Vert for \\|);
-  4. formulas KaTeX cannot parse, if the KaTeX CLI is installed
+  4. '<' directly before a letter, '/', '!' or '?' in math: GitHub can take it
+     as the start of an HTML tag and break the formula ('\\sum_{i<j}' gave
+     "Extra open brace or missing close brace"), so write \\lt or put a space
+     after '<';
+  5. formulas KaTeX cannot parse, if the KaTeX CLI is installed
      (npm install -g katex). GitHub uses MathJax; KaTeX understands nearly
      the same TeX and is the stricter of the two.
 
@@ -131,6 +135,13 @@ def scan(text):
                 i += 1
     if fence is not None:
         problems.append((fence[1], 'code block is not closed'))
+    for ln, tex, display in formulas:
+        m = re.search(r'<[A-Za-z/!?]', tex)
+        if m:
+            # a ```math block starts on the line after its fence
+            at = ln + 1 + tex[:m.start()].count('\n') if display else ln
+            problems.append((at, "'<' before a letter, '/', '!' or '?' in math can start an HTML "
+                                 "tag on GitHub: write \\lt or put a space after '<'"))
     return formulas, problems
 
 
