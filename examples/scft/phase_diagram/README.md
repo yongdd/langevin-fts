@@ -7,7 +7,7 @@ other assumption about the system.
 
 | File | Content |
 |------|---------|
-| `phase_diagram.py` | The algorithm: `run()` computes and saves a diagram, `plot()` draws a saved one |
+| `phase_diagram.py` | The algorithm: `run()` computes and saves a diagram, `connect()` joins its boundary points into curves, `plot()` draws a saved one |
 | `AB_Diblock.py` | AB diblock melt in the (f, χN) plane |
 | `ABA_Triblock.py` | ABA triblock melt in the (f, χN) plane; only the system definition differs |
 
@@ -38,11 +38,13 @@ Every SCFT solve starts from the nearest converged solution of the same phase
    critical point. Such a cell is split into four, the most stable phase is found at
    the new points and the boundaries on the two new lines. This is repeated `refine`
    times (default 2) on the new cells.
-5. **Connection.** Inside each cell, two points of a pair on its edges belong to one
-   curve. Curve ends in touching cells meet at a junction, a triple or critical point,
-   if every phase appears in an even number of their pairs, since each phase there lies
-   between two curves. Other ends mark a break; the script prints each break, and the
-   plot marks it with a red cross.
+5. **Connection** (`connect`). Inside each cell, two points of a pair on its edges
+   belong to one curve. Curve ends in touching cells belong together: two ends of the
+   same pair are one curve whose crossing fell into the neighbouring cell within the
+   root tolerance, and three or more ends meet at a junction, a triple or critical
+   point, if every phase appears in an even number of their pairs, since each phase
+   there lies between two curves. Other ends mark a break; the script prints each break,
+   and the plot marks it with a red cross.
 
 ### Root finding
 

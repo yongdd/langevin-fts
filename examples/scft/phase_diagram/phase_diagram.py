@@ -90,6 +90,75 @@ def deviation(w):
     return np.concatenate([np.ravel(w[m]) - np.mean(w[m]) for m in sorted(w)])
 
 
+def on_edges(boundaries, cell, x_end, y_end):
+    """Boundary points on the edges of a cell (x0, x1, y0, y1). A point lies only on
+    the line along which it was found, and every edge is half open (closed at the
+    end x_end, y_end of the grid), so that a point at a grid corner belongs to one
+    edge of each line through that corner."""
+    x0, x1, y0, y1 = cell
+    points = []
+    for b in boundaries:
+        if b["along"] == "y":
+            on_edge = ((np.isclose(b["x"], x0) or np.isclose(b["x"], x1)) and y0 <= b["y"]
+                       and (b["y"] < y1 or np.isclose(y1, y_end)))
+        else:
+            on_edge = ((np.isclose(b["y"], y0) or np.isclose(b["y"], y1)) and x0 <= b["x"]
+                       and (b["x"] < x1 or np.isclose(x1, x_end)))
+        if on_edge:
+            points.append(b)
+    return points
+
+
+def connect(boundaries, cells, x_step, y_step, x_end, y_end):
+    """Connect the boundary points into curves; returns the segments, the junctions
+    and the breaks.
+
+    Two points of a pair on the edges of a cell belong to one curve through it; a
+    point left over is a curve end inside the cell. Ends in touching cells belong
+    together. Two ends of the same pair are one curve whose crossing between the
+    two cells fell into the neighbouring cell within the root tolerance. Three or
+    more ends meet at a junction, a triple or critical point: every phase there lies
+    between two of the curves, so it must appear in an even number of their pairs.
+    Ends that fit neither mark a break in the diagram."""
+    segments, ends = [], []
+    for cell in cells:
+        by_pair = {}
+        for b in on_edges(boundaries, cell, x_end, y_end):
+            by_pair.setdefault(tuple(b["phases"]), []).append((b["x"], b["y"]))
+        for pair, points in by_pair.items():
+            while len(points) >= 2:
+                p = points.pop(0)
+                q = min(points, key=lambda q: np.hypot((q[0] - p[0])/x_step, (q[1] - p[1])/y_step))
+                points.remove(q)
+                segments.append({"phases": list(pair), "points": [p, q]})
+            if points:
+                ends.append({"phases": list(pair), "point": points[0], "cell": cell})
+
+    def touching(c, d):
+        return c[0] <= d[1] + 1e-9 and d[0] <= c[1] + 1e-9 and c[2] <= d[3] + 1e-9 and d[2] <= c[3] + 1e-9
+
+    clusters = []
+    for end in ends:
+        joined = [cluster for cluster in clusters if any(touching(end["cell"], e["cell"]) for e in cluster)]
+        clusters = [cluster for cluster in clusters if cluster not in joined]
+        clusters.append([end] + [e for cluster in joined for e in cluster])
+    junctions, breaks = [], []
+    for cluster in clusters:
+        appearances = {}
+        for e in cluster:
+            for p in e["phases"]:
+                appearances[p] = appearances.get(p, 0) + 1
+        centre = [float(np.mean([e["point"][k] for e in cluster])) for k in (0, 1)]
+        found = [{"phases": e["phases"], "point": e["point"]} for e in cluster]
+        if len(cluster) == 2 and cluster[0]["phases"] == cluster[1]["phases"]:
+            segments.append({"phases": cluster[0]["phases"], "points": [e["point"] for e in cluster]})
+        elif len(cluster) >= 3 and all(n % 2 == 0 for n in appearances.values()):
+            junctions.append({"point": centre, "ends": found})
+        else:
+            breaks.append({"point": centre, "ends": found})
+    return segments, junctions, breaks
+
+
 def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         derivatives=None, homogeneous=True, refine=2, smallest_step=1/4, seed_dir=".",
         labels=("x", "y"), mirror_x=None, output="phase_diagram"):
@@ -425,26 +494,9 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
             point_phase[key] = min(values, key=values.get) if values else None
         return point_phase[key]
 
-    def on_edges(x0, x1, y0, y1):
-        """Boundary points on the edges of a cell. A point lies only on the line along
-        which it was found, and every edge is half open (closed at the end of the
-        grid), so that a point at a grid corner belongs to one edge of each line
-        through that corner."""
-        points = []
-        for b in boundaries:
-            if b["along"] == "y":
-                on_edge = ((np.isclose(b["x"], x0) or np.isclose(b["x"], x1)) and y0 <= b["y"]
-                           and (b["y"] < y1 or np.isclose(y1, y_grid[-1])))
-            else:
-                on_edge = ((np.isclose(b["y"], y0) or np.isclose(b["y"], y1)) and x0 <= b["x"]
-                           and (b["x"] < x1 or np.isclose(x1, x_grid[-1])))
-            if on_edge:
-                points.append(b)
-        return points
-
     def boundary_ends_inside(cell):
         crossings = {}
-        for b in on_edges(*cell):
+        for b in on_edges(boundaries, cell, x_grid[-1], y_grid[-1]):
             crossings[tuple(b["phases"])] = crossings.get(tuple(b["phases"]), 0) + 1
         return any(n % 2 for n in crossings.values())
 
@@ -469,47 +521,9 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         print(f"  ({count['solves']} solves, {time.perf_counter() - time_start:.0f} s)")
 
     # -------------------------------------------------------------------------
-    # Stage 5: connect the boundary points into curves
+    # Stage 5: connect the boundary points into curves (see connect)
     # -------------------------------------------------------------------------
-    # Two points of a pair on the edges of a cell belong to one curve through it; a
-    # point left over is a curve end inside the cell. Ends in touching cells meet at
-    # a junction, a triple or critical point. Every phase there lies between two of
-    # the curves, so it must appear in an even number of their pairs; ends that do
-    # not form such a junction mark a break in the diagram.
-    segments, ends = [], []
-    for cell in cells:
-        by_pair = {}
-        for b in on_edges(*cell):
-            by_pair.setdefault(tuple(b["phases"]), []).append((b["x"], b["y"]))
-        for pair, points in by_pair.items():
-            while len(points) >= 2:
-                p = points.pop(0)
-                q = min(points, key=lambda q: np.hypot((q[0] - p[0])/x_step, (q[1] - p[1])/y_step))
-                points.remove(q)
-                segments.append({"phases": list(pair), "points": [p, q]})
-            if points:
-                ends.append({"phases": list(pair), "point": points[0], "cell": cell})
-
-    def touching(c, d):
-        return c[0] <= d[1] + 1e-9 and d[0] <= c[1] + 1e-9 and c[2] <= d[3] + 1e-9 and d[2] <= c[3] + 1e-9
-
-    clusters = []
-    for end in ends:
-        joined = [cluster for cluster in clusters if any(touching(end["cell"], e["cell"]) for e in cluster)]
-        clusters = [cluster for cluster in clusters if cluster not in joined]
-        clusters.append([end] + [e for cluster in joined for e in cluster])
-    junctions, breaks = [], []
-    for cluster in clusters:
-        appearances = {}
-        for e in cluster:
-            for p in e["phases"]:
-                appearances[p] = appearances.get(p, 0) + 1
-        centre = [float(np.mean([e["point"][k] for e in cluster])) for k in (0, 1)]
-        found = [{"phases": e["phases"], "point": e["point"]} for e in cluster]
-        if len(cluster) >= 3 and all(n % 2 == 0 for n in appearances.values()):
-            junctions.append({"point": centre, "ends": found})
-        else:
-            breaks.append({"point": centre, "ends": found})
+    segments, junctions, breaks = connect(boundaries, cells, x_step, y_step, x_grid[-1], y_grid[-1])
     print(f"Curves: {len(segments)} segments, {len(junctions)} junctions, {len(breaks)} breaks")
     for brk in breaks:
         print(f"  break near ({brk['point'][0]:.4f}, {brk['point'][1]:.4f}): " + ", ".join(
@@ -526,6 +540,7 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
             "refined_points": [{"x": x, "y": y, "phase": p} for (x, y), p in point_phase.items()
                                if not (np.any(np.isclose(x, x_grid)) and np.any(np.isclose(y, y_grid)))],
             "boundaries": boundaries,
+            "cells": [[float(v) for v in cell] for cell in cells],
             "segments": segments, "junctions": junctions, "breaks": breaks,
             "solves": count["solves"], "iterations": count["iterations"], "seconds": elapsed}
     with open(output + ".json", "w") as fp:
