@@ -137,6 +137,8 @@ void Molecules::add_solvent(
     if (contour_length_mapping.finalized())
         throw_with_line_number("Cannot add a solvent after a propagator computation has been created from these molecules.");
     validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction of the solvent");
+    // As for polymer blocks: the solvers keep a Boltzmann factor for each type of bond_lengths only
+    validation::require_string_key(bond_lengths, monomer_type, "bond_lengths");
 
     solvent_types.push_back(std::make_tuple(volume_fraction, monomer_type));
 }

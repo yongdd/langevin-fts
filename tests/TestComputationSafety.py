@@ -145,9 +145,24 @@ def test_input_lists(platform, reduced):
     rng = np.random.default_rng(41)
     pc.compute_propagators({m: rng.normal(0, 5, 16) for m in "AB"})
     pc.compute_stress()
-    for fugacities in ([], [1.0], [1.0, np.nan], [1.0, -1.0]):
+    for fugacities in ([], [1.0], [1.0, np.nan], [1.0, -1.0], [1.0, np.inf]):
         rejects(lambda: pc.get_stress_gce(fugacities), "fugacit")
     assert np.all(np.isfinite(pc.get_stress_gce([1.0, 2.0])))
+    pc.compute_concentrations()
+    for fugacity in (-2.0, np.nan, np.inf):
+        rejects(lambda: pc.get_total_concentration_gce(fugacity, 0, "A"), "fugacity")
+    # A name that is not a monomer type is an error, not a zero field
+    for call in (lambda: pc.get_total_concentration("X"), lambda: pc.get_total_concentration(0, "a"),
+                 lambda: pc.get_total_concentration_gce(1.0, 0, "X")):
+        rejects(call, "not found in the monomer types")
+
+    # Lengths are finite: an infinite box or bond length is rejected, not turned into NaN results
+    rejects(lambda: fac.create_computation_box([16], [np.inf]), "lx")
+    mol = fac.create_molecules_information("continuous", 0.05, {"A": np.inf})
+    rejects(lambda: mol.add_polymer(1.0, [["A", 1.0, 0, 1]]), "bond_lengths")
+    # A solvent needs a monomer type of bond_lengths, as the solvers keep one Boltzmann factor per type
+    mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0})
+    rejects(lambda: mol.add_solvent(0.3, "S"), "bond_lengths")
 
     # A solvent field left out of a later call is not taken from the earlier one
     mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0, "S": 1.0})

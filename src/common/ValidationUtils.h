@@ -24,37 +24,37 @@
 namespace validation {
 
 /**
- * @brief Validate that a value is positive.
+ * @brief Validate that a value is finite and positive.
  *
  * @tparam T Numeric type (int, double, etc.)
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value <= 0 or is NaN
+ * @throws Exception if value <= 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_positive(T value, const std::string& name)
 {
     // Negated so that NaN, for which every comparison is false, is rejected
-    if (!(value > 0))
+    if (!(value > 0) || !std::isfinite(value))
     {
-        throw_with_line_number(name + " must be a positive number, got: " + std::to_string(value));
+        throw_with_line_number(name + " must be a finite positive number, got: " + std::to_string(value));
     }
 }
 
 /**
- * @brief Validate that a value is non-negative.
+ * @brief Validate that a value is finite and non-negative.
  *
  * @tparam T Numeric type
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value < 0 or is NaN
+ * @throws Exception if value < 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_non_negative(T value, const std::string& name)
 {
-    if (!(value >= 0))
+    if (!(value >= 0) || !std::isfinite(value))
     {
-        throw_with_line_number(name + " must be a non-negative number, got: " + std::to_string(value));
+        throw_with_line_number(name + " must be a finite non-negative number, got: " + std::to_string(value));
     }
 }
 
@@ -80,12 +80,12 @@ inline void require_in_range(T value, T min_val, T max_val, const std::string& n
 }
 
 /**
- * @brief Validate that all elements in a vector are positive.
+ * @brief Validate that all elements in a vector are finite and positive.
  *
  * @tparam T Numeric type
  * @param values Vector of values to check
  * @param name   Variable name for error message
- * @throws Exception if any value <= 0 or is NaN
+ * @throws Exception if any value <= 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_all_positive(const std::vector<T>& values, const std::string& name)
@@ -99,9 +99,9 @@ inline void require_all_positive(const std::vector<T>& values, const std::string
 
     for (const auto& v : values)
     {
-        if (!(v > 0))
+        if (!(v > 0) || !std::isfinite(v))
         {
-            throw_with_line_number(name + " (" + str_values + ") must contain only positive numbers");
+            throw_with_line_number(name + " (" + str_values + ") must contain only finite positive numbers");
         }
     }
 }

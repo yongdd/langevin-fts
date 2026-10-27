@@ -9,6 +9,7 @@
 
 #include "ComputationCommon.h"
 #include "PropagatorCode.h"
+#include "ValidationUtils.h"
 
 template <typename T>
 ComputationCommon<T>::ComputationCommon(
@@ -320,6 +321,8 @@ void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* 
     this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
         std::vector<BackendArray<T>*> arrays;
         std::vector<T> weights;
         for (const auto& [key, phi_b] : phi_block)
@@ -355,6 +358,8 @@ void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_ty
     this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
         const int P = this->molecules->get_n_polymer_types();
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -386,6 +391,9 @@ void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, s
     this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
+        validation::require_non_negative(fugacity, "fugacity");
         const int P = this->molecules->get_n_polymer_types();
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
