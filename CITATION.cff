@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Yong
     given-names: Daeseong
-repository-code: "https://github.com/yongdd/langevin-fts"
+repository-code: "https://github.com/yongdd/polymerfts"
 license: Apache-2.0
 version: 0.10.0
 date-released: 2026-10-23

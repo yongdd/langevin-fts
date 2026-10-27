@@ -6,7 +6,7 @@ package:
   version: {{ version }}
 
 source:
-  git_url: https://github.com/yongdd/langevin-fts.git
+  git_url: https://github.com/yongdd/polymerfts.git
   git_rev: v{{ version }}
 
 build:
@@ -58,7 +58,7 @@ test:
     - python -c "from polymerfts import PlatformSelector; print('Platforms:', PlatformSelector.avail_platforms())"
 
 about:
-  home: https://github.com/yongdd/langevin-fts
+  home: https://github.com/yongdd/polymerfts
   summary: Polymer field theory simulation library for SCFT and L-FTS
   description: |
     PolymerFTS is a high-performance library for polymer field theory simulations.
@@ -75,8 +75,8 @@ about:
   license: Apache-2.0
   license_family: Apache
   license_file: LICENSE
-  doc_url: https://github.com/yongdd/langevin-fts#readme
-  dev_url: https://github.com/yongdd/langevin-fts
+  doc_url: https://github.com/yongdd/polymerfts#readme
+  dev_url: https://github.com/yongdd/polymerfts
 
 extra:
   recipe-maintainers:

@@ -21,8 +21,8 @@ For details, see [Features.md](docs/getting-started/Features.md).
 ### Quick Start (Conda)
 
 ```bash
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts
+git clone https://github.com/yongdd/polymerfts.git
+cd polymerfts
 conda env create -f environment.yml
 conda activate polymerfts
 ```

@@ -154,7 +154,7 @@ save_vtk("phi.vtk", result.phi, calc.prop_solver.get_lx(), nx=calc.prop_solver.n
 
 ## 2. PSCF Interoperability
 
-Tools for converting between langevin-fts and [PSCF](https://github.com/dmorse/pscfpp) formats.
+Tools for converting between PolymerFTS and [PSCF](https://github.com/dmorse/pscfpp) formats.
 
 ### 2.1 Export to PSCF
 

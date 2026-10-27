@@ -35,7 +35,7 @@ ssh -L 8765:127.0.0.1:8765 user@server
 In that SSH session, change to the repository and start the editor:
 
 ```bash
-cd /path/to/langevin-fts
+cd /path/to/polymerfts
 python3 scripts/gui/simulation_gui.py
 ```
 
@@ -192,7 +192,7 @@ no `--save-dir` option is needed. To save scripts in a job directory, start ther
 ```bash
 mkdir -p ~/polymer-jobs
 cd ~/polymer-jobs
-python3 /path/to/langevin-fts/scripts/gui/simulation_gui.py
+python3 /path/to/polymerfts/scripts/gui/simulation_gui.py
 ```
 
 With **Filename** set to `simulation.py` and **Server subfolder** empty, a server

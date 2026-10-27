@@ -10,6 +10,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Installation and platforms
 
+- The GitHub repository is renamed from `langevin-fts` to `polymerfts`, the name of the
+  package and its import (2026-10-27); GitHub redirects the old URLs.
 - The Conda environment and CI use conda-forge (Miniforge) instead of Anaconda's
   `defaults` channel, on Linux and Windows (2026-10-24). OpenBLAS is selected with
   `libblas=*=*openblas` and supplies LAPACKE through `openblas`; spglib comes from

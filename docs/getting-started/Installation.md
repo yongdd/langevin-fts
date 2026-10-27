@@ -7,8 +7,8 @@ provides Conda with conda-forge as its default channel; on Windows, also see
 ## 1. Create the Environment
 
 ```bash
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts
+git clone https://github.com/yongdd/polymerfts.git
+cd polymerfts
 conda env create -f environment.yml
 conda activate polymerfts
 ```

@@ -49,7 +49,7 @@ MATLAB scripts and notebooks formerly under `tools/` are in [analysis/](analysis
 Run them from the directory containing the simulation output, for example:
 
 ```bash
-jupyter notebook /path/to/langevin-fts/scripts/analysis/plot_2d_density.ipynb
+jupyter notebook /path/to/polymerfts/scripts/analysis/plot_2d_density.ipynb
 ```
 
 `renormalization.py` computes the UV renormalization factor $`z_\infty`$ of $`\chi N`$ and the

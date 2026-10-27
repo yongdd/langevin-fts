@@ -69,10 +69,10 @@ full = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yongdd/langevin-fts"
-Documentation = "https://github.com/yongdd/langevin-fts#readme"
-Repository = "https://github.com/yongdd/langevin-fts.git"
-Issues = "https://github.com/yongdd/langevin-fts/issues"
+Homepage = "https://github.com/yongdd/polymerfts"
+Documentation = "https://github.com/yongdd/polymerfts#readme"
+Repository = "https://github.com/yongdd/polymerfts.git"
+Issues = "https://github.com/yongdd/polymerfts/issues"
 
 [tool.scikit-build]
 # CMake configuration
