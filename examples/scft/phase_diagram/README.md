@@ -79,7 +79,10 @@ only values of F and keeps the root bracketed.
 A phase that melts or cannot be continued to an evaluation point does not exist there.
 It counts as just above the other phase, so the root lies where both phases exist. A
 root at which one of two ordered phases still cannot be continued is the end of that
-phase, not a crossing, and is skipped.
+phase, not a crossing, and is skipped. Against the homogeneous state the root is an
+order-disorder transition if the ordered phase exists there, melts there or its solves
+stop converging there, as they can next to melting; where its solves fail with an error
+or it turns into another structure, the root is skipped.
 
 ## A New System
 
@@ -87,7 +90,8 @@ Copy a system script and change:
 
 - `base_params`: the parameters shared by all phases.
 - `set_point(params, x, y)`: puts the two parameters into `params`. Any parameter can be
-  an axis: block lengths, χN, segment lengths, volume fractions.
+  an axis: block lengths, χN, segment lengths, volume fractions. With discrete chains every
+  block length must stay a multiple of `ds`; a point where it does not cannot be computed.
 - `phases`: for every candidate phase a seed, the point (x, y) where it is converged,
   and the parameters of the phase (`nx`, `space_group`, ...). A seed is initial fields
   `{"w": {monomer: array}, "lx": lx}`, as built by `seeds.py`, or a file saved by

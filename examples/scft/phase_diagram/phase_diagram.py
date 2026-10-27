@@ -202,8 +202,9 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
 
     def solve(phase, x, y, guess, reference):
         """One SCFT solve from the guess. Returns the converged state, or None when it
-        does not converge, melts, or its structure differs from the reference state.
-        Without a reference the guess is a seed, which may need many iterations."""
+        fails with an error, does not converge, melts, or its structure differs from the
+        reference state; failure[phase] then says which. Without a reference the guess
+        is a seed, which may need many iterations."""
         errors = []
 
         def stop_when_stalled(info):
@@ -226,14 +227,17 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
                                          return_result=True)
         except (RuntimeError, ValueError, FloatingPointError, ValidationError) as error:
             print(f"    {phase} at ({x:.4f}, {y:.4f}): {error}")
+            failure[phase] = "fails with an error"
             return None
         count["solves"] += 1
         count["iterations"] += result.iterations
         if not result.converged:
+            failure[phase] = "does not converge"
             return None
         w = {m: np.array(v) for m, v in result.w.items()}
         dw = deviation(w)
         if homogeneous and np.std(dw) < 1e-3:
+            failure[phase] = "melts"
             return None         # melted into the homogeneous state
         if reference is not None:
             # Continuation must stay on the branch of this phase: reject a step whose
@@ -241,6 +245,7 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
             dw_ref = deviation(reference["w"])
             overlap = np.sum(dw*dw_ref)/np.sqrt(np.sum(dw**2)*np.sum(dw_ref**2))
             if overlap < 0.9:
+                failure[phase] = "leaves its branch"
                 return None
         dF = {axis: (None if d is None else d(result)) for axis, d in derivatives.items()}
         return {"x": x, "y": y, "F": result.free_energy, "dF": dF, "w": w,
@@ -287,6 +292,7 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
 
     # Every converged state of each phase; later solves start from the nearest one
     states = {phase: [] for phase in phases}
+    failure = {}            # why the last failed solve of each phase failed
     homogeneous_state = {"F": 0.0, "dF": {"x": 0.0, "y": 0.0}}
 
     def nearest(phase, x, y):
@@ -455,6 +461,15 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
             return []
         x, y = point(line, t)
         if DIS in (a, b):
+            # An order-disorder transition: the ordered phase crosses F = 0 there, or
+            # melts there (its solves also slow down and can stall next to melting).
+            # Where its solves fail with an error or it turns into another structure,
+            # the root only marks the end of its computed states
+            ordered = b if a == DIS else a
+            if state_at(ordered, x, y) is None and failure.get(ordered) in ("fails with an error",
+                                                                             "leaves its branch"):
+                print(f"  skipped {a}/{b} at ({x:.4f}, {y:.4f}): {ordered} {failure.get(ordered)} there")
+                return []
             state_ab = homogeneous_state
         else:
             # Between two ordered phases the root must be a crossing; if one phase
