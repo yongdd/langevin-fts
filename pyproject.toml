@@ -47,6 +47,8 @@ dependencies = [
     "matplotlib>=3.10",
     "networkx>=3.0",
     "pyyaml>=6.0",
+    # _core links the spglib C library, which a pip-installed spglib supplies
+    "spglib>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -65,7 +67,6 @@ jupyter = [
 ]
 full = [
     "pandas>=2.0",
-    "spglib>=2.0",
 ]
 
 [project.urls]

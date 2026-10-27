@@ -677,7 +677,19 @@ ENDIF()
 FIND_PACKAGE(pybind11 ${_pybind11_minimum} REQUIRED HINTS ${_pybind11_cmakedir})
 
 # pybind11::module carries the Python and pybind11 include directories
-ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
+# The git commit and source state are written at every build (cmake/git_info.cmake)
+# into a small source of their own, so that a commit or an edit recompiles only it
+SET(POLYMERFTS_GIT_INFO_SOURCE "${CMAKE_BINARY_DIR}/generated/GitInfo.cpp")
+FIND_PACKAGE(Git QUIET)
+SET(_git_info_command ${CMAKE_COMMAND} -DSRC=${PROJECT_SOURCE_DIR} -DGIT=${GIT_EXECUTABLE}
+    -DOUTPUT=${POLYMERFTS_GIT_INFO_SOURCE} -P ${PROJECT_SOURCE_DIR}/cmake/git_info.cmake)
+EXECUTE_PROCESS(COMMAND ${_git_info_command})
+ADD_CUSTOM_TARGET(polymerfts_git_info
+    COMMAND ${_git_info_command}
+    BYPRODUCTS ${POLYMERFTS_GIT_INFO_SOURCE}
+    VERBATIM)
+ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp ${POLYMERFTS_GIT_INFO_SOURCE})
+ADD_DEPENDENCIES(_core polymerfts_git_info)
 IF(WIN32)
     SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".pyd")
 ELSE()
@@ -685,22 +697,8 @@ ELSE()
 ENDIF()
 TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE polymerfts_backends)
 
-# Embed the provenance of this extension, including builds from source archives.
-SET(POLYMERFTS_GIT_COMMIT "unknown")
-SET(POLYMERFTS_SOURCE_MODIFIED "unknown")
-FIND_PACKAGE(Git QUIET)
-IF(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE POLYMERFTS_GIT_COMMIT
-        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} diff --quiet HEAD -- CMakeLists.txt cmake src
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE _source_diff)
-    IF(_source_diff EQUAL 0)
-        SET(POLYMERFTS_SOURCE_MODIFIED "false")
-    ELSE()
-        SET(POLYMERFTS_SOURCE_MODIFIED "true")
-    ENDIF()
-ENDIF()
+# Embed the provenance of this extension, including builds from source archives
+# (the git commit and source state come from GitInfo.cpp above).
 STRING(TOUPPER "${CMAKE_BUILD_TYPE}" _build_config)
 SET(POLYMERFTS_HOST_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_build_config}}")
 SET(POLYMERFTS_DEVICE_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${_build_config}}")

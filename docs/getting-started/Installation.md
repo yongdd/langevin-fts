@@ -169,7 +169,9 @@ from the system, or on Windows from conda-forge (see [Windows](#windows)).
 
 ### CMake Options
 
-Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`.
+Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`. The
+defaults are those of a plain CMake configuration; `pyproject.toml` turns
+`POLYMERFTS_BUILD_TESTS` off for wheel builds.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
@@ -177,7 +179,7 @@ Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`.
 | `POLYMERFTS_USE_FFTW` | OFF | FFTW CPU backend (GPL) |
 | `POLYMERFTS_USE_CUDA` | AUTO | Detect CUDA; `ON` requires it, `OFF` disables it |
 | `POLYMERFTS_CUDA_ARCHITECTURES` | empty | Semicolon-separated GPU capabilities; empty selects defaults for the toolkit |
-| `POLYMERFTS_BUILD_TESTS` | ON | Build tests |
+| `POLYMERFTS_BUILD_TESTS` | ON (OFF in wheel builds) | Build tests |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install the Python package |
 | `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors |
 | `POLYMERFTS_INSTALL_HEADERS` | OFF | Install the experimental downstream C++ interface |
