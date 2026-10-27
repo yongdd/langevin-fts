@@ -24,6 +24,7 @@ from .utils import (
     check_partition_functions,
     atomic_savemat,
     mat_ready,
+    json_ready,
 )
 from .smearing import Smearing
 
@@ -774,9 +775,10 @@ class SCFT:
         if file_extension == ".mat":
             atomic_savemat(path, mat_ready(m_dic), long_field_names=True, do_compression=True)
 
-        # Save data in json format
+        # Save data in json format (strict JSON: a non-finite number, such as the chemical
+        # potential -inf of a species with volume fraction 0, becomes {"nonfinite_float": "-inf"})
         elif file_extension == ".json":
-            text = json.dumps(m_dic, indent=2)
+            text = json.dumps(json_ready(m_dic), indent=2, allow_nan=False)
             with open(path, "w") as f:
                 f.write(text)
 

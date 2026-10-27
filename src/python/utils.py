@@ -13,7 +13,7 @@ import warnings
 import hashlib
 import os
 import platform
-import tempfile
+import secrets
 import subprocess
 from functools import lru_cache
 from types import MappingProxyType
@@ -88,13 +88,24 @@ def _package_hashes():
     return {"python_source_sha256": source.hexdigest(), "native_binary_sha256": native.hexdigest()}
 
 
+def _new_file_next_to(path, mode):
+    """Open a new hidden file in the directory of path for writing; return it and its name.
+
+    Unlike tempfile.mkstemp (mode 0600), the umask sets its permissions, as for a
+    file written directly to path, so results stay readable as the user's other files.
+    """
+    temporary = path.parent / f".{path.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)
+    return os.fdopen(fd, mode), temporary
+
+
 def atomic_savemat(path, data, **kwargs):
     """Replace a MAT file only after a complete write in the same directory."""
     from scipy.io import savemat
     path = Path(path)
-    fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".mat", dir=path.parent)
+    stream, temporary = _new_file_next_to(path, "wb")
     try:
-        with os.fdopen(fd, "wb") as stream:
+        with stream:
             savemat(stream, data, **kwargs)
             stream.flush()
             os.fsync(stream.fileno())
@@ -108,9 +119,9 @@ def write_run_status(sim):
     """Persist completion/failure separately from periodic field checkpoints."""
     path = Path(sim.recording["dir"])
     path.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".run_status.", dir=path)
+    stream, temporary = _new_file_next_to(path / "run_status.json", "w")
     try:
-        with os.fdopen(fd, "w") as stream:
+        with stream:
             json.dump(json_ready({**sim.run_status, "metadata": sim.metadata}), stream, indent=2, allow_nan=False)
             stream.write("\n")
         os.replace(temporary, path / "run_status.json")

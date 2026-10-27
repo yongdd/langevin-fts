@@ -11,6 +11,8 @@ import contextlib
 import io
 import sys
 import json
+import os
+import stat
 import tempfile
 from pathlib import Path
 import yaml
@@ -93,6 +95,31 @@ def main():
         with (Path(tmp)/"options.json").open() as stream:
             saved = json.load(stream)["initial_params"]
         assert saved["smearing"] is None and saved["polymer_figure_dir"] == str(Path(tmp)/"figures")
+        # Result files get the permissions of any new file (0666 less the umask), not the
+        # 0600 of a temporary file; a umask of 022 tells the two apart
+        if os.name == "posix":
+            previous = os.umask(0o022)
+            try:
+                calc.save_results(str(Path(tmp)/"umask.mat"))
+                calc.save_results(str(Path(tmp)/"umask.json"))
+            finally:
+                os.umask(previous)
+            for name in ("umask.mat", "umask.json"):
+                assert stat.S_IMODE((Path(tmp)/name).stat().st_mode) == 0o644, name
+
+    # The JSON file is strict JSON: the chemical potential -inf of a polymer with volume
+    # fraction 0 is written as {"nonfinite_float": "-inf"}, not as the token -Infinity
+    with tempfile.TemporaryDirectory() as tmp:
+        p = params([32], [1.7], max_iter=2, tolerance=1e-11)
+        p["polymers"] = p["polymers"] + [{"volume_fraction": 0.0, "blocks": [{"type": "A", "length": 0.5}]}]
+        with contextlib.redirect_stdout(io.StringIO()):
+            calc = SCFT(p)
+            calc.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short), "B": -np.sqrt(2)*5*np.cos(2*np.pi*x_short)})
+        calc.save_results(str(Path(tmp)/"zero.json"))
+        def reject(token):
+            raise ValueError(token)
+        saved = json.loads((Path(tmp)/"zero.json").read_text(), parse_constant=reject)
+        assert saved["chemical_potentials"][1] == {"nonfinite_float": "-inf"}, saved["chemical_potentials"]
 
     # Callback stops between stress updates must also return the final stress,
     # including its smearing contribution, and report the corresponding error.

@@ -24,6 +24,7 @@ import io
 import sys
 import glob
 import shutil
+import stat
 import tempfile
 import contextlib
 
@@ -196,6 +197,24 @@ def test_compressible_mean(root):
           f"recorded H = H of the saved fields ({abs(h - h_recorded):.1e})")
 
 
+def test_file_permissions(root):
+    """Checkpoints and run_status.json get the permissions of any new file (0666 less the
+    umask), not the 0600 of a temporary file; a umask of 022 tells the two apart."""
+    if os.name != "posix":
+        return
+    work = os.path.join(root, "permissions")
+    rng = np.random.default_rng(3)
+    previous = os.umask(0o022)
+    try:
+        sim = quiet(LFTS, params(work, [16], [3.0], 4), random_seed=1)
+        quiet(sim.run, initial_fields={"A": rng.normal(0.0, 0.5, 16), "B": rng.normal(0.0, 0.5, 16)})
+    finally:
+        os.umask(previous)
+    modes = {name: oct(stat.S_IMODE(os.stat(os.path.join(work, name)).st_mode))
+             for name in ("fields_000004.mat", "run_status.json")}
+    check(all(mode == oct(0o644) for mode in modes.values()), f"result files follow the umask {modes}")
+
+
 def main():
     root = tempfile.mkdtemp()
     try:
@@ -203,6 +222,7 @@ def main():
         test_wtmd_cell()
         test_saddle_failure(root)
         test_compressible_mean(root)
+        test_file_permissions(root)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print(f"\n{n_pass} passed, {n_fail} failed")
