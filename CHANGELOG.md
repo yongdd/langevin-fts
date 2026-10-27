@@ -245,6 +245,9 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Fixed
 
+- `CudaCommon.h` includes `<cuda_runtime.h>` itself (2026-10-27). Host-compiled sources
+  reached the CUDA runtime API only through Thrust, whose CUDA 12.9 headers no longer
+  include it outside nvcc, so the Python module failed to compile with CUDA 12.9.
 - Script tools on Windows (2026-10-26):
   - Saving a script on the server from the Simulation Script Builder failed on Windows,
     which has none of the directory descriptors (`os.O_DIRECTORY`, `dir_fd`) that keep a

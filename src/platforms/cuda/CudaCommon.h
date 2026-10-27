@@ -33,6 +33,7 @@
 #include <map>
 #include <source_location>
 #include <string>
+#include <cuda_runtime.h>
 #include <cufft.h>
 
 #include <thrust/system_error.h>
