@@ -72,6 +72,8 @@ Polymer::Polymer(
         validation::require_positive(item.second, "bond_lengths[\"" + item.first + "\"]");
     }
 
+    validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction");
+
     // Check block lengths, segments, types
     for(size_t i=0; i<block_inputs.size(); i++)
     {

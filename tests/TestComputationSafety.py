@@ -126,6 +126,43 @@ def test_gce(platform, reduced):
         np.testing.assert_allclose(*results, rtol=0, atol=1e-10)
 
 
+def test_input_lists(platform, reduced):
+    fac = _core.PlatformSelector.create_factory(platform, reduced, "real")
+    # Volume fractions are finite and in [0, 1]
+    for fraction in (np.nan, np.inf, -0.5, 1.5):
+        mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0, "S": 1.0})
+        rejects(lambda: mol.add_polymer(fraction, [["A", 1.0, 0, 1]]), "volume_fraction")
+        rejects(lambda: mol.add_solvent(fraction, "S"), "volume_fraction")
+
+    # One fugacity per polymer type: a short list must not read past its end
+    mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0, "B": 1.0})
+    mol.add_polymer(0.6, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
+    mol.add_polymer(0.4, [["A", 1.0, 0, 1]])
+    opt = fac.create_propagator_computation_optimizer(mol, False)
+    cb = fac.create_computation_box([16], [4.0])
+    pc = fac.create_propagator_computation(cb, mol, opt, "rqm4")
+    rng = np.random.default_rng(41)
+    pc.compute_propagators({m: rng.normal(0, 5, 16) for m in "AB"})
+    pc.compute_stress()
+    for fugacities in ([], [1.0], [1.0, np.nan], [1.0, -1.0]):
+        rejects(lambda: pc.get_stress_gce(fugacities), "fugacit")
+    assert np.all(np.isfinite(pc.get_stress_gce([1.0, 2.0])))
+
+    # A solvent field left out of a later call is not taken from the earlier one
+    mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0, "S": 1.0})
+    mol.add_polymer(0.7, [["A", 1.0, 0, 1]])
+    mol.add_solvent(0.3, "S")
+    opt = fac.create_propagator_computation_optimizer(mol, False)
+    cb = fac.create_computation_box([16], [4.0])
+    pc = fac.create_propagator_computation(cb, mol, opt, "rqm4")
+    w = {m: rng.normal(0, 5, 16) for m in "AS"}
+    pc.compute_propagators(w)
+    pc.compute_concentrations()
+    assert abs(np.mean(pc.get_total_concentration("A") + pc.get_total_concentration("S")) - 1.0) < 1e-10
+    pc.compute_propagators({"A": w["A"]})
+    rejects(pc.compute_concentrations, 'monomer_type "S" of solvent 0 is not in w_input')
+
+
 def test_angles_and_grafting(platform):
     fac = _core.PlatformSelector.create_factory(platform, False, "real")
     for nx, angles in (([16], [90, 90, 60]), ([8, 8], [120, 90, 90])):
@@ -339,6 +376,7 @@ def main():
             test_basis_lifetime(platform, reduced)
             test_method_checks(platform, reduced)
             test_gce(platform, reduced)
+            test_input_lists(platform, reduced)
             test_grafting_conversions(platform, reduced)
             test_cnadi_lattice_update(platform, reduced)
         print("Computation safety:", platform, "OK")

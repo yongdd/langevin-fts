@@ -136,6 +136,7 @@ void Molecules::add_solvent(
     // A propagator computation sizes its solvent arrays when it is created
     if (contour_length_mapping.finalized())
         throw_with_line_number("Cannot add a solvent after a propagator computation has been created from these molecules.");
+    validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction of the solvent");
 
     solvent_types.push_back(std::make_tuple(volume_fraction, monomer_type));
 }

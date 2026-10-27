@@ -133,18 +133,18 @@ class CudaCrysFFTTableView
 {
 public:
     explicit CudaCrysFFTTableView(std::shared_ptr<CudaCrysFFTTables<Table>> tables)
-        : tables_(std::move(tables)), generation_(tables_->generation()) {}
+        : tables_(std::move(tables)), generation_(tables_->generation()), seen_generation_(generation_) {}
 
     /// The shared tables (for clone_sharing_tables() and set_cell()).
     const std::shared_ptr<CudaCrysFFTTables<Table>>& shared() const { return tables_; }
 
-    /// Discard the cached tables if the cell changed; returns true if it did.
+    /// Returns true once after each cell change, so that the object drops the
+    /// table pointers it keeps. A lookup with get() does not use up this report.
     bool refresh()
     {
         const std::uint64_t generation = tables_->generation();
         if (generation == generation_)
             return false;
-        seen_.clear();
         generation_ = generation;
         return true;
     }
@@ -153,7 +153,12 @@ public:
     template <typename Build>
     const Table& get(const CudaCrysFFTTableKey& key, Build&& build)
     {
-        refresh();
+        const std::uint64_t generation = tables_->generation();
+        if (generation != seen_generation_)
+        {
+            seen_.clear();
+            seen_generation_ = generation;
+        }
         auto it = seen_.find(key);
         if (it == seen_.end())
             it = seen_.emplace(key, &tables_->get(key, std::forward<Build>(build))).first;
@@ -169,7 +174,8 @@ public:
 
 private:
     std::shared_ptr<CudaCrysFFTTables<Table>> tables_;
-    std::uint64_t generation_;
+    std::uint64_t generation_;         ///< Generation last reported by refresh()
+    std::uint64_t seen_generation_;    ///< Generation of the tables in seen_
     std::map<CudaCrysFFTTableKey, const Table*> seen_;
 };
 

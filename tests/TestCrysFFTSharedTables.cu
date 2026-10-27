@@ -24,6 +24,9 @@
  * 3. b's old and new coefficients give the diffusion of an object created for
  *    the new cell; a then uses the table b built.
  * 4. The stress multipliers of b after a's cell change are those of the new cell.
+ * 5. When b's first call after a's cell change is a stress-multiplier lookup,
+ *    b's set_contour_step() with its old coefficient still drops the table of
+ *    the old cell (the lookup does not use up the report of the change).
  *
  * "Equal" means a relative difference of at most 1e-14 against the fresh object.
  */
@@ -150,6 +153,19 @@ bool run(const char* engine, const Make& make, const ApplyMultiplier& apply_mult
         apply_multiplier(*b, d_q, d_out);
         CUDA_CHECK(cudaDeviceSynchronize());
         ok = check(engine, "b's stress multiplier, new cell", relative_difference(to_host(d_out, M_phys), ref_mult_b)) && ok;
+    }
+
+    // 5. A multiplier lookup as the first call after the cell change
+    if (has_multiplier)
+    {
+        std::unique_ptr<CudaCrysFFTBase> c = make(cell_a);
+        std::unique_ptr<CudaCrysFFTBase> d = c->clone_sharing_tables();
+        diffuse(*c, ds1, d_q, d_out, M_phys);
+        diffuse(*d, ds1, d_q, d_out, M_phys);
+        c->set_cell_para(cell_b);
+        apply_multiplier(*d, d_q, d_out);
+        ok = check(engine, "b after a multiplier lookup, old coefficient",
+                   relative_difference(diffuse(*d, ds1, d_q, d_out, M_phys), ref_b1)) && ok;
     }
     return ok;
 }

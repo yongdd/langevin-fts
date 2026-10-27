@@ -98,11 +98,14 @@ void ComputationCommon<T>::set_fields(
         }
     }
 
+    // w keeps the fields of earlier calls; only the types of this call are current
+    w_input_types.clear();
     for (const auto& [monomer_type, w_monomer] : w_input)
     {
         if (!w.contains(monomer_type))
             w[monomer_type] = backend->allocate();
         backend->copy_from_host(0, w[monomer_type], w_monomer);
+        w_input_types.insert(monomer_type);
     }
 
     backend->update_dw(w_input);
@@ -116,7 +119,7 @@ void ComputationCommon<T>::compute_solvent_concentrations()
     {
         const double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
         const std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-        if (!w.contains(monomer_type))
+        if (!w_input_types.contains(monomer_type))
             throw_with_line_number("monomer_type \"" + monomer_type + "\" of solvent " + std::to_string(s) + " is not in w_input.");
 
         this->single_solvent_partitions[s] = backend->solvent_concentration(

@@ -39,6 +39,7 @@
 #include <complex>
 
 #include "PropagatorComputation.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Construct propagator computation engine.
@@ -191,6 +192,11 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
     std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
+    if (static_cast<int>(fugacities.size()) != n_polymer_types)
+        throw_with_line_number("get_stress_gce needs one fugacity per polymer type: got " +
+            std::to_string(fugacities.size()) + " for " + std::to_string(n_polymer_types) + " polymer types.");
+    for(int p=0; p<n_polymer_types; p++)
+        validation::require_non_negative(fugacities[p], "fugacities[" + std::to_string(p) + "]");
     for(int d=0; d<N_STRESS; d++)
         stress[d] = 0.0;
 
