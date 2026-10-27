@@ -130,8 +130,8 @@ ctest --test-dir build --output-on-failure
 
 Run long suites through the scheduler. Use `-R` to select tests relevant to the
 change. The available tests depend on the compiled backends. A CUDA build needs
-an allocated, visible GPU to validate its CUDA tests; a CPU-only run does not
-establish GPU correctness. Report failures and skips accurately.
+an allocated, visible GPU to validate its CUDA tests; without one, every test
+with a CUDA part fails after running its CPU parts. Report failures and skips accurately.
 
 `LFTS` and `CLFTS` runs write `polymer_<id>.png` into `recording.dir`; `SCFT` writes it
 only into `polymer_figure_dir` when given. Run temporary checks and examples from a

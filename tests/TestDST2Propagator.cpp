@@ -62,6 +62,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 #include "TestNanSafe.h"
 
 // Test parameters
@@ -312,7 +313,7 @@ int main()
         }
         std::cout << "============================================================" << std::endl;
 
-        return result;
+        return result != 0 ? result : (cuda_part_missing() ? 1 : 0);
     }
     catch (std::exception& exc)
     {

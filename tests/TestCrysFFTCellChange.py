@@ -21,6 +21,7 @@ import io
 
 import numpy as np
 from polymerfts import _core, PlatformSelector, PropagatorSolver
+from cuda_part import cuda_part_missing
 
 CASES = [
     ("Pmmm", None, [16, 12, 8], "pmmm", [[2.0, 1.8, 1.6], [2.0, 1.9, 1.6], [2.1, 1.95, 1.5]]),
@@ -101,7 +102,7 @@ def main():
                 failures += not ok
                 print(f"[{'PASS' if ok else 'FAIL'}] cuda vs {cpu[0]} {symbol} {basis} {nx} {chain}: stress {d:.1e}")
     print(f"\n{checks - failures} passed, {failures} failed")
-    return 1 if failures else 0
+    return 1 if cuda_part_missing() or failures else 0
 
 
 if __name__ == "__main__":

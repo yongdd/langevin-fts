@@ -17,6 +17,7 @@ import sys
 
 import numpy as np
 from polymerfts import _core
+from cuda_part import cuda_part_missing
 
 
 def rejects(call):
@@ -135,7 +136,8 @@ def main():
         test_single_segment_reduced_basis(platform)
         test_anderson_non_finite(platform)
         print("Input checks:", platform, "OK")
+    return 1 if cuda_part_missing() else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

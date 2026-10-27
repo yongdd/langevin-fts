@@ -49,6 +49,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 #include "SpaceGroup.h"
 #include "TestNanSafe.h"
 
@@ -531,13 +532,9 @@ int main()
         // the CPU CrysFFT stress path and the discrete+space-group path are the
         // regressions this test protects. An exception on any listed platform
         // is a failure. CUDA is listed only when a device is visible
-        // (PlatformSelector::avail_platforms checks cudaGetDeviceCount), so a
-        // CUDA build on a node without a GPU skips the CUDA part here.
+        // (PlatformSelector::avail_platforms checks cudaGetDeviceCount); a CUDA
+        // build on a node without a GPU runs the CPU part and then fails.
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        #ifdef USE_CUDA
-        if (std::find(avail_platforms.begin(), avail_platforms.end(), "cuda") == avail_platforms.end())
-            std::cout << "No visible CUDA device: the CUDA part was skipped." << std::endl;
-        #endif
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         bool ran_cpu_continuous = false;
         bool ran_cpu_discrete = false;
@@ -580,7 +577,7 @@ int main()
             return -1;
         }
 
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch(std::exception& exc)
     {

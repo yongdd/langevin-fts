@@ -89,6 +89,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 DS = 0.02  # 1/50 contour steps
 BOND_LENGTHS = {"A": 1.0, "B": 1.0}
@@ -498,6 +499,8 @@ def main():
               f"(runtime {elapsed:.1f} s):")
         for f in FAILURES:
             print(f"  - {f}")
+        return 1
+    if cuda_part_missing():
         return 1
     print(f"All space-group platform equivalence tests PASSED "
           f"(runtime {elapsed:.1f} s)")

@@ -24,6 +24,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from scipy.io import loadmat
 from polymerfts import CLFTS, LFTS, PlatformSelector
+from cuda_part import cuda_part_missing
 
 failures = 0
 
@@ -132,7 +133,7 @@ def main():
                 lfts(platform, os.path.join(tmp, f"l_{platform}_{bc}"), bc)
                 clfts(platform, os.path.join(tmp, f"cl_{platform}_{bc}"), bc)
     print(f"\n{failures} failed")
-    return 1 if failures else 0
+    return 1 if cuda_part_missing() or failures else 0
 
 
 if __name__ == "__main__":

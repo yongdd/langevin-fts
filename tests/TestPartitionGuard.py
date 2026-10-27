@@ -32,6 +32,7 @@ import numpy as np
 from polymerfts import SCFT, LFTS, PropagatorSolver, PlatformSelector, ValidationError
 from polymerfts.utils import check_partition_functions
 from TestFtsReliability import parameters, fields
+from cuda_part import cuda_part_missing
 
 N, NZ, LZ = 50, 704, 6.0
 Z = (np.arange(NZ) + 0.5) * LZ / NZ
@@ -143,7 +144,7 @@ def main():
 
     for failure in failures:
         print("[FAIL]", failure)
-    if failures:
+    if failures or cuda_part_missing():
         return 1
     print(f"Partition guard: OK (platforms: {', '.join(valid)}; Q at W = 10: {values[0]:.6e})")
     return 0

@@ -18,6 +18,7 @@ import io
 
 import numpy as np
 from polymerfts import PlatformSelector, PropagatorSolver
+from cuda_part import cuda_part_missing
 
 CASES = [
     ([4000], [40.0], ["reflecting"] * 2),
@@ -46,6 +47,8 @@ def main():
     platforms = PlatformSelector.avail_platforms()
     cpu = [p for p in platforms if p.startswith("cpu")]
     if "cuda" not in platforms or not cpu:
+        if cuda_part_missing():
+            return 1
         print("CUDA and a CPU platform are needed; skipped")
         return 77
     failures = 0

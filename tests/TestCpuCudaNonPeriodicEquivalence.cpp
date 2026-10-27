@@ -34,6 +34,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 static double compute_Q(const std::string& platform, const std::string& chain_model,
                         const std::vector<int>& nx, const std::vector<double>& lx,
@@ -74,7 +75,8 @@ int main()
         if (platforms.size() < 2)
         {
             std::cout << "Fewer than two real backends available; skipping." << std::endl;
-            return 0;
+            // (a CUDA build without a visible GPU fails instead)
+            return cuda_part_missing() ? 1 : 0;
         }
 
         struct Case { std::string chain; std::string bc; std::vector<int> nx; std::vector<double> lx; };
@@ -126,7 +128,7 @@ int main()
         if (all_ok)
         {
             std::cout << "All non-periodic CPU/CUDA equivalence tests PASSED." << std::endl;
-            return 0;
+            return cuda_part_missing() ? 1 : 0;
         }
         std::cout << "Non-periodic CPU/CUDA equivalence FAILURES detected." << std::endl;
         return -1;

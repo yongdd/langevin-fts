@@ -3,6 +3,7 @@
 
 import numpy as np
 from polymerfts import _core, PropagatorSolver
+from cuda_part import cuda_part_missing
 
 
 def rejects(call, message=None):
@@ -380,7 +381,8 @@ def main():
             test_grafting_conversions(platform, reduced)
             test_cnadi_lattice_update(platform, reduced)
         print("Computation safety:", platform, "OK")
+    return 1 if cuda_part_missing() else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

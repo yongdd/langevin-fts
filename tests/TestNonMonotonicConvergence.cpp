@@ -44,6 +44,7 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 #include "TestNanSafe.h"
 
 // Test parameters
@@ -289,7 +290,7 @@ int main()
         if (all_tests_passed)
         {
             std::cout << "All tests PASSED" << std::endl;
-            return 0;
+            return cuda_part_missing() ? 1 : 0;
         }
         else
         {

@@ -45,6 +45,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 #include "TestNanSafe.h"
 
 /**
@@ -415,7 +416,7 @@ int main()
         std::cout << "All tests PASSED!" << std::endl;
         std::cout << "========================================" << std::endl;
 
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch (std::exception& exc)
     {

@@ -32,6 +32,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 DS = 0.025
 BOND_LENGTHS = {"A": 1.0, "B": 1.2}
@@ -164,6 +165,8 @@ def main():
         print(f"FAILED: {len(FAILURES)} assertion(s) failed (runtime {elapsed:.1f} s):")
         for f in FAILURES:
             print(f"  - {f}")
+        return 1
+    if cuda_part_missing():
         return 1
     print(f"All ObliqueZ stress tests PASSED (runtime {elapsed:.1f} s)")
     return 0

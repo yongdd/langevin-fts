@@ -23,6 +23,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 NX = [12, 10, 8]
 LX = [2.0, 1.8, 1.5]
@@ -83,6 +84,8 @@ def main():
 
     if FAILURES:
         print(f"FAILED: {len(FAILURES)} check(s)")
+        return 1
+    if cuda_part_missing():
         return 1
     print("All block-concentration checks PASSED")
     return 0

@@ -44,10 +44,11 @@ python /path/to/polymerfts/examples/scft/Gyroid.py > gyroid.log 2>&1
 For CPU/GPU agreement, the build must include both backends and the job must
 have a visible GPU. Preserve JUnit results, the CMake cache, environment details,
 GPU information and the Gyroid convergence result in a distinct report directory
-per job. A CPU-only job can run the same CTest selection, but does not certify
-GPU agreement. Submit long checks and parameter sweeps through the scheduler,
-one configuration per job. Keep cluster-specific launchers, paths and module
-settings outside the repository.
+per job. Without a visible GPU, a build with the CUDA backend fails every test
+with a CUDA part, C++ and Python alike, after its CPU parts have run: a skipped
+CUDA part would read as validated GPU agreement. Submit long checks and parameter
+sweeps through the scheduler, one configuration per job. Keep cluster-specific
+launchers, paths and module settings outside the repository.
 
 To run the full suite, omit `-L numerical` from the CTest command after building
 the required targets.

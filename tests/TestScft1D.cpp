@@ -28,6 +28,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 int main()
 {
@@ -256,7 +257,7 @@ int main()
             if (!std::isfinite(error_level) || error_level > 0.1)
                 return -1;
         }
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch(std::exception& exc)
     {

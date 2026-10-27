@@ -4,6 +4,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 from polymerfts import PropagatorSolver, PlatformSelector
+from cuda_part import cuda_part_missing
 
 
 def main():
@@ -25,8 +26,11 @@ def main():
             assert solver.check_total_partition()
             solver.compute_concentrations()
             assert abs(np.mean(solver.get_concentration("A")) - 1.0) < 1e-12
+    if cuda_part_missing():
+        return 1
     print("Test passed, analytic propagator including a nonzero Fourier mode")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -217,7 +217,8 @@ dependencies. Releases before 0.10.0 use their own CMake installation instructio
 | Native regression suite | `ctest --test-dir build-tests --output-on-failure` |
 
 The native build below stages its package in `build-tests/python` for CTest.
-Available tests depend on the enabled backends. CUDA tests need a visible GPU.
+Available tests depend on the enabled backends. In a build with the CUDA backend,
+the tests with a CUDA part fail when no GPU is visible.
 See [Numerical Validation](../internals/NumericalValidation.md) for coverage.
 
 <details>

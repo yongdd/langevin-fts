@@ -43,6 +43,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 int main()
 {
@@ -343,7 +344,7 @@ int main()
             delete[] w_minus;
         }
 
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch (std::exception& exc)
     {

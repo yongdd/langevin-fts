@@ -34,6 +34,7 @@ import io
 import numpy as np
 import scipy.fft
 from polymerfts import PlatformSelector, PropagatorSolver
+from cuda_part import cuda_part_missing
 
 RNG = np.random.default_rng(11)
 failures = 0
@@ -384,7 +385,7 @@ def main():
               f"max rel diff {err:.1e}")
 
     print(f"\n{failures} failed")
-    return 1 if failures else 0
+    return 1 if cuda_part_missing() or failures else 0
 
 
 if __name__ == "__main__":

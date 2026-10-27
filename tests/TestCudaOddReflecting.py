@@ -10,8 +10,9 @@ on the same random field (std 5): partition function (relative 1e-10),
 concentrations (absolute 1e-10) and stress (relative 1e-8), for continuous
 (RQM4) and discrete chains. An odd absorbing axis must still be refused on
 CUDA, and platform="auto" must choose a CPU backend for it (and for complex
-fields of continuous chains with walls). Exit code 77 (skipped) without a CUDA
-platform.
+fields of continuous chains with walls). Exit code 77 (skipped) in a build without
+the CUDA backend or a CPU backend; exit code 1 in a CUDA build without a visible
+CUDA device.
 """
 
 import contextlib
@@ -22,6 +23,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 FAILURES = []
 
@@ -52,6 +54,8 @@ def main():
     cpus = [p for p in platforms if p.startswith("cpu")]
     print(f"Available platforms: {platforms}")
     if "cuda" not in platforms or not cpus:
+        if cuda_part_missing():
+            return 1
         print("CUDA or a CPU platform is not available: skipped")
         return 77
 

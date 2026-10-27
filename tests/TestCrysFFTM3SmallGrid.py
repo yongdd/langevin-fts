@@ -23,6 +23,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 DS = 0.02
 TOL_Q_REL = 1e-10
@@ -104,6 +105,8 @@ def main():
                 check(cons < 1e-12, f"{tag}: |mean(phi_A + phi_B) - 1| = {cons:.2e} < 1e-12")
     if FAILURES:
         print(f"\nFAILED: {len(FAILURES)} check(s)")
+        return 1
+    if cuda_part_missing():
         return 1
     print("\nm3 basis on small grids: PASSED")
     return 0

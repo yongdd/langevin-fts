@@ -19,6 +19,7 @@ from polymerfts import (LFTS, CLFTS, PropagatorSolver, PlatformSelector,
 from polymerfts.utils import atomic_savemat, settings_json, input_hash
 from polymerfts.integrators import checked_fields
 from TestFtsReliability import parameters, fields, expect_error, FailingLFTS
+from cuda_part import cuda_part_missing
 
 example_path = Path(__file__).resolve().parents[1] / "examples/lfts/CustomExtensions.py"
 spec = importlib.util.spec_from_file_location("custom_fts_extensions", example_path)
@@ -206,6 +207,8 @@ def main():
                 check_method_registry()
         finally:
             os.chdir(previous)
+    if cuda_part_missing():
+        return 1
     print("Test passed, extensions")
     return 0
 

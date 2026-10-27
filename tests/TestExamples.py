@@ -18,6 +18,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from cuda_part import cuda_part_missing
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # Examples that build no SCFT/LFTS/CLFTS simulation, and modules of examples; they
@@ -86,7 +88,7 @@ def main():
                 print("    " + "\n    ".join(tail))
                 failures.append(name)
     print(f"\n{len(scripts) - len(failures)} passed, {len(failures)} failed")
-    return 1 if failures else 0
+    return 1 if cuda_part_missing() or failures else 0
 
 
 if __name__ == "__main__":

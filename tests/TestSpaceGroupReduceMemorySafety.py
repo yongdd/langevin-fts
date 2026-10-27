@@ -17,6 +17,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 from polymerfts import scft
 from polymerfts import _core
+from cuda_part import cuda_part_missing
 
 
 def get_platform():
@@ -29,7 +30,7 @@ def get_platform():
     return "cpu-fftw"
 
 
-def main() -> None:
+def main() -> int:
     np.random.seed(1234)
 
     params = {
@@ -94,7 +95,8 @@ def main() -> None:
         "Reduced-memory space-group safety check passed: "
         f"mean(phi_A + phi_B)={total_phi_mean:.6e}"
     )
+    return 1 if cuda_part_missing() else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

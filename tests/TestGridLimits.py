@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from polymerfts import _core, PlatformSelector
+from cuda_part import cuda_part_missing
 
 
 def main():
@@ -66,7 +67,7 @@ def main():
 
     for f in failed:
         print("FAILED:", f)
-    if failed:
+    if failed or cuda_part_missing():
         sys.exit(1)
     print("Grid limits: OK (platforms: " + ", ".join(avail) + ")")
 
