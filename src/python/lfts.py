@@ -329,8 +329,9 @@ class LFTS:
             transform=self.prop_solver.fourier if params.get("smearing") is not None and not mixed_box else None
         )
 
-        # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
-        # Uses same interface as deep-langevin-fts
+        # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided. The WTMD class
+        # follows deep-langevin-fts; the input names differ: "ell" and "delta_t" here for its
+        # "l" and "dT"
         wtmd_params = params.get("wtmd", None)
         if wtmd_params is not None:
             self.wtmd = WTMD(
@@ -596,11 +597,16 @@ class LFTS:
             mdic["wtmd_u"] = self.wtmd.u * self.wtmd.CV
             mdic["wtmd_up"] = self.wtmd.up * self.wtmd.CV
             mdic["wtmd_I0"] = self.wtmd.I0
+            # The same arrays without the factor CV, which a continued run restores exactly:
+            # (x*CV)/CV can differ from x in the last bit
+            mdic["wtmd_unscaled_u"] = self.wtmd.u
+            mdic["wtmd_unscaled_up"] = self.wtmd.up
             # I1 and the samples stored since the last update, so that a continued run
             # carries the same statistics as an uninterrupted one
             for key, value in self.wtmd.I1.items():
                 monomer_pair = sorted(key.split(","))
                 mdic["wtmd_I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = value * self.wtmd.CV
+                mdic["wtmd_unscaled_I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = value
             mdic["wtmd_order_parameter_history"] = np.array(self.wtmd.order_parameter_history, dtype=np.float64)
             for key, values in self.wtmd.dH_history.items():
                 monomer_pair = sorted(key.split(","))
@@ -662,10 +668,15 @@ class LFTS:
                 "has_uint32": 0, "uinteger": 0}
         print("Restored Random Number Generator: ", self.random_bg.state)
 
-        # Restore WTMD state if available (normalize by CV as in deep-langevin-fts)
+        # Restore WTMD state if available: the arrays without the factor CV, or for an older
+        # checkpoint the scaled ones divided by CV (as in deep-langevin-fts)
         if self.wtmd is not None and "wtmd_u" in load_data:
-            self.wtmd.u = np.array(load_data["wtmd_u"]) / self.wtmd.CV
-            self.wtmd.up = np.array(load_data["wtmd_up"]) / self.wtmd.CV
+            def bias(name):
+                if "wtmd_unscaled_u" in load_data:
+                    return np.array(load_data["wtmd_unscaled_" + name])
+                return np.array(load_data["wtmd_" + name]) / self.wtmd.CV
+            self.wtmd.u = bias("u")
+            self.wtmd.up = bias("up")
             if "wtmd_I0" in load_data:
                 self.wtmd.I0 = np.array(load_data["wtmd_I0"])
             n_pending = np.atleast_1d(load_data.get("wtmd_order_parameter_history", np.zeros(0))).size
@@ -676,7 +687,7 @@ class LFTS:
                 monomer_pair = sorted(key.split(","))
                 name = monomer_pair[0] + "_" + monomer_pair[1]
                 if "wtmd_I1_" + name in load_data:
-                    self.wtmd.I1[key] = np.array(load_data["wtmd_I1_" + name]) / self.wtmd.CV
+                    self.wtmd.I1[key] = bias("I1_" + name)
                 if n_pending > 0 and "wtmd_dH_history_" + name in load_data:
                     self.wtmd.dH_history[key] = list(np.atleast_1d(load_data["wtmd_dH_history_" + name]))
             print("Restored WTMD state")
@@ -702,6 +713,13 @@ class LFTS:
         first_step = 1 if start_langevin_step is None else start_langevin_step
         if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
             raise ValidationError("start_langevin_step must be a positive integer")
+        # The histogram, the Gaussian kernels and the integrals all use the bin width dpsi.
+        # Checked unless WTMD statistics are restored, so that a run started with another
+        # dpsi still continues
+        if self.wtmd is not None and (_restart_data is None or "wtmd_u" not in _restart_data):
+            bins = (self.wtmd.psi_max - self.wtmd.psi_min) / self.wtmd.dpsi
+            if abs(bins - round(bins)) > 1e-9 * bins:
+                raise ValidationError("wtmd.dpsi must divide psi_max - psi_min into a whole number of bins")
         self.run_status = {"status": "running", "last_completed_step": first_step - 1,
                            "requested_last_step": self.langevin["max_step"],
                            "saddle_failures": 0, "noise_resamples": 0}

@@ -72,11 +72,15 @@ class WTMD:
         self.eigenvalues = eigenvalues
         self.real_fields_idx = real_fields_idx
         eigen_value_min = 0.0
+        self.exchange_idx = None
         for count, i in enumerate(self.real_fields_idx):
             if self.eigenvalues[i] < eigen_value_min:
                 eigen_value_min = self.eigenvalues[i]
                 self.exchange_idx = i
                 self.langevin_idx = count
+        if self.exchange_idx is None:
+            raise ValidationError("WTMD needs a real auxiliary (exchange) field, i.e. a negative value among the "
+                                  "printed 'Eigenvalues' of the auxiliary fields (for two monomer types, a positive chi_n)")
 
         self.u = np.zeros(self.bins)
         self.up = np.zeros(self.bins)

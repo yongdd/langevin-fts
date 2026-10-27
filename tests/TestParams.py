@@ -382,6 +382,19 @@ def main():
     ok &= expect_error(LFTS, params, "WTMD on a 2D grid")
     params = lfts_params(); params["wtmd"] = {"ell": 4}
     ok &= expect_error(CLFTS, params, "CL-FTS with a wtmd block")
+    # A bin width that does not divide the range is refused when a new run starts; the
+    # constructor accepts it, so that a run started with such a width still continues
+    params = lfts_params(); params["wtmd"] = {"psi_min": 0.0, "psi_max": 1.0, "dpsi": 0.3}
+    simulation = build(LFTS, params)
+    try:
+        simulation.run(initial_fields={})
+        print("FAILED: WTMD bin width that does not divide the range did not raise ValidationError")
+        ok = False
+    except ValidationError:
+        pass
+    for chi_n in (0.0, -5.0):   # no real auxiliary (exchange) field for the order parameter
+        params = lfts_params(); params["wtmd"] = {"ell": 4}; params["chi_n"] = {"A,B": chi_n}
+        ok &= expect_error(LFTS, params, f"WTMD at chi_n {chi_n}")
     params = lfts_params(); params.update(dynamic_stabilization=0.0, alpha_ds=0.02)
     ok &= expect_error(CLFTS, params, "dynamic_stabilization together with its alias alpha_ds")
     for value in (0, -1, 1.5, "fast"):

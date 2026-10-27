@@ -413,9 +413,23 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                         raise ValidationError(f"Invalid checkpoint charge structure sum '{key}'")
         wtmd = getattr(sim, "wtmd", None)
         if wtmd is not None:
-            for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
+            def check_wtmd_array(key):
                 if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
                     raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+            def check_wtmd_copies(name):
+                # Both copies are written from one array; the restore uses the unscaled
+                # one, so a checkpoint whose scaled copy was edited is refused
+                check_wtmd_array("wtmd_unscaled_" + name)
+                if not np.allclose(np.ravel(data["wtmd_unscaled_" + name]) * wtmd.CV,
+                                   np.ravel(data["wtmd_" + name]), rtol=1e-12, atol=0):
+                    raise ValidationError(f"Checkpoint WTMD arrays 'wtmd_{name}' and 'wtmd_unscaled_{name}' disagree")
+            # Newer checkpoints also hold the bias arrays without the factor CV ("wtmd_unscaled_*")
+            unscaled = "wtmd_unscaled_u" in data
+            for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
+                check_wtmd_array(key)
+            if unscaled:
+                check_wtmd_copies("u")
+                check_wtmd_copies("up")
             pending = np.size(data["wtmd_order_parameter_history"])
             if (pending >= wtmd.update_freq or not np.all(np.isfinite(data["wtmd_order_parameter_history"])) or
                     np.iscomplexobj(data["wtmd_order_parameter_history"])):
@@ -424,8 +438,9 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 suffix = "_".join(sorted(pair.split(",")))
                 key = "wtmd_I1_" + suffix
                 if np.any(data["wtmd_I0"]) or key in data:
-                    if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
-                        raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+                    check_wtmd_array(key)
+                    if unscaled:
+                        check_wtmd_copies("I1_" + suffix)
                 key = "wtmd_dH_history_" + suffix
                 if pending and (np.size(data[key]) != pending or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key])):
                     raise ValidationError(f"Invalid checkpoint WTMD history '{key}'")

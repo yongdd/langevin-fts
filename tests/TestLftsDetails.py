@@ -33,6 +33,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from scipy.io import loadmat
 from polymerfts import _core, LFTS
+from polymerfts.utils import atomic_savemat
 from polymerfts.wtmd import WTMD
 from polymerfts.smearing import Smearing
 
@@ -96,6 +97,28 @@ def test_wtmd_restart(root):
     check(max(diffs) < 1e-12 and np.max(np.abs(w_straight - w_second)) < 1e-10 and len(a.I1) > 0,
           f"WTMD: continued run = uninterrupted run (statistics {max(diffs):.1e}, "
           f"fields {np.max(np.abs(w_straight - w_second)):.1e})")
+    # The checkpoint also holds the bias arrays without the factor CV: they restore bit for bit
+    check(all(np.array_equal(x, y) for x, y in ((a.u, b.u), (a.up, b.up), (a.I0, b.I0)))
+          and a.I1.keys() == b.I1.keys() and all(np.array_equal(a.I1[key], b.I1[key]) for key in a.I1),
+          "WTMD: continued run restores the bias arrays bitwise")
+
+    # An older checkpoint without the unscaled copies restores the scaled arrays divided by CV
+    data = {k: v for k, v in loadmat(os.path.join(root, "first", "fields_000004.mat")).items()
+            if not k.startswith("__")}
+    unscaled = [key for key in data if key.startswith("wtmd_unscaled_")]
+    for key in unscaled:
+        del data[key]
+    atomic_savemat(os.path.join(root, "legacy.mat"), data, long_field_names=True, do_compression=True)
+    legacy = quiet(LFTS, params(os.path.join(root, "legacy"), nx, lx, 8, wtmd=wtmd), random_seed=1)
+    quiet(legacy.continue_run, os.path.join(root, "legacy.mat"))
+    c = legacy.wtmd
+    legacy_diffs = [np.max(np.abs(a.u - c.u)), np.max(np.abs(a.up - c.up)), np.max(np.abs(a.I0 - c.I0))]
+    legacy_diffs += [np.max(np.abs(a.I1[key] - c.I1.get(key, 0.0))) for key in a.I1]
+    w_legacy = loadmat(os.path.join(root, "legacy", "fields_000008.mat"))["w_A"]
+    check(len(unscaled) == 2 + len(a.I1) and max(legacy_diffs) < 1e-12
+          and np.max(np.abs(w_straight - w_legacy)) < 1e-10,
+          f"WTMD: continued run from a checkpoint without the unscaled arrays (statistics "
+          f"{max(legacy_diffs):.1e}, fields {np.max(np.abs(w_straight - w_legacy)):.1e})")
 
 
 def test_wtmd_cell():

@@ -336,11 +336,11 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | `sigma_psi` | float | Gaussian width $`\sigma_\Psi`$ | `0.16` |
 | `psi_min` | float | Minimum $`\Psi`$ | `0.0` |
 | `psi_max` | float | Maximum $`\Psi`$ | `10.0` |
-| `dpsi` | float | Bin width $`d\Psi`$ | `1e-3` |
+| `dpsi` | float | Bin width $`d\Psi`$; a new run requires it to divide `psi_max - psi_min` into a whole number of bins | `1e-3` |
 | `update_freq` | int | Statistics update frequency | `1000` |
 | `recording_period` | int | Data recording frequency | `100000` |
 
-WTMD requires a 3D grid (`nx` with three entries).
+WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange) field, that is a negative value among the `Eigenvalues` the constructor prints (of the projected interaction matrix, see [Polymer Field Theory](../theory/PolymerFieldTheory.md#2-incompressible-model); for two monomer types, a positive `chi_n`).
 
 ### Other L-FTS Options
 

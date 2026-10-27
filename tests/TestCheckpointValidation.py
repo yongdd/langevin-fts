@@ -97,11 +97,14 @@ def check_wtmd(root):
     before_rng = copy.deepcopy(sim.random_bg.state)
     before_u = sim.wtmd.u.copy()
     before_I1 = copy.deepcopy(sim.wtmd.I1)
-    for key in ("wtmd_u", "wtmd_up", "wtmd_I0", "wtmd_I1_A_B",
-                "wtmd_order_parameter_history", "wtmd_dH_history_A_B"):
+    for key in ("wtmd_u", "wtmd_up", "wtmd_I0", "wtmd_I1_A_B", "wtmd_unscaled_up", "wtmd_unscaled_I1_A_B",
+                "wtmd_order_parameter_history", "wtmd_dH_history_A_B", "edited wtmd_u", "edited wtmd_I1_A_B"):
         bad = copy.deepcopy(data)
-        bad.pop(key)
-        path = root / (key + ".mat")
+        if key.startswith("edited "):   # the scaled copy no longer matches the unscaled one
+            bad[key[7:]] = 2.0 * bad[key[7:]]
+        else:
+            bad.pop(key)
+        path = root / (key.replace(" ", "_") + ".mat")
         atomic_savemat(path, bad)
         expect_error(lambda: sim.continue_run(path), ValidationError)
         assert sim.random_bg.state == before_rng
