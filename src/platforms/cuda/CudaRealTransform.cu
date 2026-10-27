@@ -3630,6 +3630,23 @@ static size_t shared_bytes_1d(CudaTransformType type, int N)
     }
 }
 
+// The 2D/3D DST-3 kernels (executeX/Y/Z_DST3) stage one line, N+2 values, in the
+// shared memory of a block; the other 2D/3D kernels use none
+static void check_shared_line(CudaTransformType type, int N, const char* axis, int dim)
+{
+    if (type != CUDA_DST_3)
+        return;
+    int device = 0, max_shared = 0;
+    CUDA_CHECK(cudaGetDevice(&device));
+    CUDA_CHECK(cudaDeviceGetAttribute(&max_shared, cudaDevAttrMaxSharedMemoryPerBlock, device));
+    const size_t needed = sizeof(double) * (static_cast<size_t>(N) + 2);
+    if (needed > static_cast<size_t>(max_shared))
+        throw std::runtime_error("CudaRealTransform: the " + std::to_string(dim) + "D DST-3 (absorbing axis) of " +
+            axis + " = " + std::to_string(N) + " points stages " + std::to_string(needed) +
+            " bytes in shared memory, more than the " + std::to_string(max_shared) +
+            " bytes a block may use on this GPU; use a CPU platform for this grid (platform \"auto\" does).");
+}
+
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
     : N_(N), type_(type), initialized_(false)
 {
@@ -3936,6 +3953,8 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
         check_transform_length(type_x_, Nx_, "Nx", 2);
         check_transform_length(type_y_, Ny_, "Ny", 2);
         check_extended_size({type_x_, type_y_}, {Nx_, Ny_});
+        check_shared_line(type_x_, Nx_, "Nx", 2);
+        check_shared_line(type_y_, Ny_, "Ny", 2);
 
         init();
         set_stream(stream_);
@@ -4522,6 +4541,9 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
         check_transform_length(type_y_, Ny_, "Ny", 3);
         check_transform_length(type_z_, Nz_, "Nz", 3);
         check_extended_size({type_x_, type_y_, type_z_}, {Nx_, Ny_, Nz_});
+        check_shared_line(type_x_, Nx_, "Nx", 3);
+        check_shared_line(type_y_, Ny_, "Ny", 3);
+        check_shared_line(type_z_, Nz_, "Nz", 3);
 
         init();
         set_stream(stream_);

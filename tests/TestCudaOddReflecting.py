@@ -8,9 +8,10 @@ needs an even one. This test runs 1D, 2D and 3D boxes whose reflecting axes have
 odd sizes (absorbing axes even) on CUDA and compares them with each CPU backend
 on the same random field (std 5): partition function (relative 1e-10),
 concentrations (absolute 1e-10) and stress (relative 1e-8), for continuous
-(RQM4) and discrete chains. An odd absorbing axis must still be refused on
-CUDA, and platform="auto" must choose a CPU backend for it (and for complex
-fields of continuous chains with walls). Exit code 77 (skipped) in a build without
+(RQM4) and discrete chains. An odd absorbing axis, and in 2D/3D one of more than
+6142 points (the sine transform stages a line in shared memory), must still be
+refused on CUDA, and platform="auto" must choose a CPU backend for them (and for
+complex fields of continuous chains with walls). Exit code 77 (skipped) in a build without
 the CUDA backend or a CPU backend; exit code 1 in a CUDA build without a visible
 CUDA device.
 """
@@ -86,13 +87,24 @@ def main():
     except Exception as exc:
         refused = "absorbing" in str(exc)
     check(refused, "cuda refuses an odd absorbing axis with a message naming it")
+    for nx, axis in (([2, 6144], "Ny"), ([6144, 2], "Nx"), ([2, 2, 6144], "Nz")):
+        bc = ["reflecting"] * (2*len(nx))
+        bc[2*nx.index(6144):2*nx.index(6144) + 2] = ["absorbing", "absorbing"]
+        refused = False
+        try:
+            run("cuda", "discrete", nx, [1.0] * len(nx), bc, {m: np.zeros(int(np.prod(nx))) for m in "AB"})
+        except Exception as exc:
+            refused = all(text in str(exc) for text in ("absorbing", "shared memory", f"{axis} = 6144 points"))
+        check(refused, f"cuda refuses an absorbing axis {axis} of 6144 points in {len(nx)}D with a message naming it")
 
     # platform="auto" keeps the inputs that only the CPU backends run on the CPU
     walls = ["reflecting", "reflecting", "absorbing", "absorbing"]
     for nx, bc, chain_model, field_type, platform in (
             ([8, 7], walls, "continuous", "real", "cpu"), ([8, 7], walls, "discrete", "real", "cpu"),
             ([8, 8], walls, "discrete", "real", "cuda"), ([8, 8], walls, "continuous", "complex", "cpu"),
-            ([8, 8], walls, "discrete", "complex", "cuda"), ([8, 7], ["periodic"]*4, "continuous", "complex", "cuda")):
+            ([8, 8], walls, "discrete", "complex", "cuda"), ([8, 7], ["periodic"]*4, "continuous", "complex", "cuda"),
+            ([2, 6144], walls, "continuous", "real", "cpu"), ([2, 6142], walls, "discrete", "real", "cuda"),
+            ([6144, 2], ["reflecting"]*4, "continuous", "real", "cuda")):
         with contextlib.redirect_stdout(io.StringIO()):
             chosen = PropagatorSolver(nx=nx, lx=[1.0, 1.0], ds=0.02, bond_lengths={"A": 1.0}, bc=bc,
                                       chain_model=chain_model, field_type=field_type).platform

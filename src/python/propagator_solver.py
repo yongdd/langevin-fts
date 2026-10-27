@@ -206,8 +206,10 @@ class PropagatorSolver:
         """Platform for ``platform="auto"``: CPU for 1D (GPU overhead outweighs
         the gain), CUDA for 2D/3D when available, otherwise the first CPU
         backend of this build. Inputs that only the CPU backends run stay on
-        the CPU: the CUDA pseudo-spectral solvers need even sizes along
-        absorbing axes, and periodic boxes for complex fields of continuous chains.
+        the CPU: the CUDA pseudo-spectral solvers need even sizes of at most 6142
+        points along absorbing axes (the sine transform stages a line of nx+2
+        values in the 48 KB of shared memory of a block), and periodic boxes for
+        complex fields of continuous chains.
         """
         avail = _core.PlatformSelector.avail_platforms()
         cpu_platforms = [p for p in avail if p.startswith("cpu")]
@@ -216,7 +218,7 @@ class PropagatorSolver:
         if "cuda" in avail:
             bc = [b.lower() for b in self.bc]
             cpu_only = self.numerical_methods()[self.numerical_method]["solver_type"] == "pseudospectral" and (
-                any("absorbing" in bc[2*d:2*d+2] and self.nx[d] % 2 for d in range(self.dim))
+                any("absorbing" in bc[2*d:2*d+2] and (self.nx[d] % 2 or self.nx[d] > 6142) for d in range(self.dim))
                 or (self.field_type == "complex" and self.chain_model == "continuous"
                     and any(b != "periodic" for b in bc)))
             if not (cpu_only and cpu_platforms):

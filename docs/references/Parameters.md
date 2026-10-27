@@ -181,7 +181,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 **Auto-selection logic** (same for `PropagatorSolver`, `SCFT`, `LFTS` and `CLFTS`):
 - 1D simulations → the first CPU backend of the build
 - 2D/3D simulations → `"cuda"` if available, else CPU
-- Inputs that the CUDA pseudo-spectral solvers do not run stay on the CPU: an odd grid size along an absorbing direction, and complex fields of continuous chains with non-periodic boundaries. With `"platform": "cuda"` these inputs raise an error
+- Inputs that the CUDA pseudo-spectral solvers do not run stay on the CPU: an odd grid size, or more than 6142 points, along an absorbing direction in 2D/3D, and complex fields of continuous chains with non-periodic boundaries. With `"platform": "cuda"` these inputs raise an error
 
 ---
 
@@ -571,7 +571,7 @@ params = {
 
 ### Non-Periodic Boundaries (Confined Film)
 
-All numerical methods support boundary conditions that are non-periodic in every direction (reflecting or absorbing, chosen per direction): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions. On CUDA, the pseudo-spectral methods need an even grid size along absorbing directions, and continuous chains with complex fields need periodic boundaries; `"platform": "auto"` runs such inputs on the CPU.
+All numerical methods support boundary conditions that are non-periodic in every direction (reflecting or absorbing, chosen per direction): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions. On CUDA, the pseudo-spectral methods need an even grid size of at most 6142 points along absorbing directions (in 1D also at most 4096 points along reflecting ones), and continuous chains with complex fields need periodic boundaries; `"platform": "auto"` runs such inputs on the CPU.
 
 ```python
 params = {
