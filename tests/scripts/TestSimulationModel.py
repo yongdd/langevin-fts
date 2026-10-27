@@ -86,7 +86,8 @@ def test_three_monomer_mat_fields(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("problem", ("duplicate_name", "invalid_name", "unknown_block", "negative_block",
     "volume_total", "negative_fraction", "duplicate_pair", "self_pair", "unused_monomer", "empty_polymer",
-    "angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique"))
+    "angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique",
+    "discrete_ds"))
 def test_invalid_structured_models(problem):
     form = values()
     model = form["model"]
@@ -109,6 +110,9 @@ def test_invalid_structured_models(problem):
     elif problem == "cn_oblique":
         model["box"].update(shape="triclinic", angles=["85", "80", "70"])
         form["numerical_method"] = "cn-adi2"
+    elif problem == "discrete_ds":   # 0.25 is 22.5 segments of ds = 1/90
+        form.update(chain_model="discrete", numerical_method="auto", ds="1/90")
+        model["polymers"][0]["blocks"] = [{"type": "A", "length": "0.25"}, {"type": "B", "length": "0.75"}]
     with pytest.raises(ValueError):
         BUILDER["build_script"](form)
 

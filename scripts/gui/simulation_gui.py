@@ -324,6 +324,14 @@ def build_script(values):
                   polymers=[{"volume_fraction": 1.0, "blocks": blocks}])
     params.update(chain_model=choice("chain_model", ("continuous", "discrete")), ds=ds,
                   reduce_memory=bool(values["reduce_memory"]))
+    if params["chain_model"] == "discrete":
+        # The library's rule (Molecules::add_polymer): a whole number of segments per block
+        for polymer in params["polymers"]:
+            for block in polymer["blocks"]:
+                n_segment = round(block["length"] / ds)
+                if abs(block["length"] - n_segment * ds) > 1e-9:
+                    raise ValueError(f"Discrete chains: block length {block['length']:g} must be a multiple of "
+                                     f"ds = {ds:g} (closest: {n_segment * ds:g}).")
     platform = choice("platform", ("auto", "cuda", "cpu-mkl", "cpu-fftw"))
     if platform != "auto":
         params["platform"] = platform
