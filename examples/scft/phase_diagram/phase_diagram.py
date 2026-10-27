@@ -58,7 +58,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from polymerfts import scft
+from polymerfts import scft, ValidationError
 
 DIS = "DIS"             # name of the homogeneous state
 
@@ -207,10 +207,13 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         errors = []
 
         def stop_when_stalled(info):
-            # Give up on a continuation step whose lowest error has not dropped tenfold
-            # during the last 300 iterations; continue_to then retries with a smaller
-            # step. A seed can rise and fall for longer before it converges.
+            # Give up on a diverged solve, and on a continuation step whose lowest error
+            # has not dropped tenfold during the last 300 iterations; continue_to then
+            # retries with a smaller step. A seed can rise and fall for longer before it
+            # converges.
             errors.append(info.error_level)
+            if not np.isfinite(info.error_level):
+                return False
             if (reference is not None and len(errors) > 300
                     and min(errors[-300:]) > 0.1*min(errors[:-300])):
                 return False
@@ -221,7 +224,7 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
                 calculation = scft.SCFT(params=make_params(phase, x, y, guess["lx"]))
                 result = calculation.run(initial_fields=guess["w"], on_iteration=stop_when_stalled,
                                          return_result=True)
-        except (RuntimeError, ValueError, FloatingPointError) as error:
+        except (RuntimeError, ValueError, FloatingPointError, ValidationError) as error:
             print(f"    {phase} at ({x:.4f}, {y:.4f}): {error}")
             return None
         count["solves"] += 1
@@ -416,6 +419,10 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         bisects it."""
         g_lo, dg_lo = func(lo)
         g_hi, dg_hi = func(hi)
+        if g_lo == 0.0 or g_hi == 0.0:
+            return lo if g_lo == 0.0 else hi
+        if (g_lo < 0.0) == (g_hi < 0.0):
+            raise ValueError("f(a) and f(b) must have different signs")   # as brentq
         t, g, dg = (lo, g_lo, dg_lo) if abs(g_lo) < abs(g_hi) else (hi, g_hi, dg_hi)
         for _ in range(50):
             t_new = t - g/dg if dg else 0.5*(lo + hi)
