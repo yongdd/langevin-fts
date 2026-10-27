@@ -320,7 +320,7 @@ See [Numerical Validation](../internals/NumericalValidation.md) for regression c
 | `mix_min` | float | Minimum mixing parameter | `0.01` |
 | `mix_init` | float | Initial mixing parameter | `0.01` |
 
-For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `KeyError`). `"lr"` and `"lram"` require exactly one imaginary auxiliary field; otherwise `LFTS` raises `ValidationError`.
+For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `ValidationError`). `"lr"` and `"lram"` require exactly one imaginary auxiliary field; otherwise `LFTS` raises `ValidationError`.
 
 ### Well-Tempered Metadynamics (Optional)
 
@@ -346,7 +346,7 @@ WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `verbose_level` | int | Output verbosity: 0 (only the Langevin step number), 1 (plus one saddle-point summary line per Langevin step), 2 (one line per saddle-point iteration). Other values raise `ValidationError` |
+| `verbose_level` | int | Output verbosity: 0 (no line per Langevin step), 1 (the Langevin step number and one saddle-point summary line per Langevin step), 2 (the step number and one line per saddle-point iteration). Other values raise `ValidationError` |
 | `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing) |
 
 `LFTS(params, random_seed=None)`: pass an integer `random_seed` for reproducible noise.

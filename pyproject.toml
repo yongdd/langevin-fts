@@ -118,5 +118,7 @@ test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector
 environment = { OMP_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# The tests/Test*.py files are CTest scripts (run their main() through ctest);
+# only tests/scripts holds pytest tests
+testpaths = ["tests/scripts"]
 python_files = ["Test*.py"]

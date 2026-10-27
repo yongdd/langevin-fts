@@ -2,7 +2,9 @@
 
 An integrator implements ``step(fields, force, *, dt, mobility, noise,
 previous_noise, noise_direction, evaluate_force)`` and returns new active fields.
-``force`` is dH/dw (including bias/stabilization), not the signed drift.
+``force`` is dH/dw for real-type fields and -dH/dw for the imaginary-type fields of
+CLFTS (the convention of compute_func_deriv), including bias/stabilization; the
+deterministic increment is -dt * mobility * force for every field.
 ``evaluate_force(candidate)`` evaluates intermediate fields, solving the saddle
 in LFTS. Noise is drawn by the run loop once per proposal; do not draw it here.
 ``averaged_noise`` declares the noise scheme: True when a step averages ``noise`` and

@@ -148,7 +148,7 @@ copy; the installed package keeps providing the C++ core and the shared modules.
 2. In the copy, point the imports at the installed package instead of the
    relative `.`:
    ```bash
-   sed -i -E 's/^from \. import _core/from polymerfts import _core/; s/^from \.([a-z_]+) import/from polymerfts.\1 import/' ~/my_project/my_scft.py
+   sed -i -E 's/^( *)from \. import _core/\1from polymerfts import _core/; s/^( *)from \.([a-z_]+) import/\1from polymerfts.\2 import/' ~/my_project/my_scft.py
    ```
    The result looks like
    ```python

@@ -81,8 +81,10 @@ def step(self, fields, force, *, dt, mobility, noise, previous_noise,
 
 `fields` and `force` have shape `(n_active, n_grid)`. LFTS passes real fluctuating
 auxiliary fields; CLFTS passes all auxiliary fields as complex arrays. `force`
-means the functional derivative dH/dw, including current WTMD bias or dynamical
-stabilization. The deterministic increment is `-dt * mobility[:, None] * force`.
+means the functional derivative dH/dw of the real-type auxiliary fields and -dH/dw
+of the imaginary-type (pressure-like) ones of CLFTS, the sign convention of
+`compute_func_deriv`, including current WTMD bias or dynamical stabilization. For
+every field the deterministic increment is `-dt * mobility[:, None] * force`.
 `mobility` is the per-field `dt_scaling` array. Fields with zero mobility must
 remain fixed.
 
