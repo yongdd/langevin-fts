@@ -18,7 +18,9 @@ From the repository root:
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in a browser on the same computer. The editor uses only
+Open the URL that the editor prints, `http://127.0.0.1:8765/?token=...`, in a browser
+on the same computer. The token keeps other accounts of a shared server from using the
+editor's port; a page opened without it cannot load or save settings. The editor uses only
 the Python standard library. Keep the `scripts/gui/assets/` asset directory
 next to `simulation_gui.py`; all browser assets are served locally. Running an
 exported script later requires the installed polymerfts package and its
@@ -39,14 +41,15 @@ cd /path/to/polymerfts
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in your own computer's browser. Keep the SSH connection
+Open the printed URL, `http://127.0.0.1:8765/?token=...`, in your own computer's browser. Keep the SSH connection
 and editor running while editing; press **Ctrl+C** to stop the editor. The server
 listens on `127.0.0.1`. X11 forwarding is unnecessary.
 
 In VS Code Remote-SSH, run the same command in the remote terminal and forward
-port `8765` in the **Ports** tab. Open the forwarded address in your local browser.
-If port `8765` is occupied, use another port with `--port 8766` and adjust the SSH
-forwarding command and browser address to match.
+port `8765` in the **Ports** tab. Open the printed URL, or the forwarded address
+followed by the printed `?token=...`, in your local browser. If port `8765` is
+occupied, use another port with `--port 8766`, adjust the SSH forwarding command to
+match and open the URL that this run prints (each run prints a new token).
 
 ## Configure a script
 

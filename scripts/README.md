@@ -16,7 +16,7 @@ otherwise.
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in a browser. For a remote server, connect with
+Open the printed URL (`http://127.0.0.1:8765/?token=...`) in a browser. For a remote server, connect with
 `ssh -L 8765:127.0.0.1:8765 user@server` from your computer, then start the editor
 in that SSH session. VS Code Remote-SSH port forwarding also works.
 

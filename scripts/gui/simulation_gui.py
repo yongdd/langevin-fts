@@ -7,10 +7,12 @@ Phase-specific initial fields currently support lamella and gyroid.
 """
 
 import argparse
+import hmac
 import json
 import math
 import os
 import re
+import secrets
 from fractions import Fraction
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -620,6 +622,13 @@ class ScriptRequestHandler(BaseHTTPRequestHandler):
         if origin is not None and origin != "http://" + host:
             self.respond_json(403, {"error": "Cross-origin requests are not accepted."})
             return False
+        # Loopback is shared by every account on the machine: the API also needs the
+        # token of the editor's URL, which only the user who started it sees
+        # (as bytes: compare_digest refuses str with non-ASCII characters)
+        if urlsplit(self.path).path.startswith("/api/") and not hmac.compare_digest(
+                self.headers.get("X-Editor-Token", "").encode("latin-1", "replace"), self.server.token.encode()):
+            self.respond_json(403, {"error": "Open the editor with the URL (including its token) that the server printed."})
+            return False
         return True
 
     def do_GET(self):
@@ -710,10 +719,12 @@ class ScriptRequestHandler(BaseHTTPRequestHandler):
 
 
 def create_server(port=8765, save_dir=None):
-    """Bind to loopback only; SSH forwarding supplies remote browser access."""
+    """Bind to loopback only; SSH forwarding supplies remote browser access. The
+    API requires the random token of server.token, which the printed URL carries."""
     save_dir = Path(save_dir if save_dir is not None else Path.cwd()).expanduser().resolve()
     server = ThreadingHTTPServer(("127.0.0.1", port), ScriptRequestHandler)
     server.save_dir = save_dir
+    server.token = secrets.token_urlsafe(32)
     return server
 
 
@@ -731,7 +742,7 @@ def main():
         parser.exit(1, f"Could not start editor: {exc}. Check --port and --save-dir.\n")
     with server:
         port = server.server_address[1]
-        print(f"Simulation Script Builder (beta): http://127.0.0.1:{port}", flush=True)
+        print(f"Simulation Script Builder (beta): http://127.0.0.1:{port}/?token={server.token}", flush=True)
         print(f"Server script directory: {server.save_dir}", flush=True)
         print(f"SSH tunnel (on your computer): ssh -L {port}:127.0.0.1:{port} user@server", flush=True)
         print("Press Ctrl+C to stop. This editor only generates scripts.", flush=True)

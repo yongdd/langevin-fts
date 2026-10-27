@@ -30,6 +30,7 @@ def web_server():
 
 def request(server, method="GET", path="/", body=None, headers=None):
     headers = dict(headers or {})
+    headers.setdefault("X-Editor-Token", server.token)
     if isinstance(body, dict):
         body = json.dumps(body).encode("utf-8")
         headers.setdefault("Content-Type", "application/json")
@@ -132,6 +133,18 @@ def test_browser_origin_and_tunnel_ports(web_server):
     status, _, _ = request(web_server, "POST", "/api/generate", values,
                            {"Host": "localhost:9999", "Origin": "http://localhost:9999"})
     assert status == 200
+
+
+def test_api_needs_the_token(web_server):
+    # Another account on the machine reaches loopback too, but not the printed URL
+    values = BUILDER["preset_settings"](BUILDER["PRESETS"][0])
+    for token in ("", "x" + web_server.token, "é"):    # (a non-ASCII byte gets a 403 too)
+        for method, path, body in (("GET", "/api/config", None), ("GET", "/api/presets", None),
+                                   ("POST", "/api/generate", values)):
+            status, _, _ = request(web_server, method, path, body, {"X-Editor-Token": token})
+            assert status == 403, (path, token)
+    status, _, _ = request(web_server, headers={"X-Editor-Token": ""})
+    assert status == 200    # the page itself carries nothing private
 
 
 @pytest.mark.parametrize("path", ("/CLAUDE.md", "/../CLAUDE.md", "/.git/config", "/api/run"))

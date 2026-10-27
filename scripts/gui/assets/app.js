@@ -1,5 +1,10 @@
 "use strict";
 
+// The server's API needs the token of the URL that the server printed
+const apiHeaders = {"X-Editor-Token": new URLSearchParams(window.location.search).get("token") || ""};
+// The home link reloads the page with that token
+document.querySelector(".brand").search = window.location.search;
+
 const sections = [
   {id: "system", title: "System", help: "Choose the simulation and calculation method. Edit geometry in Box and chain architectures in Molecules.", fields: [
     ["mode", "Simulation", ["SCFT", "L-FTS", "CL-FTS"], "Load a starting template to apply its parameter defaults. Switching to L-FTS or CL-FTS sets the box to 3D with 90° angles; other settings are kept."],
@@ -222,7 +227,7 @@ async function generate() {
   try {
     const response = await fetch("/api/generate", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", ...apiHeaders},
       body: JSON.stringify(settings()),
       signal: controller.signal
     });
@@ -281,7 +286,7 @@ serverSaveButton.addEventListener("click", async () => {
     // Keep this write request independent of cancellable preview requests.
     const response = await fetch("/api/save", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", ...apiHeaders},
       body: JSON.stringify({
         values: settings(),
         filename: exportFilename(),
@@ -367,7 +372,9 @@ document.getElementById("refresh").addEventListener("click", generate);
 
 async function start() {
   try {
-    const [response, configResponse] = await Promise.all([fetch("/api/presets"), fetch("/api/config")]);
+    const [response, configResponse] = await Promise.all([fetch("/api/presets", {headers: apiHeaders}), fetch("/api/config", {headers: apiHeaders})]);
+    const refused = [response, configResponse].find(r => r.status === 403);
+    if (refused) throw new Error((await refused.json().catch(() => ({}))).error || "The server refused the request.");
     if (!response.ok || !configResponse.ok) throw new Error("Could not load the editor settings. Check the server and refresh the page.");
     const config = await configResponse.json();
     document.getElementById("server-root").textContent = config.save_dir;

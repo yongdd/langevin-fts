@@ -120,7 +120,8 @@ def test_structured_model_http_save(tmp_path):
     try:
         payload = {"values": values(), "filename": "mixture.py", "directory": "mixture"}
         request = Request(f"http://127.0.0.1:{server.server_address[1]}/api/save",
-                          data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+                          data=json.dumps(payload).encode(),
+                          headers={"Content-Type": "application/json", "X-Editor-Token": server.token})
         with urlopen(request, timeout=5) as response:
             assert response.status == 201
             result = json.load(response)
