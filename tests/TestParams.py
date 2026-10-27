@@ -380,6 +380,13 @@ def main():
     ok &= expect_error(LFTS, params, "LFTS unknown compressor")
     params = lfts_params(); params["wtmd"] = {"ell": 4}; params["nx"] = [8, 8]; params["lx"] = [4.0, 4.0]
     ok &= expect_error(LFTS, params, "WTMD on a 2D grid")
+    params = lfts_params(); params["wtmd"] = {"ell": 4}
+    ok &= expect_error(CLFTS, params, "CL-FTS with a wtmd block")
+    params = lfts_params(); params.update(dynamic_stabilization=0.0, alpha_ds=0.02)
+    ok &= expect_error(CLFTS, params, "dynamic_stabilization together with its alias alpha_ds")
+    for value in (0, -1, 1.5, "fast"):
+        params = base_params(); params["stress_interval"] = value
+        ok &= expect_error(SCFT, params, f"stress_interval {value!r}")
 
     if ok:
         print("Test passed, parameter handling")

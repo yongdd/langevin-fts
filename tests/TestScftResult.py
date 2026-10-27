@@ -17,6 +17,7 @@ import yaml
 
 import numpy as np
 
+from scipy.io import loadmat
 from polymerfts import SCFT, SCFTResult, SpaceGroup, PlatformSelector
 
 
@@ -76,6 +77,22 @@ def main():
                 assert saved["initial_params"]["nx"] == [32]
                 np.testing.assert_allclose(saved["phi_A"], phi["A"], rtol=0, atol=1e-11)
             assert isinstance(short.params["nx"][0], np.int64)
+
+    # Options given as None and path objects are saved in every format (MAT files have no
+    # None: such options are left out)
+    with tempfile.TemporaryDirectory() as tmp:
+        p = params([32], [1.7], max_iter=2, tolerance=1e-11, relax_cell=False, smearing=None,
+                   polymer_figure_dir=Path(tmp)/"figures")
+        with contextlib.redirect_stdout(io.StringIO()):
+            calc = SCFT(p)
+            calc.run({"A": np.sqrt(2)*5*np.cos(2*np.pi*x_short), "B": -np.sqrt(2)*5*np.cos(2*np.pi*x_short)})
+        for extension in ("mat", "json", "yaml"):
+            calc.save_results(str(Path(tmp)/("options." + extension)))
+        saved = loadmat(Path(tmp)/"options.mat", squeeze_me=True)["initial_params"]
+        assert "smearing" not in saved.dtype.names and str(saved["polymer_figure_dir"]) == str(Path(tmp)/"figures")
+        with (Path(tmp)/"options.json").open() as stream:
+            saved = json.load(stream)["initial_params"]
+        assert saved["smearing"] is None and saved["polymer_figure_dir"] == str(Path(tmp)/"figures")
 
     # Callback stops between stress updates must also return the final stress,
     # including its smearing contribution, and report the corresponding error.

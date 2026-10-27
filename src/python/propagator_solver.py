@@ -119,18 +119,19 @@ class PropagatorSolver:
 
         self.method, self.numerical_method = self._resolve_numerical_method(self.chain_model, numerical_method)
 
-        self.platform = self._auto_platform(self.dim) if platform == "auto" else platform
+        self.field_type = field_type.lower()
+        if self.field_type not in ("real", "complex"):
+            raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
+
+        self.platform = self._auto_platform() if platform == "auto" else platform
 
         self._check_boundary_conditions()
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
-        # Lattice angles, optimizer aggregation and field type
+        # Lattice angles and optimizer aggregation
         self.angles = list(angles) if angles is not None else None
         self.aggregate_propagator_computation = bool(aggregate_propagator_computation)
-        self.field_type = field_type.lower()
-        if self.field_type not in ("real", "complex"):
-            raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
 
         info = self.numerical_methods()[self.numerical_method]
         if self.field_type == "complex" and not info["supports_complex"]:
@@ -201,18 +202,25 @@ class PropagatorSolver:
             raise ValueError(str(exc)) from None
         return cls.numerical_methods()[name]["solver_type"], name
 
-    @staticmethod
-    def _auto_platform(dim):
+    def _auto_platform(self):
         """Platform for ``platform="auto"``: CPU for 1D (GPU overhead outweighs
         the gain), CUDA for 2D/3D when available, otherwise the first CPU
-        backend of this build.
+        backend of this build. Inputs that only the CPU backends run stay on
+        the CPU: the CUDA pseudo-spectral solvers need even sizes along
+        absorbing axes, and periodic boxes for complex fields of continuous chains.
         """
         avail = _core.PlatformSelector.avail_platforms()
         cpu_platforms = [p for p in avail if p.startswith("cpu")]
-        if dim == 1 and cpu_platforms:
+        if self.dim == 1 and cpu_platforms:
             return cpu_platforms[0]
         if "cuda" in avail:
-            return "cuda"
+            bc = [b.lower() for b in self.bc]
+            cpu_only = self.numerical_methods()[self.numerical_method]["solver_type"] == "pseudospectral" and (
+                any("absorbing" in bc[2*d:2*d+2] and self.nx[d] % 2 for d in range(self.dim))
+                or (self.field_type == "complex" and self.chain_model == "continuous"
+                    and any(b != "periodic" for b in bc)))
+            if not (cpu_only and cpu_platforms):
+                return "cuda"
         if cpu_platforms:
             return cpu_platforms[0]
         raise RuntimeError("No computational platform available in this build.")
@@ -222,9 +230,10 @@ class PropagatorSolver:
 
         Reflecting (DCT) and absorbing (DST) boundaries are supported on both
         platforms, verified against each other to machine precision in 1D/2D/3D
-        for continuous and discrete chains. Mixing periodic with non-periodic
-        directions is not supported by the spectral transform, so it fails
-        loudly instead of silently switching solvers.
+        for continuous and discrete chains. CUDA needs even sizes along absorbing
+        axes and, for continuous chains, real fields (see _auto_platform). Mixing
+        periodic with non-periodic directions is not supported by the spectral
+        transform, so it fails loudly instead of silently switching solvers.
         """
         bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(b in ["reflecting", "absorbing"] for b in bc_lower)
@@ -534,8 +543,8 @@ class PropagatorSolver:
         Parameters
         ----------
         center : list of float, optional
-            Center of the Gaussian in each dimension.
-            Default: center of the box.
+            Cartesian center of the Gaussian.
+            Default: center of the cell (half the sum of the lattice vectors).
         sigma : float, optional
             Standard deviation of the Gaussian. Default: 0.4
 
@@ -547,7 +556,8 @@ class PropagatorSolver:
             distribution is needed).
         """
         if center is None:
-            center = [L / 2 for L in self.lx]
+            vectors = np.array(self._computation_box.get_lattice_vectors())[:self.dim, :self.dim]
+            center = 0.5 * vectors.sum(axis=0)
 
         coords = self.get_grid_points()
         r_squared = sum(

@@ -28,7 +28,7 @@ def coexistence_quantities(state, reference_polymer=0):
     params = _value(state, "params", {})
     if params.get("zeta_n") is not None:
         raise ValueError("Bulk coexistence currently requires the incompressible model.")
-    if params.get("bc") is not None and any(bc != "periodic" for bc in params["bc"]):
+    if params.get("bc") is not None and any(str(bc).lower() != "periodic" for bc in params["bc"]):
         raise ValueError("Bulk coexistence requires periodic boundary conditions.")
     mu = _value(state, "chemical_potentials")
     if mu is None:

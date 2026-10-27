@@ -45,6 +45,18 @@ def json_ready(value):
     return value
 
 
+def mat_ready(value):
+    """Convert a parameter dictionary for scipy.io.savemat, which has no None: an option
+    given as None (its default) is left out, and paths become strings."""
+    if isinstance(value, dict):
+        return {str(k): mat_ready(v) for k, v in value.items() if v is not None}
+    if isinstance(value, (list, tuple)):
+        return [np.empty(0) if v is None else mat_ready(v) for v in value]
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    return value
+
+
 def settings_json(settings):
     return json.dumps(json_ready(settings), sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -228,6 +240,7 @@ def checkpoint_data(sim):
         if "drift_step_history" in state:
             data["record_drift_step_history"] = np.reshape(np.asarray(state["drift_step_history"], dtype=np.float64),
                                                            (-1, len(sim.monomer_types)))
+            data["record_drift_step_start"] = int(state["drift_step_start"])
         if "psi_drift_step_history" in state:
             data["record_psi_drift_step_history"] = np.asarray(state["psi_drift_step_history"], dtype=np.float64)
         # CL-FTS: the chemical potentials (one row of all species per sample) and the pressure
@@ -336,9 +349,16 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
             raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
-        # The drifts of every step since the last statistics file (absent in checkpoints of
-        # earlier versions, whose continued runs record them from the restart on)
+        # The drifts of every step since the last statistics file, or since the first step of a run
+        # continued by hand or from a checkpoint without the record (record_drift_step_start).
+        # Checkpoints of earlier versions lack the record, whose continued runs record from the restart on
         pending_steps = step % sim.recording["statistics_save_interval"]
+        if "record_drift_step_start" in data:
+            first = data["record_drift_step_start"]
+            if (isinstance(first, (bool, np.bool_)) or not isinstance(first, (int, np.integer))
+                    or not step - pending_steps < first <= step + 1):
+                raise ValidationError("Invalid checkpoint measurement 'record_drift_step_start'")
+            pending_steps = step + 1 - int(first)
         for key, per_step in (("record_drift_step_history", n_fields), ("record_psi_drift_step_history", 1)):
             if key in data:
                 values = np.atleast_1d(np.asarray(data[key]))

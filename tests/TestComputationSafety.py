@@ -292,6 +292,9 @@ def test_grid_geometry(platform):
                                [3/8*np.cos(np.pi/3), 3/8*np.sin(np.pi/3)], rtol=0, atol=1e-14)
     np.testing.assert_allclose([x[0, 0], y[0, 0]], [0.25 + 3/16*np.cos(np.pi/3), 3/16*np.sin(np.pi/3)],
                                rtol=0, atol=1e-14)
+    # The default Gaussian sits at the center of the cell, half the sum of the lattice vectors
+    center = [0.5*(4.0 + 3.0*np.cos(np.pi/3)), 0.5*3.0*np.sin(np.pi/3)]
+    np.testing.assert_array_equal(s.gaussian_initial_condition(), s.gaussian_initial_condition(center=center))
 
 
 def test_n_grid(platform):

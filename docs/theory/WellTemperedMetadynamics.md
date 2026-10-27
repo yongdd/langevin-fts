@@ -91,7 +91,7 @@ The discrete formula is derived from the continuum definition (Section 3.1) by a
 \Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
 ```
 
-where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
+where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight of the half spectrum of `rfftn`: 1 on the planes $`k_z = 0`$ and, for even $`n_z`$, $`k_z = n_z/2`$, which are their own conjugates, and 2 on every other plane, which stands for itself and its conjugate.
 
 > **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) puts $`1/M^2`$ inside the $`\ell`$-th root:
 > ```math
@@ -125,7 +125,7 @@ The cutoff $`k_c`$ is typically set to 1.4 times the peak position of the disord
 
 ### 3.5 Implementation
 
-The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts) exactly.
+The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts), except that for odd $`n_z`$ the last `rfftn` plane has weight 2: deep-langevin-fts gives it weight 1.
 
 **Order parameter:**
 ```math

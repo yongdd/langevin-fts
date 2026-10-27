@@ -48,6 +48,11 @@ def test_common_tangent():
     shifted_result = find_binary_coexistence(new_standard, new_standard, **kwargs)
     np.testing.assert_allclose(shifted_result["compositions"], result["compositions"], rtol=0, atol=1e-10)
 
+    # Boundary names are case-insensitive, as in the solver
+    state = phase(0.2)
+    state["params"] = dict(state.get("params", {}), bc=["Periodic", "PERIODIC"])
+    coexistence_quantities(state)
+
     # Reject failed or compressible states, missing species and incorrect callback compositions.
     for updates in ({"converged": False}, {"params": {"zeta_n": 10}},
                     {"params": {"bc": ["reflecting", "reflecting"]}},

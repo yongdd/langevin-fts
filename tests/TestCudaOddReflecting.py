@@ -9,7 +9,9 @@ odd sizes (absorbing axes even) on CUDA and compares them with each CPU backend
 on the same random field (std 5): partition function (relative 1e-10),
 concentrations (absolute 1e-10) and stress (relative 1e-8), for continuous
 (RQM4) and discrete chains. An odd absorbing axis must still be refused on
-CUDA. Exit code 77 (skipped) without a CUDA platform.
+CUDA, and platform="auto" must choose a CPU backend for it (and for complex
+fields of continuous chains with walls). Exit code 77 (skipped) without a CUDA
+platform.
 """
 
 import contextlib
@@ -80,6 +82,17 @@ def main():
     except Exception as exc:
         refused = "absorbing" in str(exc)
     check(refused, "cuda refuses an odd absorbing axis with a message naming it")
+
+    # platform="auto" keeps the inputs that only the CPU backends run on the CPU
+    walls = ["reflecting", "reflecting", "absorbing", "absorbing"]
+    for nx, bc, chain_model, field_type, platform in (
+            ([8, 7], walls, "continuous", "real", "cpu"), ([8, 7], walls, "discrete", "real", "cpu"),
+            ([8, 8], walls, "discrete", "real", "cuda"), ([8, 8], walls, "continuous", "complex", "cpu"),
+            ([8, 8], walls, "discrete", "complex", "cuda"), ([8, 7], ["periodic"]*4, "continuous", "complex", "cuda")):
+        with contextlib.redirect_stdout(io.StringIO()):
+            chosen = PropagatorSolver(nx=nx, lx=[1.0, 1.0], ds=0.02, bond_lengths={"A": 1.0}, bc=bc,
+                                      chain_model=chain_model, field_type=field_type).platform
+        check(chosen.startswith(platform), f"auto platform for {nx} {bc[::2]} {chain_model} {field_type}: {chosen}")
 
     if FAILURES:
         print(f"\nFAILED: {len(FAILURES)} check(s)")

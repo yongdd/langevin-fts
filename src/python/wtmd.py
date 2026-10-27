@@ -3,22 +3,24 @@
 This module implements well-tempered metadynamics to enhance sampling
 in Langevin field-theoretic simulations of block copolymers.
 
-This implementation follows deep-langevin-fts exactly.
+This implementation follows deep-langevin-fts, except for the half-spectrum weight
+of the last kz plane when nz is odd (see WTMD.__init__).
 """
 
 import numpy as np
-from scipy.io import savemat
 
+from .utils import atomic_savemat
 from .validation import ValidationError
 
 
 class WTMD:
     """Well-Tempered Metadynamics for enhanced sampling in L-FTS.
 
-    This implementation matches deep-langevin-fts exactly. With `fourier`, the
-    PropagatorSolver.fourier of the simulation (real fields, periodic box), the order
-    parameter and its derivative are transformed on the platform (on the GPU with CUDA)
-    instead of with numpy.fft, in the same rfftn layout.
+    This implementation matches deep-langevin-fts up to the odd-nz weight (see the
+    module docstring). With `fourier`, the PropagatorSolver.fourier of the simulation
+    (real fields, periodic box), the order parameter and its derivative are transformed
+    on the platform (on the GPU with CUDA) instead of with numpy.fft, in the same rfftn
+    layout.
     """
 
     def __init__(self, nx, lx, nbar,
@@ -102,8 +104,12 @@ class WTMD:
         self.dH_history = {}
 
         # Initialize arrays in Fourier spaces
+        # Half-spectrum weights: the planes kz = 0 and, for even nz, kz = nz/2 are their own
+        # conjugates; every other plane stands for itself and its conjugate
         self.wt = 2 * np.ones([nx[0], nx[1], nx[2] // 2 + 1])
-        self.wt[:, :, [0, nx[2] // 2]] = 1.0
+        self.wt[:, :, 0] = 1.0
+        if nx[2] % 2 == 0:
+            self.wt[:, :, nx[2] // 2] = 1.0
 
         if self.orthogonal:
             space_kx, space_ky, space_kz = np.meshgrid(
@@ -241,4 +247,4 @@ class WTMD:
             mdic["I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = I1
             mdic["dH_psi_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_psi
 
-        savemat(file_name, mdic, long_field_names=True, do_compression=True)
+        atomic_savemat(file_name, mdic, long_field_names=True, do_compression=True)

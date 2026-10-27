@@ -7,7 +7,8 @@ L-FTS details that change recorded results.
    checkpoint had no I1 and no samples since the last update, so dH/dpsi = I1/I0
    was underestimated after a restart.
 2. WTMD in a non-orthogonal cell uses the cell volume and |k| from the cell
-   metric (the minimal alias, as the propagator solvers).
+   metric (the minimal alias, as the propagator solvers), and its order parameter
+   from the half spectrum equals the full-spectrum sum, also for odd nz.
 3. A step whose saddle point fails is retried, so every
    recording period holds its samples (until 2026-10 the step was skipped:
    no dH file at a recording step, two periods in the next one).
@@ -106,6 +107,18 @@ def test_wtmd_cell():
     fk_ref = 1.0 / (1.0 + np.exp(12.0 * (k_ref - wt.kc) / wt.kc))
     check(abs(wt.V - volume) < 1e-12 * volume and np.max(np.abs(wt.fk - fk_ref)) < 1e-12,
           "WTMD in a hexagonal cell: cell volume and |k| from the cell metric")
+
+    # The half spectrum stands for the full one: with odd nz the plane kz = nz//2 is not its
+    # own conjugate. Coarse grids, where fk does not vanish on that plane, show it
+    rng = np.random.default_rng(7)
+    for nx, lx in (([6, 6, 6], [2.0] * 3), ([6, 6, 5], [2.0] * 3), ([12, 12, 9], [4.0] * 3)):
+        wt = quiet(WTMD, nx, lx, 10000, np.array([-12.0, 200.0]), [0])
+        w = rng.normal(0, 5, nx)
+        psi = wt.compute_order_parameter(0, np.array([w.ravel(), np.zeros(w.size)]))
+        k = np.meshgrid(*[2 * np.pi / lx[d] * np.fft.fftfreq(nx[d], 1.0 / nx[d]) for d in range(3)], indexing="ij")
+        fk = 1.0 / (1.0 + np.exp(12.0 * (np.sqrt(sum(kd**2 for kd in k)) - wt.kc) / wt.kc))
+        psi_full = np.sum(np.abs(np.fft.fftn(w))**4 * fk)**0.25 / np.prod(nx)
+        check(abs(psi - psi_full) < 1e-12 * psi_full, f"WTMD order parameter from the half spectrum, nx = {nx}")
 
 
 class FailingLFTS(LFTS):

@@ -7,7 +7,6 @@ import copy
 import itertools
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Union, List
-import scipy.io
 
 from dataclasses import dataclass
 
@@ -23,6 +22,8 @@ from .utils import (
     simulation_metadata,
     report_partition_consistency,
     check_partition_functions,
+    atomic_savemat,
+    mat_ready,
 )
 from .smearing import Smearing
 
@@ -759,6 +760,8 @@ class SCFT:
                 return {plain(key): plain(item) for key, item in value.items()}
             if isinstance(value, (list, tuple)):
                 return [plain(item) for item in value]
+            if isinstance(value, os.PathLike):
+                return os.fspath(value)
             return value
 
         m_dic = plain(m_dic)
@@ -766,19 +769,22 @@ class SCFT:
         # Get input file extension
         _, file_extension = os.path.splitext(path)
 
-        # Save data in matlab format
+        # Save data in matlab format (MAT files have no None: options given as None are left out).
+        # Every format is converted before the file is opened, so that a failure keeps an existing file
         if file_extension == ".mat":
-            scipy.io.savemat(path, m_dic, long_field_names=True, do_compression=True)
+            atomic_savemat(path, mat_ready(m_dic), long_field_names=True, do_compression=True)
 
         # Save data in json format
         elif file_extension == ".json":
+            text = json.dumps(m_dic, indent=2)
             with open(path, "w") as f:
-                json.dump(m_dic, f, indent=2)
+                f.write(text)
 
         # Save data in yaml format
         elif file_extension == ".yaml":
+            text = yaml.safe_dump(m_dic, default_flow_style=None, width=90, sort_keys=False)
             with open(path, "w") as f:
-                f.write(yaml.safe_dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
+                f.write(text)
         else:
             raise ValueError("Invalid output file extension. Use .mat, .json, or .yaml.")
 

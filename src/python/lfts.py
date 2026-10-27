@@ -6,7 +6,7 @@ import json
 import warnings
 import numpy as np
 import itertools
-from scipy.io import savemat, loadmat
+from scipy.io import loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
@@ -21,6 +21,7 @@ from .utils import (
     calculate_sigma,
     load_config,
     atomic_savemat,
+    mat_ready,
     simulation_metadata,
     checkpoint_data,
     validate_checkpoint,
@@ -565,7 +566,7 @@ class LFTS:
 
         # Make dictionary for data
         mdic = {
-            "initial_params": self.params,
+            "initial_params": mat_ready(self.params),
             "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
             "monomer_types":self.monomer_types, "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"],
@@ -957,7 +958,7 @@ class LFTS:
                     dH_history[key] = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_history[key]
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
+                atomic_savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset dictionary
                 H_history = []
                 drift_history = []
@@ -994,7 +995,7 @@ class LFTS:
                     chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
                 mdic = {"dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
                         "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
+                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":mat_ready(self.params)}
                 # Add structure functions to the dictionary
                 for key in sf_average:
                     sf_average[key] *= 1.0/max(sf_sample_count, 1)* \
@@ -1010,7 +1011,7 @@ class LFTS:
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
                 mdic["sample_count"] = sf_sample_count
                 mdic["simulation_metadata_json"] = json.dumps(self.metadata)
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
+                atomic_savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
                     sf_average[key][:] = 0.0

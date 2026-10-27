@@ -181,6 +181,7 @@ See [NumericalMethods.md](../theory/NumericalMethods.md) for benchmarks.
 **Auto-selection logic** (same for `PropagatorSolver`, `SCFT`, `LFTS` and `CLFTS`):
 - 1D simulations → the first CPU backend of the build
 - 2D/3D simulations → `"cuda"` if available, else CPU
+- Inputs that the CUDA pseudo-spectral solvers do not run stay on the CPU: an odd grid size along an absorbing direction, and complex fields of continuous chains with non-periodic boundaries. With `"platform": "cuda"` these inputs raise an error
 
 ---
 
@@ -354,7 +355,7 @@ WTMD requires a 3D grid (`nx` with three entries).
 
 ## CL-FTS Parameters
 
-`CLFTS(params, random_seed=None)` (complex Langevin) reads the shared parameters, `langevin` and `recording` exactly as L-FTS does (no `compressor`, `saddle` or `wtmd`: all fields fluctuate), and `verbose_level` (0, 1 or 2; 0 prints nothing per Langevin step, 1 and 2 both print one status line per step), plus:
+`CLFTS(params, random_seed=None)` (complex Langevin) reads the shared parameters, `langevin` and `recording` exactly as L-FTS does (no `compressor`, `saddle` or `wtmd`: all fields fluctuate; a `wtmd` block raises `ValidationError`), and `verbose_level` (0, 1 or 2; 0 prints nothing per Langevin step, 1 and 2 both print one status line per step), plus:
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
@@ -493,6 +494,7 @@ even when their values are equal.
 | `distinct_polymers` | `polymers` |
 | `box_is_altering` | `relax_cell` |
 | `scale_stress` | `stress_scale` |
+| `alpha_ds` | `dynamic_stabilization` |
 | `blocks[].fraction` | `blocks[].monomer_fractions` |
 | `space_group.number` | `space_group.hall_number` |
 | `recording.recording_period` | `recording.checkpoint_interval` |
@@ -569,7 +571,7 @@ params = {
 
 ### Non-Periodic Boundaries (Confined Film)
 
-All numerical methods support boundary conditions that are non-periodic in every direction (reflecting or absorbing, chosen per direction): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions.
+All numerical methods support boundary conditions that are non-periodic in every direction (reflecting or absorbing, chosen per direction): RQM4 and RK2 use DCT/DST transforms, while CN-ADI2 uses ghost cells. **Mixing** periodic and non-periodic directions, as in the confined-film example below, is supported only by `"cn-adi2"` (continuous chains only) — the pseudo-spectral methods raise an error for mixed boundary conditions. On CUDA, the pseudo-spectral methods need an even grid size along absorbing directions, and continuous chains with complex fields need periodic boundaries; `"platform": "auto"` runs such inputs on the CPU.
 
 ```python
 params = {

@@ -159,6 +159,16 @@ def main():
                     result = continued.continue_run(Path(params["recording"]["dir"]) / "fields_000001.mat")
                     assert result["last_completed_step"] == 2
 
+                # Options given as None (their defaults) are left out of the saved parameters,
+                # which MAT files could not hold
+                for cls, extra in ((LFTS, {"zeta_n": None, "wtmd": None}), (CLFTS, {"electrostatics": None})):
+                    params = parameters(root / (cls.__name__ + "_none"), 2)
+                    params.update(smearing=None, angles=None, bc=None, **extra)
+                    assert cls(params, random_seed=5).run(fields())["status"] == "completed"
+                    for name in ("fields_000002.mat", "structure_function_000002.mat"):
+                        saved = loadmat(root / (cls.__name__ + "_none") / name, squeeze_me=True)["initial_params"]
+                        assert "nx" in saved.dtype.names and "smearing" not in saved.dtype.names, (cls.__name__, name)
+
             for complex_fields in (False, True):
                 for section, key, value in ((None, "ds", np.nan), ("langevin", "dt", np.inf),
                                             ("langevin", "nbar", -1), ("langevin", "max_step", True),

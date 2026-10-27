@@ -21,7 +21,7 @@ import numpy as np
 from .integrators import checked_fields
 import itertools
 
-from scipy.io import savemat, loadmat
+from scipy.io import loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
@@ -36,6 +36,7 @@ from .utils import (
     calculate_sigma,
     load_config,
     atomic_savemat,
+    mat_ready,
     simulation_metadata,
     checkpoint_data,
     validate_checkpoint,
@@ -180,16 +181,10 @@ class CLFTS:
 
         # Dynamical stabilization constant for complex Langevin simulations
         # This prevents runaway solutions ("hot spots") by adding iαds·Im[W-] to exchange field forces.
-        # The parameter can be specified as either:
-        #   - "dynamic_stabilization": the combined coefficient αds (as in Willis & Matsen 2024)
-        #   - "alpha_ds": alias for compatibility with reference codes
+        # "dynamic_stabilization" is the combined coefficient αds (as in Willis & Matsen 2024);
+        # normalize_params has renamed its alias "alpha_ds", kept for compatibility with reference codes.
         # Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
-        if "dynamic_stabilization" in params:
-            self.alpha_ds = params["dynamic_stabilization"]
-        elif "alpha_ds" in params:
-            self.alpha_ds = params["alpha_ds"]
-        else:
-            self.alpha_ds = 0.0
+        self.alpha_ds = params.get("dynamic_stabilization", 0.0)
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
@@ -575,7 +570,7 @@ class CLFTS:
         """
         # Make dictionary for data
         mdic = {
-            "initial_params": self.params,
+            "initial_params": mat_ready(self.params),
             "dim": self.prop_solver.dim,
             "nx": self.prop_solver.nx,
             "lx": self.prop_solver.get_lx(),
@@ -824,6 +819,10 @@ class CLFTS:
 
         if start_langevin_step is None:
             start_langevin_step = 1
+        # First step of the per-step drift records: a restored record ends at the step before
+        # this run's first step; a run continued by hand or from a checkpoint without the
+        # record starts it anew
+        drift_step_start = start_langevin_step - len(drift_step_history)
 
         # Init timers
         time_start = time.time()
@@ -1003,7 +1002,7 @@ class CLFTS:
                     pressure_array = np.array(pressure_history, dtype=np.complex128)
                     mdic["pressure_history_real"] = np.real(pressure_array)
                     mdic["pressure_history_imag"] = np.imag(pressure_array)
-                savemat(
+                atomic_savemat(
                     os.path.join(self.recording["dir"], "dH_%06d.mat" % langevin_step),
                     mdic, long_field_names=True, do_compression=True
                 )
@@ -1013,6 +1012,7 @@ class CLFTS:
                 psi_drift_history = []
                 drift_step_history = []
                 psi_drift_step_history = []
+                drift_step_start = langevin_step + 1
                 chemical_potential_history = []
                 pressure_history = []
                 for key in self.chi_n:
@@ -1089,7 +1089,7 @@ class CLFTS:
                     "ds": self.ds,
                     "dt": self.langevin["dt"],
                     "nbar": self.langevin["nbar"],
-                    "initial_params": self.params
+                    "initial_params": mat_ready(self.params)
                 }
                 # Add structure functions to the dictionary
                 for key in sf_average:
@@ -1129,7 +1129,7 @@ class CLFTS:
                         mdic["charge_structure_function_" + form + "_imag"] = np.imag(s_form)
                 mdic["sample_count"] = sf_sample_count
                 mdic["simulation_metadata_json"] = json.dumps(self.metadata)
-                savemat(
+                atomic_savemat(
                     os.path.join(self.recording["dir"], "structure_function_%06d.mat" % langevin_step),
                     mdic, long_field_names=True, do_compression=True
                 )
@@ -1146,7 +1146,7 @@ class CLFTS:
             if langevin_step % self.recording["checkpoint_interval"] == 0:
                 self._recording_state = {"H_history": H_history, "dH_history": dH_history,
                                          "sf_average": recorded, "sample_count": sf_sample_count, "drift_history": drift_history,
-                                         "drift_step_history": drift_step_history}
+                                         "drift_step_history": drift_step_history, "drift_step_start": drift_step_start}
                 if self.electrostatics is not None:
                     self._recording_state["psi_drift_history"] = psi_drift_history
                     self._recording_state["psi_drift_step_history"] = psi_drift_step_history

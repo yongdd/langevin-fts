@@ -38,7 +38,8 @@ def normalize_params(params):
     params = copy.deepcopy(params)
     for old, new in (("distinct_polymers", "polymers"),
                      ("box_is_altering", "relax_cell"),
-                     ("scale_stress", "stress_scale")):
+                     ("scale_stress", "stress_scale"),
+                     ("alpha_ds", "dynamic_stabilization")):
         _rename_parameter(params, old, new)
     polymers = params.get("polymers")
     if isinstance(polymers, list):
@@ -219,6 +220,8 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
         raise ValidationError(f"'polymer_figure_dir' must be a directory path or None, got {figure_dir!r}")
     if params.get("electrostatics") is not None:
         raise ValidationError("'electrostatics' is supported in CL-FTS only")
+    if params.get("stress_interval", 1) != "adaptive":
+        _integer(params.get("stress_interval", 1), "stress_interval")
     smearing = params.get("smearing")
     if isinstance(smearing, dict) and isinstance(smearing.get("a_int"), dict):
         raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
@@ -263,9 +266,8 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
             _integer(compressor.get("max_hist"), "compressor.max_hist", minimum=0)
             for key in ("start_error", "mix_min", "mix_init"):
                 _finite_number(compressor.get(key), "compressor." + key, nonnegative=True)
-    for key in ("dynamic_stabilization", "alpha_ds"):
-        if key in params:
-            _finite_number(params[key], key, nonnegative=True)
+    if "dynamic_stabilization" in params:
+        _finite_number(params["dynamic_stabilization"], "dynamic_stabilization", nonnegative=True)
     smearing = params.get("smearing")
     if smearing is not None:
         if not isinstance(smearing, dict):
@@ -294,6 +296,8 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
         validate_electrostatics(params)
     wtmd = params.get("wtmd")
     if wtmd is not None:
+        if complex_fields:
+            raise ValidationError("'wtmd' is supported in L-FTS only")
         if not isinstance(wtmd, dict):
             raise ValidationError("'wtmd' must be a dict or None")
         for key in ("update_freq", "recording_period"):
