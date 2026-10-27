@@ -442,8 +442,10 @@ the next (cuFFT needs 16-byte aligned real data). Periodic and wall axes cannot 
 `PropagatorSolver.fourier` uses the cosine series along walls, whose fields have no
 boundary value. The Langevin steps use it for smearing (except in boxes that mix periodic
 and wall axes), the transforms of ψ, the `etd` integrator, the dilation of the smearing
-(osmotic pressure) and, in periodic boxes, the LR compressor of L-FTS, WTMD and the samples
-for the structure functions; boxes with walls record the Fourier coefficients of `numpy.fft`.
+(osmotic pressure), the LR compressor of L-FTS in periodic boxes and in boxes with reflecting
+walls only (boxes that mix periodic and wall axes use `scipy.fft`; absorbing walls are refused)
+and, in periodic boxes, WTMD and the samples for the structure functions; boxes with walls
+record the Fourier coefficients of `numpy.fft`.
 
 ### 3.5 AndersonMixing Hierarchy
 

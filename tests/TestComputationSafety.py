@@ -158,6 +158,9 @@ def test_input_lists(platform, reduced):
 
     # Lengths are finite: an infinite box or bond length is rejected, not turned into NaN results
     rejects(lambda: fac.create_computation_box([16], [np.inf]), "lx")
+    # A mask must leave an accessible point; otherwise Q = 0 and the concentrations are NaN
+    rejects(lambda: fac.create_computation_box([16], [4.0], mask=np.zeros(16)), "accessible")
+    fac.create_computation_box([16], [4.0], mask=np.r_[np.zeros(15), 1.0])
     mol = fac.create_molecules_information("continuous", 0.05, {"A": np.inf})
     rejects(lambda: mol.add_polymer(1.0, [["A", 1.0, 0, 1]]), "bond_lengths")
     # A solvent needs a monomer type of bond_lengths, as the solvers keep one Boltzmann factor per type

@@ -105,18 +105,6 @@ logging.level = "INFO"
 CMAKE_BUILD_TYPE = "Release"
 POLYMERFTS_BUILD_TESTS = "OFF"
 
-[tool.cibuildwheel]
-# Build for Linux only initially
-build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64"
-skip = "*-musllinux*"
-
-# Test configuration
-test-requires = ["pytest", "numpy", "scipy"]
-test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector.avail_platforms())\""
-
-[tool.cibuildwheel.linux]
-environment = { OMP_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
-
 [tool.pytest.ini_options]
 # The tests/Test*.py files are CTest scripts (run their main() through ctest);
 # only tests/scripts holds pytest tests

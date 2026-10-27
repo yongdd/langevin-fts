@@ -95,9 +95,7 @@ class WTMD:
         if I0 is not None:
             self.I0 = I0.copy()
         if I1 is not None:
-            self.I1 = I1.copy()
-            for key in self.I1:
-                self.I1[key] /= self.CV
+            self.I1 = {key: np.array(value, dtype=np.float64) / self.CV for key, value in I1.items()}
 
         self.psi_range = np.linspace(self.psi_min, self.psi_max, num=self.bins, endpoint=False)
         self.psi_range_hist = np.linspace(self.psi_min - self.dpsi / 2, self.psi_max - self.dpsi / 2, num=self.bins + 1, endpoint=True)
@@ -161,13 +159,17 @@ class WTMD:
 
         # Calculate current value of U'(Ψ) using linear interpolation
         up_hat = np.interp(psi, self.psi_range, self.up)
-        # Calculate derivative of order parameter with respect to w_aux_k
-        dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
-        # Calculate derivative of order parameter with respect to w
-        if self._fourier is not None:
-            dpsi_dwr = self._fourier.backward(dpsi_dwk) * np.power(self.M, 2.0 - self.l) / self.V
+        if psi == 0.0:
+            # Ψ = 0 only for a zero exchange field, where dΨ/dw (0/0) has no direction: no bias
+            dpsi_dwr = np.zeros(self.M)
         else:
-            dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
+            # Calculate derivative of order parameter with respect to w_aux_k
+            dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
+            # Calculate derivative of order parameter with respect to w
+            if self._fourier is not None:
+                dpsi_dwr = self._fourier.backward(dpsi_dwk) * np.power(self.M, 2.0 - self.l) / self.V
+            else:
+                dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
 
         # Add bias
         bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)

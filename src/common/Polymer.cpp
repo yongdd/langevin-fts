@@ -74,6 +74,10 @@ Polymer::Polymer(
 
     validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction");
 
+    // The graph search below starts at a vertex of the first block
+    if (block_inputs.empty())
+        throw_with_line_number("A polymer needs at least one block.");
+
     // Check block lengths, segments, types
     for(size_t i=0; i<block_inputs.size(); i++)
     {

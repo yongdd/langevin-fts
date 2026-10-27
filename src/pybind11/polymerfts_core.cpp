@@ -220,9 +220,10 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         {
             // Modified in place: a converted copy would leave the caller's array
             // unchanged, so the array must already be C-contiguous and of the field type
-            // (a wrong dtype is rejected by pybind11 before the call).
-            if (!(g.flags() & py::array::c_style))
-                throw_with_line_number("zero_mean modifies the array in place; pass a C-contiguous array.");
+            // (a wrong dtype is rejected by pybind11 before the call), and writable
+            // (a read-only memory map would crash, an immutable buffer would change).
+            if (!(g.flags() & py::array::c_style) || !g.writeable())
+                throw_with_line_number("zero_mean modifies the array in place; pass a writable C-contiguous array.");
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != N) {
@@ -1103,9 +1104,10 @@ Example:
         .def("symmetrize_reduced_basis", [](SpaceGroup& obj, py::array_t<double, 0> reduced_field)
         {
             // Modified in place (like ComputationBox.zero_mean): a converted copy would
-            // leave the caller's array unchanged, so it must already be C-contiguous float64.
-            if (!(reduced_field.flags() & py::array::c_style))
-                throw_with_line_number("symmetrize_reduced_basis modifies the array in place; pass a C-contiguous float64 array.");
+            // leave the caller's array unchanged, so it must already be C-contiguous float64,
+            // and writable.
+            if (!(reduced_field.flags() & py::array::c_style) || !reduced_field.writeable())
+                throw_with_line_number("symmetrize_reduced_basis modifies the array in place; pass a writable C-contiguous float64 array.");
             py::buffer_info buf = reduced_field.request();
             const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis(), "n_reduced_basis");
             obj.symmetrize_reduced_basis(static_cast<double*>(buf.ptr), n_fields);

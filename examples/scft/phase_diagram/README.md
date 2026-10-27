@@ -81,7 +81,7 @@ It counts as just above the other phase, so the root lies where both phases exis
 root at which one of two ordered phases still cannot be continued is the end of that
 phase, not a crossing, and is skipped. Against the homogeneous state the root is an
 order-disorder transition if the ordered phase exists there, melts there or its solves
-stop converging there, as they can next to melting; where its solves fail with an error
+stop converging there (they stall or diverge), as they can next to melting; where its solves fail with an error
 or it turns into another structure, the root is skipped.
 
 ## A New System

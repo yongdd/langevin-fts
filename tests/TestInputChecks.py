@@ -10,6 +10,8 @@ of non-finite histories.
   standard deviation of 5 after symmetrization.
 - Anderson mixing of a history whose residual products overflow uses no
   history and calls no LAPACK routine, which would print DLASCL warnings.
+- A solver of real fields rejects complex arrays instead of dropping their
+  imaginary parts.
 """
 
 import subprocess
@@ -17,6 +19,7 @@ import sys
 
 import numpy as np
 from polymerfts import _core
+from polymerfts.propagator_solver import PropagatorSolver
 from cuda_part import cuda_part_missing
 
 
@@ -129,8 +132,25 @@ def test_anderson_non_finite(platform):
     assert "DLASCL" not in output and "illegal value" not in output, output
 
 
+def test_complex_into_real(platform):
+    solver = PropagatorSolver(nx=[8, 8], lx=[2.0, 2.0], ds=0.1, bond_lengths={"A": 1.0}, bc=["periodic"] * 4,
+                              chain_model="continuous", platform=platform)
+    solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
+    w = np.random.default_rng(3).normal(0.0, 5.0, 64)
+    for call in (lambda: solver.compute_propagators({"A": w + 1j * w}), lambda: solver.mean(w + 1j * w),
+                 lambda: solver.integral(w + 0j), lambda: solver.inner_product(w, w + 1j * w)):
+        try:
+            call()
+        except ValueError as exc:
+            assert "field_type" in str(exc), exc
+            continue
+        raise AssertionError("A complex array was accepted for real fields")
+    solver.compute_propagators({"A": w})
+
+
 def main():
     for platform in _core.PlatformSelector.avail_platforms():
+        test_complex_into_real(platform)
         test_underscore_names(platform)
         test_nan_box(platform)
         test_single_segment_reduced_basis(platform)

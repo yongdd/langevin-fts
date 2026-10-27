@@ -33,7 +33,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 from scipy.io import loadmat
-from polymerfts import _core, LFTS
+from polymerfts import _core, LFTS, ValidationError
 from polymerfts.utils import atomic_savemat
 from polymerfts.wtmd import WTMD
 from polymerfts.smearing import Smearing
@@ -144,6 +144,19 @@ def test_wtmd_cell():
         psi_full = np.sum(np.abs(np.fft.fftn(w))**4 * fk)**0.25 / np.prod(nx)
         check(abs(psi - psi_full) < 1e-12 * psi_full, f"WTMD order parameter from the half spectrum, nx = {nx}")
 
+    # A zero exchange field (Ψ = 0, as in a start from w = 0) gets no bias, not 0 * inf = NaN
+    wt.up[:] = 1.0
+    psi = wt.compute_order_parameter(0, np.zeros([2, int(np.prod(nx))]))
+    langevin = np.zeros([1, int(np.prod(nx))])
+    quiet(wt.add_bias_to_langevin, psi, langevin)
+    check(psi == 0.0 and np.array_equal(langevin, np.zeros_like(langevin)), "WTMD: no bias at a zero exchange field")
+
+    # The constructor scales copies of the given statistics, not the caller's arrays
+    I1 = {"A,B": np.ones(wt.bins)}
+    wt = quiet(WTMD, nx, lx, 10000, np.array([-12.0, 200.0]), [0], I1=I1)
+    check(np.array_equal(I1["A,B"], np.ones(wt.bins)) and np.allclose(wt.I1["A,B"], 1.0 / wt.CV, rtol=1e-15, atol=0),
+          "WTMD: the given I1 arrays are left unchanged")
+
 
 class FailingLFTS(LFTS):
     """LFTS whose saddle-point solve reports failure on chosen calls."""
@@ -197,6 +210,35 @@ def test_compressible_mean(root):
           f"recorded H = H of the saved fields ({abs(h - h_recorded):.1e})")
 
 
+def test_lr_walls(root):
+    """LR and LRAM measure and apply the Jacobian in the cosine series along reflecting walls:
+    from random fields (std 2) they reach the saddle point in about as few iterations as in a
+    periodic box (5 for LR there), with periodic axes too (cn-adi2). Absorbing walls are refused."""
+    R, P = "reflecting", "periodic"
+    nx, lx = [16, 12, 10], [3.0, 2.4, 2.0]
+    n = int(np.prod(nx))
+    w = np.zeros([2, n])
+    w[0] = np.random.default_rng(5).normal(0.0, 2.0, n)
+    for bc, extra in (([R] * 6, {}), ([R] * 6, {"smearing": {"type": "gaussian", "a_int": 0.1}}),
+                      ([P, P, R, R, P, P], {"numerical_method": "cn-adi2"})):
+        for name in ("lr", "lram"):
+            p = params(os.path.join(root, "lr_walls"), nx, lx, 2, bc=bc, **extra)
+            p["saddle"] = {"max_iter": 100, "tolerance": 1e-6}
+            p["compressor"] = {"name": name, "max_hist": 20, "start_error": 5e-1, "mix_min": 0.01, "mix_init": 0.01}
+            sim = quiet(LFTS, p, random_seed=1)
+            _, _, iterations, error = quiet(sim.find_saddle_point, w.copy())
+            check(iterations <= 10 and error < 1e-6,
+                  f"{name} with walls {bc[::2]} {list(extra)}: saddle point in {iterations} iterations ({error:.1e})")
+    p = params(os.path.join(root, "lr_walls"), nx, lx, 2, bc=[R, R, "absorbing", "absorbing", R, R])
+    p["compressor"] = {"name": "lr"}
+    try:
+        quiet(LFTS, p, random_seed=1)
+        refused = False
+    except ValidationError as exc:
+        refused = "absorbing" in str(exc)
+    check(refused, "lr refused in a box with absorbing walls")
+
+
 def test_file_permissions(root):
     """Checkpoints and run_status.json get the permissions of any new file (0666 less the
     umask), not the 0600 of a temporary file; a umask of 022 tells the two apart."""
@@ -222,6 +264,7 @@ def main():
         test_wtmd_cell()
         test_saddle_failure(root)
         test_compressible_mean(root)
+        test_lr_walls(root)
         test_file_permissions(root)
     finally:
         shutil.rmtree(root, ignore_errors=True)

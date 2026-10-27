@@ -236,7 +236,7 @@ Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimiz
 | `"Monoclinic"` | a, b, c (3D only) | β |
 | `"Triclinic"` | a, b, c (3D only) | α, β, γ |
 
-Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`. Valid values depend on the dimension: 3D accepts Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic and Triclinic; 2D accepts Orthorhombic, Hexagonal2D and Oblique2D; 1D only Orthorhombic.
+Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). Relaxation never changes the angles that are not free, and its first step overwrites the tied lengths with the first one: with `relax_cell` and without a space group, a given `crystal_system` (and a 2D cell classified as hexagonal) needs `lx` and `angles` that already satisfy the table, for example `"angles": [90, 90, 120]` with a = b for `"Hexagonal"`; otherwise SCFT raises `ValidationError`. A fixed cell (`"relax_cell": false`) is not checked. With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`. Valid values depend on the dimension: 3D accepts Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic and Triclinic; 2D accepts Orthorhombic, Hexagonal2D and Oblique2D; 1D only Orthorhombic.
 
 ### Axis Ordering
 
@@ -320,7 +320,7 @@ See [Numerical Validation](../internals/NumericalValidation.md) for regression c
 | `mix_min` | float | Minimum mixing parameter | `0.01` |
 | `mix_init` | float | Initial mixing parameter | `0.01` |
 
-For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `ValidationError`). `"lr"` and `"lram"` require exactly one imaginary auxiliary field; otherwise `LFTS` raises `ValidationError`.
+For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix_init` are **required** (no built-in defaults; omitting one raises `ValidationError`). `"lr"` and `"lram"` require exactly one imaginary auxiliary field and periodic axes or reflecting walls (their Jacobian is measured in the Fourier basis of the box: the FFT along periodic axes, the cosine series along reflecting walls); otherwise, as with absorbing walls, `LFTS` raises `ValidationError`.
 
 ### Well-Tempered Metadynamics (Optional)
 

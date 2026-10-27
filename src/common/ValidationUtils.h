@@ -183,12 +183,12 @@ inline void require_string_key(const Map& container, const std::string& key,
 /**
  * @brief Validate and normalize a mask array.
  *
- * Ensures all mask values are either 0.0 or 1.0 within tolerance.
+ * Ensures all mask values are either 0.0 or 1.0 within tolerance, and at least one is 1.0.
  *
  * @param mask      Mask array to validate and normalize
  * @param size      Number of elements
  * @param tolerance Tolerance for floating point comparison
- * @throws Exception if any value is not approximately 0.0 or 1.0
+ * @throws Exception if any value is not approximately 0.0 or 1.0, or if none is 1.0
  */
 inline void validate_mask(double* mask, int size, double tolerance = 1e-7)
 {
@@ -208,6 +208,9 @@ inline void validate_mask(double* mask, int size, double tolerance = 1e-7)
                 std::to_string(mask[i]));
         }
     }
+    // Without an accessible point the polymers have no volume (Q = 0, NaN concentrations)
+    if (std::none_of(mask, mask + size, [](double value) { return value == 1.0; }))
+        throw_with_line_number("mask must leave at least one accessible grid point (value 1.0)");
 }
 
 /**

@@ -87,7 +87,7 @@ def test_three_monomer_mat_fields(tmp_path, monkeypatch):
 @pytest.mark.parametrize("problem", ("duplicate_name", "invalid_name", "unknown_block", "negative_block",
     "volume_total", "negative_fraction", "duplicate_pair", "self_pair", "unused_monomer", "empty_polymer",
     "angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique",
-    "discrete_ds"))
+    "discrete_ds", "lr_imaginary"))
 def test_invalid_structured_models(problem):
     form = values()
     model = form["model"]
@@ -113,8 +113,20 @@ def test_invalid_structured_models(problem):
     elif problem == "discrete_ds":   # 0.25 is 22.5 segments of ds = 1/90
         form.update(chain_model="discrete", numerical_method="auto", ds="1/90")
         model["polymers"][0]["blocks"] = [{"type": "A", "length": "0.25"}, {"type": "B", "length": "0.75"}]
+    elif problem == "lr_imaginary":   # A,B 20 and A,C 15 (B,C 0) give a second imaginary field
+        form.update(mode="L-FTS", compressor="lr")
     with pytest.raises(ValueError):
         BUILDER["build_script"](form)
+
+
+def test_lr_symmetric_chi(tmp_path, monkeypatch):
+    """With equal chi N for every pair, the pressure field is the only imaginary one: lr is allowed."""
+    form = values()
+    form.update(mode="L-FTS", compressor="lr")
+    form["model"]["interactions"] = [{"a": "A", "b": "B", "chi_n": "20"}, {"a": "A", "b": "C", "chi_n": "20"},
+                                     {"a": "B", "b": "C", "chi_n": "20"}]
+    calls = CHECKS["execute_export"](form, tmp_path, monkeypatch)
+    assert calls["params"]["compressor"]["name"] == "lr"
 
 
 def test_structured_model_http_save(tmp_path):

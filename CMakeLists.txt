@@ -453,7 +453,7 @@ IF(NOT _cuda_request STREQUAL "OFF")
             "CMAKE_CUDA_COMPILER")
     ELSEIF(CMAKE_VERSION VERSION_LESS 3.25.2)
         polymerfts_cuda_unusable("CMake ${CMAKE_VERSION} cannot compile C++20 CUDA code; the "
-            "GPU backend needs CMake 3.25.2 or newer (environment.yml installs 3.31)")
+            "GPU backend needs CMake 3.25.2 or newer (environment.yml installs a newer one)")
     ELSE()
         EXECUTE_PROCESS(COMMAND "${CMAKE_CUDA_COMPILER}" --version
             OUTPUT_VARIABLE _nvcc_output ERROR_QUIET)

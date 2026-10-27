@@ -77,7 +77,7 @@ Uses linear response theory to predict the saddle-point directly:
 \Omega_+^* \approx \Omega_+^{(0)} + \chi_{\Omega_+}^{-1} \cdot (\phi_+ - 1)
 ```
 
-where $`\chi_{\Omega_+}`$ is the response function.
+where $`\chi_{\Omega_+}`$ is the response function. It is measured once, at $`\Omega = 0`$, from a small kick of $`\Omega_+`$ at one grid point, and applied in the Fourier basis that makes it diagonal: the FFT in a periodic box and the cosine series (DCT-II) along reflecting walls, where the box is half of a periodic box of twice its size that holds the mirror image of the kick. Next to absorbing walls the concentrations at $`\Omega = 0`$ are not uniform, so no Fourier basis makes the response diagonal; `lr` and `lram` are refused there.
 
 ### 3.4 Available Compressors
 

@@ -44,7 +44,7 @@ Consequently,
 m_p=\ln c_p-\ln Q_p+\sum_i\ell_{pi}b_i.
 ```
 
-`SCFT.compute_chemical_potentials()` applies this correction analytically. Optional `w` and `partition_functions` arguments must describe the same CE state. No extra propagator calculation is needed. `SCFTResult.chemical_potentials` stores the values for the final snapshot, and `grand_potential` stores
+`SCFT.compute_chemical_potentials()` applies this correction analytically. Optional `w` and `partition_functions` arguments must describe the same CE state; `w` may be `SCFT.w` or a dict of fields such as `SCFTResult.w`, which is on the full grid when a space group is used. No extra propagator calculation is needed. `SCFTResult.chemical_potentials` stores the values for the final snapshot, and `grand_potential` stores
 
 ```math
 \Omega=F-\sum_p c_p m_p.

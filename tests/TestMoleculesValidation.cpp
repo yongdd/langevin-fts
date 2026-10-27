@@ -18,6 +18,7 @@
  * - Out-of-range solvent and block indices throw instead of reading past the end.
  * - A rejected polymer registers no contour lengths in the mapping.
  * - NaN lengths are rejected like non-positive ones.
+ * - A polymer without blocks is rejected instead of reading an empty vertex list.
  */
 
 #include <iostream>
@@ -106,6 +107,8 @@ int main()
                 "a polymer with an unknown monomer type is rejected");
             ok &= check(throws([&]{ molecules.add_polymer(1.0, {{"A", 0.37, 0, 1}, {"B", nan, 1, 2}}, {}); }),
                 "a polymer with a NaN contour length is rejected");
+            ok &= check(throws([&]{ molecules.add_polymer(1.0, {}, {}); }),
+                "a polymer without blocks is rejected");
             molecules.add_polymer(1.0, {{"A", 0.5, 0, 1}, {"B", 0.5, 1, 2}}, {});
             molecules.finalize_contour_length_mapping();
             const ContourLengthMapping& mapping = molecules.get_contour_length_mapping();

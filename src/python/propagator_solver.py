@@ -421,6 +421,7 @@ class PropagatorSolver:
             Example: {"G": delta_function_array}
         """
         self._initialize_solver()
+        self._check_real(*w_fields.values(), *(q_init or {}).values())
         # The native binding checks the sizes of w_fields and q_init against n_grid
         if q_init is not None:
             self._propagator_computation.compute_propagators(w_fields, q_init=q_init)
@@ -667,6 +668,7 @@ class PropagatorSolver:
             Integral of the field over the box volume.
         """
         self._initialize_solver()
+        self._check_real(field)
         field_use = self._maybe_to_reduced(field)
         return self._computation_box.integral(field_use)
 
@@ -684,6 +686,7 @@ class PropagatorSolver:
             Spatial average of the field (integral / volume).
         """
         self._initialize_solver()
+        self._check_real(field)
         field_use = self._maybe_to_reduced(field)
         return self._computation_box.mean(field_use)
 
@@ -707,6 +710,7 @@ class PropagatorSolver:
             Inner product of the two fields.
         """
         self._initialize_solver()
+        self._check_real(field1, field2)
         field1_use = self._maybe_to_reduced(field1)
         field2_use = self._maybe_to_reduced(field2)
         return self._computation_box.inner_product(field1_use, field2_use)
@@ -734,6 +738,7 @@ class PropagatorSolver:
             Sum of inner products.
         """
         self._initialize_solver()
+        self._check_real(fields1, fields2)
         fields1_use = self._maybe_to_reduced_multi(n_fields, fields1)
         fields2_use = self._maybe_to_reduced_multi(n_fields, fields2)
         return self._computation_box.multi_inner_product(n_fields, fields1_use, fields2_use)
@@ -768,6 +773,12 @@ class PropagatorSolver:
         basis), so the conversion must never be skipped on a size comparison.
         """
         return self._space_group is not None and self._space_group.physical_basis_name() != "irreducible"
+
+    def _check_real(self, *fields) -> None:
+        """Reject complex arrays for real fields: the conversion would drop their imaginary parts."""
+        if self.field_type == "real" and any(np.iscomplexobj(field) for field in fields):
+            raise ValueError('This solver has real fields: got a complex array. Complex fields need a '
+                             'solver created with field_type="complex".')
 
     def _maybe_to_reduced(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
         """Convert irreducible-basis field to reduced basis when physical basis is active."""

@@ -6,6 +6,7 @@ import json
 import warnings
 import numpy as np
 import itertools
+import scipy.fft
 from scipy.io import loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
@@ -41,6 +42,16 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
 
 
+def _axis_transform(field, axis_bc, inverse=False):
+    """Orthonormal transform of each axis: FFT ("periodic") or cosine series (DCT-II, "wall"), or its inverse."""
+    for axis, kind in enumerate(axis_bc):
+        if kind == "periodic":
+            field = (scipy.fft.ifft if inverse else scipy.fft.fft)(field, axis=axis, norm="ortho")
+        else:
+            field = (scipy.fft.idct if inverse else scipy.fft.dct)(field, type=2, axis=axis, norm="ortho")
+    return field
+
+
 class LR:
     """Linear Response (LR) field compressor for L-FTS.
 
@@ -60,10 +71,15 @@ class LR:
         Box dimensions in units of a_Ref * N_Ref^(1/2).
     jk : ndarray
         Jacobian (Hessian) matrix in Fourier space. Precomputed from
-        finite difference of δH/δw. Shape matches rfft output of nx.
+        finite difference of δH/δw. Shape: the coefficients of fourier when it
+        is given, the rfftn half spectrum of nx in a periodic box, or nx with axis_bc.
     fourier : FourierTransform, optional
-        PropagatorSolver.fourier of real fields in the periodic box, which applies 1/J(k)
-        (on the GPU with CUDA); without it the update uses numpy.fft.
+        PropagatorSolver.fourier of real fields (FFT in a periodic box, cosine series in
+        a box with reflecting walls), which applies 1/J(k) (on the GPU with CUDA);
+        without it the update uses numpy.fft or, with axis_bc, scipy.fft.
+    axis_bc : list of str, optional
+        "periodic" or "wall" for each axis of a box that mixes periodic axes and
+        reflecting walls (no fourier there): FFT and cosine series (orthonormal).
 
     Attributes
     ----------
@@ -74,12 +90,13 @@ class LR:
     jk : ndarray
         Jacobian in Fourier space.
     """
-    def __init__(self, nx, lx, jk, fourier=None):
+    def __init__(self, nx, lx, jk, fourier=None, axis_bc=None):
         self.nx = nx
         self.lx = lx
         self.jk = jk.copy()
         self._fourier = fourier
         self._inverse = None if fourier is None else fourier.set_multiplier(1.0 / self.jk)
+        self.axis_bc = axis_bc
 
     def reset_count(self,):
         """Reset compressor state (no-op for LR).
@@ -114,6 +131,10 @@ class LR:
             w_diff = self._fourier.apply([(self._inverse, np.reshape(negative_h_deriv, -1))])
             return w_current + np.reshape(w_diff, np.shape(w_current))
         nx = self.nx
+        if self.axis_bc is not None:
+            w_diff_k = _axis_transform(np.reshape(negative_h_deriv, nx), self.axis_bc)/self.jk
+            w_diff = np.real(_axis_transform(w_diff_k, self.axis_bc, inverse=True))
+            return w_current + np.reshape(w_diff, np.shape(w_current))
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.jk
         w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx, axes=tuple(range(len(nx))))*np.prod(nx), np.shape(w_current))
@@ -318,7 +339,7 @@ class LFTS:
         # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
         periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
         mixed_box = any(periodic_sides) and not all(periodic_sides)
-        periodic_box = all(periodic_sides)   # LR, WTMD and the structure functions transform with rfftn
+        periodic_box = all(periodic_sides)   # WTMD and the structure functions transform with rfftn
         self._periodic_box = periodic_box
         self.smearing = Smearing(
             self.cb.get_nx(),
@@ -372,6 +393,14 @@ class LFTS:
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
             if len(self.mpt.aux_fields_imag_idx) != 1:
                 raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
+            # The response J to a kick at w = 0 is diagonal in the Fourier basis of the box:
+            # the FFT in a periodic box, the cosine series along reflecting walls (the box is
+            # half of a periodic box of twice its size, with the mirror image of the kick).
+            # Next to an absorbing wall the concentrations at w = 0 are depleted, and no
+            # Fourier basis makes J diagonal
+            if any(b.lower() == "absorbing" for b in self.prop_solver.bc):
+                raise ValidationError("compressor 'lr' and 'lram' need periodic axes or reflecting walls; "
+                                      "use 'am' in a box with absorbing walls")
 
             # Baseline: h_deriv at w=0
             w_aux_zero = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
@@ -381,18 +410,29 @@ class LFTS:
             # Perturbed: h_deriv at w with small perturbation
             w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field
-            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.prop_solver.nx))/np.prod(self.prop_solver.nx)
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, self.smearing.apply_to_dict(phi_perturbed), self.mpt.aux_fields_imag_idx)
 
             # jk = (h(w_pert) - h(0)) / w_pert  (correct finite difference)
             h_deriv_diff = h_deriv_perturbed - h_deriv_zero
-            h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
-            jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
-
-            lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric,
-                    fourier=self.prop_solver.fourier if periodic_box else None)
+            nx = self.prop_solver.nx
+            if periodic_box:
+                w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], nx))/np.prod(nx)
+                h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, nx))/np.prod(nx)
+                jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, fourier=self.prop_solver.fourier)
+            elif not mixed_box:
+                # Reflecting walls only: the cosine series of PropagatorSolver.fourier
+                fourier = self.prop_solver.fourier
+                jk_numeric = np.real(fourier.forward(np.reshape(h_deriv_diff, -1))/fourier.forward(w_aux_perturbed[M-1]))
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, fourier=fourier)
+            else:
+                # Periodic axes and reflecting walls: FFT and cosine series with scipy.fft
+                axis_bc = ["periodic" if periodic else "wall" for periodic in periodic_sides[::2]]
+                jk_numeric = np.real(_axis_transform(np.reshape(h_deriv_diff, nx), axis_bc)
+                                     /_axis_transform(np.reshape(w_aux_perturbed[M-1], nx), axis_bc))
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, axis_bc=axis_bc)
 
         if params["compressor"]["name"] == "am":
             self.compressor = am

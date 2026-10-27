@@ -65,7 +65,7 @@ params = {
         ],
     }],
 
-    "crystal_system": "Hexagonal",  # Enforces a = b and gamma = 120 deg
+    "crystal_system": "Hexagonal",  # Relaxes a = b and c at gamma = 120 deg (the space group sets the same)
 
     # Space group P6_3/mmc (HCP)
     "space_group": {

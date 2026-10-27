@@ -273,6 +273,37 @@ def model_parameters(model):
     return params
 
 
+def imaginary_exchange_fields(types, chi_n):
+    """Number of imaginary auxiliary fields besides the pressure field of an incompressible
+    model: the positive eigenvalues of chi N on compositions with zero sum. By Sylvester's law
+    of inertia the basis e_i - e_last gives the same count as the orthonormal one of
+    polymer_field_theory; the eigenvalues come from cyclic Jacobi rotations."""
+    chi = lambda a, b: 0.0 if a == b else chi_n.get(f"{a},{b}", chi_n.get(f"{b},{a}", 0.0))
+    last, rest = types[-1], types[:-1]
+    m = [[chi(a, b) - chi(a, last) - chi(last, b) for b in rest] for a in rest]
+    n = len(m)
+    for _ in range(100):
+        if all(abs(m[p][q]) < 1e-14 * (1.0 + abs(m[p][p]) + abs(m[q][q])) for p in range(n) for q in range(p + 1, n)):
+            break
+        for p in range(n):
+            for q in range(p + 1, n):
+                if m[p][q] == 0.0:
+                    continue
+                theta = (m[q][q] - m[p][p]) / (2.0 * m[p][q])
+                t = math.copysign(1.0, theta) / (abs(theta) + math.sqrt(theta * theta + 1.0))
+                c = 1.0 / math.sqrt(t * t + 1.0)
+                s = t * c
+                m[p][p] -= t * m[p][q]
+                m[q][q] += t * m[p][q]
+                m[p][q] = m[q][p] = 0.0
+                for r in range(n):
+                    if r not in (p, q):
+                        rp, rq = m[r][p], m[r][q]
+                        m[r][p] = m[p][r] = c * rp - s * rq
+                        m[r][q] = m[q][r] = s * rp + c * rq
+    return sum(m[i][i] > 1e-8 for i in range(n))
+
+
 def build_script(values):
     """Validate form values and render a standalone, editable Python script."""
     def num(key, **kwargs):
@@ -378,6 +409,10 @@ def build_script(values):
             if len(params["segment_lengths"]) == 2 and next(iter(params["chi_n"].values())) <= 0:
                 raise ValueError("This A/B L-FTS setup requires positive chi N.")
             mixing["name"] = choice("compressor", ("am", "lr", "lram"))
+            # The library's rule (lfts.py): LR needs the pressure field as the only imaginary one
+            if mixing["name"] != "am" and imaginary_exchange_fields(list(params["segment_lengths"]), params["chi_n"]):
+                raise ValueError("Compressors lr and lram need the pressure field as the only imaginary field; "
+                                 "these chi N values give another one. Choose am.")
             params.update(saddle=dict(max_iter=num("saddle_max_iter", integer=True),
                                       tolerance=num("saddle_tolerance")), compressor=mixing)
         else:

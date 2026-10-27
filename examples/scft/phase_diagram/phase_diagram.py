@@ -227,7 +227,10 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
                                          return_result=True)
         except (RuntimeError, ValueError, FloatingPointError, ValidationError) as error:
             print(f"    {phase} at ({x:.4f}, {y:.4f}): {error}")
-            failure[phase] = "fails with an error"
+            # A diverged solve (stopped at a non-finite error, after which SCFT reports the
+            # non-finite partition function) does not converge, as next to melting
+            diverged = errors and not np.isfinite(errors[-1])
+            failure[phase] = "does not converge" if diverged else "fails with an error"
             return None
         count["solves"] += 1
         count["iterations"] += result.iterations
@@ -422,7 +425,9 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         """Root of func, which returns a value and its derivative, in [lo, hi] where
         it changes sign. The first step starts from the end closer to the root, whose
         value and derivative are already known; a step that leaves the bracket
-        bisects it."""
+        bisects it. Converged Newton steps give the root; a bracket that bisection
+        closes to xtol gives, as brentq, its end with the smaller |func|, an evaluated
+        point, so that a root at the end of a phase lies where that phase is missing."""
         g_lo, dg_lo = func(lo)
         g_hi, dg_hi = func(hi)
         if g_lo == 0.0 or g_hi == 0.0:
@@ -431,17 +436,20 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
             raise ValueError("f(a) and f(b) must have different signs")   # as brentq
         t, g, dg = (lo, g_lo, dg_lo) if abs(g_lo) < abs(g_hi) else (hi, g_hi, dg_hi)
         for _ in range(50):
-            t_new = t - g/dg if dg else 0.5*(lo + hi)
-            if not lo < t_new < hi:
+            t_new = t - g/dg if dg else None
+            if t_new is not None and lo < t_new < hi:
+                if abs(t_new - t) < xtol:
+                    return t_new
+            else:
+                if hi - lo < xtol:
+                    return lo if abs(g_lo) <= abs(g_hi) else hi
                 t_new = 0.5*(lo + hi)
-            if abs(t_new - t) < xtol:
-                return t_new
             t = t_new
             g, dg = func(t)
             if (g < 0.0) == (g_lo < 0.0):
                 lo, g_lo = t, g
             else:
-                hi = t
+                hi, g_hi = t, g
         raise ValueError("Newton iteration did not converge")
 
     def find_boundaries(a, b, line, lo, hi):

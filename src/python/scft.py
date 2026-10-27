@@ -479,6 +479,32 @@ class SCFT:
             if crystal_system not in valid_systems:
                 raise ValueError(f"Crystal system '{crystal_system}' is not valid for a {dim}D box. " +
                     "Choose from: " + ", ".join(valid_systems) + ".")
+
+            # Relaxation never changes the fixed angles, and its first step overwrites the tied
+            # lengths with the first one (a jump of the cell), so with relax_cell a crystal system
+            # that is given (or Hexagonal2D, classified from gamma) must describe the cell
+            if params["relax_cell"] and (params.get("crystal_system", None) is not None
+                                         or crystal_system == "Hexagonal2D"):
+                lx_given = [float(v) for v in params["lx"]]
+                if angles is None or len(angles) == 0:
+                    cell_angles = [90.0, 90.0, 90.0]
+                elif dim == 2:
+                    cell_angles = [90.0, 90.0, float(angles[0] if len(angles) == 1 else angles[2])]
+                else:
+                    cell_angles = [float(v) for v in angles]
+                tied = CRYSTAL_SYSTEMS[crystal_system]["lx_full"] or list(range(dim))
+                fixed = {"Hexagonal": [90, 90, 120], "Hexagonal2D": [None, None, 120], "Monoclinic": [90, None, 90],
+                         "Triclinic": [None] * 3, "Oblique2D": [None] * 3}.get(crystal_system, [90, 90, 90])
+                rule = {"Orthorhombic": "angles of 90 degrees", "Tetragonal": "a = b and angles of 90 degrees",
+                        "Cubic": "a = b = c and angles of 90 degrees",
+                        "Hexagonal": "a = b, alpha = beta = 90 and gamma = 120 degrees",
+                        "Hexagonal2D": "a = b and gamma = 120 degrees",
+                        "Monoclinic": "alpha = gamma = 90 degrees"}.get(crystal_system)
+                if (any(abs(lx_given[i] - lx_given[tied.index(tied[i])]) > 1e-6 * lx_given[i] for i in range(dim))
+                        or (dim > 1 and any(f is not None and abs(c - f) > 1e-6 for f, c in zip(fixed, cell_angles)))):
+                    raise ValidationError(f"crystal_system '{crystal_system}' needs a cell with {rule}; got lx = "
+                                          f"{lx_given} and angles = {cell_angles} (set lx and angles to such a cell"
+                                          + (", or crystal_system 'Oblique2D')" if dim == 2 else ")"))
             n_field_var = len(self.monomer_types) * np.prod(params["nx"])
         self.crystal_system = crystal_system
 
@@ -832,7 +858,9 @@ class SCFT:
         """Restore the saddle-point field means and return beta mu per chain.
 
         w and partition_functions must describe the same CE state; by default
-        use the final fields and Q saved by run(). No propagators are recomputed.
+        use the final fields and Q saved by run(). w may also be a dict of fields,
+        such as SCFTResult.w (on the full grid with a space group). No propagators
+        are recomputed.
         Incompressible: mean(xi) = 0. Compressible: mean(xi) = zeta_n (sum(phi)-1).
         """
         if w is None:
@@ -845,7 +873,10 @@ class SCFT:
         target = self.matrix_chi @ phi_mean
         if self.zeta_n is not None:
             target += self.zeta_n * (np.sum(phi_mean) - 1.0)
-        shift = target - np.array([self.prop_solver.mean(field) for field in w])
+        # A field on the full grid (SCFTResult.w with a space group): the mean of its grid points
+        means = [float(np.mean(field)) if self.sg is not None and np.size(field) == self.prop_solver.total_grid
+                 else self.prop_solver.mean(field) for field in w]
+        shift = target - np.array(means)
         mu = []
         for p, polymer in enumerate(self.polymers):
             chain = self.prop_solver.get_polymer(p)

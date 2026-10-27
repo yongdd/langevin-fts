@@ -203,6 +203,9 @@ def test_scft():
     np.testing.assert_allclose(states[0].chemical_potentials, states[1].chemical_potentials, rtol=0, atol=1e-11)
     np.testing.assert_allclose(states[0].free_energy, states[1].free_energy, rtol=0, atol=1e-11)
     np.testing.assert_allclose(states[0].free_energy_absolute, states[1].free_energy_absolute, rtol=0, atol=1e-11)
+    # The fields of a result are on the full grid, also with a space group
+    np.testing.assert_allclose(calc.compute_chemical_potentials(states[1].w, states[1].partition_functions),
+                               states[1].chemical_potentials, rtol=0, atol=1e-11)
 
 
 if __name__ == "__main__":

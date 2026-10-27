@@ -72,6 +72,28 @@ def main():
         ok = False
     except Exception:
         pass
+    # ... and so is a read-only array (a read-only memory map used to crash)
+    r = rng.normal(size=n)
+    r.setflags(write=False)
+    try:
+        cb.zero_mean(r)
+        print("FAILED: zero_mean accepted a read-only array")
+        ok = False
+    except Exception as exc:
+        if "writable" not in str(exc):
+            print("FAILED: zero_mean refused a read-only array without naming the cause:", exc)
+            ok = False
+    sg_check = _core.SpaceGroup(nx, "Im-3m", 529)
+    r = np.zeros(sg_check.get_n_reduced_basis())
+    r.setflags(write=False)
+    try:
+        sg_check.symmetrize_reduced_basis(r)
+        print("FAILED: symmetrize_reduced_basis accepted a read-only array")
+        ok = False
+    except Exception as exc:
+        if "writable" not in str(exc):
+            print("FAILED: symmetrize_reduced_basis refused a read-only array without naming the cause:", exc)
+            ok = False
     y_c = np.ascontiguousarray(y)
     cb.zero_mean(y_c)
     if not np.isclose(cb.mean(y_c), 0.0):

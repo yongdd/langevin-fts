@@ -350,6 +350,41 @@ def main():
         ok = False
     except ValueError:
         pass
+    # ... and against the cell, which relaxation keeps but does not set (without a space group)
+    for lx, angles, system in (([4.0, 4.0, 6.0], None, "Hexagonal"), ([4.0, 5.0, 6.0], None, "Cubic"),
+                               ([4.0, 5.0, 6.0], None, "Tetragonal"), ([4.0, 4.0, 4.0], [90.0, 90.0, 100.0], "Orthorhombic"),
+                               ([4.0, 4.0, 6.0], [90.0, 100.0, 120.0], "Hexagonal"),
+                               ([4.0, 4.0, 4.0], [80.0, 100.0, 90.0], "Monoclinic"),
+                               ([4.0, 5.0], [120.0], None), ([4.0, 4.0], None, "Hexagonal2D")):
+        params = base_params(); params.update(nx=[8] * len(lx), lx=lx, relax_cell=True)
+        if angles is not None:
+            params["angles"] = angles
+        if system is not None:
+            params["crystal_system"] = system
+        try:
+            build(SCFT, params)
+            print(f"FAILED: crystal system {system} accepted for lx {lx}, angles {angles}")
+            ok = False
+        except ValidationError:
+            pass
+    for lx, angles, system in (([4.0, 4.0, 6.0], [90.0, 90.0, 120.0], "Hexagonal"), ([4.0, 4.0, 6.0], None, "Tetragonal"),
+                               ([4.0, 5.0, 6.0], [90.0, 100.0, 90.0], "Monoclinic"),
+                               ([4.0, 5.0, 6.0], [80.0, 100.0, 70.0], "Triclinic")):
+        params = base_params(); params.update(nx=[8, 8, 8], lx=lx, relax_cell=True, crystal_system=system)
+        if angles is not None:
+            params["angles"] = angles
+        if build(SCFT, params).crystal_system != system:
+            print(f"FAILED: crystal system {system} for lx {lx}, angles {angles}")
+            ok = False
+    # A fixed cell is not checked: the crystal system only matters for relaxation
+    for lx, angles, system in (([4.0, 5.0], [120.0], None), ([4.0, 5.0, 6.0], None, "Cubic"),
+                               ([3.0, 4.0], [60.0], "Orthorhombic")):
+        params = base_params(); params.update(nx=[8] * len(lx), lx=lx, relax_cell=False)
+        if angles is not None:
+            params["angles"] = angles
+        if system is not None:
+            params["crystal_system"] = system
+        build(SCFT, params)
     params = base_params(); params["nx"] = [8, 8]; params["lx"] = [4.0, 4.0]; params["angles"] = [90.0, 90.0, 120.0]
     params["relax_cell"] = True
     calc = build(SCFT, params)
