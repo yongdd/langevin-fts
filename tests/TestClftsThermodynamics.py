@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Chemical potential and osmotic pressure operators of CL-FTS (CLFTS.chemical_potentials, CLFTS.pressure).
+"""Chemical potential and osmotic pressure operators of CL-FTS (CLFTS.chemical_potentials, CLFTS.pressure,
+CLFTS.pressure_virial).
 
 1. Pressure as a volume derivative: for random complex fields (standard deviation 5 for the
    real parts) and psi, the operator without the ideal term equals -(dH/dV + d ln N/dV)/C at
@@ -12,12 +13,16 @@
    whose composition mode has no field (zero eigenvalue), screened with a net charge.
 2. Mean-field limit: at the homogeneous saddle point the operators give the Flory-Huggins
    chemical potentials and osmotic pressure, plus E q^2/(2 kappa^2) for a screened system with
-   the net charge q.
-3. Records: the chemical potentials and pressures in the dH files equal the operators
+   the net charge q; the dilation operator after removing the Gaussian normalizations, the virial
+   form as it is (all forces vanish there, and its added terms remove the normalizations).
+3. Records: the chemical potentials and the virial pressures in the dH files equal the operators
    recomputed from the saved state of the same step.
-4. Restart: a continued run reproduces the pending records bit for bit; a checkpoint without
+4. Virial form: in CL runs of 2000 steps with and without screening, the Schwinger-Dyson terms
+   that pressure_virial adds to the dilation operator average to zero within four standard errors
+   (block averages), and the virial form fluctuates less than half as much.
+5. Restart: a continued run reproduces the pending records bit for bit; a checkpoint without
    them (earlier versions) gives NaN for its pending samples.
-5. Input checks: recording.pressure must be a bool, is CL-FTS only and needs free chains in a
+6. Input checks: recording.pressure must be a bool, is CL-FTS only and needs free chains in a
    periodic box.
 """
 import contextlib
@@ -194,6 +199,8 @@ def mean_field(root):
             flory_huggins += es.coupling * q ** 2 / (2 * es.kappa_sq)
         pressure = sim.pressure(w_aux, phi) - normalization(sim)
         assert abs(pressure - flory_huggins) < 1e-10 * flory_huggins, f"mean-field pressure {pressure} vs {flory_huggins}"
+        pressure = sim.pressure_virial(w_aux, phi)
+        assert abs(pressure - flory_huggins) < 1e-10 * flory_huggins, f"mean-field virial pressure {pressure} vs {flory_huggins}"
         mu = sim.chemical_potentials([sim.prop_solver.get_partition_function(p) for p in range(len(sim.chain_densities))])
         for p, polymer in enumerate(sim.polymers):
             shift = sum(block["length"] * (w + z * psi_0)[sim.monomer_types.index(block["type"])] for block in polymer["blocks"])
@@ -211,12 +218,38 @@ def records(root):
     sim.electrostatics.psi = saved["psi_real"] + 1j * saved["psi_imag"]
     w_aux = np.reshape(saved["w_aux"], (3, -1))
     phi, _ = sim.compute_concentrations(w_aux)
-    pressure = sim.pressure(w_aux, phi)
+    pressure = sim.pressure_virial(w_aux, phi)
     mu = sim.chemical_potentials([sim.prop_solver.get_partition_function(p) for p in range(2)])
     measured = complex(recorded["pressure_history_real"]) + 1j * complex(recorded["pressure_history_imag"])
     assert abs(measured - pressure) < 1e-10 * abs(pressure), f"recorded pressure {measured} vs {pressure}"
     measured = recorded["chemical_potential_history_real"] + 1j * recorded["chemical_potential_history_imag"]
     assert np.max(np.abs(measured - mu)) < 1e-10 * np.max(np.abs(mu)), "recorded chemical potentials"
+
+
+def virial(root):
+    def block(x, n_blocks=20):
+        x = x[len(x) % n_blocks:].reshape(n_blocks, -1).mean(axis=1)
+        return x.mean(), x.std(ddof=1) / np.sqrt(n_blocks)
+
+    steps, skip = 2000, 200
+    for screening_length in (0.3, None):
+        params = parameters(root / "virial", screening_length=screening_length, steps=steps)
+        params["recording"].update(checkpoint_interval=steps, statistics_save_interval=steps)
+        dilation = []
+
+        def record_dilation(sample):
+            phi = {name: np.asarray(value) for name, value in sample["phi"].items()}
+            dilation.append(sim.pressure(np.asarray(sample["w_aux"]), phi))
+        sim = quiet(lambda: CLFTS(params, random_seed=5, callbacks={"dilation": record_dilation}))
+        quiet(lambda: sim.run(initial_fields={m: np.zeros(int(np.prod(NX))) for m in "ABC"}))
+        recorded = loadmat(root / "virial" / f"dH_{steps:06d}.mat", squeeze_me=True)
+        virial_form = (recorded["pressure_history_real"] + 1j * recorded["pressure_history_imag"])[skip:]
+        dilation_form = np.array(dilation)[skip:]
+        for part in (np.real, np.imag):
+            mean, error = block(part(virial_form - dilation_form))
+            assert abs(mean) < 4 * error, f"Schwinger-Dyson terms (screening {screening_length}): {mean} +- {error}"
+        ratio = np.std(np.real(virial_form)) / np.std(np.real(dilation_form))
+        assert ratio < 0.5, f"virial form (screening {screening_length}): standard deviation ratio {ratio}"
 
 
 def restart(root):
@@ -283,7 +316,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         for name, check in (("pressure as a volume derivative", pressure_derivative), ("mean-field limit", mean_field),
-                            ("records", records), ("restart", restart), ("input checks", input_checks)):
+                            ("records", records), ("virial form", virial), ("restart", restart),
+                            ("input checks", input_checks)):
             check(root)
             print(f"[PASS] {name}")
     return 0

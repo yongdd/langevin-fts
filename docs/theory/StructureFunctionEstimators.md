@@ -220,15 +220,15 @@ Conditions (bead units, $`b = 1`$):
 
 The mapping to polymerfts is $`R_0 = b\sqrt{N}`$, $`\bar{N} = \rho_b^2 N`$, $`\zeta N = v \rho_b N`$ and $`E = 4\pi l_B \rho_b N^2`$.
 
-Each code made four independent runs of 35000 steps after equilibration; BioFTS at $`\delta t = 2 \times 10^{-3}`$ made two runs of 18000 steps. The results compare the smeared structure functions on shells of equal $`\vert\mathbf{k}\vert`$:
+BioFTS (jwessen/BioFTS, commit b82f6e01) was run with the four corrections reported in jwessen/BioFTS#1, among them the noise of its semi-implicit step, at $`\delta t = 4 \times 10^{-3}`$; polymerfts used LM steps at $`\delta\tau N = 0.2`$. Each code made 8–48 runs of 60000 steps, the first 12000 left out. The results compare the smeared structure functions on the three lowest shells of equal $`\vert\mathbf{k}\vert`$:
 
 | Quantity | Agreement between the codes | Remark |
 |---|---|---|
-| Density, homopolymer | within 1-2 % | close to the RPA |
-| Density, polyampholyte | within 1-2 % | up to 28 % above the RPA at the lowest shell; both codes show the same fluctuation correction |
-| Charge, polyampholyte | within 1-3 % at all but the lowest shell | at the lowest shell, BioFTS gives 0.121 ± 0.004 at $`\delta t = 5 \times 10^{-4}`$ and 0.132 ± 0.003 at $`2 \times 10^{-3}`$; polymerfts gives 0.138 ± 0.002 |
+| Density, homopolymer | within 0.5 % | close to the RPA |
+| Density, polyampholyte | within 0.9 % | up to 28 % above the RPA at the lowest shell; both codes show the same fluctuation correction |
+| Charge, polyampholyte | within 0.3 % | at the lowest shell the field-field forms give 0.13713 ± 0.00012 (polymerfts) and 0.13713 ± 0.00016 (BioFTS); the estimator of Section 6 gives 0.13700 ± 0.00002 |
 
-For the charge structure function, polymerfts used the estimator of Section 6. BioFTS approaches polymerfts as its time step decreases, as expected from the bias of semi-implicit stepping. Both codes use complex Langevin dynamics, so their agreement checks the implementations and the estimators, not whether the dynamics converges to the averages of the field theory ([CL-FTS theory, Section 3](ComplexLangevinSimulation.md#3-correct-convergence)).
+With the corrections, BioFTS shows no dependence on its time step between $`\delta t = 2 \times 10^{-3}`$ and $`8 \times 10^{-3}`$. Without the correction of its semi-implicit noise, its density structure function at the lowest shell is 7 % low at $`\delta t = 4 \times 10^{-3}`$, while the charge structure function there is unchanged. Both codes use complex Langevin dynamics, so their agreement checks the implementations and the estimators, not whether the dynamics converges to the averages of the field theory ([CL-FTS theory, Section 3](ComplexLangevinSimulation.md#3-correct-convergence)).
 
 **Estimators on the same trajectory.** Different estimators of the same structure function can be compared on identical samples. Their difference in noise is then the difference between the estimators alone, not between the sampling dynamics.
 

@@ -12,7 +12,8 @@ An AB diblock with charged A blocks (discrete chains, N = 20) in a salt of point
 3. Linear response: the smeared ion charge of psi = i eps cos(k.r) is -sum_s z_s^2 c_s Gamma_s(k)^2 psi/N.
 4. Chemical potentials: ln(N c_s) at psi = 0 and in the records, after the polymers; restarts are
    bitwise and refuse the ions in another order; the osmotic pressure equals -dH/dV at fixed grid
-   values and fixed numbers of ions, with and without screening.
+   values and fixed numbers of ions, with and without screening. The partition ratios
+   |Q_s|/<|e^(-u_s)|> of the ions are recorded every step: 1 for a real psi, |Q_s| for an imaginary one.
 5. Debye-Hueckel statistics: with neutral chains and weak coupling psi is Gaussian with the screening
    operator (k^2 + kappa^2)/E + sum_s z_s^2 c_s Gamma_s^2/N: V Nbar^(1/2) times this operator times
    <|psi(k)/n|^2> is 1 and the holomorphic <psi(k) psi(-k)> -1, mode by mode on average (etd steps).
@@ -186,6 +187,23 @@ def records(root):
     recorded = np.atleast_2d(data["chemical_potential_history_real"] + 1j * data["chemical_potential_history_imag"])
     assert recorded.shape == (2, 1 + len(es.ions)), recorded.shape
     assert np.allclose(recorded[-1, 1:], es.ion_chemical_potentials(), rtol=0, atol=1e-12), "recorded ion mu"
+    ratios = np.atleast_2d(data["partition_ratio_step_history"])
+    assert ratios.shape == (2, len(es.ions)) and np.all(ratios > 0) and np.all(ratios <= 1), ratios
+    assert sim.partition_ratio_species == ["ion Na", "ion Cl"], sim.partition_ratio_species
+    # 1 for a real psi; |Q_s| for an imaginary psi, whose weights all have the modulus 1
+    w_aux = np.zeros((2, n_grid), dtype=complex)
+    es.psi = smooth(rng.normal(0.0, 1.0, n_grid), 5.0)
+    assert np.max(np.abs(sim.partition_ratios(w_aux) - 1.0)) < 1e-14
+    es.psi = 1j * smooth(rng.normal(0.0, 1.0, n_grid), 20.0)
+    expected = [abs(q) for q in es.ion_densities()[1]]
+    assert max(expected) < 0.99 and np.allclose(sim.partition_ratios(w_aux), expected, rtol=1e-12, atol=0), expected
+    # A complex psi, whose real part varies over the grid, makes the ratio depend on the sign of the
+    # exponent: |Q_s| / <e^(-Re u_s)> with u_s = z_s (Gamma_s * psi)/N, smeared here with numpy
+    es.psi = smooth(rng.normal(0.0, 1.0, n_grid), 20.0) + 1j * smooth(rng.normal(0.0, 1.0, n_grid), 20.0)
+    for ion, q, ratio in zip(es.ions, es.ion_densities()[1], sim.partition_ratios(w_aux)):
+        smeared = np.fft.ifftn(np.fft.fftn(np.reshape(es.psi, NX)) * np.exp(-ion["smearing_length"] ** 2 * es.k_sq / 2))
+        expected = abs(q) / np.mean(np.exp(-ion["valence"] * np.real(smeared) / N))
+        assert expected < 0.99 and abs(ratio - expected) < 1e-12 * expected, (ion["name"], ratio, expected)
 
 
 def restart(root):

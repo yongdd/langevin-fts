@@ -43,6 +43,31 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- CL-FTS records the partition ratio |Q_s|/<|e^(-u_s)|> of every step for each canonical
+  single-site species, discrete chains of one segment and point ions
+  (`partition_ratio_step_history`, columns named by `partition_ratio_species_json`; 2026-10-29).
+  It is 1 for real fields and approaches 0 near a zero of Q_s, the pole of -n_s ln Q_s. The end
+  of a run prints its smallest value and the fractions of steps below 0.1 and 0.01,
+  `scripts/analysis/drift_tail.py` summarizes the records, and checkpoints keep the pending
+  steps (NaN for the steps of a checkpoint without the record).
+- Reproductions of published results as examples and validation records (2026-10-28):
+  `examples/charged/scft/GouyChapmanPlates.py` (Netz 2001, Poisson-Boltzmann between plates),
+  `examples/charged/clfts/CounterionsBetweenPlates.py` (Netz's loop expansion at weak coupling),
+  `SmearedSaltSelfEnergy.py` (Born self-energy and screening; Wang 2010, Agrawal and Wang 2022),
+  `McCartyPolyampholyte.py` (McCarty et al. 2019), `LeeCoacervation.py` (Lee, Popov and
+  Fredrickson 2008), `examples/block_copolymer/clfts/LequieuDiblockMelt.py` (Lequieu 2024) and
+  `examples/blend/clfts/HomopolymerSolutionBook.py` (Fredrickson and Delaney 2023).
+  docs/internals/NumericalValidation.md lists the papers and codes (PSCF, BioFTS, polycomp)
+  that polymerfts reproduces, and examples/README.md gives the compared numbers, including
+  exact Monte Carlo checks of the CL-FTS of point ions and the results that are not reproduced
+  (the phase diagram of Lee et al., the dense branch of Danielsen et al.).
+- Documentation: a closed box is the boundary to a medium of vanishing dielectric constant, so
+  ions are repelled by images of the same sign (it read "insulating walls without image
+  charges"); the checked range of charged CL-FTS (counterions between plates up to Ξ ≈ 0.6,
+  the O(δτ) bias of the ψ step); the recorded pressure dilates the box at a fixed number of grid
+  points, which differs from the pressure at fixed grid spacing when the smearing is not
+  resolved; comparisons with BioFTS (with the corrections of its issue 1, which removes the
+  time-step dependence the structure-function comparison reported) and polycomp.
 - Examples of charged systems (2026-10-28): `examples/charged/scft/ChargedDiblockLamella.py` relaxes
   the period of a charged diblock lamella with point counterions over a range of added salt,
   `examples/charged/scft/PolyelectrolyteBrush.py` solves a charged brush grafted to a charged wall of a
@@ -219,6 +244,16 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Interface changes
 
+- `recording.pressure` records the virial form of the CL-FTS osmotic pressure
+  (`CLFTS.pressure_virial`; 2026-10-29). It adds to the dilation operator, which `CLFTS.pressure`
+  still returns, the Schwinger-Dyson terms (1/2)[mean(Omega dH/dOmega) - n_g/(C V/R0^3)] of every
+  auxiliary field and the same, mode by mode, for psi. Their exact average is zero; they remove
+  the Gaussian fluctuation of the field terms and normalizations, of order
+  sqrt(n_g/2)/(C V/R0^3) per field and sample. The averages are unchanged and the standard
+  deviation per sample is smaller (0.41 to 0.078 in the diblock of `TestClftsThermodynamics`,
+  10.3 to 0.013 in the homopolymer solution of `HomopolymerSolutionBook.py` at L = 1.6 R_g with
+  16³ grid points), so `GibbsEnsemble` and the examples that average the pressure need fewer
+  samples.
 - The examples are grouped by physical system and then by simulation method (2026-10-28):
   `examples/block_copolymer/`, `examples/blend/` and `examples/charged/`, each with `scft/`,
   `lfts/` and `clfts/` as available, and `examples/tools/` for the Fourier transform and the
@@ -526,6 +561,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   engine through `plan_crysfft()` in `CrysFFTSelector.h`.
 
 ### Tests
+
+- `tests/scripts/TestDriftTail.py` runs the one-pole model of Aarts, Seiler, Sexty and
+  Stamatescu (2017) with complex Langevin dynamics (2026-10-29): at β = 1.6, where the walkers
+  reach the zero of the weight, `drift_tail.py` finds the power-law tail and Re<z²> is wrong by
+  more than 20 standard errors although Im<z²> and the Schwinger-Dyson identities of z and z²
+  vanish within their errors; at β = 4.8 no step exceeds ten times the median drift and Re<z²>
+  agrees. `TestClftsThermodynamics` checks the virial pressure at the homogeneous saddle point
+  and in CL runs, `TestDriftStepHistory` and `TestClftsPointIons` the partition ratios.
 
 Tests that passed with the code they guard reverted, or paths no test reached
 (2026-10-26):

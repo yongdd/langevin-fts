@@ -48,6 +48,7 @@ from .utils import (
     restore_extensions,
     notify_callbacks,
     DriftTailSummary,
+    PartitionRatioSummary,
 )
 
 # OpenMP environment variables
@@ -308,7 +309,7 @@ class CLFTS:
 
         # Thermodynamic operators, recorded with H: the chemical potential of each species,
         # βμ_p = ln(φ_p/α_p) - ln Q_p per chain (validation rejects grafted chains), and with
-        # recording.pressure the osmotic pressure (pressure())
+        # recording.pressure the osmotic pressure (pressure_virial())
         chains = [self.prop_solver.get_polymer(p) for p in range(self.prop_solver.get_n_polymer_types())]
         self.chain_densities = np.array([chain.get_volume_fraction() / chain.get_alpha() for chain in chains])
         # One chemical potential per polymer, then one per point ion; with grand-canonical species the
@@ -323,6 +324,19 @@ class CLFTS:
                 raise ValidationError("'recording.pressure' needs free chains (no initial_conditions)")
             if any(b != "periodic" for b in self.prop_solver.bc):
                 raise ValidationError("'recording.pressure' needs a periodic box")
+        # Canonical single-site species, discrete chains of one segment and point ions, whose ratio
+        # |Q_s|/<|e^(-u_s)|> is recorded every step (partition_ratios())
+        self._single_site_polymers = [
+            p for p, polymer in enumerate(self.polymers)
+            if self.chain_model.lower() == "discrete" and p not in self.grand_canonical
+            and not polymer.get("initial_conditions") and len(polymer["blocks"]) == 1
+            and polymer["blocks"][0]["type"] in self.monomer_types
+            and np.isclose(polymer["blocks"][0]["length"], self.ds)]
+        self.partition_ratio_species = [f"polymer {p} ({self.polymers[p]['blocks'][0]['type']})"
+                                        for p in self._single_site_polymers]
+        if self.electrostatics is not None:
+            self.partition_ratio_species += [f"ion {ion['name']}" for ion in self.electrostatics.ions
+                                             if ion["concentration"] is not None]
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
         # ψ takes the noise scheme the integrator declares (electrostatics.py): the average of
@@ -592,6 +606,31 @@ class CLFTS:
         """-Σ_p e^(βμ_p) Q_p of the grand-canonical chains, per reference chain (complex)."""
         return -complex(np.sum(self.fugacities * np.asarray(total_partitions, dtype=np.complex128)))
 
+    def partition_ratios(self, w_aux):
+        """|Q_s|/<|e^(-u_s)|> of each canonical single-site species (partition_ratio_species).
+
+        Such a species has Q_s = <e^(-u_s)>, the grid mean of the Boltzmann weight of its one site:
+        e^(-w_t ds) with the smeared field w_t (+ z_t ψ) of its type for a discrete chain of one
+        segment, e^(-z_s (Γ_s * ψ)/N) for a point ion. The ratio is 1 for real fields and falls
+        towards 0 as the complex weights cancel in the mean. -n_s ln Q_s has a pole at Q_s = 0,
+        where the force n_s e^(-u_s)/Q_s of the species grows without bound. Grand-canonical
+        species enter H as -e^(βμ_s) Q_s, without a pole, and are left out.
+        """
+        ratios = []
+        if self._single_site_polymers:
+            w = self.mpt.to_monomer_fields_dict(w_aux)
+            if self.electrostatics is not None:
+                self.electrostatics.add_potential(w)
+            types = {self.polymers[p]["blocks"][0]["type"] for p in self._single_site_polymers}
+            w = self.smearing.apply_to_dict({t: w[t] for t in types})
+            for p in self._single_site_polymers:
+                u = self.ds * w[self.polymers[p]["blocks"][0]["type"]]
+                weight = np.exp(-(u - np.min(np.real(u))))   # the ratio does not change with a real shift of u
+                ratios.append(min(1.0, float(np.abs(np.mean(weight)) / np.mean(np.abs(weight)))))   # 1 up to rounding
+        if self.electrostatics is not None:
+            ratios += self.electrostatics.ion_partition_ratios()
+        return np.array(ratios)
+
     def pressure(self, w_aux, phi):
         """Osmotic pressure operator βΠ R₀³/C of the auxiliary fields w_aux (complex).
 
@@ -638,6 +677,35 @@ class CLFTS:
         value += 0.5 * (self.mpt.R + self.mpt.I) * self.prop_solver.n_grid / n_chains
         if es is not None:
             value += es.pressure(dim, n_chains)
+        return value
+
+    def pressure_virial(self, w_aux, phi):
+        """Virial form of the osmotic pressure operator: pressure() plus terms of zero average.
+
+        Every auxiliary field Ω_i whose Gaussian integral pressure() normalizes obeys the
+        Schwinger-Dyson identity <C V/R₀³ mean(Ω_i ∂H/∂Ω_i)> = n_grid (integration by parts over
+        its n_grid grid values; ∂H/∂Ω_i is compute_func_deriv without its sign flip). Adding
+        (1/2)[mean(Ω_i ∂H/∂Ω_i) - n_grid/(C V/R₀³)] for each field replaces the field term
+        -(h2_i Ω_i² + h1_i Ω_i) and the normalization n_grid/(2 C V/R₀³) by
+        -h1_i Ω_i/2 + (Ω_i/2) Σ_j A_ji φ_j: the same average, without the Gaussian fluctuation
+        of order sqrt(n_grid/2)/(C V/R₀³) per field and sample. ψ gets the same treatment mode by
+        mode (Electrostatics.pressure_virial_correction). CLFTS records this operator.
+
+        The identities hold for exact CL sampling of H; an O(δτ) bias of the integrator or the
+        stabilization term of dynamical stabilization, which is not part of H, can make the added
+        terms average to a small non-zero value.
+        """
+        M, es = len(self.monomer_types), self.electrostatics
+        n_chains = np.sqrt(self.langevin["nbar"]) * self.prop_solver.get_volume()   # C V/R₀³
+        value = self.pressure(w_aux, phi)
+        phi_smeared = self.smearing.apply_to_dict(phi)
+        deriv = self.mpt.compute_func_deriv(w_aux, phi_smeared, range(M))
+        for i in self.mpt.aux_fields_real_idx:
+            value += 0.5 * (np.mean(w_aux[i] * deriv[i]) - self.prop_solver.n_grid / n_chains)
+        for i in self.mpt.aux_fields_imag_idx:
+            value += 0.5 * (-np.mean(w_aux[i] * deriv[i]) - self.prop_solver.n_grid / n_chains)
+        if es is not None:
+            value += es.pressure_virial_correction(es.charge_density(phi_smeared), self.prop_solver.dim, n_chains)
         return value
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev, w_aux=None):
@@ -874,6 +942,10 @@ class CLFTS:
         # the drift magnitude; a summary of this run's distribution is printed at the end
         drift_step_history = []
         psi_drift_step_history = []
+        # |Q_s|/<|e^(-u_s)|> of every step for each canonical single-site species (partition_ratios())
+        partition_ratio_step_history = []
+        n_ratios = len(self.partition_ratio_species)
+        ratio_summary = PartitionRatioSummary(self.partition_ratio_species)
         tail_labels = [f"auxiliary field {i} ({'real' if i in self.mpt.aux_fields_real_idx else 'imaginary'})"
                        for i in range(M)]
         drift_tail = DriftTailSummary(tail_labels + (["psi"] if self.electrostatics is not None else []))
@@ -908,6 +980,7 @@ class CLFTS:
             psi_drift_history=psi_drift_history if self.electrostatics is not None else None,
             drift_step_history=drift_step_history, n_fields=M,
             psi_drift_step_history=psi_drift_step_history if self.electrostatics is not None else None,
+            partition_ratio_step_history=partition_ratio_step_history if n_ratios else None, n_ratios=n_ratios,
             chemical_potential_history=chemical_potential_history if self.record_chemical_potentials else None,
             pressure_history=pressure_history if self.record_pressure else None, n_polymers=self.n_chemical_potentials,
             number_density_history=number_density_history if self.record_number_densities else None)
@@ -983,6 +1056,10 @@ class CLFTS:
                 psi_drift_max = float(np.max(np.abs(es.psi_dt_scaling * psi_force)))
                 psi_drift_step_history.append(psi_drift_max)
             drift_tail.add(np.r_[field_drift_max, [psi_drift_max] if es is not None else []])
+            if n_ratios:
+                ratios = self.partition_ratios(w_aux)
+                partition_ratio_step_history.append(ratios)
+                ratio_summary.add(ratios)
 
             # Integrate active fields; multistage methods can evaluate new forces.
             normal_noise_current = self.random.normal(
@@ -1082,7 +1159,7 @@ class CLFTS:
                 if self.record_number_densities:
                     number_density_history.append(self.number_densities(total_partitions))
                 if self.record_pressure:
-                    pressure_history.append(self.pressure(w_aux, phi))
+                    pressure_history.append(self.pressure_virial(w_aux, phi))
 
             # Save H and dH/dchi_n
             if langevin_step % self.recording["statistics_save_interval"] == 0:
@@ -1094,6 +1171,9 @@ class CLFTS:
                 if self.electrostatics is not None:
                     mdic["psi_drift_max_history"] = np.asarray(psi_drift_history)
                     mdic["psi_drift_max_step_history"] = np.asarray(psi_drift_step_history)
+                if n_ratios:
+                    mdic["partition_ratio_step_history"] = np.reshape(partition_ratio_step_history, (-1, n_ratios))
+                    mdic["partition_ratio_species_json"] = json.dumps(self.partition_ratio_species)
                 for key in self.chi_n:
                     dH_array = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
@@ -1123,6 +1203,7 @@ class CLFTS:
                 psi_drift_history = []
                 drift_step_history = []
                 psi_drift_step_history = []
+                partition_ratio_step_history = []
                 drift_step_start = langevin_step + 1
                 chemical_potential_history = []
                 pressure_history = []
@@ -1274,6 +1355,8 @@ class CLFTS:
                 if self.electrostatics is not None:
                     self._recording_state["psi_drift_history"] = psi_drift_history
                     self._recording_state["psi_drift_step_history"] = psi_drift_step_history
+                if n_ratios:
+                    self._recording_state["partition_ratio_step_history"] = partition_ratio_step_history
                 if self.record_chemical_potentials:
                     self._recording_state["chemical_potential_history"] = chemical_potential_history
                 if self.record_pressure:
@@ -1292,3 +1375,4 @@ class CLFTS:
         n_steps = max(langevin_step + 1 - start_langevin_step, 1)
         print("total time: %f, time per step: %f" % (time_duration, time_duration / n_steps))
         drift_tail.report()
+        ratio_summary.report()

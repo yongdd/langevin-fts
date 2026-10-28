@@ -367,7 +367,7 @@ The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform m
 
 **Fixed charges.** A fixed charge density $`c_f(\mathbf{r})`$ (`fixed_charge`, charges per segment of $`\rho_0`$), for example of charged surfaces or particles, has no partition function through which it could couple to $`\psi`$; it adds $`\langle \psi \, c_f \rangle`$ to $`\beta H/(C V/R_0^3)`$, so that $`c`$ in $`\delta H/\delta \psi`$ includes $`c_f`$. Its mean counts in the electroneutrality.
 
-**Closed boxes.** In a box with walls on every side the transforms are cosine series, which diagonalize $`\nabla^2`$ with no normal derivative at the walls: $`\psi`$ then describes a box with no field through its walls (insulating walls without image charges). The uniform mode is the $`m = 0`$ term of the series.
+**Closed boxes.** In a box with walls on every side the transforms are cosine series, which diagonalize $`\nabla^2`$ with no normal derivative at the walls: $`\psi`$ then describes a box with no field through its walls. This is the boundary to a medium of vanishing dielectric constant: behind each wall every charge has an image of the same sign, so the fluctuations of $`\psi`$ deplete ions next to the walls (Onsager–Samaras). In mean-field theory a laterally uniform neutral system has the same field as without the walls. The uniform mode is the $`m = 0`$ term of the series.
 
 ### 5.4 Screened Coulomb Interaction
 

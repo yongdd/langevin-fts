@@ -384,6 +384,37 @@ class Electrostatics:
         normalization = 0.5 * np.sum(1.0 - (2.0 / dim) * self.k_sq[modes] / self.screened_k_sq[modes]) / n_chains
         return ions - ((1.0 - 2.0 / dim) * h_k + h_kappa) + normalization
 
+    def pressure_virial_correction(self, c, dim, n_chains):
+        """Zero-mean term that turns the ψ part of pressure() into its virial form (clfts.py, pressure_virial).
+
+        Each mode k that the Gaussian integral over ψ integrates obeys the Schwinger-Dyson identity
+        <n_chains ψ(k) F(-k)/n²> = 1 with F = δH/δψ (force()). pressure() holds the Gaussian part
+        w_k [(k² + κ²)|ψ(k)|²/(2 E n²) + 1/(2 n_chains)] of every such mode, with the weight
+        w_k = 1 - (2/d) k²/(k² + κ²) of its dilation; adding w_k/2 [ψ(k) F(-k)/n² - 1/n_chains] leaves
+        w_k ψ(k) c(-k)/(2 n²), with the same average and a much smaller variance.
+        """
+        if self.coupling <= 0:
+            return 0.0
+        n = self.psi.size
+        force_k = self._fourier.forward(self.force(c))
+        force_minus_k = np.roll(np.flip(force_k), 1, axis=tuple(range(len(self.nx))))
+        modes = self.screened_k_sq > 0
+        weight = 1.0 - (2.0 / dim) * self.k_sq[modes] / self.screened_k_sq[modes]
+        identity = np.sum(weight * self._psi_k[modes] * force_minus_k[modes]) / n ** 2
+        return 0.5 * (identity - np.sum(weight) / n_chains)
+
+    def ion_partition_ratios(self):
+        """|Q_s| / <|e^(-z_s (Γ_s * ψ)/N)|> of every canonical point ion: 1 for a real ψ, and close to 0 where
+        the average of the complex weights nearly cancels, a zero of Q_s at which -N c_s ln Q_s has a pole."""
+        ratios = []
+        for ion in self.ions:
+            if ion["concentration"] is None:
+                continue
+            u = ion["valence"] * self._fourier.backward(ion["gamma"] * self._psi_k) / self.n_segments
+            weight = np.exp(-(u - np.min(np.real(u))))   # the ratio does not change with a real shift of u
+            ratios.append(min(1.0, float(np.abs(np.mean(weight)) / np.mean(np.abs(weight)))))   # 1 up to rounding
+        return ratios
+
     def settings(self):
         """Settings that define a continuation (checkpoint hash)."""
         settings = {"charges": self.charges, "coupling": self.coupling, "psi_dt_scaling": self.psi_dt_scaling}

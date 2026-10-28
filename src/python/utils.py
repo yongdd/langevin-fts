@@ -254,6 +254,9 @@ def checkpoint_data(sim):
             data["record_drift_step_start"] = int(state["drift_step_start"])
         if "psi_drift_step_history" in state:
             data["record_psi_drift_step_history"] = np.asarray(state["psi_drift_step_history"], dtype=np.float64)
+        if "partition_ratio_step_history" in state:
+            data["record_partition_ratio_step_history"] = np.reshape(
+                np.asarray(state["partition_ratio_step_history"], dtype=np.float64), (-1, len(sim.partition_ratio_species)))
         # CL-FTS: the chemical potentials (one row of all species per sample) and the pressure
         if "chemical_potential_history" in state:
             data["record_chemical_potential_history"] = np.reshape(
@@ -379,6 +382,13 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 if (np.size(values) != pending_steps * per_step or np.iscomplexobj(values)
                         or not np.all(np.isfinite(values)) or np.any(values < 0)):
                     raise ValidationError(f"Invalid checkpoint measurement '{key}'")
+        # Partition ratios of the same steps, in [0, 1]; NaN for the steps of a checkpoint without them
+        if "record_partition_ratio_step_history" in data:
+            values = np.atleast_1d(np.asarray(data["record_partition_ratio_step_history"]))
+            n_ratios = len(getattr(sim, "partition_ratio_species", []))
+            if (np.size(values) != pending_steps * n_ratios or np.iscomplexobj(values)
+                    or np.any(values < 0) or np.any(values > 1)):
+                raise ValidationError("Invalid checkpoint measurement 'record_partition_ratio_step_history'")
         # Pending chemical potentials and pressures (absent in checkpoints of earlier versions or
         # of runs without them; continue_run then records NaN for those samples, which later
         # checkpoints keep). A species without chains has the chemical potential -inf
@@ -475,8 +485,8 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
 
 def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None,
                             drift_step_history=None, n_fields=1, psi_drift_step_history=None,
-                            chemical_potential_history=None, pressure_history=None, n_polymers=1,
-                            number_density_history=None):
+                            partition_ratio_step_history=None, n_ratios=0, chemical_potential_history=None,
+                            pressure_history=None, n_polymers=1, number_density_history=None):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
@@ -509,6 +519,13 @@ def restore_recording_state(data, H_history, dH_history, sf_average, drift_histo
         drift_step_history.extend(np.reshape(data["record_drift_step_history"], (-1, n_fields)))
     if psi_drift_step_history is not None and "record_psi_drift_step_history" in data:
         psi_drift_step_history.extend(np.atleast_1d(data["record_psi_drift_step_history"]).tolist())
+    # The partition ratios keep the rows of the drift record: NaN for its steps that a checkpoint
+    # without them (earlier versions) holds
+    if partition_ratio_step_history is not None and drift_step_history is not None:
+        if "record_partition_ratio_step_history" in data:
+            partition_ratio_step_history.extend(np.reshape(data["record_partition_ratio_step_history"], (-1, n_ratios)))
+        else:
+            partition_ratio_step_history.extend(np.full((len(drift_step_history), n_ratios), np.nan))
     for key in dH_history:
         dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
     for key, array in sf_average.items():
@@ -559,6 +576,34 @@ class DriftTailSummary:
             largest = self.EDGES[min(np.flatnonzero(counts).max(), self.EDGES.size - 1)]
             print(f"  {label}: median ~{median:.3g}, maximum < {largest:.3g}, "
                   f"S(10x) {s10:.3g}, S(100x) {s100:.3g}, slope {slope}")
+
+
+class PartitionRatioSummary:
+    """Smallest |Q_s|/<|e^(-u_s)|> of each canonical single-site species (CLFTS.partition_ratios) over
+    a run, and the fractions of steps below 0.1 and 0.01. The step values are recorded as
+    partition_ratio_step_history. Like the drift summary it gives numbers, not a verdict: a ratio
+    near 0 means Q_s came close to its zero, the pole of -n_s ln Q_s."""
+    THRESHOLDS = (0.1, 0.01)
+
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.steps = 0
+        self.smallest = np.full(len(self.labels), np.inf)
+        self.below = np.zeros((len(self.labels), len(self.THRESHOLDS)), dtype=np.int64)
+
+    def add(self, ratios):
+        self.steps += 1
+        self.smallest = np.minimum(self.smallest, ratios)
+        self.below += np.asarray(ratios)[:, None] < np.asarray(self.THRESHOLDS)[None, :]
+
+    def report(self):
+        if self.steps == 0 or not self.labels:
+            return
+        print(f"Partition ratio |Q_s|/<|e^(-u_s)|> of the single-site species ({self.steps} steps of this run; "
+              "near 0: close to the pole of -n_s ln Q_s):")
+        for label, smallest, below in zip(self.labels, self.smallest, self.below):
+            print(f"  {label}: minimum {smallest:.3g}, steps below 0.1 {below[0] / self.steps:.3g}, "
+                  f"below 0.01 {below[1] / self.steps:.3g}")
 
 
 # Small extension mechanics; the physical order of calls stays in each run loop.
