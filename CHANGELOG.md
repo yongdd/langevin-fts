@@ -362,6 +362,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 - The propagator statistics printed `reduction = -nan %` when the chains need no propagator
   steps, as with discrete chains of one segment only; they print 0 % (2026-10-29).
+- The drift summary at the end of a CL-FTS run labelled an auxiliary field that is left out at
+  a zero eigenvalue as imaginary; it labels it dropped (2026-10-29).
 - `CudaCommon.h` includes `<cuda_runtime.h>` itself (2026-10-27). Host-compiled sources
   reached the CUDA runtime API only through Thrust, whose CUDA 12.9 headers no longer
   include it outside nvcc, so the Python module failed to compile with CUDA 12.9.

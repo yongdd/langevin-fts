@@ -7,9 +7,11 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 2. Parameter sweep / continuation: reuse the previous solution as the initial guess when building phase diagrams.
 3. Direct grand-canonical SCFT/L-FTS solver API: accept prescribed chemical
    potentials (fugacities) and handle density, field means and normalization
-   consistently. The native GCE functions, CE SCFT thermodynamic transforms and
-   incompressible phase coexistence are already implemented; see
-   [Phase Equilibrium](docs/theory/PhaseEquilibrium.md).
+   consistently. CL-FTS already takes `chemical_potential` in place of the amount of
+   a polymer or a point ion (docs/theory/PolymerFieldTheory.md, Section 6), and SCFT
+   takes grand-canonical point ions; SCFT and L-FTS reject grand-canonical polymers.
+   The native GCE functions, CE SCFT thermodynamic transforms and incompressible phase
+   coexistence are implemented; see [Phase Equilibrium](docs/theory/PhaseEquilibrium.md).
 4. SCFT preconditioner for Anderson mixing (left preconditioning failed; try right preconditioning or a modified inner product).
 6. Option to print a data file in a human-readable text format.
 7. Progress bar.
@@ -49,7 +51,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 17. Validation of pseudo-spectral parameters.
 18. Syntax check of keys in `Molecules`.
 19. `TestComparePropagatorKey`.
-20. Tests for the example scripts.
 21. Check `get_negative_frequency_mapping()` and `compute_single_segment_stress()`.
 
 ## Build and packaging
@@ -60,7 +61,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Documentation
 
 26. Python API reference (Sphinx + autodoc for `PropagatorSolver`, `SCFT`, `LFTS`).
-28. Examples guide (detailed README for the folders of `examples/`).
 
 ## Open investigations (research notes)
 
@@ -102,6 +102,12 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     the stress would keep the FFT. Offer it as an optional method, not the default, and
     pass the checks listed above before using it.
 
+34. Unresolved differences of the CL-FTS comparisons with other codes and papers (2026-10-29):
+    the pressure of charged systems against BioFTS (0.7 % lower, 3 standard errors), the
+    time-step dependent excess pressure of the Lequieu polyampholyte and the dense branch of
+    the Danielsen A50C50 binodal (4 % below). Data, numbers and the limits of CL-FTS found in
+    the same comparisons: docs/internals/NumericalValidation.md, "Open differences and limits".
+
 ## Done (removed from the list above)
 
 - 1. Parallel tempering: dropped (maintainer's decision, 2026-10-21).
@@ -111,6 +117,8 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
   Arora projection denominator; see `TestScftOptions` and `TestScftCompressible`.
 - 12. cuFFT callbacks (2026-10-20 kernel review): measured slower than the separate
   kernels on an A10, so they are not used.
+- 20. Tests for the example scripts: `TestExamples` builds the simulation of every script
+  under `examples/` and stops at its first run (2026-10-26).
 - 25. `std::map` errors in `omp parallel for` (2026-10-21): `operator[]` inserts a missing
   key, which is a write; two threads doing it race on the tree. `find()`/`at()` only read,
   which the standard allows concurrently. The propagator loops read their maps with
@@ -118,6 +126,8 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 - 27. File formats: `fields_*.mat`, SCFT results and `structure_function_*.mat` are
   described in docs/references/Tools.md (section 5), YAML/JSON parameter files in
   docs/references/Parameters.md.
+- 28. Examples guide: `examples/README.md` lists every example by physical system and method,
+  with what is validated, the compared numbers and figures (2026-10-28).
 - 30. Charged CL discrepancies against exact finite-lattice particles: moved to the
   charged-polymer research notes (2026-10-26). The user-facing caveat is the "Checked
   range" paragraph of docs/theory/ComplexLangevinSimulation.md (Section 6) and its

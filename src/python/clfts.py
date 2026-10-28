@@ -946,8 +946,8 @@ class CLFTS:
         partition_ratio_step_history = []
         n_ratios = len(self.partition_ratio_species)
         ratio_summary = PartitionRatioSummary(self.partition_ratio_species)
-        tail_labels = [f"auxiliary field {i} ({'real' if i in self.mpt.aux_fields_real_idx else 'imaginary'})"
-                       for i in range(M)]
+        kinds = {i: "real" for i in self.mpt.aux_fields_real_idx} | {i: "imaginary" for i in self.mpt.aux_fields_imag_idx}
+        tail_labels = [f"auxiliary field {i} ({kinds.get(i, 'dropped')})" for i in range(M)]
         drift_tail = DriftTailSummary(tail_labels + (["psi"] if self.electrostatics is not None else []))
         dH_history = {}
         for key in self.chi_n:
