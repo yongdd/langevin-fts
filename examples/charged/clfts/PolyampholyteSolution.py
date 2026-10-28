@@ -82,7 +82,7 @@ params = {
     },
 
     "recording":{
-        "dir":"data_mccarty_" + STATE,
+        "dir":"data_polyampholyte_" + STATE,
         "checkpoint_interval":1000,
         "sample_interval":10,
         "statistics_save_interval":1000,

@@ -22,7 +22,7 @@ orders of magnitude between the grafting wall and the far wall (phi_A drops from
 c_salt = 0.1), and the round-off of the pseudo-spectral methods (rqm4, rk2 and the discrete chain
 model), about 1e-16 of the largest value of a propagator, then grows into spurious and negative
 concentrations far from the brush. In this box rqm4 fails at every salt concentration
-(examples/README.md, Validation).
+(docs/internals/ExampleValidation.md).
 """
 
 import os

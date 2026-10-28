@@ -11,7 +11,7 @@ numbers of ions per reference chain at every sample (number_density_history in d
 script compares their averages with the Donnan values. The fluctuations of psi (the self-energy of
 the smeared ions and the screening by the other charges) lower both by the same amount, about
 4e-5 per segment at this weak coupling (0.13 % for Na+, 0.05 % for Cl-), as the one-loop theory of
-psi predicts (examples/README.md, Validation).
+psi predicts (docs/internals/ExampleValidation.md).
 """
 
 import os

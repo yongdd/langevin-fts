@@ -25,7 +25,7 @@ largest relative deviation of the profile. With 1024 cells and the smearing a = 
 pressure agrees to 3e-5 or better, the profile to 1e-3 or better (both converge as dx^2), and
 the contact theorem holds to 1.4e-4 for d~ <= 8; at d~ = 32 the pressure is 1/117 of the contact
 density, so the 2e-4 error of the extrapolated contact density becomes 2 % of P (it vanishes
-as dx -> 0). Writes gouy_chapman.json and gouy_chapman.png.
+as dx -> 0). Writes counterions_between_plates.json and counterions_between_plates.png.
 """
 
 import contextlib
@@ -98,7 +98,7 @@ print("   d/mu   P_PB (Netz Eq. 69)   P = n(mid)    rel. dev.   P = n(contact) -
 for r in rows:
     print(f"  {r['d_tilde']:5.1f}   {r['P_pb']:16.8f}   {r['P_midplane']:11.8f}   {r['P_midplane'] / r['P_pb'] - 1:+9.1e}"
           f"   {r['P_contact']:18.8f}   {r['P_contact'] / r['P_pb'] - 1:+9.1e}   {r['max_rel_dev']:12.1e}   {r['converged']}")
-json.dump(rows, open("gouy_chapman.json", "w"))
+json.dump(rows, open("counterions_between_plates.json", "w"))
 
 try:
     import matplotlib
@@ -116,6 +116,6 @@ try:
     ax.set_ylabel("n / (2 pi l_B sigma^2)")
     ax.legend(fontsize=7)
     fig.tight_layout()
-    fig.savefig("gouy_chapman.png", dpi=150)
+    fig.savefig("counterions_between_plates.png", dpi=150)
 except ImportError:
     pass

@@ -35,6 +35,8 @@
 | [PropagatorSystem.md](internals/PropagatorSystem.md) | Propagator identification and scheduling |
 | [MemoryManagement.md](internals/MemoryManagement.md) | Memory optimization and checkpointing |
 | [CudaMPS.md](internals/CudaMPS.md) | CUDA Multi-Process Service (MPS) for running multiple simulations on one GPU |
+| [NumericalValidation.md](internals/NumericalValidation.md) | Regression coverage, comparisons with published results and other codes, open differences and limits |
+| [ExampleValidation.md](internals/ExampleValidation.md) | What is validated for each example, with the compared numbers and figures |
 
 ## References
 

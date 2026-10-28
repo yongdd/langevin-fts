@@ -1,7 +1,7 @@
 """CL-FTS of the salt-free polycation/polyanion solution of Lee, Popov & Fredrickson,
 J. Chem. Phys. 128, 224908 (2008): the structure factors of their Figs. 4 and 5, and the chemical
 potential and pressures at the same state point against the one-loop theory. The phase diagram of
-their Fig. 6 is not reproduced (examples/README.md).
+their Fig. 6 is not reproduced (docs/internals/ExampleValidation.md).
 
 Lee's model: n polycations and n polyanions, discrete Gaussian chains of N_L bonds (N_L + 1 beads) with the
 charge +-z per bead, in an implicit good solvent with the Edwards excluded volume (u0/2) int rho^2 and the
@@ -67,7 +67,7 @@ params = {
     "polymers": [{"volume_fraction": 0.5, "blocks": [{"type": "P", "length": 1.0}]},    # polycation
                  {"volume_fraction": 0.5, "blocks": [{"type": "M", "length": 1.0}]}],   # polyanion
     "langevin": {"max_step": max_step, "dt": 1.0, "nbar": c_ours**2, "integrator": "etd"},
-    "recording": {"dir": "data_lee", "checkpoint_interval": max_step, "sample_interval": 10,
+    "recording": {"dir": "data_coacervate", "checkpoint_interval": max_step, "sample_interval": 10,
                   "statistics_save_interval": save, "pressure": True},
     "zeta_n": zeta_n,
     "smearing": {"type": "gaussian", "a_int": a_smear},
@@ -161,7 +161,7 @@ i = int(np.argmax(smooth[5:-5])) + 5
 print("4 pi l_B Rg^2 S_cc peak: CL-FTS %.1f at k Rg %.1f; RPA %.1f at k Rg %.1f" %
       (smooth[i], krg[i], np.max(rpa_cc), krg[np.argmax(rpa_cc)]))
 
-np.savez("lee_coacervation.npz", k_rg=krg[1:], count=count[1:], u0_snn=nn[1:], u0_snn_err=nn_e[1:],
+np.savez("complex_coacervate.npz", k_rg=krg[1:], count=count[1:], u0_snn=nn[1:], u0_snn_err=nn_e[1:],
          rpa_nn=rpa_nn[1:], s_cc=cc[1:], s_cc_err=cc_e[1:], rpa_cc=rpa_cc[1:],
          mu_excess=mu - np.log(0.5), mu_excess_err=mu_e, mu_1loop=mu_1, pi=pi, pi_err=pi_e,
          pi_dil_1loop=pi_dil_1, pi_lat_1loop=pi_lat_1)
@@ -181,4 +181,4 @@ ax[1].plot(krg[1:], rpa_cc[1:], "k-", label="RPA (this lattice)")
 ax[1].set_xlabel("k Rg"); ax[1].set_ylabel("4 pi l_B Rg^2 S_cc"); ax[1].legend()
 fig.suptitle("B = %g, C = %g, E = %g, N = %d (Lee et al. 2008)" % (B, C_lee, E_lee, N_L))
 fig.tight_layout()
-fig.savefig("lee_coacervation.png", dpi=150)
+fig.savefig("complex_coacervate.png", dpi=150)

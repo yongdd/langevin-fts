@@ -19,7 +19,7 @@ Section 6). Code units: lengths in R0, c per segment of rho0, l_B = E/(4 pi N^2 
 kappa^2 = E sum_s z_s^2 c_s/N. Here a = dx = 0.05, kappa = 5 (a kappa = 0.25), l_B/a = 1.07 and
 l_B kappa = 0.27 with 32 Na+ and 32 Cl- in a periodic box of 24^3 cells, (1.2 R0)^3.
 
-Result (30000 steps, ~8 min on one CPU core; longer runs and other couplings in examples/README.md):
+Result (30000 steps, ~8 min on one CPU core; longer runs and other couplings in docs/internals/ExampleValidation.md):
 CL-FTS mu_ex = 0.1999 +- 0.0003 against 0.1998 of the one-loop theory on this grid; the
 continuum one-loop of the smeared model is 0.2073 (a 96^3 box gives 0.2071) and Agrawal Eq. (6)
 0.1996; Wang Eq. (3.3), the a -> 0 form, 0.169. Writes salt_self_energy.json.

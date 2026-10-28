@@ -51,14 +51,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `scripts/analysis/drift_tail.py` summarizes the records, and checkpoints keep the pending
   steps (NaN for the steps of a checkpoint without the record).
 - Reproductions of published results as examples and validation records (2026-10-28):
-  `examples/charged/scft/GouyChapmanPlates.py` (Netz 2001, Poisson-Boltzmann between plates),
+  `examples/charged/scft/CounterionsBetweenPlates.py` (Netz 2001, Poisson-Boltzmann between plates),
   `examples/charged/clfts/CounterionsBetweenPlates.py` (Netz's loop expansion at weak coupling),
   `SmearedSaltSelfEnergy.py` (Born self-energy and screening; Wang 2010, Agrawal and Wang 2022),
-  `McCartyPolyampholyte.py` (McCarty et al. 2019), `LeeCoacervation.py` (Lee, Popov and
-  Fredrickson 2008), `examples/block_copolymer/clfts/LequieuDiblockMelt.py` (Lequieu 2024) and
+  `PolyampholyteSolution.py` (McCarty et al. 2019), `ComplexCoacervate.py` (Lee, Popov and
+  Fredrickson 2008), `examples/block_copolymer/clfts/SoftBeadDiblockMelt.py` (Lequieu 2024) and
   `examples/blend/clfts/HomopolymerSolutionBook.py` (Fredrickson and Delaney 2023).
   docs/internals/NumericalValidation.md lists the papers and codes (PSCF, BioFTS, polycomp)
-  that polymerfts reproduces, and examples/README.md gives the compared numbers, including
+  that polymerfts reproduces, and docs/internals/ExampleValidation.md gives the compared numbers, including
   exact Monte Carlo checks of the CL-FTS of point ions and the results that are not reproduced
   (the phase diagram of Lee et al., the dense branch of Danielsen et al.).
 - Documentation: a closed box is the boundary to a medium of vanishing dielectric constant, so
@@ -68,11 +68,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   points, which differs from the pressure at fixed grid spacing when the smearing is not
   resolved; comparisons with BioFTS (with the corrections of its issue 1, which removes the
   time-step dependence the structure-function comparison reported) and polycomp.
+- Documentation: `examples/README.md` is a short index of the examples, and
+  `docs/internals/ExampleValidation.md` holds what the tests and validation runs check for each
+  example, with the compared numbers and figures (2026-10-29).
 - Documentation: a system of point ions alone takes a neutral solvent of one segment as the
   reference chain, with `zeta_n: 0` so that it has no field (2026-10-29). With ζN > 0 the
   field of the solvent made CL-FTS diverge below about 0.01 solvent molecules per grid cell;
-  `CounterionsBetweenPlates.py` and `SmearedSaltSelfEnergy.py` use ζN = 0, which leaves ψ
-  and the ions bit for bit unchanged.
+  `clfts/CounterionsBetweenPlates.py` and `clfts/SmearedSaltSelfEnergy.py` use ζN = 0, which
+  leaves ψ and the ions bit for bit unchanged.
 - Examples of charged systems (2026-10-28): `examples/charged/scft/ChargedDiblockLamella.py` relaxes
   the period of a charged diblock lamella with point counterions over a range of added salt,
   `examples/charged/scft/PolyelectrolyteBrush.py` solves a charged brush grafted to a charged wall of a

@@ -83,7 +83,7 @@ params = {
     },
 
     "recording":{                       # Recording Simulation Data
-        "dir":"data_lequieu",           # Directory name
+        "dir":"data_soft_bead_melt",           # Directory name
         "checkpoint_interval":2000,     # Steps between full-state checkpoints
         "sample_interval":10,           # Steps between observable samples
         "statistics_save_interval":2000,   # Steps between statistics saves
@@ -130,4 +130,4 @@ for name, values, mean_field in (("beta P Rg^3", pressure, C + 0.5 * B * C**2 + 
           % (name, np.mean(values), error, paper[key], mean_field))
 
 # # Continue simulation with recorded field configurations and random states.
-# simulation.continue_run(file_name="data_lequieu/fields_040000.mat")
+# simulation.continue_run(file_name="data_soft_bead_melt/fields_040000.mat")

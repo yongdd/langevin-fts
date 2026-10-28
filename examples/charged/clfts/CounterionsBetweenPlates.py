@@ -24,7 +24,7 @@ simulation of the same lattice model (ions on the grid sites, smeared Coulomb pa
 cosine series) within its statistical errors, chi^2 = 43/32, and with PB + one loop to about 2 % of
 the fluctuation correction (the next order, Xi^2). At stronger coupling CL-FTS needs smaller time
 steps (dt <= 0.25 beyond Xi = 0.4), and at Xi >= 0.85 it departs from the exact Monte Carlo result even
-as dt -> 0 (examples/README.md, Validation). Writes counterions_between_plates.json and .png.
+as dt -> 0 (docs/internals/ExampleValidation.md). Writes counterions_between_plates.json and .png.
 """
 
 import json
