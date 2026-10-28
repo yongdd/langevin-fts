@@ -9,6 +9,7 @@
 
 #include "ComputationCommon.h"
 #include "PropagatorCode.h"
+#include "ValidationUtils.h"
 
 template <typename T>
 ComputationCommon<T>::ComputationCommon(
@@ -85,6 +86,7 @@ void ComputationCommon<T>::set_fields(
     const std::map<std::string, const T*>& q_init)
 {
     this->check_box_space_group();
+    this->clear_computed();
     for (const auto& [key, edge] : this->propagator_computation_optimizer->get_computation_propagators())
     {
         if (!w_input.contains(edge.monomer_type))
@@ -97,11 +99,14 @@ void ComputationCommon<T>::set_fields(
         }
     }
 
+    // w keeps the fields of earlier calls; only the types of this call are current
+    w_input_types.clear();
     for (const auto& [monomer_type, w_monomer] : w_input)
     {
         if (!w.contains(monomer_type))
             w[monomer_type] = backend->allocate();
         backend->copy_from_host(0, w[monomer_type], w_monomer);
+        w_input_types.insert(monomer_type);
     }
 
     backend->update_dw(w_input);
@@ -115,7 +120,7 @@ void ComputationCommon<T>::compute_solvent_concentrations()
     {
         const double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
         const std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-        if (!w.contains(monomer_type))
+        if (!w_input_types.contains(monomer_type))
             throw_with_line_number("monomer_type \"" + monomer_type + "\" of solvent " + std::to_string(s) + " is not in w_input.");
 
         this->single_solvent_partitions[s] = backend->solvent_concentration(
@@ -260,6 +265,7 @@ template <typename T>
 void ComputationCommon<T>::update_laplacian_operator()
 {
     this->check_box_space_group();
+    this->clear_computed();
     try
     {
         backend->update_laplacian_operator();
@@ -290,6 +296,7 @@ template <typename T>
 T ComputationCommon<T>::get_total_partition(int polymer)
 {
     this->check_box_space_group();
+    this->require_propagators();
     const int P = this->molecules->get_n_polymer_types();
     if (polymer < 0 || polymer > P-1)
         throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -300,6 +307,7 @@ template <typename T>
 T ComputationCommon<T>::get_solvent_partition(int s)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     const int S = this->molecules->get_n_solvent_types();
     if (s < 0 || s > S-1)
         throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
@@ -310,8 +318,11 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
         std::vector<BackendArray<T>*> arrays;
         std::vector<T> weights;
         for (const auto& [key, phi_b] : phi_block)
@@ -344,8 +355,11 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
         const int P = this->molecules->get_n_polymer_types();
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -374,8 +388,12 @@ template <typename T>
 void ComputationCommon<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
+        // A name that is not a monomer type (a typo) is an error, not a zero field
+        validation::require_string_key(this->molecules->get_bond_lengths(), monomer_type, "the monomer types");
+        validation::require_non_negative(fugacity, "fugacity");
         const int P = this->molecules->get_n_polymer_types();
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -405,6 +423,7 @@ template <typename T>
 void ComputationCommon<T>::get_block_concentration(int p, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int N = this->cb->get_n_basis();
@@ -451,6 +470,7 @@ template <typename T>
 void ComputationCommon<T>::get_solvent_concentration(int s, T* phi)
 {
     this->check_box_space_group();
+    this->require_concentrations();
     try
     {
         const int S = this->molecules->get_n_solvent_types();

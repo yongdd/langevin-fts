@@ -37,6 +37,8 @@ class SymmetricPolymerTheory:
     ----------
     monomer_types : list of str
         Monomer type labels.
+    matrix_chi : ndarray
+        Symmetric χN matrix in the order of monomer_types, zero diagonal, shape (M, M).
     eigenvalues : ndarray
         Eigenvalues of the interaction matrix, shape (M,).
     matrix_o : ndarray
@@ -65,11 +67,23 @@ class SymmetricPolymerTheory:
         self.monomer_types = monomer_types
         self.zeta_n = zeta_n
         M = len(self.monomer_types)
-        # Pair keys in sorted order ("B,A" -> "A,B"), as compute_eigen_system looks them up
+        # Pair keys in sorted order ("B,A" -> "A,B"), as the χN matrix looks them up
         chi_n = {",".join(sorted(key.split(","))): value for key, value in chi_n.items()}
-        
+
+        # χN matrix; pairs missing from chi_n do not interact
+        matrix_chi = np.zeros((M,M))
+        for i in range(M):
+            for j in range(i+1,M):
+                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
+                monomer_pair.sort()
+                key = monomer_pair[0] + "," + monomer_pair[1]
+                if key in chi_n:
+                    matrix_chi[i,j] = chi_n[key]
+                    matrix_chi[j,i] = chi_n[key]
+        self.matrix_chi = matrix_chi
+
         # Compute eigenvalues, orthogonal matrix, vector_s and vector_S
-        eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
+        eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(matrix_chi, zeta_n)
 
         # Indices whose auxiliary fields are real
         self.aux_fields_real_idx = []
@@ -233,19 +247,8 @@ class SymmetricPolymerTheory:
             w[type] = w_temp[count]
         return w
 
-    def compute_eigen_system(self, monomer_types, chi_n, zeta_n):
-        M = len(monomer_types)
-
-        # Construct chi_n matrix
-        matrix_chin = np.zeros((M,M))
-        for i in range(M):
-            for j in range(i+1,M):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    matrix_chin[i,j] = chi_n[key]
-                    matrix_chin[j,i] = chi_n[key]
+    def compute_eigen_system(self, matrix_chi, zeta_n):
+        M = matrix_chi.shape[0]
 
         # Incompressible model
         if zeta_n is None:
@@ -253,7 +256,7 @@ class SymmetricPolymerTheory:
             matrix_p = np.identity(M) - matrix_q
 
             # Compute eigenvalues and eigenvectors
-            projected_chin = np.matmul(matrix_p, np.matmul(matrix_chin, matrix_p))
+            projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
             eigenvalues, eigenvectors = np.linalg.eigh(projected_chin)
 
             # Reordering eigenvalues and eigenvectors
@@ -283,12 +286,12 @@ class SymmetricPolymerTheory:
                     eigenvectors[:,i] = vector/np.linalg.norm(vector)
 
             # Construct vector_s (vector_S follows from the final eigenvectors below)
-            vector_s = np.matmul(matrix_chin, np.ones(M))/M
+            vector_s = np.matmul(matrix_chi, np.ones(M))/M
 
         # Compressible model
         else:
             # Compute eigenvalues and eigenvectors
-            u = zeta_n*np.ones((M,M)) + matrix_chin
+            u = zeta_n*np.ones((M,M)) + matrix_chi
             eigenvalues, eigenvectors = np.linalg.eigh(u)
 
             # Reordering eigenvalues and eigenvectors
@@ -572,7 +575,7 @@ class SymmetricPolymerTheory:
 
         return d_h_const, d_Q2, d_q1, d_A, d_phi2, d_phi1
 
-    def compute_h_deriv_chin(self, chi_n, w_aux, phi=None, wtmd=False):
+    def compute_h_deriv_chin(self, chi_n=None, w_aux=None, phi=None, wtmd=False):
         """Compute derivatives of Hamiltonian w.r.t. χN parameters.
 
         Calculates dH/dχ_{ij}N for all interaction parameters. Used in L-FTS
@@ -602,8 +605,10 @@ class SymmetricPolymerTheory:
 
         Parameters
         ----------
-        chi_n : dict
-            Flory-Huggins interaction parameters, {monomer_pair: value}; the ones of this object.
+        chi_n : dict, optional
+            Flory-Huggins interaction parameters, {monomer_pair: value}. The derivatives always
+            use the χN of this object; when given, chi_n must equal it. Without it, pass w_aux
+            and phi by keyword.
         w_aux : ndarray
             Current auxiliary potential fields, shape (M, total_grid).
         phi : dict, optional
@@ -618,7 +623,12 @@ class SymmetricPolymerTheory:
         dH : dict
             Derivatives {monomer_pair: dH/dχN_value}.
         """
-        if {",".join(sorted(key.split(","))): float(value) for key, value in chi_n.items()} != self.chi_n:
+        if chi_n is not None and not isinstance(chi_n, dict):
+            raise TypeError("compute_h_deriv_chin: chi_n must be a dict {monomer_pair: value}; pass the "
+                            "fields by keyword, compute_h_deriv_chin(w_aux=w_aux, phi=phi).")
+        if w_aux is None:
+            raise TypeError("compute_h_deriv_chin needs the auxiliary fields w_aux.")
+        if chi_n is not None and {",".join(sorted(key.split(","))): float(value) for key, value in chi_n.items()} != self.chi_n:
             raise ValueError("compute_h_deriv_chin needs the chi N of this SymmetricPolymerTheory.")
 
         # Volume averages <Ω_k>, <Ω_k Ω_l>, <φ_j Ω_k>, <φ_j> and <φ_i φ_j> (no conjugate: H is

@@ -91,7 +91,7 @@ The discrete formula is derived from the continuum definition (Section 3.1) by a
 \Psi = \frac{1}{M} \left( \sum_k f_k |\tilde{W}_k|^\ell w_t \right)^{1/\ell}
 ```
 
-where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight for `rfftn` (2 for interior k-points, 1 for edge k-points).
+where $`\tilde{W}_k = \text{DFT}[W_-]`$, $`M = n_x n_y n_z`$ is the total number of grid points, and $`w_t`$ is the weight of the half spectrum of `rfftn`: 1 on the planes $`k_z = 0`$ and, for even $`n_z`$, $`k_z = n_z/2`$, which are their own conjugates, and 2 on every other plane, which stands for itself and its conjugate.
 
 > **Note:** The supplementary code of the original paper (Beardsley & Matsen 2022) puts $`1/M^2`$ inside the $`\ell`$-th root:
 > ```math
@@ -125,7 +125,7 @@ The cutoff $`k_c`$ is typically set to 1.4 times the peak position of the disord
 
 ### 3.5 Implementation
 
-The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts) exactly.
+The implementation matches [deep-langevin-fts](https://github.com/yongdd/deep-langevin-fts) with two exceptions. For odd $`n_z`$ the last `rfftn` plane has weight 2: deep-langevin-fts gives it weight 1. The hills are deposited as described in §4: deep-langevin-fts divides the histogram by the samples inside the $`\Psi`$ range and convolves it circularly.
 
 **Order parameter:**
 ```math
@@ -166,27 +166,31 @@ CV = \sqrt{\bar{N}} \cdot V
 
 where $`\bar{N}`$ is the invariant polymerization index (`nbar`) and $`V`$ is the box volume.
 
-**Gaussian kernels (precomputed in Fourier space):**
+**Gaussian kernels:** the hills are cut at $`8\sigma_\Psi`$, where they fall below $`10^{-13}`$ of their peak. The histogram bins extend by this margin (`pad` bins) on both sides of $`[\Psi_\text{min}, \Psi_\text{max})`$:
 ```python
-X = dpsi * np.concatenate([np.arange((bins+1)//2), np.arange(bins//2) - bins//2]) / sigma_psi
-u_kernel = np.fft.rfft(np.exp(-0.5 * X**2))
-up_kernel = np.fft.rfft(-X / sigma_psi * np.exp(-0.5 * X**2))
+pad = int(np.ceil(8.0 * sigma_psi / dpsi))
+X = dpsi * np.arange(-pad, pad + 1) / sigma_psi
+u_kernel = np.exp(-0.5 * X**2)
+up_kernel = -X / sigma_psi * np.exp(-0.5 * X**2)
+psi_range_hist = np.linspace(psi_min - (pad + 0.5) * dpsi, psi_max + (pad - 0.5) * dpsi,
+                             num=bins + 2 * pad + 1)
 ```
 
 ### 4.2 Statistics Update
 
-At every `update_freq` steps, the bias potential is updated using FFT convolution:
+At every `update_freq` steps, every stored sample deposits a hill of the same weight. The histogram is divided by the number of all samples, so samples outside the range do not enlarge the hills of the samples inside it, and a sample within the margin deposits the tail that reaches into the range. A linear convolution (mode `"valid"`) keeps the bins of the range; the $`\Psi`$ axis does not wrap around:
 
 ```python
-# Compute histogram of order parameters
-hist, _ = np.histogram(order_parameter_history, bins=psi_range_hist, density=True)
-hist_k = np.fft.rfft(hist)
+# Histogram of the order parameters on the extended bins
+n_samples = len(order_parameter_history)
+counts, _ = np.histogram(order_parameter_history, bins=psi_range_hist)
+hist = counts / (n_samples * dpsi)
 
-# Compute updates via FFT convolution
+# Sum of the hills by linear convolution
 amplitude = np.exp(-CV * u / dT) / CV
-gaussian = np.fft.irfft(hist_k * u_kernel, bins) * dpsi
+gaussian = scipy.signal.fftconvolve(hist, u_kernel, mode="valid") * dpsi
 du = amplitude * gaussian
-dup = amplitude * np.fft.irfft(hist_k * up_kernel, bins) * dpsi - CV * up / dT * du
+dup = amplitude * scipy.signal.fftconvolve(hist, up_kernel, mode="valid") * dpsi - CV * up / dT * du
 
 # Update bias potential and derivative
 u += du
@@ -275,7 +279,7 @@ wtmd = WTMD(
 | `compute_order_parameter(step, w_aux)` | Calculate order parameter $`\Psi`$ from auxiliary fields |
 | `add_bias_to_langevin(psi, langevin)` | Add bias force to Langevin dynamics |
 | `store_order_parameter(psi, dH)` | Store $`\Psi`$ and $`dH/d\chi`$ for statistics |
-| `update_statistics()` | Update $`U(\Psi)`$ and $`U'(\Psi)`$ via FFT convolution |
+| `update_statistics()` | Update $`U(\Psi)`$, $`U'(\Psi)`$, $`I_0`$ and $`I_1`$ by linear convolution with the Gaussian hills |
 | `write_data(filename)` | Save statistics to .mat file |
 
 ### 6.3 Integration with LFTS
@@ -328,7 +332,7 @@ wtmd.add_bias_to_langevin(psi, w_lambda)
 
 # After successful saddle point convergence: dH/dχN of the fields at which psi
 # was computed (the fields before the update), so that psi and dH form one sample
-dH = mpt.compute_h_deriv_chin(chi_n, w_aux_before, phi_before)
+dH = mpt.compute_h_deriv_chin(w_aux=w_aux_before, phi=phi_before)
 wtmd.store_order_parameter(psi, dH)
 
 if langevin_step % wtmd.update_freq == 0:

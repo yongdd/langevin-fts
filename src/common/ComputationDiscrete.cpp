@@ -204,6 +204,8 @@ void ComputationDiscrete<T>::compute_propagators(
             this->single_polymer_partitions[p] = this->backend->inner_product_inverse_weight(
                 q_left, q_right, this->backend->boltzmann_factor(monomer_type))
                 /(n_aggregated*this->cb->get_volume());
+
+        this->propagators_computed_ = true;
     }
     catch (std::exception& exc)
     {
@@ -250,6 +252,7 @@ template <typename T>
 void ComputationDiscrete<T>::compute_concentrations()
 {
     this->check_box_space_group();
+    this->require_propagators();
     try
     {
         // Concentration of each block (several blocks when propagators are aggregated)
@@ -286,6 +289,7 @@ void ComputationDiscrete<T>::compute_concentrations()
         errors.rethrow();
 
         this->compute_solvent_concentrations();
+        this->concentrations_computed_ = true;
     }
     catch (std::exception& exc)
     {
@@ -297,10 +301,11 @@ template <typename T>
 void ComputationDiscrete<T>::compute_stress()
 {
     this->check_box_space_group();
-    // Requires the propagators of the current fields (compute_propagators()).
+    this->require_propagators();
     try
     {
         this->check_stress_supported("pseudospectral");
+        this->backend->prepare_stress();
 
         // Stress of each block: sum over its bonds
         std::vector<std::array<T, 6>> stress_of_block(this->phi_block.size());
@@ -351,6 +356,7 @@ void ComputationDiscrete<T>::compute_stress()
 
         // Sum the blocks of each polymer
         this->set_stress_from_blocks(stress_of_block);
+        this->stress_computed_ = true;
     }
     catch (std::exception& exc)
     {
@@ -362,6 +368,7 @@ template <typename T>
 void ComputationDiscrete<T>::get_chain_propagator(T* q_out, int polymer, int v, int u, int n)
 {
     this->check_box_space_group();
+    this->require_propagators();
     // For debugging and testing: the propagator of one block and direction
     try
     {
@@ -384,9 +391,10 @@ void ComputationDiscrete<T>::get_chain_propagator(T* q_out, int polymer, int v, 
 }
 
 template <typename T>
-bool ComputationDiscrete<T>::check_total_partition()
+std::vector<double> ComputationDiscrete<T>::compute_partition_errors()
 {
     this->check_box_space_group();
+    this->require_propagators();
     // Q must be the same at every segment of every block
     const int n_polymer_types = this->molecules->get_n_polymer_types();
     std::vector<std::vector<T>> total_partitions(n_polymer_types);
@@ -408,17 +416,7 @@ bool ComputationDiscrete<T>::check_total_partition()
         }
     }
 
-    // A uniform field shift can make Q arbitrarily small. Check the
-    // relative complex error against the Q actually used to normalize phi.
-    std::cout << "Polymer id: relative contour partition error" << std::endl;
-    for (int p = 0; p < n_polymer_types; p++)
-    {
-        const double error = relative_partition_error(total_partitions[p], this->single_polymer_partitions[p]);
-        std::cout << "\t" << p << ": " << error << std::endl;
-        if (!std::isfinite(error) || error > PARTITION_TOLERANCE)
-            return false;
-    }
-    return true;
+    return relative_partition_errors(total_partitions, this->single_polymer_partitions);
 }
 
 // Explicit template instantiation

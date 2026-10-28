@@ -72,6 +72,12 @@ Polymer::Polymer(
         validation::require_positive(item.second, "bond_lengths[\"" + item.first + "\"]");
     }
 
+    validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction");
+
+    // The graph search below starts at a vertex of the first block
+    if (block_inputs.empty())
+        throw_with_line_number("A polymer needs at least one block.");
+
     // Check block lengths, segments, types
     for(size_t i=0; i<block_inputs.size(); i++)
     {
@@ -261,6 +267,9 @@ int Polymer::get_n_blocks() const
 }
 int Polymer::get_n_segment(const int idx) const
 {
+    if (idx < 0 || idx >= static_cast<int>(blocks.size()))
+        throw_with_line_number("Block index (" + std::to_string(idx) + ") must be in range [0, " +
+            std::to_string(static_cast<int>(blocks.size()) - 1) + "]");
     return blocks[idx].n_segment;
 }
 int Polymer::get_n_segment_total() const

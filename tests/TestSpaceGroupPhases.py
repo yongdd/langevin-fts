@@ -28,6 +28,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 from polymerfts import scft
 from polymerfts import _core
+from cuda_part import cuda_part_missing
 
 # Path to pre-converged phase data files
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -434,7 +435,7 @@ def main():
 
     print("=" * 70)
 
-    return 0 if total_failed == 0 else 1
+    return 1 if cuda_part_missing() or total_failed else 0
 
 
 if __name__ == "__main__":

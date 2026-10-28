@@ -124,117 +124,45 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             }
             else
             {
-                const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-                double local_ds = mapping.get_ds_from_index(ds_index);
-                const double bond_length = this->molecules->get_bond_lengths().at(monomer_type);   // no map copy per step
-                double bond_length_sq = bond_length * bond_length;
-                double coeff_full = bond_length_sq * local_ds / 6.0;
-                double coeff_half = bond_length_sq * local_ds / 12.0;
+                const double coeff_full = this->crysfft_coeff(monomer_type, ds_index, 6.0);
+                const double coeff_half = this->crysfft_coeff(monomer_type, ds_index, 12.0);
 
-                const int M_phys = crysfft_physical_size_;
                 double* d_full_step = reinterpret_cast<double*>(d_q_step_1_one[STREAM].get());
                 double* d_half_step = reinterpret_cast<double*>(d_q_step_2_one[STREAM].get());
 
                 if (crysfft_identity_map_)
                 {
-                    // ===== Step 1: Full step =====
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_crysfft_in_[STREAM], d_q_in, _d_exp_dw, 1.0, M_phys);
-                    CUDA_CHECK_LAUNCH();
+                    // Full step and two half steps; their last factors exp(-w*ds/2)
+                    // and exp(-w*ds/4) and the mask go into the Richardson combination
+                    this->crysfft_diffuse(STREAM, d_q_in, d_full_step, coeff_full, _d_exp_dw, nullptr, nullptr);
+                    this->crysfft_diffuse(STREAM, d_q_in, d_half_step, coeff_half, _d_exp_dw_half, _d_exp_dw, nullptr);
 
-                    crysfft_[STREAM]->set_contour_step(coeff_full);
-                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_full_step, streams[STREAM][0]);
-
-                    // ===== Step 2: Two half steps =====
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_crysfft_in_[STREAM], d_q_in, _d_exp_dw_half, 1.0, M_phys);
-                    CUDA_CHECK_LAUNCH();
-
-                    crysfft_[STREAM]->set_contour_step(coeff_half);
-                    crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_crysfft_out_[STREAM], d_crysfft_out_[STREAM], _d_exp_dw, 1.0, M_phys);
-                    CUDA_CHECK_LAUNCH();
-
-                    crysfft_[STREAM]->diffusion(d_crysfft_out_[STREAM], d_half_step, streams[STREAM][0]);
-
-                    // ===== Richardson extrapolation with exp_dw factors =====
                     ker_lin_comb_exp<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                         d_q_out,
                         d_half_step, _d_exp_dw_half, 4.0/3.0,
                         d_full_step, _d_exp_dw, -1.0/3.0,
-                        d_q_mask, M_phys);
+                        d_q_mask, crysfft_physical_size_);
                     CUDA_CHECK_LAUNCH();
                     return;
                 }
 
-                // ===== Step 1: Full step =====
-                ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], d_q_in, _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                crysfft_[STREAM]->set_contour_step(coeff_full);
-                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_full_step, d_crysfft_out_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                CUDA_CHECK_LAUNCH();
-
-                // ===== Step 2: Two half steps =====
-                ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], d_q_in, _d_exp_dw_half, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                crysfft_[STREAM]->set_contour_step(coeff_half);
-                crysfft_[STREAM]->diffusion(d_crysfft_in_[STREAM], d_crysfft_out_[STREAM], streams[STREAM][0]);
-
-                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_out_[STREAM], _d_exp_dw, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                crysfft_[STREAM]->diffusion(d_crysfft_out_[STREAM], d_crysfft_in_[STREAM], streams[STREAM][0]);
-
-                ker_multi_map<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_crysfft_in_[STREAM], _d_exp_dw_half, d_crysfft_phys_to_reduced_, M_phys);
-                CUDA_CHECK_LAUNCH();
-
-                ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_half_step, d_crysfft_in_[STREAM], d_crysfft_reduced_to_phys_, n_basis_);
-                CUDA_CHECK_LAUNCH();
+                // ===== Full step and two half steps on the reduced basis =====
+                this->crysfft_diffuse(STREAM, d_q_in, d_full_step, coeff_full, _d_exp_dw, nullptr, _d_exp_dw);
+                this->crysfft_diffuse(STREAM, d_q_in, d_half_step, coeff_half, _d_exp_dw_half, _d_exp_dw, _d_exp_dw_half);
 
                 // ===== Richardson extrapolation on reduced basis =====
                 ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                     d_q_out, 4.0/3.0, d_half_step, -1.0/3.0, d_full_step, n_basis_);
                 CUDA_CHECK_LAUNCH();
 
-                if (d_q_mask != nullptr)
-                {
-                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_q_out, d_q_out, d_q_mask, 1.0, n_basis_);
-                    CUDA_CHECK_LAUNCH();
-                }
+                this->multiply_mask(STREAM, d_q_out, d_q_mask);
                 return;
             }
         }
 
-        // Determine input/output pointers based on space group
-        CuDeviceData<T> *fft_in = d_q_in;
-        CuDeviceData<T> *fft_out = d_q_out;
-
-        if (space_group_ != nullptr)
-        {
-            // Expand reduced basis → full grid
-            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
-            CUDA_CHECK_LAUNCH();
-            fft_in = d_q_full_in_[STREAM];
-            fft_out = d_q_full_out_[STREAM];
-        }
+        // Full-grid input/output (expanded from / reduced to the basis with a space group)
+        CuDeviceData<T> *fft_in = this->expand_to_full_grid(STREAM, d_q_in);
+        CuDeviceData<T> *fft_out = this->full_grid_output(STREAM, d_q_out);
 
         // The last factor exp(-w*ds/4) of the two half steps (with the FFT
         // normalization) is applied inside the Richardson combination below
@@ -355,36 +283,8 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
             -1.0/3.0, d_q_step_1_one[STREAM], M);
         CUDA_CHECK_LAUNCH();
 
-        // Multiply mask (on full grid)
-        if (d_q_mask != nullptr)
-        {
-            double* d_q_mask_full = d_q_mask;
-            if (space_group_ != nullptr)
-            {
-                // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
-                if constexpr (std::is_same_v<T, double>)
-                {
-                    ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                        d_q_full_in_[STREAM], d_q_mask, d_full_to_reduced_map_, M);
-                    CUDA_CHECK_LAUNCH();
-                    d_q_mask_full = d_q_full_in_[STREAM];
-                }
-                else
-                {
-                    throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                }
-            }
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask_full, 1.0, M);
-            CUDA_CHECK_LAUNCH();
-        }
-
-        // Reduce full grid → reduced basis
-        if (space_group_ != nullptr)
-        {
-            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
-            CUDA_CHECK_LAUNCH();
-        }
+        // Reduce to the basis (with a space group) and multiply the mask
+        this->store_full_grid(STREAM, fft_out, d_q_out, d_q_mask);
     }
     catch(std::exception& exc)
     {

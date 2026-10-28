@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cmath>
 #include <vector>
 #include <cub/device/device_reduce.cuh>

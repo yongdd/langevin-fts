@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from polymerfts import _core, PlatformSelector
+from cuda_part import cuda_part_missing
 
 
 def main():
@@ -59,13 +60,14 @@ def main():
                 "s.add_polymer(1.0, [['A', 1.0, 0, 1]])\n"
                 "s.compute_propagators({'A': np.zeros(512)})\n")
         env = dict(os.environ, LFTS_GPU_NUM_BLOCKS="8192", LFTS_GPU_NUM_THREADS="256")
-        run = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+        run = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
         if run.returncode == 0 or "threads in total" not in run.stdout + run.stderr:
             failed.append("CUDA launch of 2^21 threads accepted or rejected without the message")
 
     for f in failed:
         print("FAILED:", f)
-    if failed:
+    if failed or cuda_part_missing():
         sys.exit(1)
     print("Grid limits: OK (platforms: " + ", ".join(avail) + ")")
 

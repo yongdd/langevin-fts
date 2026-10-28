@@ -80,9 +80,9 @@ __global__ void ker_add_segment_products(cuDoubleComplex* phi, SegmentProducts<c
 template <typename T>
 CudaComputationBackend<T>::CudaComputationBackend(
     ComputationBox<T>* cb_in, Molecules* molecules,
-    std::string method, std::string numerical_method,
+    const NumericalMethodInfo& method_info,
     SpaceGroup* space_group, int max_n_streams)
-    : cb(nullptr), space_group(space_group), chain_model(molecules->get_model_name()),
+    : cb(nullptr), space_group(space_group),
       solver_discrete(nullptr), n_streams(0), n_basis(0), force_off_diagonal_stress(false)
 {
     for (int i = 0; i < MAX_STREAMS; i++)
@@ -124,10 +124,6 @@ CudaComputationBackend<T>::CudaComputationBackend(
             CUDA_CHECK(count_cuda_event(cudaEventCreateWithFlags(&copy_done[i], cudaEventDisableTiming)));
         }
 
-        const auto& method_info = resolve_numerical_method(chain_model, numerical_method, method);
-        validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
-        if (method != method_info.solver_type)
-            throw_with_line_number("Solver type does not match the registered numerical method.");
         switch (method_info.id)
         {
         case NumericalMethodId::Discrete:
@@ -146,7 +142,12 @@ CudaComputationBackend<T>::CudaComputationBackend(
         case NumericalMethodId::CNADI2:
             if constexpr (std::is_same_v<T, double>)
                 solver = std::make_unique<CudaSolverCNADI>(cb, molecules, n_streams, streams, false);
+            else
+                throw_with_line_number("The cn-adi2 method is only available for real fields.");
             break;
+        default:
+            throw_with_line_number("The CUDA backend has no solver for the numerical method \"" +
+                                   std::string(method_info.name) + "\".");
         }
 
         // Ones for free chain ends
@@ -553,6 +554,12 @@ void CudaComputationBackend<T>::normalize_concentration(int stream, BackendArray
 }
 
 template <typename T>
+void CudaComputationBackend<T>::prepare_stress()
+{
+    solver->prepare_stress();
+}
+
+template <typename T>
 std::array<T, 6> CudaComputationBackend<T>::block_stress(
     int stream, const std::vector<SegmentPair<T>>& pairs, const std::string& monomer_type)
 {
@@ -663,8 +670,10 @@ void CudaComputationBackend<T>::sum_to_host(
 
     CUDA_CHECK(cudaMemset(d_sum, 0, sizeof(T)*n_basis));
     for (size_t a = 0; a < arrays.size(); a++)
+    {
         ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_sum, to_device_scalar(weights[a]), raw(arrays[a]), 1.0, d_sum, n_basis);
-    CUDA_CHECK_LAUNCH();
+        CUDA_CHECK_LAUNCH();
+    }
     CUDA_CHECK(cudaMemcpy(out, d_sum, sizeof(T)*n_basis, cudaMemcpyDeviceToHost));
 }
 

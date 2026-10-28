@@ -73,7 +73,7 @@ def main():
         return 77  # ctest SKIP_RETURN_CODE
     ok = True
 
-    from polymerfts.utils import parse_chi_n
+    from polymerfts.validation import parse_chi_n
     for bad in ("A,B,C", "A", "A,,B"):
         try:
             parse_chi_n({bad: 10.0}, {"A": 1.0, "B": 1.0, "C": 1.0})
@@ -241,6 +241,26 @@ def main():
     ok &= expect_error(LFTS, params, "LFTS without saddle")
     params = base_params(); del params["optimizer"]
     ok &= expect_error(SCFT, params, "SCFT without optimizer")
+    # SCFT numeric options with which the iteration cannot converge
+    for change, what in ((lambda p: p.update(tolerance=float("nan")), "NaN tolerance"),
+                         (lambda p: p.update(tolerance=0.0), "zero tolerance"),
+                         (lambda p: p.update(stress_scale=float("nan")), "NaN stress_scale"),
+                         (lambda p: p["optimizer"].update(mix_min=float("nan")), "NaN optimizer.mix_min"),
+                         (lambda p: p["optimizer"].update(max_hist=2.5), "non-integer optimizer.max_hist"),
+                         (lambda p: p["optimizer"].update(name="adam"), "unknown optimizer")):
+        params = base_params(); change(params)
+        ok &= expect_error(SCFT, params, what)
+    # L-FTS and CL-FTS take no q_init: grafted chains are rejected at construction
+    for cls in (LFTS, CLFTS):
+        params = lfts_params(); params["polymers"][0]["initial_conditions"] = {0: "G"}
+        try:
+            build(cls, params)
+            print(f"FAILED: {cls.__name__} accepted a grafted chain")
+            ok = False
+        except ValidationError as exc:
+            if "free chains" not in str(exc):
+                print(f"FAILED: {cls.__name__} rejected a grafted chain with another error: {exc}")
+                ok = False
 
     # ---- solver options: defaults and explicit values reach the propagator solver
     calc = build(SCFT, base_params())
@@ -350,6 +370,41 @@ def main():
         ok = False
     except ValueError:
         pass
+    # ... and against the cell, which relaxation keeps but does not set (without a space group)
+    for lx, angles, system in (([4.0, 4.0, 6.0], None, "Hexagonal"), ([4.0, 5.0, 6.0], None, "Cubic"),
+                               ([4.0, 5.0, 6.0], None, "Tetragonal"), ([4.0, 4.0, 4.0], [90.0, 90.0, 100.0], "Orthorhombic"),
+                               ([4.0, 4.0, 6.0], [90.0, 100.0, 120.0], "Hexagonal"),
+                               ([4.0, 4.0, 4.0], [80.0, 100.0, 90.0], "Monoclinic"),
+                               ([4.0, 5.0], [120.0], None), ([4.0, 4.0], None, "Hexagonal2D")):
+        params = base_params(); params.update(nx=[8] * len(lx), lx=lx, relax_cell=True)
+        if angles is not None:
+            params["angles"] = angles
+        if system is not None:
+            params["crystal_system"] = system
+        try:
+            build(SCFT, params)
+            print(f"FAILED: crystal system {system} accepted for lx {lx}, angles {angles}")
+            ok = False
+        except ValidationError:
+            pass
+    for lx, angles, system in (([4.0, 4.0, 6.0], [90.0, 90.0, 120.0], "Hexagonal"), ([4.0, 4.0, 6.0], None, "Tetragonal"),
+                               ([4.0, 5.0, 6.0], [90.0, 100.0, 90.0], "Monoclinic"),
+                               ([4.0, 5.0, 6.0], [80.0, 100.0, 70.0], "Triclinic")):
+        params = base_params(); params.update(nx=[8, 8, 8], lx=lx, relax_cell=True, crystal_system=system)
+        if angles is not None:
+            params["angles"] = angles
+        if build(SCFT, params).crystal_system != system:
+            print(f"FAILED: crystal system {system} for lx {lx}, angles {angles}")
+            ok = False
+    # A fixed cell is not checked: the crystal system only matters for relaxation
+    for lx, angles, system in (([4.0, 5.0], [120.0], None), ([4.0, 5.0, 6.0], None, "Cubic"),
+                               ([3.0, 4.0], [60.0], "Orthorhombic")):
+        params = base_params(); params.update(nx=[8] * len(lx), lx=lx, relax_cell=False)
+        if angles is not None:
+            params["angles"] = angles
+        if system is not None:
+            params["crystal_system"] = system
+        build(SCFT, params)
     params = base_params(); params["nx"] = [8, 8]; params["lx"] = [4.0, 4.0]; params["angles"] = [90.0, 90.0, 120.0]
     params["relax_cell"] = True
     calc = build(SCFT, params)
@@ -380,6 +435,26 @@ def main():
     ok &= expect_error(LFTS, params, "LFTS unknown compressor")
     params = lfts_params(); params["wtmd"] = {"ell": 4}; params["nx"] = [8, 8]; params["lx"] = [4.0, 4.0]
     ok &= expect_error(LFTS, params, "WTMD on a 2D grid")
+    params = lfts_params(); params["wtmd"] = {"ell": 4}
+    ok &= expect_error(CLFTS, params, "CL-FTS with a wtmd block")
+    # A bin width that does not divide the range is refused when a new run starts; the
+    # constructor accepts it, so that a run started with such a width still continues
+    params = lfts_params(); params["wtmd"] = {"psi_min": 0.0, "psi_max": 1.0, "dpsi": 0.3}
+    simulation = build(LFTS, params)
+    try:
+        simulation.run(initial_fields={})
+        print("FAILED: WTMD bin width that does not divide the range did not raise ValidationError")
+        ok = False
+    except ValidationError:
+        pass
+    for chi_n in (0.0, -5.0):   # no real auxiliary (exchange) field for the order parameter
+        params = lfts_params(); params["wtmd"] = {"ell": 4}; params["chi_n"] = {"A,B": chi_n}
+        ok &= expect_error(LFTS, params, f"WTMD at chi_n {chi_n}")
+    params = lfts_params(); params.update(dynamic_stabilization=0.0, alpha_ds=0.02)
+    ok &= expect_error(CLFTS, params, "dynamic_stabilization together with its alias alpha_ds")
+    for value in (0, -1, 1.5, "fast"):
+        params = base_params(); params["stress_interval"] = value
+        ok &= expect_error(SCFT, params, f"stress_interval {value!r}")
 
     if ok:
         print("Test passed, parameter handling")

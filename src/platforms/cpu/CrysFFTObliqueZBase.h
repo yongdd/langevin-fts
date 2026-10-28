@@ -13,17 +13,13 @@
 #define CRYS_FFT_OBLIQUEZ_BASE_H_
 
 #include <array>
-#include <atomic>
-#include <mutex>
-#include <thread>
 #include <cmath>
-#include <cstdint>
-#include <limits>
-#include <map>
 #include <memory>
-#include <unordered_map>
 
+#include "CrysFFTSharedTables.h"
 #include "Exception.h"
+#include "MinimalFormAlias.h"
+#include "ReciprocalMetric.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,7 +32,7 @@
  * Provides common functionality:
  * - Reciprocal metric tensor computation
  * - Boltzmann factor generation and caching
- * - Per-thread state (owned by the object)
+ * - Boltzmann factors shared by the calling threads (CrysFFTSharedTables.h)
  *
  * The derived classes (FftwCrysFFTObliqueZ, MklCrysFFTObliqueZ) provide the
  * transforms: initFFTPlans(), diffusion(), apply_multiplier().
@@ -58,108 +54,15 @@ protected:
 
     double norm_factor_{1.0};
 
-    struct ThreadState
+    /// Boltzmann factors per ds, shared by the threads that call the engine
+    SharedTableCache<double, std::unique_ptr<double[]>> boltzmann_;
+
+    /// Boltzmann factors of the calling thread's last set_contour_step(); nullptr
+    /// when it has called none since the last cell change.
+    const double* current_boltzmann() const
     {
-        std::map<double, std::unique_ptr<double[]>> boltzmann;
-        const double* boltz_current = nullptr;
-        double ds_current = std::numeric_limits<double>::quiet_NaN();
-        uint64_t epoch = 0;
-    };
-    mutable std::atomic<uint64_t> cache_epoch_{1};   ///< bumped to invalidate every thread's cache
-    /// Unique per object, never reused: lets a thread recognise the object its
-    /// remembered cache slot belongs to (see get_thread_state()).
-    inline static std::atomic<uint64_t> next_instance_id_{1};
-    const uint64_t instance_id_{next_instance_id_.fetch_add(1, std::memory_order_relaxed)};
-    mutable std::mutex thread_states_mutex_;
-    /// Per-calling-thread caches (the propagator loop runs in OpenMP threads),
-    /// owned by this object so that they are released together with it.
-    mutable std::unordered_map<std::thread::id, ThreadState> thread_states_;
-
-    static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para)
-    {
-        const double a = cell_para[0];
-        const double b = cell_para[1];
-        const double c = cell_para[2];
-        const double alpha = cell_para[3];
-        const double beta = cell_para[4];
-        const double gamma = cell_para[5];
-
-        const double cos_a = std::cos(alpha);
-        const double cos_b = std::cos(beta);
-        const double cos_g = std::cos(gamma);
-        const double sin_g = std::sin(gamma);
-
-        const double vol_factor_sq =
-            1.0 - cos_a * cos_a - cos_b * cos_b - cos_g * cos_g + 2.0 * cos_a * cos_b * cos_g;
-        const double vol_factor = std::sqrt(vol_factor_sq);
-        const double volume = a * b * c * vol_factor;
-
-        // Direct lattice vectors
-        const double ax = a, ay = 0.0, az = 0.0;
-        const double bx = b * cos_g, by = b * sin_g, bz = 0.0;
-        const double cx = c * cos_b;
-        const double cy = (sin_g != 0.0) ? c * (cos_a - cos_b * cos_g) / sin_g : 0.0;
-        const double cz = volume / (a * b * sin_g);
-
-        // Reciprocal lattice vectors (without 2π)
-        const double bc_x = by * cz - bz * cy;
-        const double bc_y = bz * cx - bx * cz;
-        const double bc_z = bx * cy - by * cx;
-
-        const double ca_x = cy * az - cz * ay;
-        const double ca_y = cz * ax - cx * az;
-        const double ca_z = cx * ay - cy * ax;
-
-        const double ab_x = ay * bz - az * by;
-        const double ab_y = az * bx - ax * bz;
-        const double ab_z = ax * by - ay * bx;
-
-        const double a_star_x = bc_x / volume;
-        const double a_star_y = bc_y / volume;
-        const double a_star_z = bc_z / volume;
-        const double b_star_x = ca_x / volume;
-        const double b_star_y = ca_y / volume;
-        const double b_star_z = ca_z / volume;
-        const double c_star_x = ab_x / volume;
-        const double c_star_y = ab_y / volume;
-        const double c_star_z = ab_z / volume;
-
-        std::array<double, 6> metric{};
-        metric[0] = a_star_x * a_star_x + a_star_y * a_star_y + a_star_z * a_star_z;
-        metric[1] = a_star_x * b_star_x + a_star_y * b_star_y + a_star_z * b_star_z;
-        metric[2] = a_star_x * c_star_x + a_star_y * c_star_y + a_star_z * c_star_z;
-        metric[3] = b_star_x * b_star_x + b_star_y * b_star_y + b_star_z * b_star_z;
-        metric[4] = b_star_x * c_star_x + b_star_y * c_star_y + b_star_z * c_star_z;
-        metric[5] = c_star_x * c_star_x + c_star_y * c_star_y + c_star_z * c_star_z;
-        return metric;
-    }
-
-    /// Cache of the calling thread (owned by this object, see thread_states_).
-    ThreadState& get_thread_state() const
-    {
-        // Each thread remembers the slot it used last, tagged with the object's
-        // id, so the usual case (one object per thread) takes no lock. The slot
-        // is looked up under the lock only when the thread switches object; the
-        // map keeps references valid across insertions, and a stale remembered
-        // pointer is never followed because ids are not reused.
-        struct LastSlot { uint64_t instance_id = 0; ThreadState* state = nullptr; };
-        thread_local LastSlot last;
-        if (last.instance_id != instance_id_)
-        {
-            std::lock_guard<std::mutex> lock(thread_states_mutex_);
-            last.state = &thread_states_[std::this_thread::get_id()];
-            last.instance_id = instance_id_;
-        }
-        ThreadState* state = last.state;
-        const uint64_t epoch = cache_epoch_.load(std::memory_order_acquire);
-        if (state->epoch != epoch)
-        {
-            state->boltzmann.clear();
-            state->boltz_current = nullptr;
-            state->ds_current = std::numeric_limits<double>::quiet_NaN();
-            state->epoch = epoch;
-        }
-        return *state;
+        const std::unique_ptr<double[]>* boltz = boltzmann_.current();
+        return boltz ? boltz->get() : nullptr;
     }
 
     std::unique_ptr<double[]> generateBoltzmann(double ds) const
@@ -186,31 +89,10 @@ protected:
         // cos(pi/2) ~ 6e-17; do not flip rectangular cells onto the
         // minimal-form alias path.
         const bool oblique_xy = (std::abs(G12) > 1e-12 * std::max(std::abs(G11), std::abs(G22)));
-        const int Nx = nx_logical_[0];
-        const int Ny = nx_logical_[1];
-        auto min_form_rep_xy = [&](int& m1, int& m2) {
-            auto form = [&](double a, double b) {
-                return G11 * a * a + 2.0 * G12 * a * b + G22 * b * b;
-            };
-            int b1 = m1, b2 = m2;
-            double best = form(m1, m2);
-            for (int a = -1; a <= 1; ++a)
-            {
-                for (int b = -1; b <= 1; ++b)
-                {
-                    if (a == 0 && b == 0)
-                        continue;
-                    const int t1 = m1 + a * Nx;
-                    const int t2 = m2 + b * Ny;
-                    const double f = form(t1, t2);
-                    if (f < best)
-                    {
-                        best = f;
-                        b1 = t1; b2 = t2;
-                    }
-                }
-            }
-            m1 = b1; m2 = b2;
+        const std::array<int, 3> grid_xy = {nx_logical_[0], nx_logical_[1], 1};
+        const IndexMetric metric_xy{G11, G22, 0.0, G12, 0.0, 0.0};
+        auto form_xy = [&](double a, double b, double) {
+            return G11 * a * a + 2.0 * G12 * a * b + G22 * b * b;
         };
 
         const int Nyh = nx_logical_[1] / 2 + 1;
@@ -220,10 +102,10 @@ protected:
             int m1s = (ix > nx_logical_[0] / 2) ? (ix - nx_logical_[0]) : ix;
             for (int iy = 0; iy < Nyh; ++iy)
             {
-                int m1 = m1s;
-                int m2 = iy;
+                std::array<int, 3> rep = {m1s, iy, 0};
                 if (oblique_xy)
-                    min_form_rep_xy(m1, m2);
+                    min_form_alias_rep(rep, grid_xy, metric_xy, form_xy);
+                const int m1 = rep[0], m2 = rep[1];
                 for (int iz = 0; iz < Nz2; ++iz)
                 {
                     int m3 = iz;
@@ -241,7 +123,7 @@ protected:
 
     void freeBoltzmann()
     {
-        cache_epoch_.fetch_add(1, std::memory_order_acq_rel);
+        boltzmann_.invalidate();
     }
 
 public:
@@ -251,7 +133,7 @@ public:
         std::array<double, 9> /*trans_part*/)
         : nx_logical_(nx_logical),
           cell_para_(cell_para),
-          recip_metric_(compute_recip_metric(cell_para))
+          recip_metric_(reciprocal_metric_of_cell(cell_para))
     {
         for (int d = 0; d < 3; ++d)
         {
@@ -275,25 +157,13 @@ public:
         if (cell_para == cell_para_)
             return;
         cell_para_ = cell_para;
-        recip_metric_ = compute_recip_metric(cell_para_);
+        recip_metric_ = reciprocal_metric_of_cell(cell_para_);
         freeBoltzmann();
     }
 
     void set_contour_step(double ds)
     {
-        ThreadState& state = get_thread_state();
-        if (state.boltz_current != nullptr && state.ds_current == ds)
-            return;
-
-        auto it = state.boltzmann.find(ds);
-        if (it == state.boltzmann.end())
-        {
-            std::unique_ptr<double[]> boltz = generateBoltzmann(ds);
-            it = state.boltzmann.emplace(ds, std::move(boltz)).first;
-        }
-
-        state.ds_current = ds;
-        state.boltz_current = it->second.get();
+        boltzmann_.select(ds, [&] { return generateBoltzmann(ds); });
     }
 
     const std::array<int, 3>& get_nx_logical() const { return nx_logical_; }

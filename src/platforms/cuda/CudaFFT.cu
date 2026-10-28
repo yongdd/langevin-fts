@@ -211,16 +211,15 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
         }
         else
         {
-            // Check for odd dimensions - DCT-2/DCT-3 only supports even N
-            // The FCT algorithm (Makhoul 1980) requires even N for interleaved decomposition
+            // The DCT-2/DCT-3 of reflecting axes take any length; the DST-2 kernels
+            // of CudaRealTransform need an even one, so absorbing axes must be even
             for (int d = 0; d < DIM; ++d)
             {
-                if (nx_[d] % 2 != 0)
+                if (bc_[d] == BoundaryCondition::ABSORBING && nx_[d] % 2 != 0)
                 {
-                    throw_with_line_number("CudaFFT with non-periodic BC requires even grid sizes. "
-                                          "Dimension " + std::to_string(d) + " has odd size " +
-                                          std::to_string(nx_[d]) + ". DCT-2/DCT-3 implementation "
-                                          "uses FCT algorithm which only supports even N.");
+                    throw_with_line_number("CudaFFT requires an even grid size along absorbing axes "
+                                          "(the CUDA DST-2 needs even lengths). Dimension " + std::to_string(d) +
+                                          " has odd size " + std::to_string(nx_[d]) + "; reflecting axes may be odd.");
                 }
             }
 
@@ -561,8 +560,13 @@ void CudaFFT<T, DIM>::backward_stream(std::complex<double>* d_cdata, T* d_rdata,
 
         if constexpr (std::is_same<T, double>::value)
         {
+            // Z2D may overwrite its input even out of place: transform a copy
+            // so the caller's spectrum is preserved (as in the double* interface)
+            cuDoubleComplex* d_complex = reinterpret_cast<cuDoubleComplex*>(d_work_buffer_.get());
+            CUDA_CHECK(cudaMemcpyAsync(d_complex, d_cdata_cu, sizeof(cuDoubleComplex) * total_complex_grid_,
+                                       cudaMemcpyDeviceToDevice, stream));
             CUFFT_CHECK(cufftSetStream(plan_backward_, stream));
-            CUFFT_CHECK(cufftExecZ2D(plan_backward_, d_cdata_cu, d_rdata));
+            CUFFT_CHECK(cufftExecZ2D(plan_backward_, d_complex, d_rdata));
 
             ker_scale<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_rdata, 1.0 / total_grid_, total_grid_);

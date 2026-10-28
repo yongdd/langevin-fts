@@ -10,7 +10,7 @@
  *
  * - CudaCommon singleton manages GPU blocks/threads configuration
  * - Environment variables: LFTS_GPU_NUM_BLOCKS, LFTS_GPU_NUM_THREADS
- * - Default: 256 blocks, 256 threads per block
+ * - Default: 1024 blocks, 256 threads per block
  *
  * **Kernel Categories:**
  *
@@ -77,27 +77,37 @@ std::map<std::string, const To*> reinterpret_map(const std::map<std::string, con
     return output;
 }
 
+namespace
+{
+    // The integer value of a launch environment variable, or default_value when it is unset
+    int launch_variable(const char* name, int default_value)
+    {
+        const char* value = std::getenv(name);
+        if (value == nullptr || *value == '\0')
+            return default_value;
+        std::size_t end = 0;
+        int result = 0;
+        try
+        {
+            result = std::stoi(value, &end);
+        }
+        catch (const std::exception&)
+        {
+            end = 0;
+        }
+        if (end == 0 || value[end] != '\0')
+            throw_with_line_number(std::string(name) + " must be an integer, got \"" + value + "\".");
+        return result;
+    }
+}
+
 CudaCommon::CudaCommon()
 {
     try{
-        // Intialize NUM_BLOCKS and NUM_THREADS
-        const char *ENV_N_BLOCKS  = getenv("LFTS_GPU_NUM_BLOCKS");
-        const char *ENV_N_THREADS = getenv("LFTS_GPU_NUM_THREADS");
-
-        std::string env_var_n_blocks (ENV_N_BLOCKS  ? ENV_N_BLOCKS  : "");
-        std::string env_var_n_threads(ENV_N_THREADS ? ENV_N_THREADS : "");
-
         // 1024 blocks of 256 threads: 3-6% faster than 256 blocks at 64^3 on an A10
         // (grid-stride kernels and CUB reductions, so the results do not depend on it)
-        if (env_var_n_blocks.empty())
-            this->n_blocks = 1024;
-        else
-            this->n_blocks = std::stoi(env_var_n_blocks);
-
-        if (env_var_n_threads.empty())
-            this->n_threads = 256;
-        else
-            this->n_threads = std::stoi(env_var_n_threads);
+        this->n_blocks  = launch_variable("LFTS_GPU_NUM_BLOCKS", 1024);
+        this->n_threads = launch_variable("LFTS_GPU_NUM_THREADS", 256);
         check_launch(this->n_blocks, this->n_threads);
 
     }
@@ -105,19 +115,6 @@ CudaCommon::CudaCommon()
     {
         throw_without_line_number(exc.what());
     }
-}
-void CudaCommon::set(int n_blocks, int n_threads, int process_idx)
-{
-    int devices_count;
-
-    // Check the pair together (set_n_blocks alone would check it against the old n_threads)
-    check_launch(n_blocks, n_threads);
-    this->n_blocks = n_blocks;
-    this->n_threads = n_threads;
-
-    // Change GPU setting
-    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
-    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
 }
 int CudaCommon::get_n_blocks()
 {
@@ -127,12 +124,8 @@ int CudaCommon::get_n_threads()
 {
     return n_threads;
 }
-// int CudaCommon::get_n_gpus()
-// {
-//     return n_gpus;
-// }
 // The grid-stride kernels launched with n_blocks x n_threads rely on at most
-// MAX_GRID_THREADS threads (see GridLimits.h)
+// MAX_GRID_THREADS threads (see GridLimits.h), within the limits of the current device
 void CudaCommon::check_launch(int n_blocks, int n_threads)
 {
     if (n_blocks < 1 || n_threads < 1 || n_threads > 1024 ||
@@ -140,6 +133,16 @@ void CudaCommon::check_launch(int n_blocks, int n_threads)
         throw_with_line_number("The CUDA launch of " + std::to_string(n_blocks) + " blocks x " +
             std::to_string(n_threads) + " threads is not supported: at most 1024 threads per block and " +
             std::to_string(MAX_GRID_THREADS) + " threads in total (LFTS_GPU_NUM_BLOCKS, LFTS_GPU_NUM_THREADS).");
+
+    int device = 0, max_threads = 0, max_blocks = 0;
+    CUDA_CHECK(cudaGetDevice(&device));
+    CUDA_CHECK(cudaDeviceGetAttribute(&max_threads, cudaDevAttrMaxThreadsPerBlock, device));
+    CUDA_CHECK(cudaDeviceGetAttribute(&max_blocks, cudaDevAttrMaxGridDimX, device));
+    if (n_threads > max_threads || n_blocks > max_blocks)
+        throw_with_line_number("The CUDA launch of " + std::to_string(n_blocks) + " blocks x " +
+            std::to_string(n_threads) + " threads exceeds the limits of device " + std::to_string(device) +
+            ": " + std::to_string(max_threads) + " threads per block and " + std::to_string(max_blocks) +
+            " blocks (LFTS_GPU_NUM_BLOCKS, LFTS_GPU_NUM_THREADS).");
 }
 void CudaCommon::set_n_blocks(int n_blocks)
 {
@@ -150,14 +153,6 @@ void CudaCommon::set_n_threads(int n_threads)
 {
     check_launch(this->n_blocks, n_threads);
     this->n_threads = n_threads;
-}
-void CudaCommon::set_idx(int process_idx)
-{
-    int devices_count;
-
-    // Change GPU setting
-    CUDA_CHECK(cudaGetDeviceCount(&devices_count));
-    CUDA_CHECK(cudaSetDevice(process_idx%devices_count));
 }
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M)

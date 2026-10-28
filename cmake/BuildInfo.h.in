@@ -1,12 +1,16 @@
 #pragma once
 
+// Written at every build into GitInfo.cpp (cmake/git_info.cmake)
+const char* polymerfts_git_commit();
+const char* polymerfts_source_modified();
+
 // Raw literals preserve quotes and backslashes in compiler flags.
 inline pybind11::dict polymerfts_build_info()
 {
     pybind11::dict info;
     info["code_version"] = R"meta(@POLYMERFTS_VERSION@)meta";
-    info["git_commit"] = R"meta(@POLYMERFTS_GIT_COMMIT@)meta";
-    info["source_modified"] = R"meta(@POLYMERFTS_SOURCE_MODIFIED@)meta";
+    info["git_commit"] = polymerfts_git_commit();
+    info["source_modified"] = polymerfts_source_modified();
     info["compiler"] = R"meta(@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@)meta";
     info["build_type"] = R"meta(@CMAKE_BUILD_TYPE@)meta";
     info["host_flags"] = R"meta(@POLYMERFTS_HOST_FLAGS@)meta";

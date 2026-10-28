@@ -3,19 +3,26 @@
 This module implements well-tempered metadynamics to enhance sampling
 in Langevin field-theoretic simulations of block copolymers.
 
-This implementation follows deep-langevin-fts exactly.
+This implementation follows deep-langevin-fts, except for the half-spectrum weight
+of the last kz plane when nz is odd (see WTMD.__init__) and the deposition of the
+hills (see WTMD.update_statistics).
 """
 
 import numpy as np
-from scipy.io import savemat
+import scipy.signal
 
+from .utils import atomic_savemat
 from .validation import ValidationError
 
 
 class WTMD:
     """Well-Tempered Metadynamics for enhanced sampling in L-FTS.
 
-    This implementation matches deep-langevin-fts exactly.
+    This implementation matches deep-langevin-fts up to the odd-nz weight and the
+    deposition of the hills (see the module docstring). With `fourier`, the PropagatorSolver.fourier of the simulation
+    (real fields, periodic box), the order parameter and its derivative are transformed
+    on the platform (on the GPU with CUDA) instead of with numpy.fft, in the same rfftn
+    layout.
     """
 
     def __init__(self, nx, lx, nbar,
@@ -29,7 +36,7 @@ class WTMD:
                  dpsi=1e-3,
                  update_freq=1000,
                  recording_period=100000,
-                 u=None, up=None, I0=None, I1=None, angles=None):
+                 u=None, up=None, I0=None, I1=None, angles=None, fourier=None):
 
         self.l = l
         self.kc = kc
@@ -46,6 +53,7 @@ class WTMD:
             raise ValidationError("WTMD requires a 3D grid (nx with three entries)")
         self.nx = nx
         self.lx = lx
+        self._fourier = fourier
         self.M = nx[0] * nx[1] * nx[2]
         self.Mk = nx[0] * nx[1] * (nx[2] // 2 + 1)
 
@@ -66,11 +74,15 @@ class WTMD:
         self.eigenvalues = eigenvalues
         self.real_fields_idx = real_fields_idx
         eigen_value_min = 0.0
+        self.exchange_idx = None
         for count, i in enumerate(self.real_fields_idx):
             if self.eigenvalues[i] < eigen_value_min:
                 eigen_value_min = self.eigenvalues[i]
                 self.exchange_idx = i
                 self.langevin_idx = count
+        if self.exchange_idx is None:
+            raise ValidationError("WTMD needs a real auxiliary (exchange) field, i.e. a negative value among the "
+                                  "printed 'Eigenvalues' of the auxiliary fields (for two monomer types, a positive chi_n)")
 
         self.u = np.zeros(self.bins)
         self.up = np.zeros(self.bins)
@@ -85,12 +97,16 @@ class WTMD:
         if I0 is not None:
             self.I0 = I0.copy()
         if I1 is not None:
-            self.I1 = I1.copy()
-            for key in self.I1:
-                self.I1[key] /= self.CV
+            self.I1 = {key: np.array(value, dtype=np.float64) / self.CV for key, value in I1.items()}
 
+        # The hills are Gaussians cut at 8σ, where they fall below 1e-13 of their peak. The
+        # histogram of the samples extends by this margin (pad bins) on both sides of the
+        # range, so that samples just outside the range deposit their tails inside it.
+        self.pad = int(np.ceil(8.0 * self.sigma_psi / self.dpsi))
         self.psi_range = np.linspace(self.psi_min, self.psi_max, num=self.bins, endpoint=False)
-        self.psi_range_hist = np.linspace(self.psi_min - self.dpsi / 2, self.psi_max - self.dpsi / 2, num=self.bins + 1, endpoint=True)
+        self.psi_range_hist = np.linspace(self.psi_min - (self.pad + 0.5) * self.dpsi,
+                                          self.psi_max + (self.pad - 0.5) * self.dpsi,
+                                          num=self.bins + 2 * self.pad + 1, endpoint=True)
 
         # Store order parameters for updating U and U_hat
         self.order_parameter_history = []
@@ -98,8 +114,12 @@ class WTMD:
         self.dH_history = {}
 
         # Initialize arrays in Fourier spaces
+        # Half-spectrum weights: the planes kz = 0 and, for even nz, kz = nz/2 are their own
+        # conjugates; every other plane stands for itself and its conjugate
         self.wt = 2 * np.ones([nx[0], nx[1], nx[2] // 2 + 1])
-        self.wt[:, :, [0, nx[2] // 2]] = 1.0
+        self.wt[:, :, 0] = 1.0
+        if nx[2] % 2 == 0:
+            self.wt[:, :, nx[2] // 2] = 1.0
 
         if self.orthogonal:
             space_kx, space_ky, space_kz = np.meshgrid(
@@ -120,14 +140,17 @@ class WTMD:
             mag_k = np.reshape(np.sqrt(k_sq), [nx[0], nx[1], nx[2] // 2 + 1])
         self.fk = 1.0 / (1.0 + np.exp(12.0 * (mag_k - kc) / kc))
 
-        # Compute fourier transform of gaussian functions
-        X = self.dpsi * np.concatenate([np.arange((self.bins + 1) // 2), np.arange(self.bins // 2) - self.bins // 2]) / self.sigma_psi
-        self.u_kernel = np.fft.rfft(np.exp(-0.5 * X**2))
-        self.up_kernel = np.fft.rfft(-X / self.sigma_psi * np.exp(-0.5 * X**2))
+        # Gaussian hill and its derivative at the offsets X = (Ψ - Ψ_sample)/σ of the bins
+        X = self.dpsi * np.arange(-self.pad, self.pad + 1) / self.sigma_psi
+        self.u_kernel = np.exp(-0.5 * X**2)
+        self.up_kernel = -X / self.sigma_psi * np.exp(-0.5 * X**2)
 
     # Compute order parameter Ψ
     def compute_order_parameter(self, langevin_step, w_aux):
-        self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
+        if self._fourier is not None:
+            self.w_aux_k = self._fourier.forward(np.reshape(w_aux[self.exchange_idx], -1))
+        else:
+            self.w_aux_k = np.fft.rfftn(np.reshape(w_aux[self.exchange_idx], self.nx))
         psi = np.sum(np.power(np.absolute(self.w_aux_k), self.l) * self.fk * self.wt)
         psi = np.power(psi, 1.0 / self.l) / self.M
         return psi
@@ -144,10 +167,17 @@ class WTMD:
 
         # Calculate current value of U'(Ψ) using linear interpolation
         up_hat = np.interp(psi, self.psi_range, self.up)
-        # Calculate derivative of order parameter with respect to w_aux_k
-        dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
-        # Calculate derivative of order parameter with respect to w
-        dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
+        if psi == 0.0:
+            # Ψ = 0 only for a zero exchange field, where dΨ/dw (0/0) has no direction: no bias
+            dpsi_dwr = np.zeros(self.M)
+        else:
+            # Calculate derivative of order parameter with respect to w_aux_k
+            dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
+            # Calculate derivative of order parameter with respect to w
+            if self._fourier is not None:
+                dpsi_dwr = self._fourier.backward(dpsi_dwk) * np.power(self.M, 2.0 - self.l) / self.V
+            else:
+                dpsi_dwr = np.fft.irfftn(dpsi_dwk, self.nx, axes=tuple(range(len(self.nx)))) * np.power(self.M, 2.0 - self.l) / self.V
 
         # Add bias
         bias = np.reshape(self.V * up_hat * dpsi_dwr, self.M)
@@ -157,25 +187,25 @@ class WTMD:
 
     def update_statistics(self):
 
-        # Compute histogram
-        hist, bin_edges = np.histogram(self.order_parameter_history, bins=self.psi_range_hist, density=True)
-        hist_k = np.fft.rfft(hist)
-        bin_mids = bin_edges[1:] - self.dpsi / 2
+        # Histogram of the samples on the extended bins, divided by the number of all samples:
+        # every sample deposits a hill of the same weight, and samples beyond the margin none
+        n_samples = len(self.order_parameter_history)
+        counts, _ = np.histogram(self.order_parameter_history, bins=self.psi_range_hist)
+        hist = counts / (n_samples * self.dpsi)
 
+        # The hills are summed by linear convolution; mode "valid" keeps the bins of the range
         dI1 = {}
         for key in self.dH_history:
             hist_dH_, _ = np.histogram(self.order_parameter_history,
                                        weights=self.dH_history[key],
-                                       bins=self.psi_range_hist, density=False)
-            hist_dH_ /= len(self.order_parameter_history)
-            hist_dH_k = np.fft.rfft(hist_dH_)
-            dI1[key] = np.fft.irfft(hist_dH_k * self.u_kernel, self.bins)
+                                       bins=self.psi_range_hist)
+            dI1[key] = scipy.signal.fftconvolve(hist_dH_ / n_samples, self.u_kernel, mode="valid")
 
         # Compute dU(Ψ), dU'(Ψ)
         amplitude = np.exp(-self.CV * self.u / self.dT) / self.CV
-        gaussian = np.fft.irfft(hist_k * self.u_kernel, self.bins) * self.dpsi
+        gaussian = scipy.signal.fftconvolve(hist, self.u_kernel, mode="valid") * self.dpsi
         du = amplitude * gaussian
-        dup = amplitude * np.fft.irfft(hist_k * self.up_kernel, self.bins) * self.dpsi - self.CV * self.up / self.dT * du
+        dup = amplitude * scipy.signal.fftconvolve(hist, self.up_kernel, mode="valid") * self.dpsi - self.CV * self.up / self.dT * du
 
         print("np.max(np.abs(amplitude)):%8.5e" % (np.max(np.abs(amplitude))))
         print("np.max(np.abs(gaussian)):%8.5e" % (np.max(np.abs(gaussian))))
@@ -231,4 +261,4 @@ class WTMD:
             mdic["I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = I1
             mdic["dH_psi_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_psi
 
-        savemat(file_name, mdic, long_field_names=True, do_compression=True)
+        atomic_savemat(file_name, mdic, long_field_names=True, do_compression=True)

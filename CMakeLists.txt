@@ -9,7 +9,7 @@ SET(POLYMERFTS_VERSION_MINOR 10)
 SET(POLYMERFTS_VERSION_PATCH 0)
 SET(POLYMERFTS_VERSION "${POLYMERFTS_VERSION_MAJOR}.${POLYMERFTS_VERSION_MINOR}.${POLYMERFTS_VERSION_PATCH}")
 
-PROJECT(LANGEVIN_FTS
+PROJECT(PolymerFTS
     VERSION ${POLYMERFTS_VERSION}
     DESCRIPTION "Polymer Field Theory Simulation Library for SCFT, L-FTS, and CL-FTS"
     LANGUAGES CXX
@@ -17,6 +17,16 @@ PROJECT(LANGEVIN_FTS
 
 # Custom find modules (FindMKL.cmake)
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# conda on Windows keeps native libraries under <prefix>/Library, so
+# -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" works there as on Linux.
+IF(WIN32)
+    FOREACH(_prefix ${CMAKE_PREFIX_PATH})
+        IF(IS_DIRECTORY "${_prefix}/Library")
+            LIST(APPEND CMAKE_PREFIX_PATH "${_prefix}/Library")
+        ENDIF()
+    ENDFOREACH()
+ENDIF()
 
 # ============================================================================
 #  Options
@@ -74,18 +84,44 @@ SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # Warnings for host code in every build type; Debug adds -Wextra and gprof
 # instrumentation. (For AddressSanitizer add -fsanitize=address
 # -fno-omit-frame-pointer to CMAKE_CXX_FLAGS on the command line.)
-ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wall>)
-IF(POLYMERFTS_WERROR)
-    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Werror>)
-ENDIF()
-IF(CMAKE_BUILD_TYPE STREQUAL Debug)
-    # host code only: nvcc rejects -Wextra
-    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wextra> $<$<COMPILE_LANGUAGE:CXX>:-pg>)
-    ADD_LINK_OPTIONS(-pg)
+IF(MSVC)
+    # /W3 without the implicit-narrowing warnings C4244 and C4267, which GCC's
+    # -Wall leaves out too. The sources are UTF-8 (Greek letters in comments),
+    # which MSVC does not assume under a non-UTF-8 code page; the same holds for
+    # the host compiler of nvcc. The CUDA headers (CCCL) need the conforming
+    # preprocessor. <cmath> defines M_PI only with _USE_MATH_DEFINES; the CRT
+    # marks getenv and the POSIX names (dup, fileno) as deprecated.
+    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:/W3> $<$<COMPILE_LANGUAGE:CXX>:/wd4244>
+                        $<$<COMPILE_LANGUAGE:CXX>:/wd4267> $<$<COMPILE_LANGUAGE:CXX>:/utf-8>
+                        $<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>
+                        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>
+                        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>)
+    ADD_COMPILE_DEFINITIONS(_USE_MATH_DEFINES NOMINMAX _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+    IF(POLYMERFTS_WERROR)
+        ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:/WX>)
+    ENDIF()
+ELSE()
+    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wall>)
+    IF(POLYMERFTS_WERROR)
+        ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Werror>)
+    ENDIF()
+    IF(CMAKE_BUILD_TYPE STREQUAL Debug)
+        # host code only: nvcc rejects -Wextra
+        ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-Wextra> $<$<COMPILE_LANGUAGE:CXX>:-pg>)
+        ADD_LINK_OPTIONS(-pg)
+    ENDIF()
 ENDIF()
 
-# OpenMP (propagator-level parallelism on the CPU; the CUDA target adds
-# -fopenmp for its host code below)
+# OpenMP (propagator-level parallelism on the CPU; the CUDA target adds the
+# OpenMP flag for its host code below). MSVC's default OpenMP 2.0 rejects the
+# unsigned loop indices of the propagator loops; its LLVM runtime (CMake 3.30+)
+# accepts them.
+IF(MSVC AND CMAKE_VERSION VERSION_LESS 3.30)
+    MESSAGE(FATAL_ERROR "MSVC builds need CMake 3.30 or newer for the LLVM OpenMP runtime "
+                        "(/openmp:llvm), found ${CMAKE_VERSION}. Install a newer CMake, "
+                        "e.g. 'conda install -c conda-forge \"cmake>=3.30\"'.")
+ENDIF()
+SET(OpenMP_RUNTIME_MSVC llvm)
 FIND_PACKAGE(OpenMP REQUIRED)
 SET(CMAKE_CXX_FLAGS        "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
@@ -146,7 +182,7 @@ ELSE()
 ENDIF()
 
 # LAPACKE: SVD solver of Anderson mixing. OpenBLAS can provide its C interface
-# directly; Anaconda's openblas-devel supplies lapacke.h. Keep standalone LAPACKE
+# directly; conda-forge's openblas supplies lapacke.h. Keep standalone LAPACKE
 # supported, and use MKL only when its backend was explicitly requested.
 FIND_LIBRARY(LAPACKE_LIBRARY NAMES lapacke openblas
     HINTS ENV LAPACKE_ROOT PATH_SUFFIXES lib lib64)
@@ -168,6 +204,11 @@ IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
     SET(CMAKE_REQUIRED_LIBRARIES ${LAPACKE_LIBRARY})
     UNSET(POLYMERFTS_LAPACKE_HAS_SVD CACHE)
     CHECK_CXX_SOURCE_COMPILES("
+        #include <complex>
+        #ifdef _MSC_VER
+        #define lapack_complex_float std::complex<float>
+        #define lapack_complex_double std::complex<double>
+        #endif
         #if __has_include(<lapacke.h>)
         #include <lapacke.h>
         #else
@@ -186,14 +227,14 @@ IF(LAPACKE_LIBRARY AND LAPACKE_INCLUDE_DIR)
     IF(NOT POLYMERFTS_LAPACKE_HAS_SVD)
         MESSAGE(FATAL_ERROR "The selected LAPACKE headers/library do not provide "
             "LAPACKE_dgelsd and LAPACKE_zgelsd. Install OpenBLAS with LAPACKE support "
-            "(conda install --override-channels -c defaults openblas-devel), "
+            "(conda install --override-channels -c conda-forge openblas), "
             "or set LAPACKE_LIBRARY and LAPACKE_INCLUDE_DIR to a matching provider.")
     ENDIF()
     INCLUDE_DIRECTORIES(${LAPACKE_INCLUDE_DIR})
     MESSAGE(STATUS "LAPACKE found: ${LAPACKE_LIBRARY} (${LAPACKE_INCLUDE_DIR})")
 ELSE()
     MESSAGE(FATAL_ERROR "LAPACKE (library and lapacke.h or mkl_lapacke.h) is required but was not found. "
-        "Install with: conda install --override-channels -c defaults openblas-devel, "
+        "Install with: conda install --override-channels -c conda-forge openblas, "
         "or apt install liblapacke-dev, or set LAPACKE_ROOT. "
         "MKL can also supply LAPACKE when POLYMERFTS_USE_MKL=ON.")
 ENDIF()
@@ -220,8 +261,10 @@ ADD_LIBRARY(common
     src/common/ComputationReduceMemoryContinuous.cpp
     src/common/ComputationReduceMemoryDiscrete.cpp
     src/common/AndersonMixing.cpp
+    src/common/AbstractFactory.cpp
     src/common/Scheduler.cpp
     src/common/SpaceGroup.cpp
+    src/common/FourierTransform.cpp
 )
 TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES} ${LAPACKE_LIBRARY})
 
@@ -240,6 +283,7 @@ SET(POLYMERFTS_CPU_COMMON_SOURCES
     src/platforms/cpu/CpuSolverCNADI.cpp
     src/platforms/cpu/CpuComputationBackend.cpp
     src/platforms/cpu/CpuAndersonMixing.cpp
+    src/platforms/cpu/CpuFourierTransform.cpp
 )
 
 # ---- FFTW3 ----
@@ -260,11 +304,16 @@ IF(POLYMERFTS_USE_FFTW)
     ENDIF()
     IF(NOT FFTW3_FOUND)
         MESSAGE(FATAL_ERROR "POLYMERFTS_USE_FFTW=ON but FFTW3 was not found. "
-            "Install fftw (e.g. conda install --override-channels -c defaults fftw) or set FFTW_ROOT.")
+            "Install fftw (e.g. conda install --override-channels -c conda-forge fftw) or set FFTW_ROOT.")
     ENDIF()
 
     SET(BUILD_CPU_FFTW_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
+    # fftw3.h imports the data of the FFTW DLL (fftw_version) only with FFTW_DLL;
+    # without it, the linker takes fftw_version from MKL's FFTW wrappers
+    IF(WIN32)
+        ADD_DEFINITIONS(-DFFTW_DLL)
+    ENDIF()
     INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
 
     MESSAGE(WARNING
@@ -292,7 +341,7 @@ IF(POLYMERFTS_USE_MKL)
     FIND_PACKAGE(MKL QUIET)
     IF(NOT MKL_FOUND)
         MESSAGE(FATAL_ERROR "POLYMERFTS_USE_MKL=ON but MKL was not found. "
-            "Install MKL (e.g. conda install --override-channels -c defaults mkl mkl-include) "
+            "Install MKL (e.g. conda install --override-channels -c conda-forge mkl-devel) "
             "or set MKLROOT.")
     ENDIF()
 
@@ -404,7 +453,7 @@ IF(NOT _cuda_request STREQUAL "OFF")
             "CMAKE_CUDA_COMPILER")
     ELSEIF(CMAKE_VERSION VERSION_LESS 3.25.2)
         polymerfts_cuda_unusable("CMake ${CMAKE_VERSION} cannot compile C++20 CUDA code; the "
-            "GPU backend needs CMake 3.25.2 or newer (environment.yml installs 3.31)")
+            "GPU backend needs CMake 3.25.2 or newer (environment.yml installs a newer one)")
     ELSE()
         EXECUTE_PROCESS(COMMAND "${CMAKE_CUDA_COMPILER}" --version
             OUTPUT_VARIABLE _nvcc_output ERROR_QUIET)
@@ -530,7 +579,8 @@ IF(POLYMERFTS_BUILD_CUDA)
     # nvcc links from (without the driver stubs).
     SET(_toolkit_lib_dirs "")
     FOREACH(_dir ${CMAKE_CUDA_HOST_IMPLICIT_LINK_DIRECTORIES}
-                 "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64" "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib")
+                 "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64" "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib"
+                 "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib/x64")
         IF(NOT _dir MATCHES "/stubs/?$")
             LIST(APPEND _toolkit_lib_dirs "${_dir}")
         ENDIF()
@@ -570,10 +620,15 @@ IF(POLYMERFTS_BUILD_CUDA)
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
+        src/platforms/cuda/CudaFourierTransform.cu
         src/platforms/cuda/CudaFactory.cu
     )
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES ${POLYMERFTS_CUDA_ARCHITECTURES})
-    TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
+    IF(MSVC)
+        TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/openmp:llvm>)
+    ELSE()
+        TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
+    ENDIF()
 ENDIF()
 
 IF(NOT BUILD_CPU_FFTW_LIB AND NOT BUILD_CPU_MKL_LIB AND NOT POLYMERFTS_BUILD_CUDA)
@@ -622,26 +677,28 @@ ENDIF()
 FIND_PACKAGE(pybind11 ${_pybind11_minimum} REQUIRED HINTS ${_pybind11_cmakedir})
 
 # pybind11::module carries the Python and pybind11 include directories
-ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp)
-SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
+# The git commit and source state are written at every build (cmake/git_info.cmake)
+# into a small source of their own, so that a commit or an edit recompiles only it
+SET(POLYMERFTS_GIT_INFO_SOURCE "${CMAKE_BINARY_DIR}/generated/GitInfo.cpp")
+FIND_PACKAGE(Git QUIET)
+SET(_git_info_command ${CMAKE_COMMAND} -DSRC=${PROJECT_SOURCE_DIR} -DGIT=${GIT_EXECUTABLE}
+    -DOUTPUT=${POLYMERFTS_GIT_INFO_SOURCE} -P ${PROJECT_SOURCE_DIR}/cmake/git_info.cmake)
+EXECUTE_PROCESS(COMMAND ${_git_info_command})
+ADD_CUSTOM_TARGET(polymerfts_git_info
+    COMMAND ${_git_info_command}
+    BYPRODUCTS ${POLYMERFTS_GIT_INFO_SOURCE}
+    VERBATIM)
+ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp ${POLYMERFTS_GIT_INFO_SOURCE})
+ADD_DEPENDENCIES(_core polymerfts_git_info)
+IF(WIN32)
+    SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".pyd")
+ELSE()
+    SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
+ENDIF()
 TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE polymerfts_backends)
 
-# Embed the provenance of this extension, including builds from source archives.
-SET(POLYMERFTS_GIT_COMMIT "unknown")
-SET(POLYMERFTS_SOURCE_MODIFIED "unknown")
-FIND_PACKAGE(Git QUIET)
-IF(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE POLYMERFTS_GIT_COMMIT
-        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} diff --quiet HEAD -- CMakeLists.txt cmake src
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE _source_diff)
-    IF(_source_diff EQUAL 0)
-        SET(POLYMERFTS_SOURCE_MODIFIED "false")
-    ELSE()
-        SET(POLYMERFTS_SOURCE_MODIFIED "true")
-    ENDIF()
-ENDIF()
+# Embed the provenance of this extension, including builds from source archives
+# (the git commit and source state come from GitInfo.cpp above).
 STRING(TOUPPER "${CMAKE_BUILD_TYPE}" _build_config)
 SET(POLYMERFTS_HOST_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_build_config}}")
 SET(POLYMERFTS_DEVICE_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${_build_config}}")
@@ -680,6 +737,8 @@ ELSE()
     IF(NOT _sitearch_result EQUAL 0)
         MESSAGE(FATAL_ERROR "Failed to query site-packages path from ${Python3_EXECUTABLE}")
     ENDIF()
+    # Windows paths come with backslashes
+    FILE(TO_CMAKE_PATH "${Python3_SITEARCH}" Python3_SITEARCH)
     SET(POLYMERFTS_PY_INSTALL_DIR "${Python3_SITEARCH}/polymerfts")
 ENDIF()
 

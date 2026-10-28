@@ -86,8 +86,6 @@ private:
     CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;
     /// @}
 
-    void print_array(int n, T *a);  ///< Debug helper
-
 public:
     /**
      * @brief Construct GPU Anderson mixing optimizer.

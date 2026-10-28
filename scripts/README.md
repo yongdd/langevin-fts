@@ -8,7 +8,7 @@ otherwise.
 |--------|----------|
 | [gui/](gui/) | Browser script builder and [web assets](gui/assets/) |
 | [pscf/](pscf/) | PSCF converter and a small initial-field example |
-| [analysis/](analysis/) | MATLAB scripts and Jupyter notebooks for density, structure functions, WTMD and interaction calibration |
+| [analysis/](analysis/) | MATLAB scripts, Jupyter notebooks and a Python script for density, structure functions, WTMD and interaction calibration |
 
 ## Simulation Script Builder (beta)
 
@@ -16,7 +16,7 @@ otherwise.
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in a browser. For a remote server, connect with
+Open the printed URL (`http://127.0.0.1:8765/?token=...`) in a browser. For a remote server, connect with
 `ssh -L 8765:127.0.0.1:8765 user@server` from your computer, then start the editor
 in that SSH session. VS Code Remote-SSH port forwarding also works.
 
@@ -49,7 +49,15 @@ MATLAB scripts and notebooks formerly under `tools/` are in [analysis/](analysis
 Run them from the directory containing the simulation output, for example:
 
 ```bash
-jupyter notebook /path/to/langevin-fts/scripts/analysis/plot_2d_density.ipynb
+jupyter notebook /path/to/polymerfts/scripts/analysis/plot_2d_density.ipynb
+```
+
+`renormalization.py` computes the UV renormalization factor $`z_\infty`$ of $`\chi N`$ and the
+bare segment length $`a_b/a`$ of CL-FTS. It reads a fields file or takes
+options, and needs only NumPy and SciPy:
+
+```bash
+python scripts/analysis/renormalization.py data_simulation/fields_010000.mat
 ```
 
 See the [tools reference](../docs/references/Tools.md) for usage and

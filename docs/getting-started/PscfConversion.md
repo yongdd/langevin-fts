@@ -204,11 +204,11 @@ each command's mapping. If there are no write commands, `results/fields.mat` is
 saved by default. Output paths must be relative filenames without `..`;
 conflicting file/directory paths are rejected.
 
-The script creates a fresh `results/` beside `simulation.py`, including polymer
-architecture drawings. It refuses to reuse an existing results directory.
-A failed or unconverged calculation raises an error before saving snapshots;
-its results directory may already contain drawings. Move that directory before
-rerunning the script.
+The script creates a fresh `results/` beside `simulation.py` and leaves the working
+directory unchanged; it draws no polymer architecture figures. It refuses to reuse an
+existing results directory. A failed or unconverged calculation raises an error before
+saving snapshots, leaving an empty results directory. Move or remove that directory
+before rerunning the script.
 
 ### Supported parameters and limitations
 
@@ -235,6 +235,7 @@ The converter rejects the following rather than producing a partial script:
 | Basis or k-grid reads/writes, `WRITE_STRESS`, other commands | Use full real-space potential fields and the supported writes above |
 | `AmIteratorBasis` and other iterators | Use `AmIteratorGrid`; source space-group operations are not translated |
 | Partially flexible cells; flexible 2D square/rhombic or 3D rhombohedral cells | Their relaxation constraints cannot be represented by this translation; fixed cells are supported |
+| Cells with a volume below 0.1 abc, e.g. an oblique cell with γ under 5.74° | polymerfts rejects such nearly flat cells ([Parameters](../references/Parameters.md#lattice-angles-non-orthogonal)); convert the reduced (Niggli) cell of the lattice. Field import and export keep them |
 | Bead chains, solvents, grand-canonical `mu`, nonunit `vMonomer` | The translator supports the continuous incompressible canonical polymer model only |
 | External potentials, masks, environments, FTS settings and other unrecognized blocks or labels | These require model-specific implementation |
 | Iterator controls such as `errorType`, `verbose`, `lambda`, `useLambdaRamp`, `r`; other implementation-specific options | No direct setting translation is implemented; remove them only after reviewing how the solver settings should change |
@@ -271,12 +272,16 @@ PSCF's [UnitCell2.cpp](https://github.com/dmorse/pscfpp/blob/dfaddb98d6436fadee2
 and [UnitCell3.cpp](https://github.com/dmorse/pscfpp/blob/dfaddb98d6436fadee2ca16b84d82880f1759710/src/prdc/crystal/UnitCell3.cpp).
 
 Lattice selection follows SCFT: a space group's crystal system takes precedence
-over `crystal_system`. An explicit `--lattice` override is checked against the
+over `crystal_system`. PSCF's monoclinic lattice relaxes β, the angle of the unique
+axis b; a monoclinic group with the unique axis a or c is exported as a triclinic
+lattice with a fixed cell and rejected with box relaxation (use the unique-axis-b
+setting of the group, or `--lattice triclinic`, which relaxes every angle in PSCF). An explicit `--lattice` override is checked against the
 actual geometry. Flexible skewed 3D inputs without an explicit crystal system
 require this choice so that angle constraints are not silently changed.
-Flexible skewed 2D cells with explicit `crystal_system="Orthorhombic"` keep gamma
-fixed in polymerfts and are rejected by default; use a fixed cell or explicitly
-choose a PSCF lattice and its corresponding relaxation constraints.
+Flexible skewed 2D cells with explicit `crystal_system="Orthorhombic"` are rejected
+by default, as polymerfts SCFT rejects them: with `relax_cell`, Orthorhombic needs
+90-degree angles. Use a fixed cell or explicitly choose a PSCF lattice and its
+corresponding relaxation constraints.
 
 Grid values are transferred without interpolation. Polymerfts normally samples
 at cell centers and PSCF at nodes, so assigning the same values changes the
@@ -292,8 +297,8 @@ Hall setting are not transferred. All exported fields must be on the full grid.
 SCFT result files already expand symmetry-reduced fields before saving.
 
 Discrete chains, complex fields, finite compressibility, random-copolymer blocks,
-grafting, masks, nonperiodic boundaries and interaction smearing are rejected
-instead of being approximated. Use a supported continuous incompressible model
+grafting, grand-canonical polymers, masks, nonperiodic boundaries, interaction
+smearing and electrostatics are rejected instead of being approximated. Use a supported continuous incompressible model
 for cross-code comparisons. A PSCF calculation still needs its own convergence
 checks; conversion does not establish thermodynamic equivalence of different
 models or solver stopping criteria.

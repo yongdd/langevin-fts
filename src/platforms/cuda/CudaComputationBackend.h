@@ -27,6 +27,7 @@
 #include "CudaComputationBox.h"
 #include "CudaSolver.h"
 #include "Molecules.h"
+#include "NumericalMethods.h"
 #include "SpaceGroup.h"
 
 template <typename T>
@@ -38,7 +39,6 @@ class CudaComputationBackend : public ComputationBackend<T>
 private:
     CudaComputationBox<T>* cb;
     SpaceGroup* space_group;
-    std::string chain_model;
     std::unique_ptr<CudaSolver<T>> solver;
     CudaSolverPseudoDiscrete<T>* solver_discrete;  ///< solver, when the chains are discrete (not owning)
     int n_streams;
@@ -72,12 +72,12 @@ private:
 
 public:
     /**
-     * @param method           "pseudospectral" or "realspace" (continuous chains)
-     * @param numerical_method "rqm4", "rk2" or "cn-adi2" ("" selects the default)
-     * @param max_n_streams    Upper bound on the number of concurrent propagators
+     * @param method_info   Numerical method, resolved and validated by the factory
+     *                      (AbstractFactory::create_propagator_computation())
+     * @param max_n_streams Upper bound on the number of concurrent propagators
      */
     CudaComputationBackend(ComputationBox<T>* cb, Molecules* molecules,
-                           std::string method, std::string numerical_method,
+                           const NumericalMethodInfo& method_info,
                            SpaceGroup* space_group, int max_n_streams = MAX_STREAMS);
     ~CudaComputationBackend();
 
@@ -120,6 +120,7 @@ public:
     T inner_product_inverse_weight(BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* w) override;
     void add_segment_products(int stream, BackendArray<T>* phi, const std::vector<SegmentPair<T>>& pairs) override;
     void normalize_concentration(int stream, BackendArray<T>* phi, T norm, BackendArray<T>* divisor) override;
+    void prepare_stress() override;
     std::array<T, 6> block_stress(int stream, const std::vector<SegmentPair<T>>& pairs,
                                   const std::string& monomer_type) override;
     T solvent_concentration(BackendArray<T>* phi, BackendArray<T>* w, double ds, double volume_fraction) override;

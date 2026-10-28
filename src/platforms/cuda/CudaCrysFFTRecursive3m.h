@@ -12,6 +12,8 @@
 
 #include <array>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -20,31 +22,14 @@
 #include <cufft.h>
 
 #include "CudaCrysFFT.h"
+#include "Recursive3mHelpers.h"
 
 class CudaCrysFFTRecursive3m : public CudaCrysFFTBase
 {
 public:
-    /**
-     * @brief Multiplier selection for the stress fast path.
-     *
-     * Mirrors the CPU CrysFFTRecursive3mBase::MultiplierType:
-     * - Kx2/Ky2/Kz2, Kxy2 (x and y), K2 (all): Cartesian k_d² summed over
-     *   those axes (continuous chains)
-     * - Exp...: the same times exp(-k²·coeff) (discrete chains)
-     */
-    enum class MultiplierType
-    {
-        Kx2,
-        Ky2,
-        Kz2,
-        ExpKx2,
-        ExpKy2,
-        ExpKz2,
-        Kxy2,
-        K2,
-        ExpKxy2,
-        ExpK2
-    };
+    /// Multiplier selection for the stress fast path, shared with the CPU
+    /// engine (crys_recursive_3m::MultiplierType in Recursive3mHelpers.h)
+    using MultiplierType = crys_recursive_3m::MultiplierType;
 
     CudaCrysFFTRecursive3m(
         std::array<int, 3> nx_logical,
@@ -58,6 +43,7 @@ public:
     void diffusion(double* d_q_in, double* d_q_out) override;
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) override;
     void set_stream(cudaStream_t stream) override;
+    std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const override;
 
     /**
      * @brief Apply a k-space multiplier via the 3m pipeline (for stress).
@@ -75,6 +61,9 @@ public:
      */
     void apply_multiplier(double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream);
 
+    /// Build the multiplier cache of apply_multiplier(type, coeff) now (outside the stress loop).
+    void prepare_multiplier(MultiplierType type, double coeff);
+
 private:
     /// Device tables of one k-space multiplier (owning; the struct is move-only)
     struct KCacheDevice
@@ -89,7 +78,6 @@ private:
     int M_physical_{0};
     int M_complex_{0};
 
-    std::array<double, 6> cell_para_;
     std::array<double, 9> translational_part_;
 
     /// Pairing permutation of the fold: twiddle r_p multiplies the
@@ -98,19 +86,21 @@ private:
     /// See Recursive3mFoldParity.h for the derivation.
     std::array<int, 8> fold_perm_{};
 
-    std::array<std::vector<double>, 8> r_re_;
-    std::array<std::vector<double>, 8> r_im_;
+    /// Twiddle factors of the fold, fixed by the grid and the translations (shared with the clones)
+    struct Twiddles
+    {
+        std::array<std::vector<double>, 8> re;
+        std::array<std::vector<double>, 8> im;
+    };
+    std::shared_ptr<const Twiddles> twiddles_;
 
-    std::unordered_map<double, KCacheDevice> k_cache_;
+    /// k-space caches: Boltzmann factors per coefficient and the stress
+    /// multipliers per (type, coeff), shared with the clones together with the
+    /// cell (see CudaCrysFFTTables.h); all caches have one shape
+    enum TableKind { kBoltzmann, kMultiplier };
+    CudaCrysFFTTableView<KCacheDevice> tables_;
     const KCacheDevice* k_current_{nullptr};
     double coeff_current_{0.0};
-
-    /// Multiplier caches for the stress fast path, keyed by (type, coeff)
-    std::map<std::pair<int, double>, KCacheDevice> multiplier_cache_;
-
-    /// Device buffers of the caches dropped by the last cell change; the next
-    /// cache builds reuse them instead of allocating (all caches have one shape)
-    std::vector<KCacheDevice> spare_caches_;
 
     cufftHandle plan_r2c_{};
     cufftHandle plan_c2r_{};
@@ -118,16 +108,23 @@ private:
 
     CudaDeviceBuffer<cufftDoubleComplex> d_step1_;
     CudaDeviceBuffer<cufftDoubleComplex> d_step2_;
-    CudaDeviceBuffer<double> d_work_;
 
     cudaStream_t stream_{0};
 
+    /// Clone of `other` sharing its twiddle factors and tables (see clone_sharing_tables()).
+    explicit CudaCrysFFTRecursive3m(const CudaCrysFFTRecursive3m& other);
+
     void init_plans();
     void free_plans();
-    void generate_twiddle_factors();
-    KCacheDevice generate_k_cache(double coeff);
-    KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff);
-    KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat);
+    std::shared_ptr<const Twiddles> generate_twiddle_factors() const;
+    // The cache builders make the cache of the given cell in `cache` (a table
+    // build, see CudaCrysFFTTables::get())
+    KCacheDevice generate_k_cache(double coeff, const std::array<double, 6>& cell, KCacheDevice cache);
+    KCacheDevice generate_k_cache_from_multiplier(MultiplierType type, double coeff,
+                                                  const std::array<double, 6>& cell, KCacheDevice cache);
+    KCacheDevice build_k_cache_from_tempmat(const std::vector<double>& tempmat, KCacheDevice cache);
+    /// The multiplier cache of (type, coeff), built when missing.
+    const KCacheDevice& multiplier_cache(MultiplierType type, double coeff);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
     void apply_with_cache(const KCacheDevice& cache, double* d_q_in, double* d_q_out, cudaStream_t stream);

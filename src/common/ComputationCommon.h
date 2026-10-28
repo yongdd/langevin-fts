@@ -20,6 +20,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -85,6 +86,7 @@ protected:
 
     std::vector<BackendArray<T>*> phi_solvent;     ///< Concentration of each solvent
     std::map<std::string, BackendArray<T>*> w;     ///< Fields of the last compute_propagators()
+    std::set<std::string> w_input_types;           ///< Monomer types given to the last compute_propagators()
 
     /**
      * @param create_backend Called after the space group is set on the box,

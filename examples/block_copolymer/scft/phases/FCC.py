@@ -1,0 +1,94 @@
+import os
+import numpy as np
+from scipy.io import savemat
+from scipy.ndimage import gaussian_filter
+
+# OpenMP environment variables (set before importing polymerfts)
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
+
+# Major Simulation params
+f = 24/90       # A-fraction of major BCP chain, f
+
+params = {
+    "nx":[32,32,32],            # Simulation grid numbers
+    "lx":[1.91,1.91,1.91],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+                                # where "a_Ref" is reference statistical segment length
+                                # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+
+    "reduce_memory":False,     # Reduce memory usage by storing only check points.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Relax cell lengths and allowed angles during SCFT iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/90,                       # Contour step interval, which is equal to 1/N_Ref.
+
+    "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
+        "A":1.0, 
+        "B":1.0, },
+
+    "chi_n": {"A,B": 18.1},     # Interaction parameter, Flory-Huggins params * N_Ref
+
+    "polymers":[{      # Polymer species
+        "volume_fraction":1.0,  # volume fraction of polymer chain
+        "blocks":[              # AB diBlock Copolymer
+            {"type":"A", "length":f, }, # A-block
+            {"type":"B", "length":1-f}, # B-block
+        ],},],
+    
+    "space_group" :{
+        "symbol":"Fm-3m",   # IT symbol of the space group
+        "hall_number": 523,      # (optional) Hall number of the space group
+    },
+
+    "optimizer":{
+        "name":"am",            # Anderson Mixing
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
+    
+    "max_iter":2000,     # The maximum relaxation iterations
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+}
+
+# Set initial fields
+w_A = np.zeros(list(params["nx"]), dtype=np.float64)
+w_B = np.zeros(list(params["nx"]), dtype=np.float64)
+print("w_A and w_B are initialized to BCC phase.")
+n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
+sphere_positions = []
+for i in range(0,n_unitcell):
+    for j in range(0,n_unitcell):
+        for k in range(0,n_unitcell):
+            sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
+            sphere_positions.append([(i+0/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
+            sphere_positions.append([(i+1/2)/n_unitcell,(j+0/2)/n_unitcell,(k+1/2)/n_unitcell])
+            sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+0/2)/n_unitcell])
+for x,y,z in sphere_positions:
+    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+    w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
+
+# Initialize calculation
+calculation = scft.SCFT(params=params)
+
+# Set a timer
+
+# Run
+calculation.run(initial_fields={"A": w_A, "B": w_B})
+
+# Estimate execution time
+
+# Save final results (.mat, .json or .yaml format)
+calculation.save_results("FCC.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#        1   -4.063E-16  [ 1.2029684E+00  ]     0.658794896   1.8147786E+00  lx=[  1.9100000, 1.9100000, 1.9100000 ]
+#        2    1.932E-15  [ 1.1319192E+00  ]     0.254319806   1.1487383E+00  lx=[  1.9164471, 1.9164471, 1.9164471 ]
+#        3    2.645E-16  [ 1.1089083E+00  ]     0.127488720   8.1038937E-01  lx=[  1.9200544, 1.9200544, 1.9200544 ]
+#        4    1.477E-15  [ 1.0997613E+00  ]     0.072778894   6.2131193E-01  lx=[  1.9226493, 1.9226493, 1.9226493 ]
+#        5   -7.002E-16  [ 1.0960894E+00  ]     0.044770669   5.1469335E-01  lx=[  1.9247578, 1.9247578, 1.9247578 ]
+#        6    9.526E-16  [ 1.0949596E+00  ]     0.028583895   4.5473658E-01  lx=[  1.9265911, 1.9265911, 1.9265911 ]

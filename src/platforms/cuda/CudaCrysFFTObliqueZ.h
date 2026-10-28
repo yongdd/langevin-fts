@@ -1,6 +1,18 @@
 /**
  * @file CudaCrysFFTObliqueZ.h
  * @brief CUDA CrysFFT for z-mirror symmetry (DCT-z + FFT-xy, gamma arbitrary).
+ *
+ * The DCT-II along z and the FFT along x, y run as one real 3D FFT of the
+ * physical grid (Nx, Ny, Nz/2) with Makhoul's z permutation (even samples
+ * forward, odd samples backward). One kernel then forms the DCT coefficients
+ * of the pair kz, Nz/2 - kz from the half spectrum, applies their Boltzmann
+ * factors and returns to the half spectrum of the inverse permutation:
+ *
+ *   P'(k) = S(k) P(k) + D(k) e^{i pi kz/(Nz/2)} conj(P(-kx, -ky, kz)),
+ *
+ * with S = B(kz) + B(Nz/2 - kz), D = B(kz) - B(Nz/2 - kz) and B(Nz/2) = 0.
+ * This needs the Boltzmann factors to be even in (kx, ky), which holds for
+ * alpha = beta = 90 degrees.
  */
 
 #ifndef CUDA_CRYS_FFT_OBLIQUEZ_H_
@@ -9,12 +21,12 @@
 #include <array>
 #include <memory>
 #include <map>
+#include <mutex>
+#include <vector>
 #include <cuda_runtime.h>
 #include <cufft.h>
 
 #include "CudaCrysFFT.h"
-
-class CudaRealTransform3D;
 
 class CudaCrysFFTObliqueZ : public CudaCrysFFTBase
 {
@@ -23,34 +35,37 @@ private:
     std::array<int, 3> nx_physical_;
     int M_logical_{0};
     int M_physical_{0};
-    int M_complex_xy_{0};
+    int M_spectral_{0};   ///< Nx * Ny * (Nz/4 + 1): half spectrum of the physical grid
 
-    std::array<double, 6> cell_para_;
-    std::array<double, 6> recip_metric_;
+    /// (S, D) pairs per ds (see the file comment), shared with the clones
+    /// together with the cell (see CudaCrysFFTTables.h)
+    using Table = CudaDeviceBuffer<double>;
+    enum TableKind { kBoltzmann };
+    CudaCrysFFTTableView<Table> tables_;
 
-    std::map<double, CudaDeviceBuffer<double>> d_boltzmann_;
-    std::vector<CudaDeviceBuffer<double>> spare_tables_;   ///< Buffers of the tables dropped by the last cell change
-    double* d_boltz_current_{nullptr};   ///< Table of ds_current_ in d_boltzmann_ (not owning)
+    const double* d_boltz_current_{nullptr};   ///< Table of ds_current_ (not owning)
     double ds_current_{0.0};
 
-    std::unique_ptr<CudaRealTransform3D> dct_forward_z_;
-    std::unique_ptr<CudaRealTransform3D> dct_backward_z_;
+    cufftHandle plan_fwd_{};   ///< 3D D2Z of the physical grid
+    cufftHandle plan_bwd_{};   ///< 3D Z2D of the physical grid
+    bool plans_initialized_{false};
 
-    cufftHandle plan_xy_fwd_{};
-    cufftHandle plan_xy_bwd_{};
-    bool plan_xy_initialized_{false};
-
-    CudaDeviceBuffer<cufftDoubleComplex> d_complex_;
-    CudaDeviceBuffer<double> d_real_xy_;
+    /// (cos, sin)(pi kz/(Nz/2)) per stored kz; depends only on the grid, shared with the clones
+    std::shared_ptr<const CudaDeviceBuffer<double>> d_twiddle_;
+    CudaDeviceBuffer<double> d_real_;                  ///< Permuted physical grid
+    CudaDeviceBuffer<cufftDoubleComplex> d_spectrum_;  ///< Its half spectrum (updated in place)
 
     double norm_factor_{1.0};
     cudaStream_t stream_{0};
 
-    static std::array<double, 6> compute_recip_metric(const std::array<double, 6>& cell_para);
-    void init_fft_xy();
-    void free_fft_xy();
-    void generateBoltzmann(double ds);
-    void freeBoltzmann();
+    /// Clone of `other` sharing its twiddle factors and tables (see clone_sharing_tables()).
+    explicit CudaCrysFFTObliqueZ(const CudaCrysFFTObliqueZ& other);
+
+    /// Create the 3D plans, the work buffers and (unless shared) the twiddle factors.
+    void init_transforms();
+    void free_plans();
+    /// (S, D) table for given ds and cell, in `buffers` (a table build, see CudaCrysFFTTables::get()).
+    Table generateBoltzmann(double ds, const std::array<double, 6>& cell, Table buffers);
     /// Free everything acquired so far (idempotent; also used when the constructor throws).
     void release();
 
@@ -67,6 +82,7 @@ public:
     void diffusion(double* d_q_in, double* d_q_out) override;
     void diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream) override;
     void set_stream(cudaStream_t stream) override;
+    std::unique_ptr<CudaCrysFFTBase> clone_sharing_tables() const override;
 
     int get_M_physical() const { return M_physical_; }
 };

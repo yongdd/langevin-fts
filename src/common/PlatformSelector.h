@@ -37,13 +37,13 @@
  * // Output: "cuda", "cpu-fftw"
  *
  * // Create factory for CUDA platform
- * auto* factory = PlatformSelector::create_factory_real("cuda", false);
+ * auto factory = PlatformSelector::create_factory_real("cuda", false);
  *
  * // Create factory for CPU with memory reduction (ignored for CPU)
- * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-fftw", false);
+ * auto factory_cpu = PlatformSelector::create_factory_real("cpu-fftw", false);
  *
  * // Create factory for complex fields (for certain advanced applications)
- * auto* factory_complex = PlatformSelector::create_factory_complex("cuda", false);
+ * auto factory_complex = PlatformSelector::create_factory_complex("cuda", false);
  * @endcode
  */
 
@@ -110,7 +110,7 @@ public:
      *                          of full histories, recomputing as needed.
      *                          Reduces memory usage but increases computation time.
      *
-     * @return AbstractFactory<double>* pointer to the created factory
+     * @return Owning pointer to the created factory
      *
      * @throws Exception if platform is not available or invalid
      *
@@ -119,15 +119,15 @@ public:
      * @example
      * @code
      * // Create CUDA factory
-     * auto* factory = PlatformSelector::create_factory_real("cuda", false);
+     * auto factory = PlatformSelector::create_factory_real("cuda", false);
      *
      * // Create solver with specific numerical method
-     * auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "rqm4");
+     * auto solver = factory->create_propagator_computation(cb.get(), mols.get(), optimizer.get(), "rqm4");
      * // Or for real-space methods:
-     * // auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "cn-adi2");
+     * // auto solver = factory->create_propagator_computation(cb.get(), mols.get(), optimizer.get(), "cn-adi2");
      * @endcode
      */
-    static AbstractFactory<double>* create_factory_real(
+    static std::unique_ptr<AbstractFactory<double>> create_factory_real(
         std::string platform, bool reduce_memory);
 
     /**
@@ -140,14 +140,14 @@ public:
      * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *
-     * @return AbstractFactory<std::complex<double>>* pointer to the created factory
+     * @return Owning pointer to the created factory
      *
      * @throws Exception if platform is not available or invalid
      *
      * @note Complex field support is less commonly used. Most simulations
      *       use real-valued fields via create_factory_real().
      */
-    static AbstractFactory<std::complex<double>>* create_factory_complex(
+    static std::unique_ptr<AbstractFactory<std::complex<double>>> create_factory_complex(
         std::string platform, bool reduce_memory);
 };
 

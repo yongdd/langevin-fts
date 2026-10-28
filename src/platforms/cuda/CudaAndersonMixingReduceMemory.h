@@ -46,7 +46,7 @@
  * **Memory Layout:**
  *
  * - Host (pinned): Field and residual history (max_hist × n_var each)
- * - Device: Only 4 temporary arrays (d_w_hist1, d_w_hist2, etc.)
+ * - Device: Only 3 history arrays (d_w_hist1, d_w_hist2, d_w_deriv_hist2)
  *
  * **Data Flow:**
  *
@@ -86,12 +86,11 @@ private:
     CudaDeviceBuffer<CuDeviceData<T>> d_sum;
     /// @}
 
-    /// @name GPU buffers for history access (2 pairs)
+    /// @name GPU buffers for history access
     /// @{
-    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist1;        ///< First history entry on GPU
-    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist2;        ///< Second history entry on GPU
-    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv_hist1;  ///< First residual history on GPU
-    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv_hist2;  ///< Second residual history on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist1;        ///< Newest field (also older residuals for the dot products)
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_hist2;        ///< Older history entry on GPU
+    CudaDeviceBuffer<CuDeviceData<T>> d_w_deriv_hist2;  ///< Older residual history on GPU (the newest is d_w_deriv)
     /// @}
 
     /// @name CUB reduction storage
@@ -100,8 +99,6 @@ private:
     CudaDeviceBuffer<unsigned char> d_temp_storage;
     CudaDeviceBuffer<CuDeviceData<T>> d_sum_out;
     /// @}
-
-    void print_array(int n, T *a);
 
 public:
     /**

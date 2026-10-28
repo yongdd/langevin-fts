@@ -36,13 +36,14 @@
 ContourLengthMapping::ContourLengthMapping(double global_ds, double tolerance)
     : global_ds(global_ds), tolerance(tolerance), is_finalized(false)
 {
-    if (global_ds <= 0.0)
+    // Negated comparisons reject NaN, which compares false
+    if (!(global_ds > 0.0 && std::isfinite(global_ds)))
     {
-        throw_with_line_number("global_ds must be positive.");
+        throw_with_line_number("global_ds must be positive and finite.");
     }
-    if (tolerance <= 0.0)
+    if (!(tolerance > 0.0 && std::isfinite(tolerance)))
     {
-        throw_with_line_number("tolerance must be positive.");
+        throw_with_line_number("tolerance must be positive and finite.");
     }
 }
 
@@ -109,9 +110,9 @@ void ContourLengthMapping::add_block(double contour_length)
         throw_with_line_number("Cannot add blocks after finalize() has been called.");
     }
 
-    if (contour_length <= 0.0)
+    if (!(contour_length > 0.0 && std::isfinite(contour_length)))
     {
-        throw_with_line_number("contour_length must be positive.");
+        throw_with_line_number("contour_length must be positive and finite.");
     }
 
     pending_lengths.push_back(contour_length);

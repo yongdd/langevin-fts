@@ -8,170 +8,17 @@
 #include "CudaCommon.h"
 #include "Exception.h"
 #include "Recursive3mFoldParity.h"
+#include "Recursive3mHelpers.h"
 
 #include <cstring>
 #include <cmath>
 #include <stdexcept>
 #include <tuple>
 
+// Host-side fold, twiddles and multipliers are shared with the CPU engine
+using namespace crys_recursive_3m;
+
 namespace {
-constexpr double kPi = 3.14159265358979323846;
-
-std::vector<std::array<double, 3>> generate_m3_operations(
-    const std::array<double, 9>& g,
-    const std::array<int, 3>& s)
-{
-    return {
-        {-2.0 * kPi * (g[0]),                              -2.0 * kPi * (g[1]),                              -2.0 * kPi * (g[2] - 1.0 / s[2])},
-        {-2.0 * kPi * (g[3]),                              -2.0 * kPi * (g[4] - 1.0 / s[1]),                 -2.0 * kPi * (g[5])},
-        {-2.0 * kPi * (g[0] + g[3]),                       -2.0 * kPi * (-g[1] + g[4] - 1.0 / s[1]),         -2.0 * kPi * (g[2] + g[5] - 1.0 / s[2])},
-        {-2.0 * kPi * (g[6] - 1.0 / s[0]),                 -2.0 * kPi * (g[7]),                              -2.0 * kPi * (g[8])},
-        {-2.0 * kPi * (g[6] - g[0] - 1.0 / s[0]),          -2.0 * kPi * (g[1] + g[7]),                       -2.0 * kPi * (g[2] + g[8] - 1.0 / s[2])},
-        {-2.0 * kPi * (-g[3] + g[6] - 1.0 / s[0]),         -2.0 * kPi * (g[4] + g[7] - 1.0 / s[1]),          -2.0 * kPi * (g[5] + g[8])},
-        {-2.0 * kPi * (-g[0] - g[3] + g[6] - 1.0 / s[0]),  -2.0 * kPi * (-g[1] + g[4] + g[7] - 1.0 / s[1]),  -2.0 * kPi * (g[2] + g[5] + g[8] - 1.0 / s[2])}
-    };
-}
-
-void twiddle_factor(
-    const std::vector<std::tuple<double*, double*, std::array<double, 3>>>& data,
-    const std::array<int, 3>& range)
-{
-    const int Nx = range[0];
-    const int Ny = range[1];
-    const int Nz = range[2];
-
-    for (size_t itr_task = 0; itr_task < data.size(); ++itr_task)
-    {
-        double* dstcos = std::get<0>(data[itr_task]);
-        double* dstsin = std::get<1>(data[itr_task]);
-        auto paras = std::get<2>(data[itr_task]);
-        for (int ix = 0; ix < Nx; ++ix)
-        {
-            for (int iy = 0; iy < Ny; ++iy)
-            {
-                size_t base = static_cast<size_t>(ix * Ny + iy) * Nz;
-                for (int iz = 0; iz < Nz; ++iz)
-                {
-                    double angle = ix * paras[0] + iy * paras[1] + iz * paras[2];
-                    dstcos[base + iz] = std::cos(angle);
-                    dstsin[base + iz] = std::sin(angle);
-                }
-            }
-        }
-    }
-}
-
-void mat_split(
-    const double* src,
-    const std::array<double*, 8>& dst,
-    const std::array<int, 3>& size)
-{
-    const int Nx = size[0];
-    const int Ny = size[1];
-    const int Nz = size[2];
-
-    const int Nx2 = Nx / 2;
-    const int Ny2 = Ny / 2;
-    const int Nz2 = Nz / 2;
-
-    for (int part = 0; part < 8; ++part)
-    {
-        const double* local_src = src
-            + ((part & 4) >> 2) * Nx2 * Ny * Nz
-            + ((part & 2) >> 1) * Ny2 * Nz
-            + (part & 1) * Nz2;
-        double* local_dst = dst[part];
-
-        for (int ix = 0; ix < Nx2; ++ix)
-        {
-            for (int iy = 0; iy < Ny2; ++iy)
-            {
-                const double* src_row = local_src + (ix * Ny + iy) * Nz;
-                double* dst_row = local_dst + (ix * Ny2 + iy) * Nz2;
-                std::memcpy(dst_row, src_row, sizeof(double) * Nz2);
-            }
-        }
-    }
-}
-
-void add_sub_by_seq(
-    const std::array<double*, 8>& dst,
-    const std::array<std::pair<int, int>, 4>& seq,
-    const std::array<int, 3>& halfsize)
-{
-    const int Nx = halfsize[0];
-    const int Ny = halfsize[1];
-    const int Nz = halfsize[2];
-    const int NxNy = Nx * Ny;
-
-    for (size_t itr_seq = 0; itr_seq < seq.size(); ++itr_seq)
-    {
-        double* dst0 = dst[seq[itr_seq].first];
-        double* dst1 = dst[seq[itr_seq].second];
-        for (int itr_xy = 0; itr_xy < NxNy; ++itr_xy)
-        {
-            size_t base = static_cast<size_t>(itr_xy) * Nz;
-            for (int itr_z = 0; itr_z < Nz; ++itr_z)
-            {
-                double temp = dst0[base + itr_z] + dst1[base + itr_z];
-                dst1[base + itr_z] = dst0[base + itr_z] - dst1[base + itr_z];
-                dst0[base + itr_z] = temp;
-            }
-        }
-    }
-}
-
-void mul_add_sub_by_seq(
-    const std::array<double*, 8>& dst_re,
-    const std::array<double*, 8>& dst_im,
-    const std::array<double*, 8>& src_re,
-    const std::array<double*, 8>& src_im,
-    const std::array<double*, 8>& src_mul,
-    const std::array<std::pair<int, int>, 4>& seq,
-    const std::array<int, 3>& halfsize)
-{
-    const int Nx = halfsize[0];
-    const int Ny = halfsize[1];
-    const int Nz = halfsize[2];
-    const int NxNy = Nx * Ny;
-
-    for (size_t itr_seq = 0; itr_seq < seq.size(); ++itr_seq)
-    {
-        int i0 = seq[itr_seq].first;
-        int i1 = seq[itr_seq].second;
-        double* dst_re0 = dst_re[i0];
-        double* dst_re1 = dst_re[i1];
-        double* dst_im0 = dst_im[i0];
-        double* dst_im1 = dst_im[i1];
-        const double* src_re0 = src_re[i0];
-        const double* src_re1 = src_re[i1];
-        const double* src_im0 = src_im[i0];
-        const double* src_im1 = src_im[i1];
-        const double* mul0 = src_mul[i0];
-        const double* mul1 = src_mul[i1];
-
-        for (int itr_xy = 0; itr_xy < NxNy; ++itr_xy)
-        {
-            size_t base = static_cast<size_t>(itr_xy) * Nz;
-            for (int itr_z = 0; itr_z < Nz; ++itr_z)
-            {
-                size_t idx = base + itr_z;
-                dst_re0[idx] = mul0[idx] * src_re0[idx];
-                dst_im0[idx] = mul0[idx] * src_im0[idx];
-                dst_re1[idx] = mul1[idx] * src_re1[idx];
-                dst_im1[idx] = mul1[idx] * src_im1[idx];
-
-                double tempre = dst_re0[idx] + dst_re1[idx];
-                dst_re1[idx] = dst_re0[idx] - dst_re1[idx];
-                dst_re0[idx] = tempre;
-
-                double tempim = dst_im0[idx] + dst_im1[idx];
-                dst_im1[idx] = dst_im0[idx] - dst_im1[idx];
-                dst_im0[idx] = tempim;
-            }
-        }
-    }
-}
 
 __global__ void ker_apply_k_3m(
     cufftDoubleComplex* __restrict__ dst,
@@ -244,8 +91,8 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
     std::array<double, 6> cell_para,
     std::array<double, 9> translational_part)
     : nx_logical_(nx_logical),
-      cell_para_(cell_para),
-      translational_part_(translational_part)
+      translational_part_(translational_part),
+      tables_(std::make_shared<CudaCrysFFTTables<KCacheDevice>>(cell_para))
 {
     try
     {
@@ -284,18 +131,46 @@ CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(
         M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
         M_complex_ = nx_physical_[0] * nx_physical_[1] * (nx_physical_[2] / 2 + 1);
 
-        d_work_.allocate(M_physical_);
         d_step1_.allocate(M_complex_);
         d_step2_.allocate(M_complex_);
 
         init_plans();
-        generate_twiddle_factors();
+        twiddles_ = generate_twiddle_factors();
     }
     catch (...)
     {
         release();
         throw;
     }
+}
+
+CudaCrysFFTRecursive3m::CudaCrysFFTRecursive3m(const CudaCrysFFTRecursive3m& other)
+    : nx_logical_(other.nx_logical_),
+      nx_physical_(other.nx_physical_),
+      M_logical_(other.M_logical_),
+      M_physical_(other.M_physical_),
+      M_complex_(other.M_complex_),
+      translational_part_(other.translational_part_),
+      fold_perm_(other.fold_perm_),
+      twiddles_(other.twiddles_),
+      tables_(other.tables_.shared())
+{
+    try
+    {
+        d_step1_.allocate(M_complex_);
+        d_step2_.allocate(M_complex_);
+        init_plans();
+    }
+    catch (...)
+    {
+        release();
+        throw;
+    }
+}
+
+std::unique_ptr<CudaCrysFFTBase> CudaCrysFFTRecursive3m::clone_sharing_tables() const
+{
+    return std::unique_ptr<CudaCrysFFTBase>(new CudaCrysFFTRecursive3m(*this));
 }
 
 CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
@@ -307,13 +182,11 @@ CudaCrysFFTRecursive3m::~CudaCrysFFTRecursive3m()
 void CudaCrysFFTRecursive3m::release()
 {
     // The caches and buffers are owning; the cuFFT plans need the explicit free
-    k_cache_.clear();
     k_current_ = nullptr;
-    multiplier_cache_.clear();
-    spare_caches_.clear();
+    tables_.reset();
+    twiddles_.reset();
     d_step1_.release();
     d_step2_.release();
-    d_work_.release();
 
     free_plans();
 }
@@ -342,155 +215,54 @@ void CudaCrysFFTRecursive3m::free_plans()
     plans_initialized_ = false;
 }
 
-void CudaCrysFFTRecursive3m::generate_twiddle_factors()
+std::shared_ptr<const CudaCrysFFTRecursive3m::Twiddles> CudaCrysFFTRecursive3m::generate_twiddle_factors() const
 {
+    auto twiddles = std::make_shared<Twiddles>();
+    auto& r_re = twiddles->re;
+    auto& r_im = twiddles->im;
     for (int i = 0; i < 8; ++i)
     {
-        r_re_[i].assign(M_physical_, 0.0);
-        r_im_[i].assign(M_physical_, 0.0);
+        r_re[i].assign(M_physical_, 0.0);
+        r_im[i].assign(M_physical_, 0.0);
     }
 
     auto operations = generate_m3_operations(translational_part_, nx_logical_);
     std::vector<std::tuple<double*, double*, std::array<double, 3>>> twiddle;
     for (size_t i = 0; i < operations.size(); ++i)
     {
-        twiddle.emplace_back(r_re_[i + 1].data(), r_im_[i + 1].data(), operations[i]);
+        twiddle.emplace_back(r_re[i + 1].data(), r_im[i + 1].data(), operations[i]);
     }
 
-    std::fill(r_re_[0].begin(), r_re_[0].end(), 1.0);
-    std::fill(r_im_[0].begin(), r_im_[0].end(), 0.0);
+    std::fill(r_re[0].begin(), r_re[0].end(), 1.0);
+    std::fill(r_im[0].begin(), r_im[0].end(), 0.0);
 
     twiddle_factor(twiddle, nx_physical_);
+    return twiddles;
 }
 
-CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache(double coeff)
+CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache(
+    double coeff, const std::array<double, 6>& cell, KCacheDevice cache)
 {
-    std::vector<double> kx(nx_logical_[0]);
-    std::vector<double> ky(nx_logical_[1]);
-    std::vector<double> kz(nx_logical_[2]);
-
-    double factor_Lx = 2.0 * kPi / cell_para_[0];
-    factor_Lx *= factor_Lx;
-    double factor_Ly = 2.0 * kPi / cell_para_[1];
-    factor_Ly *= factor_Ly;
-    double factor_Lz = 2.0 * kPi / cell_para_[2];
-    factor_Lz *= factor_Lz;
-
-    for (int ix = 0; ix < nx_logical_[0]; ++ix)
-    {
-        int temp = (ix > nx_logical_[0] / 2) ? (nx_logical_[0] - ix) : ix;
-        kx[ix] = temp * temp * factor_Lx;
-    }
-    for (int iy = 0; iy < nx_logical_[1]; ++iy)
-    {
-        int temp = (iy > nx_logical_[1] / 2) ? (nx_logical_[1] - iy) : iy;
-        ky[iy] = temp * temp * factor_Ly;
-    }
-    for (int iz = 0; iz < nx_logical_[2]; ++iz)
-    {
-        int temp = (iz > nx_logical_[2] / 2) ? (nx_logical_[2] - iz) : iz;
-        kz[iz] = temp * temp * factor_Lz;
-    }
-
-    std::vector<double> tempmat(static_cast<size_t>(M_logical_));
-    double factor = 1.0 / static_cast<double>(M_logical_);
-
-    for (int ix = 0; ix < nx_logical_[0]; ++ix)
-    {
-        for (int iy = 0; iy < nx_logical_[1]; ++iy)
-        {
-            size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
-            for (int iz = 0; iz < nx_logical_[2]; ++iz)
-            {
-                tempmat[base + iz] = std::exp(-(kx[ix] + ky[iy] + kz[iz]) * coeff) * factor;
-            }
-        }
-    }
-
-    return build_k_cache_from_tempmat(tempmat);
-}
-
-// Axes a multiplier sums k_d² over (bit 0: x, 1: y, 2: z), and whether it
-// carries the bond factor exp(-k² coeff)
-static int multiplier_axes(CudaCrysFFTRecursive3m::MultiplierType type)
-{
-    using MT = CudaCrysFFTRecursive3m::MultiplierType;
-    switch (type)
-    {
-        case MT::Kx2:  case MT::ExpKx2:  return 1;
-        case MT::Ky2:  case MT::ExpKy2:  return 2;
-        case MT::Kz2:  case MT::ExpKz2:  return 4;
-        case MT::Kxy2: case MT::ExpKxy2: return 3;
-        case MT::K2:   case MT::ExpK2:   return 7;
-    }
-    return 0;
-}
-static bool multiplier_has_bond(CudaCrysFFTRecursive3m::MultiplierType type)
-{
-    using MT = CudaCrysFFTRecursive3m::MultiplierType;
-    return type == MT::ExpKx2 || type == MT::ExpKy2 || type == MT::ExpKz2
-        || type == MT::ExpKxy2 || type == MT::ExpK2;
+    const std::vector<double> tempmat = logical_k_table(nx_logical_, cell, [coeff](double kx2, double ky2, double kz2) {
+        return std::exp(-(kx2 + ky2 + kz2) * coeff);
+    });
+    return build_k_cache_from_tempmat(tempmat, std::move(cache));
 }
 
 CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::generate_k_cache_from_multiplier(
-    MultiplierType type, double coeff)
+    MultiplierType type, double coeff, const std::array<double, 6>& cell, KCacheDevice cache)
 {
     const int axes = multiplier_axes(type);
     const bool with_bond = multiplier_has_bond(type);
-    std::vector<double> kx(nx_logical_[0]);
-    std::vector<double> ky(nx_logical_[1]);
-    std::vector<double> kz(nx_logical_[2]);
-
-    double factor_Lx = 2.0 * kPi / cell_para_[0];
-    factor_Lx *= factor_Lx;
-    double factor_Ly = 2.0 * kPi / cell_para_[1];
-    factor_Ly *= factor_Ly;
-    double factor_Lz = 2.0 * kPi / cell_para_[2];
-    factor_Lz *= factor_Lz;
-
-    for (int ix = 0; ix < nx_logical_[0]; ++ix)
-    {
-        int temp = (ix > nx_logical_[0] / 2) ? (nx_logical_[0] - ix) : ix;
-        kx[ix] = temp * temp * factor_Lx;
-    }
-    for (int iy = 0; iy < nx_logical_[1]; ++iy)
-    {
-        int temp = (iy > nx_logical_[1] / 2) ? (nx_logical_[1] - iy) : iy;
-        ky[iy] = temp * temp * factor_Ly;
-    }
-    for (int iz = 0; iz < nx_logical_[2]; ++iz)
-    {
-        int temp = (iz > nx_logical_[2] / 2) ? (nx_logical_[2] - iz) : iz;
-        kz[iz] = temp * temp * factor_Lz;
-    }
-
-    std::vector<double> tempmat(static_cast<size_t>(M_logical_));
-    double factor = 1.0 / static_cast<double>(M_logical_);
-
-    for (int ix = 0; ix < nx_logical_[0]; ++ix)
-    {
-        for (int iy = 0; iy < nx_logical_[1]; ++iy)
-        {
-            size_t base = static_cast<size_t>(ix * nx_logical_[1] + iy) * nx_logical_[2];
-            for (int iz = 0; iz < nx_logical_[2]; ++iz)
-            {
-                double kx2 = kx[ix];
-                double ky2 = ky[iy];
-                double kz2 = kz[iz];
-                double k2 = kx2 + ky2 + kz2;
-                const double k_axes = ((axes & 1) ? kx2 : 0.0) + ((axes & 2) ? ky2 : 0.0) + ((axes & 4) ? kz2 : 0.0);
-                double value = with_bond ? std::exp(-k2 * coeff) * k_axes : k_axes;
-
-                tempmat[base + iz] = value * factor;
-            }
-        }
-    }
-
-    return build_k_cache_from_tempmat(tempmat);
+    const std::vector<double> tempmat = logical_k_table(nx_logical_, cell, [axes, with_bond, coeff](double kx2, double ky2, double kz2) {
+        const double k_axes = ((axes & 1) ? kx2 : 0.0) + ((axes & 2) ? ky2 : 0.0) + ((axes & 4) ? kz2 : 0.0);
+        return with_bond ? std::exp(-(kx2 + ky2 + kz2) * coeff) * k_axes : k_axes;
+    });
+    return build_k_cache_from_tempmat(tempmat, std::move(cache));
 }
 
 CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_tempmat(
-    const std::vector<double>& tempmat)
+    const std::vector<double>& tempmat, KCacheDevice cache)
 {
     std::array<std::vector<double>, 8> k_split;
     std::array<double*, 8> k_split_ptr{};
@@ -514,9 +286,9 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     std::array<std::vector<double>, 8> k_im_host;
     std::array<double*, 8> k_re_ptr{};
     std::array<double*, 8> k_im_ptr{};
-    std::array<double*, 8> r_re_ptr{};
-    std::array<double*, 8> r_im_ptr{};
-    std::array<double*, 8> k_split_perm_ptr{};
+    std::array<const double*, 8> r_re_ptr{};
+    std::array<const double*, 8> r_im_ptr{};
+    std::array<const double*, 8> k_split_perm_ptr{};
 
     for (int i = 0; i < 8; ++i)
     {
@@ -524,8 +296,8 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
         k_im_host[i].assign(M_physical_, 0.0);
         k_re_ptr[i] = k_re_host[i].data();
         k_im_ptr[i] = k_im_host[i].data();
-        r_re_ptr[i] = r_re_[i].data();
-        r_im_ptr[i] = r_im_[i].data();
+        r_re_ptr[i] = twiddles_->re[i].data();
+        r_im_ptr[i] = twiddles_->im[i].data();
         // Twiddle r_p pairs with S_{fold_perm_[p]} (translation-parity
         // permutation; identity when all generator translations are even in
         // grid units).
@@ -535,15 +307,9 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
     constexpr std::array<std::pair<int, int>, 4> seq3{{{0,7},{6,1},{2,5},{4,3}}};
     mul_add_sub_by_seq(k_re_ptr, k_im_ptr, r_re_ptr, r_im_ptr, k_split_perm_ptr, seq3, halfsize);
 
-    // Reuse the buffers of a cache dropped by a cell change when one is left;
-    // allocating and copying on the default stream would stall the other streams
-    KCacheDevice cache;
-    if (!spare_caches_.empty())
-    {
-        cache = std::move(spare_caches_.back());
-        spare_caches_.pop_back();
-    }
-    // on failure the local cache releases its tables
+    // `cache` holds the buffers of a cache dropped by a cell change when one is
+    // left; allocating and copying on the default stream would stall the other
+    // streams. On failure the local cache releases its tables
     for (int i = 0; i < 8; ++i)
     {
         if (cache.re[i].empty())
@@ -563,41 +329,24 @@ CudaCrysFFTRecursive3m::KCacheDevice CudaCrysFFTRecursive3m::build_k_cache_from_
 
 void CudaCrysFFTRecursive3m::set_cell_para(const std::array<double, 6>& cell_para)
 {
-    if (cell_para[0] == cell_para_[0] &&
-        cell_para[1] == cell_para_[1] &&
-        cell_para[2] == cell_para_[2])
-    {
-        return;
-    }
-    cell_para_ = cell_para;
-
-    // Keep the device buffers for the caches the next steps rebuild.
-    // Reusing the buffers is safe because the computations synchronize every stream
-    // before update_laplacian_operator() can change the cell; set_cell_para() must
-    // not run while a kernel may still read the old tables.
-    for (auto& kv : k_cache_)
-        spare_caches_.push_back(std::move(kv.second));
-    k_cache_.clear();
-    k_current_ = nullptr;
-
-    for (auto& kv : multiplier_cache_)
-        spare_caches_.push_back(std::move(kv.second));
-    multiplier_cache_.clear();
+    // Changes the cell of every object sharing the caches (no-op for the current cell)
+    tables_.shared()->set_cell(cell_para);
+    if (tables_.refresh())
+        k_current_ = nullptr;
 }
-
 
 void CudaCrysFFTRecursive3m::set_contour_step(double coeff)
 {
+    if (tables_.refresh())   // another object changed the cell
+        k_current_ = nullptr;
     if (k_current_ && coeff == coeff_current_)
         return;
 
-    auto it = k_cache_.find(coeff);
-    if (it == k_cache_.end())
-    {
-        it = k_cache_.emplace(coeff, generate_k_cache(coeff)).first;
-    }
+    k_current_ = &tables_.get({kBoltzmann, 0, coeff},
+        [&](const std::array<double, 6>& cell, KCacheDevice cache) {
+            return generate_k_cache(coeff, cell, std::move(cache));
+        });
     coeff_current_ = coeff;
-    k_current_ = &it->second;
 }
 
 void CudaCrysFFTRecursive3m::diffusion(double* d_q_in, double* d_q_out)
@@ -607,8 +356,10 @@ void CudaCrysFFTRecursive3m::diffusion(double* d_q_in, double* d_q_out)
 
 void CudaCrysFFTRecursive3m::diffusion(double* d_q_in, double* d_q_out, cudaStream_t stream)
 {
+    if (tables_.refresh())   // another object changed the cell
+        k_current_ = nullptr;
     if (!k_current_)
-        throw_with_line_number("CudaCrysFFTRecursive3m::set_contour_step must be called before diffusion().");
+        throw_with_line_number("CudaCrysFFTRecursive3m::set_contour_step must be called before diffusion() and after a cell change.");
 
     apply_with_cache(*k_current_, d_q_in, d_q_out, stream);
 }
@@ -624,8 +375,7 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
         CUDA_CHECK(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice, stream_));
     }
 
-    if (cufftExecD2Z(plan_r2c_, d_work, d_step1_) != CUFFT_SUCCESS)
-        throw_with_line_number("CudaCrysFFTRecursive3m cufftExecD2Z failed.");
+    CUFFT_CHECK(cufftExecD2Z(plan_r2c_, d_work, d_step1_));
 
     const int threads = 256;
     const int blocks = grid_blocks(M_complex_, threads);
@@ -639,23 +389,28 @@ void CudaCrysFFTRecursive3m::apply_with_cache(
         nx_physical_[0], nx_physical_[1], nx_physical_[2], nx_physical_[2] / 2 + 1);
     CUDA_CHECK_LAUNCH();
 
-    if (cufftExecZ2D(plan_c2r_, d_step2_, d_work) != CUFFT_SUCCESS)
-        throw_with_line_number("CudaCrysFFTRecursive3m cufftExecZ2D failed.");
+    CUFFT_CHECK(cufftExecZ2D(plan_c2r_, d_step2_, d_work));
+}
+
+const CudaCrysFFTRecursive3m::KCacheDevice& CudaCrysFFTRecursive3m::multiplier_cache(MultiplierType type, double coeff)
+{
+    // Types without the bond factor do not depend on coeff; normalize the cache key
+    const double key_coeff = multiplier_has_bond(type) ? coeff : 0.0;
+    return tables_.get({kMultiplier, static_cast<int>(type), key_coeff},
+        [&](const std::array<double, 6>& cell, KCacheDevice cache) {
+            return generate_k_cache_from_multiplier(type, coeff, cell, std::move(cache));
+        });
 }
 
 void CudaCrysFFTRecursive3m::apply_multiplier(
     double* d_q_in, double* d_q_out, MultiplierType type, double coeff, cudaStream_t stream)
 {
-    // Types without the bond factor do not depend on coeff; normalize the cache key
-    auto key = std::make_pair(static_cast<int>(type), multiplier_has_bond(type) ? coeff : 0.0);
+    apply_with_cache(multiplier_cache(type, coeff), d_q_in, d_q_out, stream);
+}
 
-    auto it = multiplier_cache_.find(key);
-    if (it == multiplier_cache_.end())
-    {
-        it = multiplier_cache_.emplace(key, generate_k_cache_from_multiplier(type, coeff)).first;
-    }
-
-    apply_with_cache(it->second, d_q_in, d_q_out, stream);
+void CudaCrysFFTRecursive3m::prepare_multiplier(MultiplierType type, double coeff)
+{
+    multiplier_cache(type, coeff);
 }
 
 void CudaCrysFFTRecursive3m::set_stream(cudaStream_t stream)

@@ -34,36 +34,32 @@
 #include "PropagatorComputation.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 static double compute_Q(const std::string& platform, const std::string& chain_model,
                         const std::vector<int>& nx, const std::vector<double>& lx,
                         const std::string& bc_kind, double ds,
                         const std::vector<double>& w)
 {
-    AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, false);
+    std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, false);
 
     std::map<std::string, double> bond_lengths = {{"A", 1.0}};
-    Molecules* molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
+    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
 
     std::vector<BlockInput> blocks = {{"A", 1.0, 0, 1}};
     molecules->add_polymer(1.0, blocks);
 
-    PropagatorComputationOptimizer* optimizer =
-        new PropagatorComputationOptimizer(molecules, false);
+    auto optimizer =
+        std::make_unique<PropagatorComputationOptimizer>(molecules.get(), false);
 
     std::vector<std::string> bc(2 * nx.size(), bc_kind);
-    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, bc);
+    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, bc);
 
-    PropagatorComputation<double>* solver =
-        factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
+    std::unique_ptr<PropagatorComputation<double>> solver =
+        factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4");
     solver->compute_propagators({{"A", w.data()}});
     double Q = solver->get_total_partition(0);
 
-    delete solver;
-    delete cb;
-    delete optimizer;
-    delete molecules;
-    delete factory;
     return Q;
 }
 
@@ -79,7 +75,8 @@ int main()
         if (platforms.size() < 2)
         {
             std::cout << "Fewer than two real backends available; skipping." << std::endl;
-            return 0;
+            // (a CUDA build without a visible GPU fails instead)
+            return cuda_part_missing() ? 1 : 0;
         }
 
         struct Case { std::string chain; std::string bc; std::vector<int> nx; std::vector<double> lx; };
@@ -131,7 +128,7 @@ int main()
         if (all_ok)
         {
             std::cout << "All non-periodic CPU/CUDA equivalence tests PASSED." << std::endl;
-            return 0;
+            return cuda_part_missing() ? 1 : 0;
         }
         std::cout << "Non-periodic CPU/CUDA equivalence FAILURES detected." << std::endl;
         return -1;

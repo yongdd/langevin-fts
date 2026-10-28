@@ -1910,68 +1910,6 @@ __global__ void kernel_dct2_3d_postOp_z_lut(
     }
 }
 
-__global__ void kernel_dct2_3d_postOp_z_zmajor(
-    const double* __restrict__ in,
-    double* __restrict__ out,
-    int Nx, int Ny, int Nz)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = Nx * Ny * Nz;
-
-    while (idx < total) {
-        int iz = idx % Nz;
-        int iy = (idx / Nz) % Ny;
-        int ix = idx / (Nz * Ny);
-
-        int in_base = (ix * Ny + iy) * Nz;
-        int out_idx = (iz * Nx + ix) * Ny + iy;
-
-        if (iz == 0) {
-            out[out_idx] = in[in_base] * 2.0;
-        } else {
-            double sina, cosa;
-            sincos(iz * M_PI / (2.0 * Nz), &sina, &cosa);
-            double Ta = in[in_base + iz] + in[in_base + (Nz - iz)];
-            double Tb = in[in_base + iz] - in[in_base + (Nz - iz)];
-            out[out_idx] = Ta * cosa + Tb * sina;
-        }
-
-        idx += blockDim.x * gridDim.x;
-    }
-}
-
-__global__ void kernel_dct2_3d_postOp_z_lut_zmajor(
-    const double* __restrict__ in,
-    double* __restrict__ out,
-    int Nx, int Ny, int Nz,
-    const double* __restrict__ sin_lut,
-    const double* __restrict__ cos_lut)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = Nx * Ny * Nz;
-
-    while (idx < total) {
-        int iz = idx % Nz;
-        int iy = (idx / Nz) % Ny;
-        int ix = idx / (Nz * Ny);
-
-        int in_base = (ix * Ny + iy) * Nz;
-        int out_idx = (iz * Nx + ix) * Ny + iy;
-
-        if (iz == 0) {
-            out[out_idx] = in[in_base] * 2.0;
-        } else {
-            double sina = sin_lut[iz];
-            double cosa = cos_lut[iz];
-            double Ta = in[in_base + iz] + in[in_base + (Nz - iz)];
-            double Tb = in[in_base + iz] - in[in_base + (Nz - iz)];
-            out[out_idx] = Ta * cosa + Tb * sina;
-        }
-
-        idx += blockDim.x * gridDim.x;
-    }
-}
-
 __global__ void kernel_dct2_3d_preOp_y(
     const double* __restrict__ in,
     cufftDoubleComplex* __restrict__ out,
@@ -2224,77 +2162,6 @@ __global__ void kernel_dct3_3d_preOp_z_lut(
     }
 }
 
-__global__ void kernel_dct3_3d_preOp_z_from_zmajor(
-    const double* __restrict__ in_zmajor,
-    double* __restrict__ out_xyz,
-    int Nx, int Ny, int Nz)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = Nx * Ny * (Nz / 2);
-
-    while (idx < total) {
-        int iz = idx % (Nz / 2);
-        int iy = (idx / (Nz / 2)) % Ny;
-        int ix = idx / ((Nz / 2) * Ny);
-
-        int base = (ix * Ny + iy) * Nz;
-        int iz1 = iz + 1;
-        int iz2 = Nz - iz - 1;
-
-        double a = in_zmajor[(iz1 * Nx + ix) * Ny + iy];
-        double b = in_zmajor[(iz2 * Nx + ix) * Ny + iy];
-
-        double sina, cosa;
-        sincos(iz1 * M_PI / (2.0 * Nz), &sina, &cosa);
-        double Ta = a + b;
-        double Tb = a - b;
-
-        if (iz == 0)
-            out_xyz[base] = in_zmajor[ix * Ny + iy];
-
-        out_xyz[base + iz1] = Ta * sina + Tb * cosa;
-        out_xyz[base + iz2] = Ta * cosa - Tb * sina;
-
-        idx += blockDim.x * gridDim.x;
-    }
-}
-
-__global__ void kernel_dct3_3d_preOp_z_from_zmajor_lut(
-    const double* __restrict__ in_zmajor,
-    double* __restrict__ out_xyz,
-    int Nx, int Ny, int Nz,
-    const double* __restrict__ sin_lut,
-    const double* __restrict__ cos_lut)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = Nx * Ny * (Nz / 2);
-
-    while (idx < total) {
-        int iz = idx % (Nz / 2);
-        int iy = (idx / (Nz / 2)) % Ny;
-        int ix = idx / ((Nz / 2) * Ny);
-
-        int base = (ix * Ny + iy) * Nz;
-        int iz1 = iz + 1;
-        int iz2 = Nz - iz - 1;
-
-        double a = in_zmajor[(iz1 * Nx + ix) * Ny + iy];
-        double b = in_zmajor[(iz2 * Nx + ix) * Ny + iy];
-
-        double sina = sin_lut[iz1];
-        double cosa = cos_lut[iz1];
-        double Ta = a + b;
-        double Tb = a - b;
-
-        if (iz == 0)
-            out_xyz[base] = in_zmajor[ix * Ny + iy];
-
-        out_xyz[base + iz1] = Ta * sina + Tb * cosa;
-        out_xyz[base + iz2] = Ta * cosa - Tb * sina;
-
-        idx += blockDim.x * gridDim.x;
-    }
-}
 __global__ void kernel_dct3_3d_postOp_z(
     const cufftDoubleComplex* __restrict__ in,
     double* __restrict__ out,
@@ -3693,7 +3560,8 @@ __global__ void kernel_dst4_3d_postOp_x(
 // be odd (even logical N); the DST-2 kernels (all dimensions) and the 2D/3D DST-3
 // kernels assume even lengths. Unsupported lengths are refused here instead of
 // returning wrong values (nothing in the library reaches them: CudaFFT rejects odd
-// non-periodic grids and the CrysFFT uses DCT-2/3 only).
+// absorbing axes, its odd reflecting axes take the DCT-2/3 of any length, and the
+// CrysFFT uses DCT-2/3 only).
 //------------------------------------------------------------------------------
 static const char* transform_type_name(CudaTransformType type)
 {
@@ -3760,6 +3628,23 @@ static size_t shared_bytes_1d(CudaTransformType type, int N)
         case CUDA_DST_3: return sizeof(double) * (N + 2);
         default:         return 0;
     }
+}
+
+// The 2D/3D DST-3 kernels (executeX/Y/Z_DST3) stage one line, N+2 values, in the
+// shared memory of a block; the other 2D/3D kernels use none
+static void check_shared_line(CudaTransformType type, int N, const char* axis, int dim)
+{
+    if (type != CUDA_DST_3)
+        return;
+    int device = 0, max_shared = 0;
+    CUDA_CHECK(cudaGetDevice(&device));
+    CUDA_CHECK(cudaDeviceGetAttribute(&max_shared, cudaDevAttrMaxSharedMemoryPerBlock, device));
+    const size_t needed = sizeof(double) * (static_cast<size_t>(N) + 2);
+    if (needed > static_cast<size_t>(max_shared))
+        throw std::runtime_error("CudaRealTransform: the " + std::to_string(dim) + "D DST-3 (absorbing axis) of " +
+            axis + " = " + std::to_string(N) + " points stages " + std::to_string(needed) +
+            " bytes in shared memory, more than the " + std::to_string(max_shared) +
+            " bytes a block may use on this GPU; use a CPU platform for this grid (platform \"auto\" does).");
 }
 
 CudaRealTransform1D::CudaRealTransform1D(int N, CudaTransformType type)
@@ -4068,6 +3953,8 @@ CudaRealTransform2D::CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_
         check_transform_length(type_x_, Nx_, "Nx", 2);
         check_transform_length(type_y_, Ny_, "Ny", 2);
         check_extended_size({type_x_, type_y_}, {Nx_, Ny_});
+        check_shared_line(type_x_, Nx_, "Nx", 2);
+        check_shared_line(type_y_, Ny_, "Ny", 2);
 
         init();
         set_stream(stream_);
@@ -4654,6 +4541,9 @@ CudaRealTransform3D::CudaRealTransform3D(int Nx, int Ny, int Nz,
         check_transform_length(type_y_, Ny_, "Ny", 3);
         check_transform_length(type_z_, Nz_, "Nz", 3);
         check_extended_size({type_x_, type_y_, type_z_}, {Nx_, Ny_, Nz_});
+        check_shared_line(type_x_, Nx_, "Nx", 3);
+        check_shared_line(type_y_, Ny_, "Ny", 3);
+        check_shared_line(type_z_, Nz_, "Nz", 3);
 
         init();
         set_stream(stream_);
@@ -4845,105 +4735,6 @@ void CudaRealTransform3D::execute(double* d_data, cudaStream_t stream)
 {
     set_stream(stream);
     execute(d_data);
-}
-
-void CudaRealTransform3D::execute_z_dct2(double* d_data)
-{
-    if (!initialized_)
-        throw std::runtime_error("CudaRealTransform3D not initialized");
-
-    executeZ_DCT2(d_data);
-    CUDA_CHECK(cudaMemcpyAsync(d_data, d_temp_, sizeof(double) * M_,
-                                    cudaMemcpyDeviceToDevice, stream_));
-}
-
-void CudaRealTransform3D::execute_z_dct2(double* d_data, cudaStream_t stream)
-{
-    set_stream(stream);
-    execute_z_dct2(d_data);
-}
-
-void CudaRealTransform3D::execute_z_dct2_to_zmajor(double* d_data, double* d_out_zmajor)
-{
-    if (!initialized_)
-        throw std::runtime_error("CudaRealTransform3D not initialized");
-    if (type_z_ != CUDA_DCT_2)
-        throw std::runtime_error("execute_z_dct2_to_zmajor requires DCT-2 along Z");
-
-    int blockSize = 256;
-    int half_z = Nz_ / 2 + 1;
-    int total_preOp = Nx_ * Ny_ * half_z;
-    int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
-    int numBlocks_postOp = grid_blocks(M_, blockSize);
-
-    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
-
-    kernel_dct2_3d_preOp_z<<<numBlocks_preOp, blockSize, 0, stream_>>>(
-        d_data, d_complex, Nx_, Ny_, Nz_);
-    CUDA_CHECK_LAUNCH();
-    CUFFT_CHECK(cufftExecZ2D(plan_z_, d_complex, d_work_));
-    if (!dct2_sin_z_.empty() && !dct2_cos_z_.empty())
-        kernel_dct2_3d_postOp_z_lut_zmajor<<<numBlocks_postOp, blockSize, 0, stream_>>>(
-            d_work_, d_out_zmajor, Nx_, Ny_, Nz_, dct2_sin_z_, dct2_cos_z_);
-    else
-        kernel_dct2_3d_postOp_z_zmajor<<<numBlocks_postOp, blockSize, 0, stream_>>>(
-            d_work_, d_out_zmajor, Nx_, Ny_, Nz_);
-    CUDA_CHECK_LAUNCH();
-}
-
-void CudaRealTransform3D::execute_z_dct2_to_zmajor(double* d_data, double* d_out_zmajor, cudaStream_t stream)
-{
-    set_stream(stream);
-    execute_z_dct2_to_zmajor(d_data, d_out_zmajor);
-}
-
-void CudaRealTransform3D::execute_z_dct3(double* d_data)
-{
-    if (!initialized_)
-        throw std::runtime_error("CudaRealTransform3D not initialized");
-
-    executeZ_DCT3(d_data);
-    CUDA_CHECK(cudaMemcpyAsync(d_data, d_temp_, sizeof(double) * M_,
-                                    cudaMemcpyDeviceToDevice, stream_));
-}
-
-void CudaRealTransform3D::execute_z_dct3(double* d_data, cudaStream_t stream)
-{
-    set_stream(stream);
-    execute_z_dct3(d_data);
-}
-
-void CudaRealTransform3D::execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz)
-{
-    if (!initialized_)
-        throw std::runtime_error("CudaRealTransform3D not initialized");
-    if (type_z_ != CUDA_DCT_3)
-        throw std::runtime_error("execute_z_dct3_from_zmajor requires DCT-3 along Z");
-
-    int blockSize = 256;
-    int total_preOp = Nx_ * Ny_ * (Nz_ / 2);
-    int numBlocks_preOp = grid_blocks(total_preOp, blockSize);
-    int numBlocks_postOp = grid_blocks(M_, blockSize);
-
-    if (!dct3_sin_z_.empty() && !dct3_cos_z_.empty())
-        kernel_dct3_3d_preOp_z_from_zmajor_lut<<<numBlocks_preOp, blockSize, 0, stream_>>>(
-            d_in_zmajor, d_out_xyz, Nx_, Ny_, Nz_, dct3_sin_z_, dct3_cos_z_);
-    else
-        kernel_dct3_3d_preOp_z_from_zmajor<<<numBlocks_preOp, blockSize, 0, stream_>>>(
-            d_in_zmajor, d_out_xyz, Nx_, Ny_, Nz_);
-    CUDA_CHECK_LAUNCH();
-
-    cufftDoubleComplex* d_complex = reinterpret_cast<cufftDoubleComplex*>(d_x1_.get());
-    CUFFT_CHECK(cufftExecD2Z(plan_z_, d_out_xyz, d_complex));
-    kernel_dct3_3d_postOp_z<<<numBlocks_postOp, blockSize, 0, stream_>>>(
-        d_complex, d_out_xyz, Nx_, Ny_, Nz_);
-    CUDA_CHECK_LAUNCH();
-}
-
-void CudaRealTransform3D::execute_z_dct3_from_zmajor(double* d_in_zmajor, double* d_out_xyz, cudaStream_t stream)
-{
-    set_stream(stream);
-    execute_z_dct3_from_zmajor(d_in_zmajor, d_out_xyz);
 }
 
 //------------------------------------------------------------------------------

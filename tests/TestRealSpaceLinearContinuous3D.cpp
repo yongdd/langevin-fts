@@ -414,8 +414,9 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            delete cb;
+            // A computation uses its box until it is destroyed
             delete solver;
+            delete cb;
         }
         return 0;
     }

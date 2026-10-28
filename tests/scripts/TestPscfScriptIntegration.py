@@ -58,9 +58,9 @@ def test_imported_script_converges(tmp_path, case):
                                  metadata=pscf / 'metadata.json', platform=platform)
     # Start outside the bundle; the generated script must resolve its own inputs.
     result = subprocess.run([sys.executable, str(bundle / 'simulation.py')], cwd=tmp_path,
-                            capture_output=True, text=True, timeout=120)
-    (tmp_path / 'polymerfts.log').write_text(result.stdout + '\n' + result.stderr)
-    assert result.returncode == 0, (tmp_path / 'polymerfts.log').read_text()[-6000:]
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+    (tmp_path / 'polymerfts.log').write_text(result.stdout + '\n' + result.stderr, encoding='utf-8')
+    assert result.returncode == 0, (tmp_path / 'polymerfts.log').read_text(encoding='utf-8')[-6000:]
     snapshots = [bundle / 'results/out' / (name + '.mat') for name in ('omega', 'rho', 'thermo')]
     assert all(path.is_file() for path in snapshots)
     fields = loadmat(snapshots[0], simplify_cells=True)
@@ -78,5 +78,5 @@ def test_imported_script_converges(tmp_path, case):
         np.testing.assert_allclose(fields['angles'], p['angles'], rtol=0, atol=1e-8)
     else:
         assert abs(float(np.asarray(fields['lx']).item()) - p['lx'][0]) > 1e-3
-    assert (bundle / 'results/polymer_0.png').is_file()
-    assert not (tmp_path / 'polymer_0.png').exists()
+    # The script writes only its results; no chain architecture figures
+    assert not list(bundle.rglob('polymer_*.png')) and not (tmp_path / 'polymer_0.png').exists()

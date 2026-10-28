@@ -27,23 +27,24 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Cache conda packages
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /home/runner/conda_pkgs_dir
-        key: conda-defaults-${{ runner.os }}-${{ hashFiles('environment.yml') }}
+        key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
-    - name: Install the Anaconda environment
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Install the conda environment
+      uses: conda-incubator/setup-miniconda@v4
       with:
+        miniforge-version: latest
         activate-environment: polymerfts
-        auto-activate-base: false
+        auto-activate: false
         environment-file: environment.yml
-        channels: defaults
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
         pkgs-dirs: /home/runner/conda_pkgs_dir
 
     - name: Test script utilities
@@ -56,30 +57,30 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Cache conda packages
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /home/runner/conda_pkgs_dir
-        key: conda-defaults-${{ runner.os }}-${{ hashFiles('environment.yml') }}
+        key: conda-forge-${{ runner.os }}-${{ hashFiles('environment.yml') }}
 
-    - name: Install the Anaconda environment
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Install the conda environment
+      uses: conda-incubator/setup-miniconda@v4
       with:
+        miniforge-version: latest
         activate-environment: polymerfts
-        auto-activate-base: false
+        auto-activate: false
         environment-file: environment.yml
-        channels: defaults
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
         pkgs-dirs: /home/runner/conda_pkgs_dir
 
     - name: Install MKL and FFTW
       shell: bash -l {0}
       run: |
-        conda install -y --override-channels -c defaults --freeze-installed \
-          mkl=2025.0.0 mkl-include=2025.0.0 fftw
+        conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 
     - name: Record installed dependencies
       shell: bash -l {0}
@@ -154,6 +155,56 @@ jobs:
             raise RuntimeError("Uninstall left package metadata")
         PY
 
+  build-windows:
+    name: Build and Test (Windows, MSVC, MKL + FFTW)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: cmd /C CALL {0}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    # The Windows installer of Miniforge 26.9.4-0 fails in `conda init` ("needs sudo"
+    # for Scripts\conda.exe, conda-forge/miniforge#913). Return to latest once a
+    # fixed installer is released.
+    - name: Install the conda environment
+      uses: conda-incubator/setup-miniconda@v4
+      with:
+        miniforge-version: 26.7.2-1
+        activate-environment: polymerfts
+        auto-activate: false
+        environment-file: environment.yml
+        channels: conda-forge
+        channel-priority: strict
+        conda-remove-defaults: "true"
+
+    - name: Test script utilities
+      run: python -m pytest tests/scripts -q
+
+    - name: Install MKL and FFTW
+      run: conda install -y --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
+
+    # docs/getting-started/Installation.md, Windows. vcvars64 runs after the conda
+    # activation, so that MSVC's link.exe comes before the MSYS link of Library\usr\bin;
+    # CMake and Ninja are those of the environment (MSVC builds need CMake 3.30+), and
+    # VSLANG keeps the /showIncludes text of cl in English for Ninja's dependencies.
+    - name: Build and run the basic tests
+      run: |
+        set VSLANG=1033
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+        call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+        set "BIN=%CONDA_PREFIX%\Library\bin"
+        "%BIN%\cmake.exe" --version || exit /b 1
+        "%BIN%\cmake.exe" -S . -B build-tests -G Ninja -DCMAKE_MAKE_PROGRAM="%BIN%\ninja.exe" ^
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" ^
+          -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CUDA=OFF ^
+          -DPOLYMERFTS_BUILD_TESTS=ON -DPOLYMERFTS_WERROR=ON || exit /b 1
+        "%BIN%\cmake.exe" --build build-tests --parallel || exit /b 1
+        "%BIN%\ctest.exe" --test-dir build-tests -L basic --output-on-failure --timeout 900 || exit /b 1
+
   lint:
     name: Code Quality Checks
     runs-on: ubuntu-latest
@@ -164,21 +215,22 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
-    - name: Set up Anaconda Python
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Set up Python
+      uses: conda-incubator/setup-miniconda@v4
       with:
+        miniforge-version: latest
         activate-environment: lint
-        auto-activate-base: false
-        python-version: "3.14"
-        channels: defaults
+        auto-activate: false
+        python-version: "3.15"
+        channels: conda-forge
         channel-priority: strict
-        conda-remove-defaults: "false"
+        conda-remove-defaults: "true"
 
     - name: Install linting tools
       run: |
-        conda install -y --override-channels -c defaults flake8
+        conda install -y --override-channels -c conda-forge flake8
 
     - name: Run flake8 (critical errors only)
       run: |
@@ -189,7 +241,7 @@ jobs:
         flake8 src/python --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: "22"
 
@@ -205,7 +257,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check CPU and CUDA computation/solver classes match
       run: |

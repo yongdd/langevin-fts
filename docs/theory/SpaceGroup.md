@@ -187,6 +187,7 @@ import numpy as np
 # Create space group object
 nx = [64, 64, 64]
 sg = SpaceGroup(nx, "Ia-3d", hall_number=530)
+sg.display_info()
 
 # Output:
 # ---------- Space Group ----------
@@ -246,7 +247,7 @@ before passing it in. SCFT chooses:
 | Hexagonal | a, c | nx = ny |
 | Trigonal | a, c | nx = ny |
 | Orthorhombic | a, b, c | none |
-| Monoclinic | a, b, c, β | none |
+| Monoclinic | a, b, c and the angle between the axes perpendicular to the unique axis (β for unique axis b) | none |
 | Triclinic | a, b, c, α, β, γ | none |
 
 ### Grid Divisibility Requirements
@@ -287,6 +288,8 @@ Metadata is exposed through getter methods (not attributes):
 | `get_spacegroup_number()` | International space group number (1-230) |
 | `get_spacegroup_symbol()` | ITA short symbol |
 | `get_crystal_system()` | Crystal system name |
+| `check_cell(lx, angles)` | Raise unless the cell (lengths, angles in degrees) belongs to the crystal system of the group; the computation box applies the same check |
+| `display_info()` | Print the group, its crystal system and the basis sizes (construction prints nothing) |
 | `uses_hexagonal_axes()` | True for hexagonal/trigonal groups in a hexagonal-axes setting (a = b, γ = 120°); False for rhombohedral-axes R settings (a = b = c, α = β = γ) |
 | `get_n_symmetry_ops()` | Number of symmetry operations |
 | `get_n_reduced_basis()` | Number of reduced-basis points (irreducible mesh points, or the physical sub-grid size when a physical basis is enabled) |
@@ -394,7 +397,10 @@ a *relative* tolerance on the off-diagonal metric elements
 ($`|G^{*}_{ij}| > 10^{-12} \cdot \max_d G^{*}_{dd}`$); orthogonal cells use the
 principal-zone representative unchanged (both conventions coincide there).
 The same representative is used in the k-space Boltzmann tables, the stress
-tables, and the CrysFFT ObliqueZ generators.
+tables, and the CrysFFT ObliqueZ generators (`src/common/MinimalFormAlias.h`).
+The search is exact rather than limited to one period around the centered
+index, which misses the minimum when the grid spacing differs strongly between
+axes (e.g. 4×32 points on a 120-degree cell with equal lengths).
 
 **Initial-guess note**: analytic initial fields for hexagonal phases should
 be built with the hybrid convention (in-plane $`i/N`$, cell-centered $`z`$) to
@@ -452,8 +458,10 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 - The box must match the crystal system of the group (cubic: a = b = c and 90° angles;
   tetragonal: a = b and 90° angles; orthorhombic: 90° angles; hexagonal/trigonal on
   hexagonal axes: a = b and γ = 120°;
-  rhombohedral axes: a = b = c and α = β = γ, without box relaxation). `SCFT` raises a
-  `ValidationError` otherwise.
+  rhombohedral axes: a = b = c and α = β = γ, without box relaxation; monoclinic: the
+  unique axis perpendicular to the other two; triclinic: any cell). `SCFT` raises a
+  `ValidationError` otherwise. With box relaxation, a monoclinic group frees the angle
+  between the two axes perpendicular to its unique axis and a triclinic group all three.
 - Beta feature - validate results carefully
 - Requires `spglib` library
 - **Initial-field symmetry**: input fields are projected onto the **full**

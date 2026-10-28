@@ -35,6 +35,7 @@
 #include <numbers>
 #include <stdexcept>
 #include "MklFFT.h"
+#include "MklDctLines.h"
 #include "MklDftiLayout.h"
 #include "MklStatusCheck.h"
 
@@ -339,171 +340,29 @@ void MklFFT<T, DIM>::getStrides(int dim, int& stride, int& num_transforms) const
 }
 
 //------------------------------------------------------------------------------
-// DCT-II Forward via FFT (O(N log N))
-// Based on cuHelmholtz algorithm
+// DCT-II Forward via FFT (O(N log N), cuHelmholtz algorithm; MklDctLines.h)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void MklFFT<T, DIM>::applyDCT2Forward(double* data, double* temp, int dim)
 {
-    int n = nx_[dim];
     int stride, num_transforms;
     getStrides(dim, stride, num_transforms);
-
-    const double* cos_tbl = cos_tables_[dim].data();
-    const double* sin_tbl = sin_tables_[dim].data();
-
-    int complex_size = n / 2 + 1;
-
-    // Thread-local buffers
-    thread_local std::vector<double> slice;
-    thread_local std::vector<std::complex<double>> fft_in;
-    thread_local std::vector<double> fft_out;
-
-    if (static_cast<int>(slice.size()) < n)
-    {
-        slice.resize(n);
-        fft_in.resize(complex_size);
-        fft_out.resize(n);
-    }
-
-    for (int batch = 0; batch < num_transforms; ++batch)
-    {
-        for (int s = 0; s < stride; ++s)
-        {
-            int offset = batch * n * stride + s;
-
-            // Extract 1D slice (strided)
-            for (int j = 0; j < n; ++j)
-                slice[j] = data[offset + j * stride];
-
-            // DCT-II preprocessing: rearrange into complex format
-            // Based on cuHelmholtz preOp_dct2
-            fft_in[0] = std::complex<double>(slice[0], 0.0);
-            for (int k = 1; k < complex_size - 1; ++k)
-            {
-                double x_2k = slice[2 * k];
-                double x_2k_1 = slice[2 * k - 1];
-                fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
-            }
-            if (n % 2 == 0)
-            {
-                fft_in[n / 2] = std::complex<double>(slice[n - 1], 0.0);
-            }
-            else if (n > 1)  // odd n; a single point has only fft_in[0]
-            {
-                int k = n / 2;
-                double x_2k = slice[2 * k];
-                double x_2k_1 = slice[2 * k - 1];
-                fft_in[k] = std::complex<double>((x_2k + x_2k_1) / 2.0, -(x_2k_1 - x_2k) / 2.0);
-            }
-
-            // Inverse FFT (c2r)
-            // Cast complex to double* for MKL DFTI interface
-            mkl_dfti_check(DftiComputeBackward(dct_fft_backward_[dim],
-                                               reinterpret_cast<double*>(fft_in.data()),
-                                               fft_out.data()),
-                           "DftiComputeBackward (DCT-II)");
-
-            // DCT-II postprocessing: apply twiddle factors
-            // Based on cuHelmholtz postOp_dct2
-            // Match CUDA: DC * 2, others without scaling, then FFTW scaling (0.5)
-            temp[offset] = fft_out[0];  // DC component (2 * 0.5 = 1)
-            for (int k = 1; k <= n / 2; ++k)
-            {
-                double Ta = fft_out[k] + fft_out[n - k];
-                double Tb = fft_out[k] - fft_out[n - k];
-
-                // CUDA: no division, FFTW wants 0.5 scaling
-                double result_k = (Ta * cos_tbl[k] + Tb * sin_tbl[k]) * 0.5;
-                double result_nk = (Ta * sin_tbl[k] - Tb * cos_tbl[k]) * 0.5;
-
-                temp[offset + k * stride] = result_k;
-                if (k < n - k)
-                    temp[offset + (n - k) * stride] = result_nk;
-            }
-        }
-    }
-
-    // Copy temp to data
-    std::memcpy(data, temp, total_grid_ * sizeof(double));
+    // 0.5 x FFTW's REDFT10, the standard DCT-II (as FftwFFT)
+    mkl_dct2_lines(data, temp, nx_[dim], stride, num_transforms, dct_fft_backward_[dim],
+                   cos_tables_[dim].data(), sin_tables_[dim].data(), 0.5);
 }
 
 //------------------------------------------------------------------------------
-// DCT-III Backward via FFT (O(N log N))
-// Based on cuHelmholtz algorithm
+// DCT-III Backward via FFT (O(N log N), cuHelmholtz algorithm; MklDctLines.h)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void MklFFT<T, DIM>::applyDCT3Backward(double* data, double* temp, int dim)
 {
-    int n = nx_[dim];
     int stride, num_transforms;
     getStrides(dim, stride, num_transforms);
-
-    const double* cos_tbl = cos_tables_[dim].data();
-    const double* sin_tbl = sin_tables_[dim].data();
-
-    int complex_size = n / 2 + 1;
-
-    // Thread-local buffers
-    thread_local std::vector<double> slice;
-    thread_local std::vector<double> fft_in;
-    thread_local std::vector<std::complex<double>> fft_out;
-
-    if (static_cast<int>(slice.size()) < n)
-    {
-        slice.resize(n);
-        fft_in.resize(n);
-        fft_out.resize(complex_size);
-    }
-
-    for (int batch = 0; batch < num_transforms; ++batch)
-    {
-        for (int s = 0; s < stride; ++s)
-        {
-            int offset = batch * n * stride + s;
-
-            // Extract 1D slice (strided)
-            for (int j = 0; j < n; ++j)
-                slice[j] = data[offset + j * stride];
-
-            // DCT-III preprocessing: apply twiddle factors
-            // Based on cuHelmholtz preOp_dct3
-            fft_in[0] = slice[0];
-            for (int k = 0; k < n / 2; ++k)
-            {
-                double val_k = slice[k + 1];
-                double val_nk = slice[n - k - 1];
-
-                double Ta = val_k + val_nk;
-                double Tb = val_k - val_nk;
-
-                fft_in[k + 1] = Ta * sin_tbl[k + 1] + Tb * cos_tbl[k + 1];
-                fft_in[n - k - 1] = Ta * cos_tbl[k + 1] - Tb * sin_tbl[k + 1];
-            }
-
-            // Forward FFT (r2c)
-            mkl_dfti_check(DftiComputeForward(dct_fft_forward_[dim], fft_in.data(), fft_out.data()),
-                           "DftiComputeForward (DCT-III)");
-
-            // DCT-III postprocessing: rearrange complex to real
-            // Based on cuHelmholtz postOp_dct3
-            // Divide by n to match FFTW's DCT-III normalization
-            double scale = 1.0 / n;
-            temp[offset] = fft_out[0].real() * scale;
-            for (int k = 1; k <= n / 2; ++k)
-            {
-                double re = fft_out[k].real();
-                double im = fft_out[k].imag();
-
-                temp[offset + (2 * k - 1) * stride] = (re - im) * scale;
-                if (2 * k < n)
-                    temp[offset + (2 * k) * stride] = (re + im) * scale;
-            }
-        }
-    }
-
-    // Copy temp to data
-    std::memcpy(data, temp, total_grid_ * sizeof(double));
+    // FFTW's REDFT01 / n, the inverse of applyDCT2Forward
+    mkl_dct3_lines(data, temp, nx_[dim], stride, num_transforms, dct_fft_forward_[dim],
+                   cos_tables_[dim].data(), sin_tables_[dim].data(), 1.0 / nx_[dim]);
 }
 
 //------------------------------------------------------------------------------

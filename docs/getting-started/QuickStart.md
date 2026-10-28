@@ -16,7 +16,7 @@ Ensure you have:
 ### Running the Lamellar Example
 
 ```bash
-cd examples/scft
+cd examples/block_copolymer/scft
 python Lamella3D.py
 ```
 
@@ -91,7 +91,7 @@ For large systems that exceed GPU memory:
 params["reduce_memory"] = True
 ```
 
-This stores only checkpoints and recomputes intermediate values, which cuts the memory that grows with the grid and the number of contour steps (for `examples/scft/Gyroid.py` on a 64³ grid the GPU memory falls from 1064 to 420 MiB) at the cost of 2-4x slower execution.
+This stores only checkpoints and recomputes intermediate values, which cuts the memory that grows with the grid and the number of contour steps (for `examples/block_copolymer/scft/Gyroid.py` on a 64³ grid the GPU memory falls from 1064 to 420 MiB) at the cost of 2-4x slower execution.
 
 ### Multi-threading Settings
 
@@ -148,7 +148,7 @@ copy; the installed package keeps providing the C++ core and the shared modules.
 2. In the copy, point the imports at the installed package instead of the
    relative `.`:
    ```bash
-   sed -i -E 's/^from \. import _core/from polymerfts import _core/; s/^from \.([a-z_]+) import/from polymerfts.\1 import/' ~/my_project/my_scft.py
+   sed -i -E 's/^( *)from \. import _core/\1from polymerfts import _core/; s/^( *)from \.([a-z_]+) import/\1from polymerfts.\2 import/' ~/my_project/my_scft.py
    ```
    The result looks like
    ```python
@@ -182,7 +182,7 @@ Other options:
 ## Next Steps
 
 - **Tutorials**: Start with notebooks in `tutorials/` (see `tutorials/README.md` for order)
-- **Examples**: Explore `examples/scft/`, `examples/lfts/`, and `examples/clfts/` for various polymer systems
+- **Examples**: Explore `examples/` ([index](../../examples/README.md)), grouped by physical system and simulation method
 - **Parameters**: See [Parameters.md](../references/Parameters.md) for complete parameter reference
 - **Theory**: Read [NumericalMethods.md](../theory/NumericalMethods.md) for algorithm details
 

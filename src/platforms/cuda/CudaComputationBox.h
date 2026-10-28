@@ -61,10 +61,7 @@ template <typename T>
 class CudaComputationBox : public ComputationBox<T>
 {
 private:
-    T *sum;                     ///< Host buffer for reduction result
     CudaDeviceBuffer<CuDeviceData<T>> d_sum;       ///< Device buffer for reduction intermediate
-
-    CudaDeviceBuffer<CuDeviceData<T>> d_multiple;  ///< Temp storage for multi-component inner product
     CudaDeviceBuffer<double> d_dv;                 ///< dV (volume element) in device memory
 
     /// @name CUB Reduction Storage
@@ -85,6 +82,9 @@ private:
      * Allocates CUB temporary storage and device buffers.
      */
     void initialize();
+
+    /// Sum of the first n values of d_sum (CUB, legacy default stream), returned to the host.
+    T reduce_sum_to_host(int n);
 
 public:
     /**
@@ -196,7 +196,7 @@ public:
     /**
      * @brief Subtract mean from device array.
      *
-     * Makes the array have zero mean: g = g - mean(g), mean = integral / volume
+     * Makes the array have zero mean: g = g - integral(g) / accessible volume
      * (as ComputationBox::zero_mean)
      *
      * @param d_g Device array to modify in-place (size n_grid; n_basis with a space group)

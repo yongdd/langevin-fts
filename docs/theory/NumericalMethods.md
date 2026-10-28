@@ -234,7 +234,7 @@ k_sq = (2*pi)^2 * ( G_star_11 * n1^2 + G_star_22 * n2^2 + G_star_33 * n3^2
 boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 ```
 
-For non-orthogonal cells, each index triple is first replaced by its alias $`(n_1 + a_1 N_1, n_2 + a_2 N_2, n_3 + a_3 N_3)`$, $`a_i \in \lbrace -1, 0, 1 \rbrace`$, with the smallest $`|\mathbf{k}|^2`$, so that the discrete operator keeps the point-group symmetry of the cell.
+For non-orthogonal cells, each index triple is first replaced by its alias $`(n_1 + a_1 N_1, n_2 + a_2 N_2, n_3 + a_3 N_3)`$ with the smallest $`|\mathbf{k}|^2`$, so that the discrete operator keeps the point-group symmetry of the cell. The search is exact: an alias whose $`|\mathbf{k}|^2`$ does not exceed that of the centered index satisfies $`|n_d + a_d N_d| \le \sqrt{f\,(G^{*-1})_{dd}}`$ with $`f`$ the metric form of the centered index, which bounds the $`a_d`$ to examine. On nearly isotropic grids this is $`a_d \in \lbrace -1, 0, 1 \rbrace`$; with strongly anisotropic grid spacing the minimum can lie further away.
 
 ---
 
@@ -306,7 +306,7 @@ Material conservation requires that forward and backward partition functions are
 | **RK2** | Exact | Same symmetric splitting as RQM4 |
 | **CN-ADI2** | Exact | Symmetric Crank-Nicolson time stepping |
 
-The remaining mismatch is round-off and does not depend on the method. For an AB diblock ($`f = 0.4`$) on a 32³ grid with $`ds = 0.01`$ and random fields of standard deviation 5, the largest relative deviation of $`Q`$ along the chain (reported by `check_total_partition()`) is $`2\times10^{-16}`$–$`3\times10^{-15}`$ on CUDA and about $`2\times10^{-14}`$ on cpu-mkl, for all three methods and for periodic, reflecting and absorbing boundaries; the mean of the total concentration differs from 1 by at most $`1.1\times10^{-15}`$ (CUDA) and $`8\times10^{-15}`$ (cpu-mkl).
+The remaining mismatch is round-off and does not depend on the method. For an AB diblock ($`f = 0.4`$) on a 32³ grid with $`ds = 0.01`$ and random fields of standard deviation 5, the largest relative deviation of $`Q`$ along the chain (returned by `partition_errors()`) is $`2\times10^{-16}`$–$`3\times10^{-15}`$ on CUDA and about $`2\times10^{-14}`$ on cpu-mkl, for all three methods and for periodic, reflecting and absorbing boundaries; the mean of the total concentration differs from 1 by at most $`1.1\times10^{-15}`$ (CUDA) and $`8\times10^{-15}`$ (cpu-mkl).
 
 **Reference**: Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312
 
@@ -321,7 +321,7 @@ The benchmarks below use the system of Fig. 1 from Song et al., *Chinese J. Poly
 - **Platform**: NVIDIA A10 GPU (CUDA), `OMP_MAX_ACTIVE_LEVELS=0` and `OMP_NUM_THREADS=4`, so the two propagators of each iteration are computed one after another
 - **System**: AB diblock copolymer, continuous chains, $`b_A = b_B`$, Gyroid phase
 - **Conditions**: f = 0.375, χN = 18, M = 32³, L = 3.65 (box fixed), Ns = 1/ds
-- **Initial field**: gyroid level-set field as in `examples/scft/Gyroid.py`, with amplitudes 0.3 and 0.1
+- **Initial field**: gyroid level-set field as in `examples/block_copolymer/scft/Gyroid.py`, with amplitudes 0.3 and 0.1
 - **Optimizer**: Anderson mixing, `max_hist` = 20, `start_error` = 10⁻², `mix_init` = `mix_min` = 0.02
 - **SCFT convergence**: tolerance = 10⁻⁹ (reached after 240–300 iterations)
 - **Max iterations**: 2000

@@ -5,7 +5,7 @@ integrate, resolve the saddle or concentrations, accept the step, update WTMD,
 record observables, call observers, and checkpoint. The default integrator is
 Leimkuhler–Matthews (LM). Existing simulation scripts keep working.
 
-Start with [CustomExtensions.py](../../examples/lfts/CustomExtensions.py), which
+Start with [CustomExtensions.py](../../examples/tools/CustomExtensions.py), which
 implements a composition observable and an additive-noise predictor–corrector
 integrator (one explicit Heun correction).
 Both work with `LFTS` and `CLFTS`. No subclass of either simulation is needed.
@@ -81,8 +81,10 @@ def step(self, fields, force, *, dt, mobility, noise, previous_noise,
 
 `fields` and `force` have shape `(n_active, n_grid)`. LFTS passes real fluctuating
 auxiliary fields; CLFTS passes all auxiliary fields as complex arrays. `force`
-means the functional derivative dH/dw, including current WTMD bias or dynamical
-stabilization. The deterministic increment is `-dt * mobility[:, None] * force`.
+means the functional derivative dH/dw of the real-type auxiliary fields and -dH/dw
+of the imaginary-type (pressure-like) ones of CLFTS, the sign convention of
+`compute_func_deriv`, including current WTMD bias or dynamical stabilization. For
+every field the deterministic increment is `-dt * mobility[:, None] * force`.
 `mobility` is the per-field `dt_scaling` array. Fields with zero mobility must
 remain fixed.
 
@@ -95,6 +97,39 @@ when constructing the stochastic increment. Noise direction is real in LFTS;
 CLFTS uses real exchange-field noise and imaginary pressure-field noise. LM
 averages `noise` and `previous_noise`; Euler uses only `noise`. At a fresh run,
 previous noise is zero, preserving the existing LM initialization.
+
+With `electrostatics`, the integrator does not receive the electrostatic potential ψ
+(unless it declares `linear_response`, below).
+CLFTS advances ψ after the auxiliary fields with its own exponential step, which takes
+the noise scheme the integrator declares in `averaged_noise`: `True` averages two noises
+from the ψ stream like `lm`, `False` gives fresh noise like `euler`. The built-in
+integrators declare it; a custom integrator used with `electrostatics` must declare it,
+or the construction raises `ValidationError`
+([CL-FTS theory, Section 6](../theory/ComplexLangevinSimulation.md#6-charged-systems)).
+
+An integrator that declares `linear_response = True` (CLFTS only, periodic boxes) receives
+the Jacobian of the forces at the homogeneous state (its symmetric part, see the
+[CL-FTS theory, Section 2.1](../theory/ComplexLangevinSimulation.md#21-exponential-time-differencing)) before the run:
+
+```python
+def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourier):
+    # jacobian[i, j] = dF_i(k)/dw_j(k), shape (m, m, *nx); mobility and noise_direction
+    # are those that step() will receive; fourier is the simulation's PropagatorSolver.fourier
+    ...
+```
+
+`fourier` transforms and multiplies whole fields with the FFT of the platform: matrices of
+functions of k stored once with `set_multiplier` (on the GPU with CUDA) and applied with
+`apply` ([Fourier transform example](../../examples/tools/FourierTransform.py)).
+
+With Coulomb coupling, CLFTS then passes ψ to `step` as the last of the m fields: its force
+is -δH/δψ, its mobility `psi_dt_scaling`, its noise imaginary and drawn from the ψ stream,
+and `evaluate_force` takes and returns all m fields. Without screening, CLFTS sets the
+uniform mode of the returned ψ to zero. Each simulation keeps its own copy (`copy.deepcopy`) of such
+an integrator, which holds the response of its system; multipliers of `fourier` cannot be copied, so
+an integrator that stores them defines `__deepcopy__` (the built-in one copies its settings without the response). The built-in `etd` integrator is such a method
+([CL-FTS theory, Section 2.1](../theory/ComplexLangevinSimulation.md#21-exponential-time-differencing)).
+L-FTS rejects these integrators.
 
 The loop draws noise once per proposal and maintains previous noise after
 acceptance. Intermediate stages reuse that noise. `evaluate_force(candidate)`

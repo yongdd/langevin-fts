@@ -37,7 +37,7 @@
  * std::vector<std::string> bc = {"periodic", "periodic", "periodic",
  *                                 "periodic", "periodic", "periodic"};
  *
- * ComputationBox<double>* cb = factory->create_computation_box(nx, lx, bc);
+ * std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, bc);
  *
  * // Compute volume integral of a field
  * double integral_phi = cb->integral(phi);
@@ -47,7 +47,7 @@
  *
  * // Create hexagonal box (γ = 120°)
  * std::vector<double> angles = {90.0, 90.0, 120.0};
- * ComputationBox<double>* hex_cb = factory->create_computation_box(nx, lx, bc, angles);
+ * std::unique_ptr<ComputationBox<double>> hex_cb = factory->create_computation_box(nx, lx, bc, angles);
  * @endcode
  */
 #ifndef COMPUTATION_BOX_H_
@@ -257,7 +257,21 @@ protected:
      */
     void compute_recip_metric();
 
+    /// Computations of this box whose numerical method requires an orthogonal cell
+    int orthogonal_cell_holders_ = 0;
+
 public:
+    /**
+     * @brief Keep the cell orthogonal while a computation needs it.
+     *
+     * The factory calls hold_orthogonal_cell() for a computation whose
+     * numerical method requires an orthogonal cell (cn-adi2), and the
+     * computation releases it when it is destroyed. While it is held,
+     * set_lattice_parameters() rejects other angles before changing the box.
+     */
+    void hold_orthogonal_cell() { orthogonal_cell_holders_++; }
+    void release_orthogonal_cell() noexcept { orthogonal_cell_holders_--; }
+
     /**
      * Attach a computation's group while its constructors run. A failed backend
      * or propagator allocation restores the old box and the group's freeze flag
@@ -320,7 +334,8 @@ public:
      *               - gamma: angle between a and b vectors
      * @param mask   Optional mask array for impenetrable regions
      *
-     * @throws Exception if angles are invalid (must be > 0 and < 180, and form valid cell)
+     * @throws Exception if angles are invalid (must be > 0 and < 180 and form a cell of
+     *         volume at least 0.1 abc)
      *
      * @example
      * @code
@@ -578,7 +593,9 @@ public:
     /**
      * @brief Remove the spatial mean from a field (make it zero-mean).
      *
-     * Modifies g in-place: g[i] -= mean(g)
+     * Modifies g in-place: g[i] -= integral(g) / accessible volume, so that
+     * integral(g) and mean(g) vanish afterwards. Without a mask this is
+     * g[i] -= mean(g); with one, masked points shift with the rest.
      *
      * When space group is set, uses the mean weighted with the basis weights
      * (orbit counts times the mask).
@@ -612,6 +629,11 @@ public:
      *
      * @note After calling set_lattice_parameters(), you should also update the Laplacian
      *       operator in the propagator solver.
+     *
+     * @throws Exception before changing the box for invalid angles (including a
+     *         cell of volume below 0.1 abc), for a
+     *         non-orthogonal cell with walls or while hold_orthogonal_cell()
+     *         is in effect, and for a cell that does not match the space group
      */
     virtual void set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles);
 };

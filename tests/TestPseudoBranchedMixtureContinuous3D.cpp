@@ -496,8 +496,9 @@ int main()
             for(int i=0;i<3;i++)
                 stress_list[i].push_back(stress[i]);
 
-            delete cb;
+            // A computation uses its box until it is destroyed
             delete solver;
+            delete cb;
         }
         for(int i=0;i<3;i++)
         {

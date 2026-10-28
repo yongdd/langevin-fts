@@ -31,6 +31,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 DS = 0.01
 F_A = 0.36
@@ -159,7 +160,7 @@ def main():
                       f"mixed {bc_name} [{model}]: stress cpu-vs-cuda {rel_s:.3e} < 1e-10")
 
     print(f"\n{n_pass} passed, {n_fail} failed")
-    sys.exit(0 if n_fail == 0 else 1)
+    sys.exit(1 if cuda_part_missing() or n_fail else 0)
 
 
 if __name__ == "__main__":

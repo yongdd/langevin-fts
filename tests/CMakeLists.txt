@@ -16,7 +16,12 @@ SET(BASIC_TESTS
     TestComplexMask
     TestComputationSafety
     TestComputationState
+    TestInputChecks
+    TestMoleculesValidation
+    TestPartitionGuard
+    TestDriftStepHistory
     # Platform & utilities
+    TestConsoleEncoding
     TestDisplayArchitecture
     TestCircularBuffer
     TestScheduler
@@ -35,6 +40,8 @@ SET(BASIC_TESTS
     TestCpuFFTMixedBC
     TestCpuSimulationBox
     TestCpuTridiagonal
+    # Fourier multipliers of whole fields on every platform (Python)
+    TestFourierTransform
 
     # CUDA FFT & utilities
     TestCudaFFT
@@ -49,6 +56,10 @@ SET(BASIC_TESTS
     TestCudaCubReduceSumClass
     TestCrysFFT
     TestCrysFFTObliqueZGlide
+    TestCrysFFTObliqueZCuda
+    TestCrysFFTSelector
+    TestCudaCrysTablesAllocation
+    TestCrysFFTSharedTables
 
     # Propagator solvers
     TestCrankNicolson1D
@@ -96,6 +107,17 @@ FUNCTION(SET_TEST_LABELS TEST_NAME)
     ENDIF()
 ENDFUNCTION()
 
+# Windows looks for the DLLs of an executable on PATH. The spglib DLL lies in
+# the spglib Python package, above the directory of its import library.
+FUNCTION(SET_TEST_DLL_PATH TEST_NAME)
+    IF(WIN32)
+        GET_FILENAME_COMPONENT(_spglib_lib_dir "${SPGLIB_LIBRARIES}" DIRECTORY)
+        GET_FILENAME_COMPONENT(_spglib_root "${_spglib_lib_dir}" DIRECTORY)
+        SET_PROPERTY(TEST ${TEST_NAME} PROPERTY ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:${_spglib_root}" "PATH=path_list_prepend:${_spglib_root}/bin")
+    ENDIF()
+ENDFUNCTION()
+
 # Add Python Files. They import the package staged in the build tree
 # (see polymerfts_stage in the top-level CMakeLists.txt), so installation
 # is not required and an old site-packages install is never tested by mistake.
@@ -112,8 +134,10 @@ FOREACH(FILE_NAME ${FILE_LIST})
 ENDFOREACH()
 
 SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation TestExtensions TestPropagatorAnalytic TestConvergenceOrderLite TestSamplingStatistics
-    TestStructureFunctionRPA TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence
+    TestStructureFunctionRPA TestChargedStructureFunctionRPA TestStructureFunctionRecords TestClftsElectrostatics TestClftsPointIons TestClftsGrandCanonical TestScftElectrostatics TestGibbsEnsemble TestConfinedElectrostatics TestClftsEtd TestClftsThermodynamics
+    TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress TestScftObliqueSpaceGroups
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
+    TestCnAdiLongLines TestCrysFFTCellChange
     APPEND PROPERTY LABELS numerical)
 
 # Generate files named "Test*.cpp"
@@ -147,6 +171,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
     # in an MKL-only build). A CUDA build run without a visible GPU fails instead.
     SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES SKIP_RETURN_CODE 77)
     SET_TEST_LABELS(${TEST_NAME})
+    SET_TEST_DLL_PATH(${TEST_NAME})
 ENDFOREACH()
 
 # Benchmark executables (not added to ctest)
@@ -187,13 +212,18 @@ IF(POLYMERFTS_BUILD_CUDA)
         IF(NOT ${TEST_NAME} MATCHES "Bench")
             ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
             SET_TEST_LABELS(${TEST_NAME})
+            SET_TEST_DLL_PATH(${TEST_NAME})
         ENDIF()
     ENDFOREACH()
-    # Its out-of-memory check holds most of the free device memory for a moment
-    # (a ballast buffer); keep it away from the other tests under ctest -j
+    # Its out-of-memory check (--out-of-memory) holds most of the free device memory
+    # for a moment (a ballast buffer): a separate entry, kept away from the other
+    # tests under ctest -j, so that its skip does not hide the other checks
     IF(TARGET TestCudaDeviceBuffer)
-        # Exit code 77: the out-of-memory check could not hold the device memory
-        SET_TESTS_PROPERTIES(TestCudaDeviceBuffer PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        ADD_TEST(TestCudaDeviceBufferOutOfMemory ${CMAKE_CURRENT_BINARY_DIR}/TestCudaDeviceBuffer --out-of-memory)
+        SET_TEST_DLL_PATH(TestCudaDeviceBufferOutOfMemory)
+        # Exit code 77: the device memory could not be held, or the driver backs it with
+        # system memory (the WDDM sysmem fallback), so no construction can run out
+        SET_TESTS_PROPERTIES(TestCudaDeviceBufferOutOfMemory PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         # NVML gives this process's device memory for the end-to-end check
         # (other processes on the GPU then do not disturb it)
         IF(TARGET CUDA::nvml)

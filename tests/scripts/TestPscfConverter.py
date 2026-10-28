@@ -161,6 +161,37 @@ def test_grafting_and_custom_propagators_are_not_dropped(key):
         TOOL['prepare_export'](result(p))
 
 
+@pytest.mark.filterwarnings('error::DeprecationWarning')
+@pytest.mark.parametrize('hall, angles, relax, lattice', (
+    (57, [90., 100., 90.], True, 'monoclinic'), (58, [90., 90., 100.], False, 'triclinic'),
+    (5, [100., 90., 90.], False, 'triclinic'), (58, [90., 90., 100.], True, None)))
+def test_monoclinic_unique_axis(hall, angles, relax, lattice, monkeypatch):
+    # PSCF's monoclinic lattice has the unique axis b; the unique axes a and c keep a fixed cell as triclinic.
+    # The spglib calls use its raising error handling (no DeprecationWarning) and restore the setting;
+    # spglib's environment variable, which overrides that setting, is left out here
+    monkeypatch.delenv('SPGLIB_OLD_ERROR_HANDLING', raising=False)
+    spglib = pytest.importorskip('spglib')
+    handling = getattr(getattr(spglib, 'error', None), 'OLD_ERROR_HANDLING', None)
+    p = params()
+    p.update(angles=angles, relax_cell=relax, space_group={'symbol': 'P2/m' if hall in (57, 58) else 'P2',
+                                                           'hall_number': hall})
+    if lattice is None:
+        with pytest.raises(ValueError, match='unique axis c'):
+            TOOL['prepare_export'](result(p))
+    else:
+        assert TOOL['prepare_export'](result(p))[2] == lattice
+    assert getattr(getattr(spglib, 'error', None), 'OLD_ERROR_HANDLING', None) == handling
+
+
+@pytest.mark.parametrize('hall, message', ((0, 'positive'), (531, 'between 1 and 530')))
+def test_hall_number_range(hall, message):
+    pytest.importorskip('spglib')
+    p = params()
+    p['space_group'] = {'symbol': 'P1', 'hall_number': hall}
+    with pytest.raises(ValueError, match=message):
+        TOOL['choose_lattice'](p)
+
+
 def test_invalid_space_group_symbol_has_a_clear_error():
     p = params()
     p['space_group'] = {'symbol': 123}
@@ -315,7 +346,8 @@ def test_unchanged_literal_containers_and_indexing_are_supported(tmp_path):
 
 @pytest.mark.parametrize('problem', ('discrete', 'complex', 'nonfinite', 'field_size', 'nx_mismatch',
                                    'missing_field', 'finite_compressibility', 'walls', 'random_block',
-                                   'cycle', 'disconnected', 'partial_nodes', 'duplicate_chi', 'bad_cell'))
+                                   'cycle', 'disconnected', 'partial_nodes', 'duplicate_chi', 'bad_cell',
+                                   'electrostatics', 'grand_canonical'))
 def test_invalid_exports_are_rejected_before_writing(tmp_path, problem):
     data = result()
     p = data['initial_params']
@@ -336,6 +368,8 @@ def test_invalid_exports_are_rejected_before_writing(tmp_path, problem):
     elif problem == 'partial_nodes': p['polymers'][0]['blocks'][0]['v'] = 0
     elif problem == 'duplicate_chi': p['chi_n']['long_B,Zed'] = 20.
     elif problem == 'bad_cell': data['angles'] = [10., 10., 170.]
+    elif problem == 'electrostatics': p['electrostatics'] = {'charges': {'Zed': .1, 'long_B': -.1}, 'coupling': 100.}
+    elif problem == 'grand_canonical': p['polymers'][0]['chemical_potential'] = p['polymers'][0].pop('volume_fraction')
     source = tmp_path / 'source.mat'
     savemat(source, data, long_field_names=True)
     with pytest.raises((ValueError, TypeError)): TOOL['export_files'](source, tmp_path / 'pscf')
@@ -409,7 +443,8 @@ def test_command_line_example_and_error_exit(tmp_path):
     subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], check=True, capture_output=True, timeout=15)
     subprocess.run([sys.executable, str(CONVERTER), 'import', str(output / 'in/omega'), '-o', str(tmp_path / 'roundtrip.mat'),
                     '--metadata', str(output / 'metadata.json')], check=True, capture_output=True, timeout=15)
-    failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], capture_output=True, text=True, timeout=15)
+    failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(output)], capture_output=True,
+                            text=True, encoding='utf-8', errors='replace', timeout=15)
     assert failed.returncode == 2 and 'Error:' in failed.stderr and 'Traceback' not in failed.stderr
 
 
@@ -418,6 +453,6 @@ def test_bad_mat_file_has_a_clean_command_line_error(tmp_path):
     source.write_bytes(b'')
     target = tmp_path / 'pscf'
     failed = subprocess.run([sys.executable, str(CONVERTER), 'export', str(source), '-o', str(target)],
-                            capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert failed.returncode == 2 and 'Cannot read MATLAB file' in failed.stderr
     assert 'Traceback' not in failed.stderr and not target.exists()

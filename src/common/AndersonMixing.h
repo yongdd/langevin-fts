@@ -35,7 +35,7 @@
  * double mix_min = 0.1;       // Minimum mixing parameter
  * double mix_init = 0.1;      // Initial mixing parameter
  *
- * AndersonMixing<double>* am = factory->create_anderson_mixing(
+ * std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(
  *     n_var, max_hist, start_error, mix_min, mix_init);
  *
  * // In SCFT iteration loop
@@ -59,8 +59,20 @@
 
 #include <cassert>
 #include <iostream>
+#include <string>
 
 #include "Exception.h"
+#include "GridLimits.h"
+
+/// Throw unless 1 <= n_var <= MAX_GRID_ARRAY: the variables are indexed with 32-bit
+/// integers (GridLimits.h). Takes a wide integer so that callers can check sizes
+/// before narrowing them.
+inline void check_anderson_variables(long long n_var)
+{
+    if (n_var < 1 || n_var > MAX_GRID_ARRAY)
+        throw_with_line_number("Anderson mixing of " + std::to_string(n_var) + " variables is not supported: "
+            "between 1 and " + std::to_string(MAX_GRID_ARRAY) + " (32-bit indices).");
+}
 
 /**
  * @class AndersonMixing

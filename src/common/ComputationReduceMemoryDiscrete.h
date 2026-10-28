@@ -55,7 +55,7 @@ public:
     void compute_concentrations() override;
     void compute_stress() override;
     void get_chain_propagator(T* q_out, int polymer, int v, int u, int n) override;
-    bool check_total_partition() override;
+    std::vector<double> compute_partition_errors() override;
 };
 
 #endif

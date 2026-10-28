@@ -30,8 +30,10 @@ class Smearing:
 
         - type : str
             "gaussian"
-        - a_int : float
-            Smearing length scale in units of R₀.
+        - a_int : float or dict
+            Smearing length scale in units of R₀, or one length per monomer
+            type ({type: a_int}, CL-FTS only); fields and concentrations of a
+            type are then smeared with its own Γ_i(k).
 
         For Sigmoidal smearing:
 
@@ -60,7 +62,9 @@ class Smearing:
     type : str or None
         Smearing type ("gaussian" or "sigmoidal").
     fourier : ndarray or None
-        Smearing function in Fourier space Γ(k).
+        Smearing function in Fourier space Γ(k); None with per-type lengths.
+    species_fourier : dict or None
+        Γ_i(k) of each monomer type when a_int is given per type.
     params : dict or None
         Smearing parameters.
     k_mag : ndarray or None
@@ -69,7 +73,7 @@ class Smearing:
         Square of k magnitude at each grid point (with the cell metric).
     """
 
-    def __init__(self, nx, lx, smearing_params, angles=None, bc=None):
+    def __init__(self, nx, lx, smearing_params, angles=None, bc=None, transform=None):
         """Initialize smearing function.
 
         Parameters
@@ -85,6 +89,10 @@ class Smearing:
             None means an orthogonal cell.
         bc : list of str or None
             Boundary conditions, two per axis; None means periodic.
+        transform : FourierTransform or None
+            PropagatorSolver.fourier of the simulation, with which apply() multiplies by
+            Γ(k) (on the GPU with CUDA). Without it, and in a box that mixes periodic and
+            wall axes, apply() transforms with NumPy/SciPy.
         """
         self.nx = list(nx)
         self.lx = list(lx)
@@ -101,11 +109,20 @@ class Smearing:
         self.axis_bc = ["periodic" if bc[2 * d].lower() == "periodic" else "wall" for d in range(self.dim)]
         self.periodic = all(b == "periodic" for b in self.axis_bc)
 
+        # apply() multiplies by Γ(k) with the Fourier transform of the simulation
+        # (PropagatorSolver.fourier, on the GPU with CUDA); a box that mixes periodic and wall
+        # axes, which it does not transform, keeps the NumPy transforms
+        mixed = not self.periodic and "periodic" in self.axis_bc
+        self._transform = None if mixed else transform
+        self._multipliers = {}
+
+        self.species_fourier = None
         if smearing_params is None:
             self.enabled = False
             self.fourier = None
             self.type = None
             self.params = None
+            self.per_species = False
             self.k_mag = None
             self.k_sq = None
             return
@@ -116,7 +133,8 @@ class Smearing:
         if self.type == "gaussian":
             if "a_int" not in smearing_params:
                 raise ValueError("Gaussian smearing requires 'a_int' parameter.")
-            self.params = {"a_int": smearing_params["a_int"]}
+            a_int = smearing_params["a_int"]
+            self.params = {"a_int": dict(a_int) if isinstance(a_int, dict) else a_int}
             print(f"Smearing: Gaussian, a_int = {self.params['a_int']}")
         elif self.type == "sigmoidal":
             if "k_int" not in smearing_params:
@@ -126,6 +144,7 @@ class Smearing:
         else:
             raise ValueError(f"Unknown smearing type: {self.type}. "
                            f"Supported types: 'gaussian', 'sigmoidal'")
+        self.per_species = isinstance(self.params.get("a_int"), dict)
 
         self.set_box(lx, angles)
 
@@ -143,6 +162,7 @@ class Smearing:
             Cell angles in degrees, [alpha, beta, gamma] (or [gamma] in 2D).
         """
         self.lx = list(lx)
+        self._multipliers = {}   # Γ changes with the box
         if angles is None:
             angles = [90.0, 90.0, 90.0]
         elif len(angles) == 1:
@@ -192,7 +212,11 @@ class Smearing:
             self.k_sq = np.reshape(k_sq, self.nx)
         self.k_mag = np.sqrt(self.k_sq)
 
-        if self.type == "gaussian":
+        if self.per_species:
+            # Γ_i(k) = exp(-a_i²·k²/2) for each monomer type
+            self.fourier = None
+            self.species_fourier = {name: np.exp(-a ** 2 * self.k_sq / 2) for name, a in self.params["a_int"].items()}
+        elif self.type == "gaussian":
             # Γ(k) = exp(-a_int²·k²/2)
             self.fourier = np.exp(-self.params["a_int"] ** 2 * self.k_sq / 2)
         else:
@@ -232,18 +256,13 @@ class Smearing:
         result = np.zeros(6)
         if not self.enabled:
             return result
+        if self.per_species:
+            raise NotImplementedError("The stress of per-type smearing lengths is not implemented.")
 
         # <φ (D*w)> = (1/n²) Σ_k conj(φ(k)) D(k) w(k) for a real, even multiplier D
-        # (with the orthonormal transforms of wall axes: (1/n) Σ_k conj(φ(k)) D(k) w(k))
         correlation = 0.0
         for w, phi in zip(fields, concentrations):
-            if self.periodic:
-                w_k = np.fft.fftn(np.reshape(w, self.nx))
-                phi_k = np.fft.fftn(np.reshape(phi, self.nx))
-            else:
-                w_k = self._forward(np.reshape(w, self.nx)) * np.sqrt(self.n_grid)
-                phi_k = self._forward(np.reshape(phi, self.nx)) * np.sqrt(self.n_grid)
-            correlation = correlation + np.real(np.conj(phi_k) * w_k)
+            correlation = correlation + np.real(np.conj(self.coefficients(phi)) * self.coefficients(w))
         correlation = np.ravel(correlation) / self.n_grid ** 2
 
         # dΓ/d(k²)
@@ -258,11 +277,11 @@ class Smearing:
             dgamma_dk_sq = np.divide(dgamma_dk, 2 * k, out=np.zeros_like(k), where=k > 0)
 
         weight = dgamma_dk_sq * correlation
-        for slot, dk_sq in self._lattice_derivatives_k_sq().items():
+        for slot, dk_sq in self.lattice_derivatives_k_sq().items():
             result[slot] = np.sum(weight * dk_sq)
         return result
 
-    def _lattice_derivatives_k_sq(self):
+    def lattice_derivatives_k_sq(self):
         """∂(k²)/∂θ on the grid for each lattice parameter, keyed by its stress slot.
 
         k² = 4π² mᵀ g⁻¹ m with g_ab = L_a L_b cos θ_ab gives
@@ -302,7 +321,43 @@ class Smearing:
                 derivatives[slot][tied] += 8 * np.pi ** 2 * u[a] * u[b] * L[a] * L[b] * self._sin[a, b]
         return {slot: d / n_tied for slot, d in derivatives.items()}
 
-    def apply(self, field):
+    def dilation(self, field, name=None):
+        """(∂Γ/∂ln V) * field for a uniform dilation of the box at fixed grid values.
+
+        The cell keeps its shape, so every wavevector scales as k² ∝ V^(-2/d) and
+        ∂Γ/∂ln V = -(2/d) k² dΓ/dk² (the osmotic pressure of CL-FTS, clfts.py). Returns a
+        complex array of length n_grid; zero without smearing.
+        """
+        if not self.enabled:
+            return np.zeros(np.size(field), dtype=np.complex128)
+        if self.type == "gaussian":
+            a_int = self.params["a_int"][name] if self.per_species else self.params["a_int"]
+            dgamma_dk_sq = -0.5 * a_int ** 2 * self.kernel(name)
+        else:
+            k_int, dk_int = self.params["k_int"], self.params["dk_int"]
+            c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
+            dgamma_dk = -c0 / dk_int * (1 - np.tanh((self.k_mag - k_int) / dk_int) ** 2)
+            dgamma_dk_sq = np.divide(dgamma_dk, 2 * self.k_mag, out=np.zeros_like(self.k_mag), where=self.k_mag > 0)
+        multiplier = -(2.0 / self.dim) * self.k_sq * dgamma_dk_sq
+        result = self._multiply(field, ("dilation", name if self.per_species else None), multiplier)
+        if result is not None:
+            return np.asarray(result, dtype=np.complex128)
+        field_grid = np.reshape(np.asarray(field, dtype=np.complex128), self.nx)
+        if self.periodic:
+            result = np.fft.ifftn(np.fft.fftn(field_grid) * multiplier)
+        else:
+            result = self._backward(self._forward(field_grid) * multiplier)
+        return np.reshape(result, self.n_grid)
+
+    def kernel(self, name=None):
+        """Γ(k) on the grid, of monomer type `name` when the lengths are given per type."""
+        if not self.per_species:
+            return self.fourier
+        if name not in self.species_fourier:
+            raise ValueError(f"No smearing length for monomer type '{name}'.")
+        return self.species_fourier[name]
+
+    def apply(self, field, name=None):
         """Apply smearing to a single field array.
 
         Computes smeared field: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
@@ -311,6 +366,8 @@ class Smearing:
         ----------
         field : numpy.ndarray
             Field array of length n_grid (can be complex).
+        name : str, optional
+            Monomer type of the field; required for per-type smearing lengths.
 
         Returns
         -------
@@ -320,6 +377,13 @@ class Smearing:
         """
         if not self.enabled:
             return field
+        gamma = self.kernel(name)
+
+        result = self._multiply(field, name if self.per_species else None, gamma)   # one Γ for all types otherwise
+        if result is not None:
+            if np.isrealobj(field) and np.iscomplexobj(result):
+                return np.ascontiguousarray(np.real(result))
+            return result
 
         # Reshape to grid dimensions
         field_grid = np.reshape(field, self.nx)
@@ -327,10 +391,10 @@ class Smearing:
         # FFT -> multiply by Γ(k) -> IFFT (DCT-II along wall axes)
         if self.periodic:
             field_fourier = np.fft.fftn(field_grid)
-            field_smeared_fourier = field_fourier * self.fourier
+            field_smeared_fourier = field_fourier * gamma
             field_smeared = np.fft.ifftn(field_smeared_fourier)
         else:
-            field_smeared = self._backward(self._forward(field_grid) * self.fourier)
+            field_smeared = self._backward(self._forward(field_grid) * gamma)
 
         # Reshape back to flat array
         # Return real part for real input, full complex for complex input
@@ -338,6 +402,31 @@ class Smearing:
         if np.isrealobj(field):
             return np.ascontiguousarray(np.real(result))
         return result
+
+    def _multiply(self, field, key, values):
+        """backward(values(k) · forward(field)) with the Fourier transform of the simulation.
+
+        values is given on the grid of k_sq; its multiplier is stored once under key (until
+        set_box). Returns None where NumPy/SciPy transform instead: without a transform, in a
+        box that mixes periodic and wall axes, and for a complex field and a transform of real
+        fields.
+        """
+        transform = self._transform
+        if transform is None or (transform.field_type == "real" and np.iscomplexobj(field)):
+            return None
+        if key not in self._multipliers:
+            # values on the coefficients of the transform (the rfftn half spectrum for real fields)
+            self._multipliers[key] = transform.set_multiplier(
+                values[tuple(slice(0, n) for n in transform.coefficient_shape)])
+        return transform.apply([(self._multipliers[key], np.reshape(field, -1))])
+
+    def coefficients(self, field):
+        """Coefficients of a real field at the wavenumbers of k_sq, normalized like numpy.fft.fftn:
+        <a b> = (1/n²) Σ_k conj(a(k)) b(k). On wall axes they are the orthonormal cosine series
+        times √n."""
+        if self.periodic:
+            return np.fft.fftn(np.reshape(field, self.nx))
+        return self._forward(np.reshape(field, self.nx)) * np.sqrt(self.n_grid)
 
     def _forward(self, field):
         """Orthonormal transform of each axis: FFT (periodic) or DCT-II (walls)."""
@@ -363,7 +452,8 @@ class Smearing:
         Parameters
         ----------
         fields : dict
-            Dictionary of fields {name: field_array}.
+            Dictionary of fields {name: field_array}; with per-type lengths the
+            names are monomer types.
 
         Returns
         -------
@@ -374,7 +464,7 @@ class Smearing:
         if not self.enabled:
             return fields
 
-        return {key: self.apply(field) for key, field in fields.items()}
+        return {key: self.apply(field, key) for key, field in fields.items()}
 
     def __repr__(self):
         """Return string representation."""

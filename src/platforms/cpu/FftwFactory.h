@@ -34,7 +34,7 @@
  * FftwFactory<double> factory(false);  // reduce_memory=false for speed
  *
  * // Create simulation objects
- * auto* cb = factory.create_computation_box(nx, lx, bc);
+ * auto cb = factory.create_computation_box(nx, lx, bc);
  * auto* mols = factory.create_molecules_information("continuous", 0.01, bonds);
  * auto* solver = factory.create_propagator_computation(cb, mols, optimizer, "rqm4");
  *
@@ -89,7 +89,7 @@ public :
      * @param mask Optional mask for impenetrable regions
      * @return CpuComputationBox instance
      */
-    ComputationBox<T>* create_computation_box(
+    std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -104,38 +104,12 @@ public :
      * @param mask   Optional mask for impenetrable regions
      * @return CpuComputationBox instance
      */
-    ComputationBox<T>* create_computation_box(
+    std::unique_ptr<ComputationBox<T>> create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
         std::vector<double> angles,
         const double* mask=nullptr) override;
-
-    /**
-     * @brief Create molecules container.
-     * @param chain_model  "continuous" or "discrete"
-     * @param ds           Contour step size
-     * @param bond_lengths Segment lengths squared
-     * @return Molecules instance
-     */
-    Molecules* create_molecules_information(
-        std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;
-
-    /**
-     * @brief Create propagator computation solver.
-     *
-     * Creates ComputationContinuous, ComputationDiscrete, or their reduce-memory
-     * variants with the CPU backend, based on chain model, memory mode, and
-     * numerical method. Uses FFTW3 for FFT operations.
-     *
-     * @param cb                              Computation box
-     * @param molecules                       Molecules container
-     * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "rqm4", "rk2" (pseudo-spectral) or
-     *                                        "cn-adi2" (real-space)
-     * @return CPU propagator solver (using FFTW)
-     */
-    PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group=nullptr) override;
 
     /**
      * @brief Create CPU Anderson mixing optimizer.
@@ -146,9 +120,18 @@ public :
      * @param mix_init   Initial mixing parameter
      * @return CpuAndersonMixing instance
      */
-    AndersonMixing<T>* create_anderson_mixing(
+    std::unique_ptr<AndersonMixing<T>> create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) override;
+
+    /**
+     * @brief Create a CPU (FFTW) Fourier transform.
+     * @param cb Computation box
+     * @param bc Transform of each axis
+     * @return CpuFourierTransform instance
+     */
+    std::unique_ptr<FourierTransform<T>> create_fourier_transform(
+        ComputationBox<T>* cb, std::vector<BoundaryCondition> bc) override;
 
     /**
      * @brief Display CPU platform information.
@@ -156,5 +139,11 @@ public :
      * Prints FFTW version and other configuration details.
      */
     void display_info() override;
+
+protected:
+    /// CPU backend with FFTW transforms (see AbstractFactory::create_backend())
+    std::unique_ptr<ComputationBackend<T>> create_backend(
+        ComputationBox<T>* cb, Molecules* molecules, const NumericalMethodInfo& method_info,
+        SpaceGroup* space_group, int max_n_streams) override;
 };
 #endif

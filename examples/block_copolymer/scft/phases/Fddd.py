@@ -1,0 +1,88 @@
+import os
+import numpy as np
+import scipy.io
+from scipy.ndimage import gaussian_filter
+
+# OpenMP environment variables (set before importing polymerfts)
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
+
+# Major Simulation params
+f = 0.43        # A-fraction of major BCP chain, f
+
+params = {
+    "nx":[84,48,24],            # Simulation grid numbers
+    "lx":[5.58,3.17,1.59],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+                                # where "a_Ref" is reference statistical segment length
+                                # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+
+    "reduce_memory":False,     # Reduce memory usage by storing only check points.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Relax cell lengths and allowed angles during SCFT iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
+
+    "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
+        "A":1.0, 
+        "B":1.0, },
+
+    "chi_n": {"A,B": 14.0},     # Interaction parameter, Flory-Huggins params * N_Ref
+
+    "polymers":[{      # Polymer species
+        "volume_fraction":1.0,  # volume fraction of polymer chain
+        "blocks":[              # AB diBlock Copolymer
+            {"type":"A", "length":f, }, # A-block
+            {"type":"B", "length":1-f}, # B-block
+        ],},],
+
+    "space_group" :{
+        "symbol":"Fddd",   # IT symbol of the space group
+        "hall_number": 336,     # (optional) Hall number of the space group
+    },
+
+    "optimizer":{       
+        # "lr":1e-1,         # initial learning rate,
+        # "gamma":0.9993,    # learning rate at Tth iteration is lr*γ^(T-1)
+        
+        "name":"am",            # Anderson Mixing
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
+
+    "max_iter":2000,     # The maximum relaxation iterations
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+}
+
+# Set initial fields
+print("w_A and w_B are initialized to Fddd phase.")
+input_data = scipy.io.loadmat("FdddInput.mat", squeeze_me=True)
+w_A = input_data["w_A"]
+w_B = input_data["w_B"]
+
+# Interpolate input data on params["nx"], if necessary
+w_A = scipy.ndimage.zoom(np.reshape(w_A, input_data["nx"]), params["nx"]/input_data["nx"])
+w_B = scipy.ndimage.zoom(np.reshape(w_B, input_data["nx"]), params["nx"]/input_data["nx"])
+
+# Initialize calculation
+calculation = scft.SCFT(params=params)
+
+# Set a timer
+
+# Run
+calculation.run(initial_fields={"A": w_A, "B": w_B})
+
+# Estimate execution time
+
+# Save final results (.mat, .json or .yaml format)
+calculation.save_results("Fddd.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#        1   -3.028E-15  [ 1.6912990E+00  ]    -0.110796011   1.6908844E-01  lx=[  5.5800000, 3.1700000, 1.5900000 ]
+#        2   -1.247E-16  [ 1.7208911E+00  ]    -0.114068547   1.6702211E-01  lx=[  5.5799936, 3.1699760, 1.5898520 ]
+#        3    1.938E-17  [ 1.7518478E+00  ]    -0.117250745   1.6474036E-01  lx=[  5.5799867, 3.1699505, 1.5896999 ]
+#        4   -6.219E-17  [ 1.7841704E+00  ]    -0.120347670   1.6221966E-01  lx=[  5.5799798, 3.1699253, 1.5895520 ]
+#        5    1.404E-15  [ 1.8178568E+00  ]    -0.123361145   1.5944989E-01  lx=[  5.5799734, 3.1699019, 1.5894163 ]

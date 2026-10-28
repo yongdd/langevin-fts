@@ -1,18 +1,23 @@
 # Installation
 
-You need Conda and a C++20 compiler. Start by cloning the repository.
+You need Conda and a C++20 compiler. [Miniforge](https://github.com/conda-forge/miniforge)
+provides Conda with conda-forge as its default channel; on Windows, also see
+[Windows](#windows). Start by cloning the repository.
 
 ## 1. Create the Environment
 
 ```bash
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts
+git clone https://github.com/yongdd/polymerfts.git
+cd polymerfts
 conda env create -f environment.yml
 conda activate polymerfts
 ```
 
-The environment uses Anaconda's official channel and Python 3.14; spglib is
-installed from its upstream PyPI wheel.
+The environment uses the conda-forge channel and Python 3.15, with OpenBLAS for
+LAPACKE and spglib with its C library.
+Python 3.15 runs in UTF-8 mode, so output redirected to a file keeps symbols such as
+χN on Windows as well; with Python 3.11-3.14 on Windows, characters the console
+encoding lacks are written as escapes such as `₀` unless `PYTHONUTF8=1` is set.
 
 ## 2. Build a Wheel with MKL or FFTW
 
@@ -25,8 +30,7 @@ CUDA is then detected automatically; see [GPU setup](#gpu-setup) for details.
 **MKL**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -34,7 +38,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```
@@ -88,17 +92,75 @@ python -c "from polymerfts import PlatformSelector; print(PlatformSelector.avail
 </details>
 
 <details>
+<summary>Windows</summary>
+
+### Windows
+
+Install Visual Studio 2022 or newer with the **Desktop development with C++**
+workload, and [Miniforge](https://github.com/conda-forge/miniforge). Run the steps
+above in an **x64 Native Tools Command Prompt** after `conda activate polymerfts`;
+the Conda commands are the same. In `cmd`, set variables with `set` and continue
+lines with `^`. Select the Ninja generator on the command line: the Visual Studio
+generator builds CUDA only with the Visual Studio integration of NVIDIA's installer,
+and without it `POLYMERFTS_USE_CUDA=AUTO` leaves CUDA out.
+
+```bat
+set CMAKE_PREFIX_PATH=%CONDA_PREFIX%
+python -m pip wheel . --no-deps --wheel-dir dist -Ccmake.args=-GNinja ^
+    -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
+```
+
+For the GPU backend, install the CUDA toolkit into the environment before building.
+Its activation script selects the Visual Studio generator through
+`CMAKE_GENERATOR`, which the `-G` option overrides:
+
+```bat
+conda install --override-channels -c conda-forge --freeze-installed ^
+    cuda-nvcc cuda-cudart-dev libcufft-dev
+```
+
+The native build with CTest adds `-G Ninja`:
+
+```bat
+cmake -S . -B build-tests -G Ninja -DCMAKE_PREFIX_PATH=%CONDA_PREFIX% ^
+    -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_WERROR=ON
+cmake --build build-tests --parallel 4
+ctest --test-dir build-tests --output-on-failure
+```
+
+- MSVC uses its LLVM OpenMP runtime (`/openmp:llvm`), which needs CMake 3.30+; the
+  environment supplies a newer CMake.
+- Ninja reads the header dependencies from the `/showIncludes` lines of `cl`, whose
+  text follows the language of Visual Studio, and CMake stores that text when it
+  configures a build directory. A build that runs in another language than its
+  configure records no header dependencies, so objects are not rebuilt when only a
+  header changes. With a Visual Studio in a language other than English, set
+  `VSLANG=1033` for every configure and build, for example once with
+  `setx VSLANG 1033`. A build directory configured without it keeps the other
+  language's text; configure a new one.
+- By default the NVIDIA driver on Windows lets CUDA allocations fall back to system
+  memory ("CUDA - Sysmem Fallback Policy" in the NVIDIA Control Panel). A calculation
+  larger than the GPU memory then runs slowly instead of failing, and the
+  out-of-memory check of `TestCudaDeviceBuffer`, the ctest entry
+  `TestCudaDeviceBufferOutOfMemory`, is skipped. The policy can be set to
+  "Prefer No Sysmem Fallback".
+- Checked with Visual Studio 2026 (MSVC 19.51) and CUDA 13.4 from conda-forge.
+
+</details>
+
+<details>
 <summary>Dependencies and CMake options</summary>
 
 ### Dependencies
 
 `environment.yml` supplies the shared dependencies. Install the selected CPU FFT
-library separately, and provide the compiler and any CUDA toolkit outside Conda.
+library separately, and provide the compiler outside Conda. The CUDA toolkit comes
+from the system, or on Windows from conda-forge (see [Windows](#windows)).
 
 | Dependency | Requirement |
 |------------|-------------|
-| Python | 3.11+; the supplied environment uses 3.14 |
-| C++ compiler | C++20 with `std::source_location`, such as GCC 11+; CUDA also requires a compatible host compiler |
+| Python | 3.11+; the supplied environment uses 3.15 |
+| C++ compiler | C++20 with `std::source_location`, such as GCC 11+ or MSVC from Visual Studio 2022+; CUDA also requires a compatible host compiler |
 | CMake | 3.18+ for CPU-only builds; 3.25.2+ for CUDA |
 | spglib | 2.x; included in the environment |
 | LAPACKE | Included in the environment; manual installs can use `liblapacke-dev` or `LAPACKE_ROOT` |
@@ -107,7 +169,9 @@ library separately, and provide the compiler and any CUDA toolkit outside Conda.
 
 ### CMake Options
 
-Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`.
+Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`. The
+defaults are those of a plain CMake configuration; `pyproject.toml` turns
+`POLYMERFTS_BUILD_TESTS` off for wheel builds.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
@@ -115,7 +179,7 @@ Pass wheel build options as `-Ccmake.define.OPTION=VALUE` to `pip wheel`.
 | `POLYMERFTS_USE_FFTW` | OFF | FFTW CPU backend (GPL) |
 | `POLYMERFTS_USE_CUDA` | AUTO | Detect CUDA; `ON` requires it, `OFF` disables it |
 | `POLYMERFTS_CUDA_ARCHITECTURES` | empty | Semicolon-separated GPU capabilities; empty selects defaults for the toolkit |
-| `POLYMERFTS_BUILD_TESTS` | ON | Build tests |
+| `POLYMERFTS_BUILD_TESTS` | ON (OFF in wheel builds) | Build tests |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install the Python package |
 | `POLYMERFTS_WERROR` | OFF | Treat host C++ warnings as errors |
 | `POLYMERFTS_INSTALL_HEADERS` | OFF | Install the experimental downstream C++ interface |
@@ -153,7 +217,8 @@ dependencies. Releases before 0.10.0 use their own CMake installation instructio
 | Native regression suite | `ctest --test-dir build-tests --output-on-failure` |
 
 The native build below stages its package in `build-tests/python` for CTest.
-Available tests depend on the enabled backends. CUDA tests need a visible GPU.
+Available tests depend on the enabled backends. In a build with the CUDA backend,
+the tests with a CUDA part fail when no GPU is visible.
 See [Numerical Validation](../internals/NumericalValidation.md) for coverage.
 
 <details>
@@ -163,8 +228,7 @@ CPU CI enables both backends in one job, including their agreement checks.
 To use the same configuration locally:
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0 fftw
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0 fftw=3.3.11
 cmake -S . -B build-tests -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
     -DPOLYMERFTS_USE_MKL=ON -DPOLYMERFTS_USE_FFTW=ON \
     -DPOLYMERFTS_USE_CUDA=OFF -DPOLYMERFTS_WERROR=ON

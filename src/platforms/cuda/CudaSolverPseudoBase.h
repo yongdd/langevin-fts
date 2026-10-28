@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <cufft.h>
 
 #include "Exception.h"
@@ -37,6 +38,7 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaCrysFFT.h"   // CudaCrysFFTBase, CudaCrysFFTMode
+#include "CudaCrysFFTStress.h"
 
 class SpaceGroup;
 struct CrysFFTBasisMapping;
@@ -88,6 +90,8 @@ protected:
     std::unique_ptr<CudaCrysFFTBase> crysfft_[MAX_STREAMS];   ///< Per-stream CrysFFT objects
     CudaDeviceBuffer<double> d_crysfft_in_[MAX_STREAMS];              ///< Per-stream physical grid input
     CudaDeviceBuffer<double> d_crysfft_out_[MAX_STREAMS];             ///< Per-stream physical grid output
+    std::set<double> crysfft_coeffs_;   ///< Step coefficients whose tables update_crysfft_tables() built
+    std::set<std::pair<double, bool>> crysfft_stress_keys_;   ///< (b², bond factor) of the stress multipliers prepare_stress() built
 
     /**
      * @param max_fft_batch             Largest number of fields the derived solver
@@ -108,6 +112,34 @@ protected:
 
     /// Release the CrysFFT objects and device maps (safe to call repeatedly).
     void cleanup_crysfft();
+
+    /**
+     * @brief Full-grid input of a spectral step: d_q_in itself, or its expansion
+     *        from the reduced basis into d_q_full_in_ when a space group is set.
+     */
+    CuDeviceData<T>* expand_to_full_grid(int STREAM, CuDeviceData<T>* d_q_in);
+
+    /// Full-grid output of a spectral step: d_q_out itself, or d_q_full_out_ when a space group is set.
+    CuDeviceData<T>* full_grid_output(int STREAM, CuDeviceData<T>* d_q_out);
+
+    /**
+     * @brief Store the full-grid result d_full in d_q_out, reducing it to the
+     *        basis when a space group is set, then apply the mask (if any).
+     */
+    void store_full_grid(int STREAM, CuDeviceData<T>* d_full, CuDeviceData<T>* d_q_out, const double* d_q_mask);
+
+    /// d_q *= mask on the propagator basis (reduced basis with a space group); no-op for nullptr.
+    void multiply_mask(int STREAM, CuDeviceData<T>* d_q, const double* d_q_mask);
+
+    /**
+     * @brief CrysFFT diffusion of reduced-basis propagators on the physical sub-grid.
+     *
+     * d_q_out = post · D · (mid · D ·) pre · d_q_in with D = exp(coeff ∇²): the
+     * factors are reduced-basis Boltzmann factors, nullptr to skip one, and a
+     * non-null mid adds the second diffusion step. d_q_out may alias d_q_in.
+     */
+    void crysfft_diffuse(int STREAM, double* d_q_in, double* d_q_out, double coeff,
+                         const double* pre, const double* mid, const double* post);
 
     /**
      * @brief Shared body of update_dw(): d_exp_dw = exp(-factor*ds*w) and,
@@ -144,6 +176,23 @@ protected:
     virtual const double* get_stress_boltz_bond(
         const std::string& monomer_type, bool is_half_bond_length) const;
 
+    /**
+     * @brief CrysFFT diffusion coefficient b²·Δs/divisor of one propagator step.
+     *
+     * @param divisor 6 for a full step, 12 for a half step
+     */
+    double crysfft_coeff(const std::string& monomer_type, int ds_index, double divisor) const;
+
+    /**
+     * @brief Coefficients (see crysfft_coeff()) of the CrysFFT steps that the
+     *        method takes for a block of this monomer type and contour step.
+     *
+     * Their Boltzmann tables are built for every block when the CrysFFT objects
+     * are created and when the cell changes, so the propagator loop only selects
+     * them; crysfft_diffuse() rejects a coefficient whose table was not built.
+     */
+    virtual std::vector<double> crysfft_block_coeffs(const std::string& monomer_type, int ds_index) const = 0;
+
 private:
     bool plan_for_created_[MAX_STREAMS][2];  ///< plan_for_[i][b] exists (cufftHandle has no null value)
     bool plan_bak_created_[MAX_STREAMS][2];  ///< plan_bak_[i][b] exists
@@ -157,6 +206,14 @@ private:
     /// Upload the index maps and create the per-stream CrysFFT objects for `mode`.
     void setup_crysfft(CudaCrysFFTMode mode, const CrysFFTBasisMapping& map,
                        const std::array<double, 9>& m3_translations);
+    /// Pass the current cell to the CrysFFT objects and build the Boltzmann tables of all steps.
+    void update_crysfft_tables();
+    /// True when the segment stress takes the CrysFFT fast path (Pmmm or 3m, orthogonal 3D cell).
+    bool crysfft_stress_fast_path() const;
+    /// b² of the monomer type, halved for a half bond (the stress integrand and its multiplier key).
+    double stress_bond_length_sq(const std::string& monomer_type, bool is_half_bond_length) const;
+    /// Arguments of the CrysFFT stress fast path on this stream.
+    CudaCrysFFTStressArgs crysfft_stress_args(int STREAM, double bond_length_sq, bool include_bond_factor);
 
 public:
     virtual ~CudaSolverPseudoBase();
@@ -190,6 +247,9 @@ public:
         int n_basis) override;
 
     void update_laplacian_operator() override;
+
+    /// Build the CrysFFT stress multipliers of every block before the segment loop.
+    void prepare_stress() override;
 };
 
 #endif  // CUDA_SOLVER_PSEUDO_BASE_H_

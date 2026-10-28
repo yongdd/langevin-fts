@@ -156,8 +156,10 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
     full_to_reduced_map_full_ = full_to_reduced_map_;
     orbit_counts_full_ = orbit_counts_;
     reduced_to_irreducible_map_.clear();
+}
 
-    // Print info
+void SpaceGroup::display_info() const
+{
     std::cout << "---------- Space Group ----------" << std::endl;
     std::cout << "Hall number: " << hall_number_ << std::endl;
     std::cout << "International space group number: " << spacegroup_number_ << std::endl;
@@ -165,7 +167,7 @@ void SpaceGroup::initialize(std::vector<int> nx, int hall_number)
     std::cout << "Crystal system: " << crystal_system_ << std::endl;
     std::cout << "Number of symmetry operations: " << n_symmetry_ops_ << std::endl;
     std::cout << "Original mesh size: " << total_grid_ << std::endl;
-    std::cout << "Reduced basis size (irreducible): " << n_irreducible_ << std::endl;
+    std::cout << "Reduced basis size (irreducible): " << get_n_reduced_basis_full() << std::endl;
     if (nx_.size() == 3)
     {
         const bool even_grid = (nx_[0] % 2 == 0 && nx_[1] % 2 == 0 && nx_[2] % 2 == 0);
@@ -1042,7 +1044,6 @@ void SpaceGroup::enable_pmmm_physical_basis()
     }
 
     physical_basis_ = PhysicalBasis::Pmmm;
-    std::cout << "Pmmm physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
 }
 
 bool SpaceGroup::m3_crysfft_feasible() const
@@ -1211,7 +1212,6 @@ void SpaceGroup::enable_m3_physical_basis()
     }
 
     physical_basis_ = PhysicalBasis::M3;
-    std::cout << "M3 physical basis enabled. Reduced basis size: " << n_irreducible_ << std::endl;
 }
 
 void SpaceGroup::enable_z_mirror_physical_basis()
@@ -1317,9 +1317,6 @@ void SpaceGroup::enable_z_mirror_physical_basis()
     z_mirror_shift_ = shift;
     z_mirror_translation_ = t_z;
     physical_basis_ = PhysicalBasis::ZMirror;
-
-    std::cout << "Z-mirror physical basis enabled (shift=" << z_mirror_shift_
-              << "). Reduced basis size: " << n_irreducible_ << std::endl;
 }
 
 void SpaceGroup::enable_physical_basis(PhysicalBasis basis)

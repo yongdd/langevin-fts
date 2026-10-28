@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 #include <iomanip>
 #include <cmath>
 #include <numbers>
@@ -28,6 +29,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 int main()
 {
@@ -112,14 +114,14 @@ int main()
         double am_mix_init = 0.02;
 
         //-------------- allocate array ------------
-        double w      [2*M+nx.size()];
-        double w_out  [2*M+nx.size()];
-        double w_diff [2*M+nx.size()];
-        double xi     [M];
-        double phi_a  [M];
-        double phi_b  [M];
-        double w_plus [M];
-        double w_minus[M];
+        std::vector<double> w(2*M+nx.size());
+        std::vector<double> w_out(2*M+nx.size());
+        std::vector<double> w_diff(2*M+nx.size());
+        std::vector<double> xi(M);
+        std::vector<double> phi_a(M);
+        std::vector<double> phi_b(M);
+        std::vector<double> w_plus(M);
+        std::vector<double> w_minus(M);
 
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
@@ -135,16 +137,16 @@ int main()
                 {
                     for(bool reduce_memory : reduce_memorys)
                     {
-                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                        std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                         // factory->display_info();
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
-                        ComputationBox<double>* cb = factory->create_computation_box(nx, lx_backup, {});
-                        Molecules* molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                        std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx_backup, {});
+                        std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
-                        PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                        PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
-                        AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
+                        auto propagator_computation_optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), aggregate_propagator_computation);
+                        std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
+                        std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
                         // -------------- Print simulation parameters ------------
@@ -200,9 +202,9 @@ int main()
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                             solver->compute_concentrations();
                             std::cout << "Getting total concentration A..." << std::endl;
-                            solver->get_total_concentration("A", phi_a);
+                            solver->get_total_concentration("A", phi_a.data());
                             std::cout << "Getting total concentration B..." << std::endl;
-                            solver->get_total_concentration("B", phi_b);
+                            solver->get_total_concentration("B", phi_b.data());
 
                             // Check the total partition function
                             if (iter == 0 && !solver->check_total_partition())
@@ -224,8 +226,8 @@ int main()
                                 w_plus[i]  = (w[i]+w[i+M])/2;
                             }
 
-                            energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                            energy_total -= cb->integral(w_plus)/cb->get_volume();
+                            energy_total = cb->inner_product(w_minus.data(),w_minus.data())/chi_n/cb->get_volume();
+                            energy_total -= cb->integral(w_plus.data())/cb->get_volume();
                             for(int p=0; p<molecules->get_n_polymer_types(); p++){
                                 Polymer& pc = molecules->get_polymer(p);
                                 energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
@@ -246,12 +248,12 @@ int main()
                             old_error_level = error_level;
                             for(int i=0; i<2*M; i++)
                                 w_diff[i] = w_out[i]- w[i];
-                            error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
-                                            (cb->multi_inner_product(2,w,w)+1.0));
+                            error_level = sqrt(cb->multi_inner_product(2,w_diff.data(),w_diff.data())/
+                                            (cb->multi_inner_product(2,w.data(),w.data())+1.0));
                             error_level += sqrt(stress[0]*stress[0] + stress[1]*stress[1] + stress[2]*stress[2]);
 
                             // Print iteration # and error levels and check the mass conservation
-                            sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                            sum = (cb->integral(phi_a.data()) + cb->integral(phi_b.data()))/cb->get_volume() - 1.0;
                             std::cout<< std::setw(8) << iter;
                             std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                             std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
@@ -279,7 +281,7 @@ int main()
                                 w[2*M+d] = cb->get_lx(d);
                                 w_diff[2*M+d] = -stress[d];
                             }
-                            am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
+                            am->calculate_new_fields(w.data(), w.data(), w_diff.data(), old_error_level, error_level);
 
                             // Update lx
                             std::cout << "Updating lx..." << std::endl;
@@ -290,13 +292,6 @@ int main()
                             solver->update_laplacian_operator();
                         }
                         energy_total_list.push_back(energy_total);
-                        
-                        delete factory;
-                        delete cb;
-                        delete molecules;
-                        delete propagator_computation_optimizer;
-                        delete solver;
-                        delete am;
                     }
                 }
             }
@@ -307,7 +302,7 @@ int main()
             if (!(stddev <= 1e-7))
                 return -1;
         }
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch(std::exception& exc)
     {

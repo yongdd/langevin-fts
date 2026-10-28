@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 #include <iomanip>
 #include <cmath>
 #include <numbers>
@@ -60,9 +61,9 @@ int main()
         const int M = nx[0]*nx[1];
 
         //-------------- allocate array ------------
-        double w      [2*M+nx.size()];
-        double phi_a  [M];
-        double phi_b  [M];
+        std::vector<double> w(2*M+nx.size());
+        std::vector<double> phi_a(M);
+        std::vector<double> phi_b(M);
 
         // Choose platform
         std::string chain_model = "Discrete";
@@ -89,15 +90,15 @@ int main()
             {
             for(bool aggregate_propagator_computation : aggregate_propagator_computations)
             {
-                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                 // factory->display_info();
 
                 // Create instances and assign to the variables of base classes for the dynamic binding
-                ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
-                Molecules* molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {});
+                std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                 molecules->add_polymer(1.0, blocks, {});
-                PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                auto propagator_computation_optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), aggregate_propagator_computation);
+                std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
 
                 // -------------- Print simulation parameters ------------
                 std::cout << std::setprecision(default_precision);
@@ -127,14 +128,14 @@ int main()
                 // For the given fields find the polymer statistics
                 solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}}, {});
                 solver->compute_concentrations();
-                solver->get_total_concentration("A", phi_a);
-                solver->get_total_concentration("B", phi_b);
+                solver->get_total_concentration("A", phi_a.data());
+                solver->get_total_concentration("B", phi_b.data());
 
                 if (solver->check_total_partition() == false)
                     return -1;
 
                 // Print iteration # and error levels and check the mass conservation
-                sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                sum = (cb->integral(phi_a.data()) + cb->integral(phi_b.data()))/cb->get_volume() - 1.0;
                 std::cout<< "Mass error, total partitions" << std::endl;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                 std::cout<< "\t[";
@@ -147,12 +148,6 @@ int main()
                 std::cout<< "]" << std::endl;
 
                 total_partition_list.push_back(sum_total_partition);
-                
-                delete factory;
-                delete cb;
-                delete molecules;
-                delete propagator_computation_optimizer;
-                delete solver;
             }
             }
             double mean = std::accumulate(total_partition_list.begin(), total_partition_list.end(), 0.0)/total_partition_list.size();

@@ -24,34 +24,27 @@
 #include <complex>
 #include <vector>
 #include <type_traits>
-#include <cstdio>
-#include <unistd.h>
-#include <fcntl.h>
+#include <cmath>
 
+// MSVC has no C99 _Complex, the default complex type of LAPACKE: use
+// std::complex there. lapacke.h then declares lapack_make_complex_* with C
+// linkage returning it (C4190); they are not called here.
+#ifdef _MSC_VER
+#define lapack_complex_float std::complex<float>
+#define lapack_complex_double std::complex<double>
+#pragma warning(push)
+#pragma warning(disable : 4190)
+#endif
 #if __has_include(<lapacke.h>)
 #include <lapacke.h>
 #elif __has_include(<mkl_lapacke.h>)
 #include <mkl_lapacke.h>
 #else
-#error "LAPACKE header not found. Install with: conda install --override-channels -c defaults openblas-devel"
+#error "LAPACKE header not found. Install with: conda install --override-channels -c conda-forge openblas"
 #endif
-
-// RAII helper to suppress stderr (LAPACK xerbla warnings)
-struct SuppressStderr {
-    int saved_fd;
-    SuppressStderr() {
-        fflush(stderr);
-        saved_fd = dup(STDERR_FILENO);
-        int devnull = open("/dev/null", O_WRONLY);
-        dup2(devnull, STDERR_FILENO);
-        close(devnull);
-    }
-    ~SuppressStderr() {
-        fflush(stderr);
-        dup2(saved_fd, STDERR_FILENO);
-        close(saved_fd);
-    }
-};
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include "AndersonMixing.h"
 #include "GridLimits.h"
@@ -69,10 +62,7 @@ template <typename T>
 AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
 {
-    // The variables are indexed with 32-bit integers (see GridLimits.h)
-    if (n_var < 1 || n_var > MAX_GRID_ARRAY)
-        throw_with_line_number("Anderson mixing of " + std::to_string(n_var) + " variables is not supported: "
-            "between 1 and " + std::to_string(MAX_GRID_ARRAY) + " (32-bit indices).");
+    check_anderson_variables(n_var);
 
     // The number of variables to be determined
     this->n_var = n_var;
@@ -113,12 +103,22 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
         return;
     }
 
-    // Check max element to avoid LAPACK warnings on zero/tiny matrices
+    // Skip LAPACK for zero/tiny matrices and for non-finite input (a diverged
+    // iteration). An infinite element makes xerbla print DLASCL warnings to
+    // stdout, and a NaN makes LAPACKE return an error; both give no mixing.
+    auto is_finite = [](const T& x) { return std::isfinite(std::real(x)) && std::isfinite(std::imag(x)); };
     double max_elem = 0.0;
+    bool finite = true;
     for (int i = 0; i < n; i++)
+    {
+        finite = finite && is_finite(v[i]);
         for (int j = 0; j < n; j++)
+        {
+            finite = finite && is_finite(u[i][j]);
             max_elem = std::max(max_elem, std::abs(u[i][j]));
-    if (max_elem < 1e-20)
+        }
+    }
+    if (max_elem < 1e-20 || !finite)
     {
         for (int i = 0; i < n; i++)
             a[i] = static_cast<T>(0.0);
@@ -141,12 +141,9 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        {
-            SuppressStderr guard;
-            info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                                  A.data(), n, b.data(), 1,
-                                  s.data(), 1e-10, &rank);
-        }
+        info = LAPACKE_dgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              A.data(), n, b.data(), 1,
+                              s.data(), 1e-10, &rank);
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : 0.0;
@@ -162,13 +159,10 @@ void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
             b[i] = v[i];
         }
 
-        {
-            SuppressStderr guard;
-            info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
-                                  reinterpret_cast<lapack_complex_double*>(A.data()), n,
-                                  reinterpret_cast<lapack_complex_double*>(b.data()), 1,
-                                  s.data(), 1e-10, &rank);
-        }
+        info = LAPACKE_zgelsd(LAPACK_ROW_MAJOR, n, n, 1,
+                              reinterpret_cast<lapack_complex_double*>(A.data()), n,
+                              reinterpret_cast<lapack_complex_double*>(b.data()), 1,
+                              s.data(), 1e-10, &rank);
 
         for (int i = 0; i < n; i++)
             a[i] = (info == 0) ? b[i] : std::complex<double>(0.0, 0.0);

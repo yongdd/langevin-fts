@@ -83,6 +83,9 @@ void Molecules::add_polymer(
     std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
+    if (contour_length_mapping.finalized())
+        throw_with_line_number("Cannot add a polymer after a propagator computation has been created from these molecules.");
+
     // For discrete chains, validate that contour_length is an integer multiple of ds
     if (model_name == "discrete")
     {
@@ -104,6 +107,10 @@ void Molecules::add_polymer(
         }
     }
 
+    // Validate the polymer before registering anything, so that a rejected
+    // polymer leaves no contour lengths in the mapping
+    Polymer polymer(ds, bond_lengths, volume_fraction, block_inputs, chain_end_to_q_init);
+
     // Register block contour lengths in the mapping
     for (const auto& block : block_inputs)
     {
@@ -111,8 +118,7 @@ void Molecules::add_polymer(
     }
 
     // Add new polymer type
-    polymer_types.push_back(Polymer(ds, bond_lengths,
-        volume_fraction, block_inputs, chain_end_to_q_init));
+    polymer_types.push_back(std::move(polymer));
 }
 
 /**
@@ -127,7 +133,13 @@ void Molecules::add_polymer(
 void Molecules::add_solvent(
     double volume_fraction, std::string monomer_type)
 {
-    // Add new polymer type
+    // A propagator computation sizes its solvent arrays when it is created
+    if (contour_length_mapping.finalized())
+        throw_with_line_number("Cannot add a solvent after a propagator computation has been created from these molecules.");
+    validation::require_in_range(volume_fraction, 0.0, 1.0, "volume_fraction of the solvent");
+    // As for polymer blocks: the solvers keep a Boltzmann factor for each type of bond_lengths only
+    validation::require_string_key(bond_lengths, monomer_type, "bond_lengths");
+
     solvent_types.push_back(std::make_tuple(volume_fraction, monomer_type));
 }
 std::string Molecules::get_model_name() const
@@ -159,6 +171,9 @@ int Molecules::get_n_solvent_types() const
 }
 std::tuple<double, std::string> Molecules::get_solvent(const int s) const
 {
+    if (s < 0 || s >= static_cast<int>(solvent_types.size()))
+        throw_with_line_number("Solvent index (" + std::to_string(s) + ") must be in range [0, " +
+            std::to_string(static_cast<int>(solvent_types.size()) - 1) + "]");
     return solvent_types[s];
 }
 

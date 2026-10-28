@@ -39,6 +39,7 @@
 #include <complex>
 
 #include "PropagatorComputation.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Construct propagator computation engine.
@@ -62,6 +63,12 @@ PropagatorComputation<T>::PropagatorComputation(
         throw_with_line_number("ComputationBox<double>* cb is a null pointer");
     if (molecules == nullptr)
         throw_with_line_number("Molecules *molecules is a null pointer");
+    if (propagator_computation_optimizer == nullptr)
+        throw_with_line_number("PropagatorComputationOptimizer *propagator_computation_optimizer is a null pointer");
+    // The polymer indices of the schedule address arrays sized from molecules
+    if (!propagator_computation_optimizer->is_built_from(molecules))
+        throw_with_line_number("The propagator computation optimizer was built from another Molecules object. "
+                               "Build it from the Molecules passed to this computation.");
 
     this->cb = cb;
     this->molecules = molecules;
@@ -82,7 +89,18 @@ PropagatorComputation<T>::PropagatorComputation(
 template <typename T>
 PropagatorComputation<T>::~PropagatorComputation()
 {
-    // Vectors handle memory cleanup automatically
+    if (holds_orthogonal_cell_)
+        cb->release_orthogonal_cell();
+}
+
+template <typename T>
+void PropagatorComputation<T>::hold_orthogonal_cell()
+{
+    if (!holds_orthogonal_cell_)
+    {
+        cb->hold_orthogonal_cell();
+        holds_orthogonal_cell_ = true;
+    }
 }
 
 template <typename T>
@@ -91,6 +109,40 @@ void PropagatorComputation<T>::check_box_space_group() const
     if (cb->get_space_group() != space_group_)
         throw_with_line_number("The space group of the computation box changed after this computation "
             "was created; create a new computation or give each computation its own box.");
+}
+
+template <typename T>
+void PropagatorComputation<T>::clear_computed()
+{
+    propagators_computed_ = false;
+    concentrations_computed_ = false;
+    stress_computed_ = false;
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_propagators() const
+{
+    if (!propagators_computed_)
+        throw_with_line_number("Propagators not computed for the current fields and box. "
+            "Call compute_propagators() first.");
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_concentrations() const
+{
+    require_propagators();
+    if (!concentrations_computed_)
+        throw_with_line_number("Concentrations not computed for the current propagators. "
+            "Call compute_concentrations() after compute_propagators().");
+}
+
+template <typename T>
+void PropagatorComputation<T>::require_stress() const
+{
+    require_propagators();
+    if (!stress_computed_)
+        throw_with_line_number("Stress not computed for the current propagators. "
+            "Call compute_stress() after compute_propagators().");
 }
 
 /**
@@ -108,6 +160,7 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 {
     this->check_box_space_group();
+    this->require_stress();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
@@ -140,10 +193,16 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 {
     this->check_box_space_group();
+    this->require_stress();
     const int N_STRESS = 6;  // [dH/dL1, dH/dL2, dH/dL3, dH/dγ, dH/dβ, dH/dα]
     std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
+    if (static_cast<int>(fugacities.size()) != n_polymer_types)
+        throw_with_line_number("get_stress_gce needs one fugacity per polymer type: got " +
+            std::to_string(fugacities.size()) + " for " + std::to_string(n_polymer_types) + " polymer types.");
+    for(int p=0; p<n_polymer_types; p++)
+        validation::require_non_negative(fugacities[p], "fugacities[" + std::to_string(p) + "]");
     for(int d=0; d<N_STRESS; d++)
         stress[d] = 0.0;
 
@@ -177,23 +236,13 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
     this->cb->set_space_group(sg);
 }
 
-/**
- * @brief Compute propagators using reduced basis input fields.
- *
- * Uses reduced basis fields directly. The solver handles expand/reduce
- * internally around FFT operations.
- */
 template <typename T>
-void PropagatorComputation<T>::compute_propagators_reduced(
-    std::map<std::string, const T*> w_reduced,
-    std::map<std::string, const T*> q_init)
+bool PropagatorComputation<T>::check_total_partition(double tolerance)
 {
-    if (space_group_ == nullptr) {
-        throw_with_line_number("Space group not set. Create a computation with a space group.");
-    }
-
-    // Call the standard compute_propagators with reduced basis fields
-    compute_propagators(w_reduced, q_init);
+    for (const double error : compute_partition_errors())
+        if (!std::isfinite(error) || error > tolerance)
+            return false;
+    return true;
 }
 
 // Explicit template instantiation

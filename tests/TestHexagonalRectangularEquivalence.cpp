@@ -45,6 +45,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 #include "TestNanSafe.h"
 
 /**
@@ -78,24 +79,24 @@ ScftResult run_scft_fixed_box(
     const double PI = std::numbers::pi;
 
     // Create computation box
-    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, angles);
+    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {}, angles);
 
     // Create molecules
     std::vector<BlockInput> blocks = {
         {"A",     f, 0, 1},
         {"B", 1.0-f, 1, 2},
     };
-    Molecules* molecules = factory->create_molecules_information("Continuous", ds, {{"A", 1.0}, {"B", 1.0}});
+    std::unique_ptr<Molecules> molecules = factory->create_molecules_information("Continuous", ds, {{"A", 1.0}, {"B", 1.0}});
     molecules->add_polymer(1.0, blocks, {});
 
     // Create solver
-    PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, false);
-    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
+    auto optimizer = std::make_unique<PropagatorComputationOptimizer>(molecules.get(), false);
+    std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), optimizer.get(), "rqm4");
 
     // Create Anderson mixing
     const int M = cb->get_total_grid();
     int am_n_var = 2 * M;
-    AndersonMixing<double>* am = factory->create_anderson_mixing(am_n_var, 20, 1e-1, 0.1, 0.1);
+    std::unique_ptr<AndersonMixing<double>> am = factory->create_anderson_mixing(am_n_var, 20, 1e-1, 0.1, 0.1);
 
     // Allocate arrays
     double* w = new double[2 * M];
@@ -271,12 +272,6 @@ ScftResult run_scft_fixed_box(
     delete[] phi_a;
     delete[] phi_b;
 
-    delete molecules;
-    delete optimizer;
-    delete cb;
-    delete solver;
-    delete am;
-
     return {energy_total, stress, lx, angles};
 }
 
@@ -353,7 +348,7 @@ int main()
             std::cout << std::endl;
             std::cout << "----------------------------------------" << std::endl;
 
-            AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+            std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
 
             //==================================================================
             // Test: Fixed Box SCFT - verify stress is small at optimal parameters
@@ -362,7 +357,7 @@ int main()
 
             std::cout << "\nRunning hexagonal cell..." << std::endl;
             auto result_hex = run_scft_fixed_box(
-                factory, nx_hex, lx_hex, angles_hex, f, chi_n, ds,
+                factory.get(), nx_hex, lx_hex, angles_hex, f, chi_n, ds,
                 max_iter, tolerance, "Hexagonal2D_Input.txt", true, true);
             std::cout << "  Final free energy (hex): " << std::setprecision(9) << std::fixed << result_hex.energy << std::endl;
             std::cout << "  Stress [σ_xx, σ_yy, σ_xy]: [" << std::scientific << std::setprecision(3)
@@ -370,7 +365,7 @@ int main()
 
             std::cout << "\nRunning rectangular cell..." << std::endl;
             auto result_rect = run_scft_fixed_box(
-                factory, nx_rect, lx_rect, angles_rect, f, chi_n, ds,
+                factory.get(), nx_rect, lx_rect, angles_rect, f, chi_n, ds,
                 max_iter, tolerance, "Rectangular2D_Input.txt", true, true);
             std::cout << "  Final free energy (rect): " << std::setprecision(9) << std::fixed << result_rect.energy << std::endl;
             std::cout << "  Stress [σ_xx, σ_yy, σ_xy]: [" << std::scientific << std::setprecision(3)
@@ -384,7 +379,6 @@ int main()
             if (!(energy_diff <= tolerance_comparison))
             {
                 std::cout << "ERROR: Free energies differ by more than " << tolerance_comparison << "!" << std::endl;
-                delete factory;
                 return -1;
             }
             std::cout << "Energy comparison: PASSED" << std::endl;
@@ -415,8 +409,6 @@ int main()
             std::cout << "  Max |stress| (rect): " << max_stress_rect << std::endl;
             std::cout << "  σ_xy (hex): " << result_hex.stress[2] << std::endl;
             std::cout << "  σ_xy (rect): " << result_rect.stress[2] << std::fixed << std::endl;
-
-            delete factory;
             }  // end reduce_memory loop
         }  // end platform loop
 
@@ -424,7 +416,7 @@ int main()
         std::cout << "All tests PASSED!" << std::endl;
         std::cout << "========================================" << std::endl;
 
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch (std::exception& exc)
     {

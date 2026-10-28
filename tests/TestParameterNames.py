@@ -74,7 +74,7 @@ def check_aliases(root):
     # not be valid because ambiguity is caught before numerical construction.
     pairs = [({old: 1, new: 1}, "") for old, new in (
         ("distinct_polymers", "polymers"), ("box_is_altering", "relax_cell"),
-        ("scale_stress", "stress_scale"))]
+        ("scale_stress", "stress_scale"), ("alpha_ds", "dynamic_stabilization"))]
     pairs.extend([({"recording": {old: 1, new: 1}}, "recording.") for old, new in (
         ("recording_period", "checkpoint_interval"), ("sf_computing_period", "sample_interval"),
         ("sf_recording_period", "statistics_save_interval"))])

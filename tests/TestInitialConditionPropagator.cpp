@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 #include <iomanip>
 #include <cmath>
 #include <numbers>
@@ -27,6 +28,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "TestCudaPart.h"
 
 int main()
 {
@@ -54,9 +56,9 @@ int main()
         bool reduce_memory=false;
 
         //-------------- Allocate array ------------
-        double w[M];
-        double q_init[M];
-        double q_out[M];
+        std::vector<double> w(M);
+        std::vector<double> q_init(M);
+        std::vector<double> q_out(M);
 
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
@@ -69,20 +71,20 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                    std::unique_ptr<AbstractFactory<double>> factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                     // factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
-                    Molecules *molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                    std::unique_ptr<ComputationBox<double>> cb = factory->create_computation_box(nx, lx, {});
+                    std::unique_ptr<Molecules> molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
                     molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
-                    PropagatorComputationOptimizer* propagator_computation_optimizer= factory->create_propagator_computation_optimizer(molecules, aggregate_propagator_computation);
+                    std::unique_ptr<PropagatorComputationOptimizer> propagator_computation_optimizer = factory->create_propagator_computation_optimizer(molecules.get(), aggregate_propagator_computation);
 
                     // Display branches
                     propagator_computation_optimizer->display_blocks();
                     propagator_computation_optimizer->display_sub_propagators();
 
-                    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                    std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(cb.get(), molecules.get(), propagator_computation_optimizer.get(), "rqm4");
 
                     // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
@@ -99,16 +101,16 @@ int main()
                     q_init[0] = 1.0/cb->get_dv(0);
 
                     // Keep the level of field value
-                    cb->zero_mean(w);
+                    cb->zero_mean(w.data());
 
                     // For the given fields find the polymer statistics
-                    solver->compute_propagators({{"A",w}},{{"G", q_init}});
+                    solver->compute_propagators({{"A",w.data()}},{{"G", q_init.data()}});
                     solver->compute_concentrations();
 
                     for(int n=20; n<=N; n+=20)
                     {   
                                                    //output, p, v ,u, n
-                        solver->get_chain_propagator(q_out, 0, 0, 1, n);
+                        solver->get_chain_propagator(q_out.data(), 0, 0, 1, n);
 
                         double sum = 0.0;
                         double x_square = 0.0;
@@ -145,16 +147,10 @@ int main()
                             return -1;
                         }
                     }
-                    
-                    delete factory;
-                    delete cb;
-                    delete molecules;
-                    delete propagator_computation_optimizer;
-                    delete solver;
                 }
             }
         }
-        return 0;
+        return cuda_part_missing() ? 1 : 0;
     }
     catch(std::exception& exc)
     {

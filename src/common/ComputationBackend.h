@@ -198,6 +198,12 @@ public:
     virtual void normalize_concentration(int stream, BackendArray<T>* phi, T norm, BackendArray<T>* divisor) = 0;
 
     /**
+     * @brief Build what block_stress() needs before the blocks run in parallel
+     *        (for example k-space multiplier tables); the default does nothing.
+     */
+    virtual void prepare_stress() {}
+
+    /**
      * @brief Stress of one block: Σ_i weight_i * σ(q_1,i, q_2,i).
      *
      * σ is the solver's segment stress, the six v⊗v sums

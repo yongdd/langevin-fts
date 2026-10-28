@@ -85,7 +85,7 @@ Reduce-memory mode runs the same steps one propagator at a time, keeping q only 
 
 For adding observables, Langevin integrators or propagator methods, see
 [Extensions.md](Extensions.md) and the runnable
-[CustomExtensions.py](../../examples/lfts/CustomExtensions.py).
+[CustomExtensions.py](../../examples/tools/CustomExtensions.py).
 
 **Location**: `src/common/AbstractFactory.h`
 
@@ -96,29 +96,33 @@ The abstract factory provides a unified interface for creating platform-specific
 ```
 AbstractFactory<T>                    [Abstract Base]
 ├── create_computation_box()          [pure virtual]
-├── create_molecules_information()    [pure virtual]
+├── create_molecules_information()    [concrete, platform-independent]
 ├── create_propagator_computation_optimizer(molecules, aggregate)  [concrete, platform-independent]
-├── create_propagator_computation()   [pure virtual]
+├── create_propagator_computation()   [concrete: Computation* with create_backend()]
 ├── create_anderson_mixing()          [pure virtual]
-└── display_info()                    [pure virtual]
+├── display_info()                    [pure virtual]
+└── create_backend()                  [pure virtual, protected]
         │
         ├── FftwFactory<T>             [CPU - FFTW transforms]
         │   └── Creates: CpuComputationBox, CpuAndersonMixing,
-        │                Computation* with a CpuComputationBackend
+        │                CpuComputationBackend (FFTW)
         │
         ├── MklFactory<T>              [CPU - MKL transforms]
         │   └── Creates: CpuComputationBox, CpuAndersonMixing,
-        │                Computation* with a CpuComputationBackend
+        │                CpuComputationBackend (MKL)
         │
         └── CudaFactory<T>            [GPU]
             └── Creates: CudaComputationBox, CudaAndersonMixing[ReduceMemory],
-                         Computation* with a CudaComputationBackend
+                         CudaComputationBackend
 ```
 
 `Computation*` is one of the platform-neutral computations (`ComputationContinuous`,
 `ComputationDiscrete`, `ComputationReduceMemoryContinuous`,
-`ComputationReduceMemoryDiscrete`), chosen from the chain model and `reduce_memory`. The
-backend creates the solver (`CpuSolver*` or `CudaSolver*`) from the numerical method.
+`ComputationReduceMemoryDiscrete`). `create_propagator_computation()` in
+`src/common/AbstractFactory.cpp` resolves and validates the numerical method once,
+chooses the computation from the chain model and `reduce_memory`, and builds it around
+the backend that the platform returns from `create_backend()`. The backend creates the
+solver (`CpuSolver*` or `CudaSolver*`) for that method.
 
 ### Platform Implementations
 
@@ -146,11 +150,11 @@ The classes each platform provides (the computation classes above them are share
 #include "PlatformSelector.h"
 
 // Create factory for a specific platform ("cpu-fftw", "cpu-mkl", or "cuda")
-AbstractFactory<double>* factory =
+std::unique_ptr<AbstractFactory<double>> factory =
     PlatformSelector::create_factory_real("cuda", reduce_memory);
 
 // For complex-valued field theories
-AbstractFactory<std::complex<double>>* factory_complex =
+std::unique_ptr<AbstractFactory<std::complex<double>>> factory_complex =
     PlatformSelector::create_factory_complex("cuda", reduce_memory);
 ```
 
@@ -163,12 +167,20 @@ AbstractFactory<std::complex<double>>* factory_complex =
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `create_computation_box(nx, lx, bc, mask=nullptr)` | `ComputationBox<T>*` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
-| `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `ComputationBox<T>*` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
-| `create_propagator_computation_optimizer(molecules, aggregate)` | `PropagatorComputationOptimizer*` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
-| `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
-| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry |
-| `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
+| `create_computation_box(nx, lx, bc, mask=nullptr)` | `std::unique_ptr<ComputationBox<T>>` | Orthogonal simulation grid with boundary conditions; optional mask for impenetrable regions |
+| `create_computation_box(nx, lx, bc, angles, mask=nullptr)` | `std::unique_ptr<ComputationBox<T>>` | Grid with lattice angles in degrees for non-orthogonal cells (`angles` empty: orthogonal; `[gamma]` for 2D; `[alpha, beta, gamma]` for 3D); optional mask |
+| `create_propagator_computation_optimizer(molecules, aggregate)` | `std::unique_ptr<PropagatorComputationOptimizer>` | Propagator dependency graph with optional aggregation (concrete method of the base class) |
+| `create_molecules_information(model, ds, bond_lengths)` | `std::unique_ptr<Molecules>` | Polymer/solvent container (concrete method of the base class) |
+| `create_propagator_computation(box, molecules, optimizer, method, space_group=nullptr)` | `std::unique_ptr<PropagatorComputation<T>>` | Propagator solver (method: rqm4, rk2, cn-adi2); optional `SpaceGroup*` enables space-group symmetry (concrete method of the base class; the platform supplies the backend) |
+| `create_anderson_mixing(n_var, max_hist, ...)` | `std::unique_ptr<AndersonMixing<T>>` | Field update accelerator |
+| `create_fourier_transform(box, bc)` | `std::unique_ptr<FourierTransform<T>>` | Transforms and Fourier multipliers of whole fields (one transform per axis, see Section 3.4) |
+
+The caller owns the created objects. An object created from others keeps raw pointers
+to them (the optimizer to its molecules; the computation to its box, molecules,
+optimizer and space group), so they must outlive it. Local `unique_ptr`s are destroyed
+in reverse order of declaration, so creating the objects in this order destroys each
+computation before the objects it points to. The Python bindings keep these arguments
+alive with `py::keep_alive`.
 
 ---
 
@@ -233,6 +245,8 @@ PropagatorComputation<T>                      [Abstract Base]
 ├── get_total_partition(polymer)              [pure virtual]
 ├── get_chain_propagator(p, v, u, n)          [pure virtual]
 ├── get_total_concentration(monomer)          [pure virtual]
+├── compute_partition_errors()                [pure virtual]
+├── check_total_partition(tolerance)
 └── update_laplacian_operator()               [pure virtual]
         │
         └── ComputationCommon<T>              [backend, scheduler, φ storage, getters, solvents]
@@ -250,10 +264,27 @@ ComputationBackend<T>                         [Abstract Base, grid operations]
                                               checkpoints in pinned host memory
 ```
 
-All of these live in `src/common/` except the two backends. The platform
-factories (`MklFactory`, `FftwFactory`, `CudaFactory`) create the computation
-with their backend; the Python layer and the C++ tests (through
+All of these live in `src/common/` except the two backends.
+`AbstractFactory::create_propagator_computation()` creates the computation with
+the backend that the platform factory (`MklFactory`, `FftwFactory`,
+`CudaFactory`) supplies; the Python layer and the C++ tests (through
 `tests/TestComputationFactory.h`) obtain every computation from a factory.
+
+**What has been computed.** The base class records whether the propagators,
+the concentrations and the stress belong to the current fields and box. A new
+`compute_propagators()` and `update_laplacian_operator()` clear all three; each
+computation sets its own when it completes. The getters throw instead of
+returning values of other fields or another box: `get_total_partition()`,
+`get_chain_propagator()`, `compute_concentrations()`, `compute_stress()` and
+`compute_partition_errors()` need the propagators, the concentration getters
+also `compute_concentrations()`, `get_stress()` also `compute_stress()`. A new
+computation class sets the flags at the end of its `compute_*` methods and
+calls the `require_*` checks first in its getters. `compute_partition_errors()`
+returns the forward/backward error of every polymer and prints nothing;
+`check_total_partition()` compares them with a tolerance. The molecules are
+fixed once a computation exists (`add_polymer()` and `add_solvent()` throw), and
+a `cn-adi2` computation keeps its box orthogonal while it exists
+(`ComputationBox::hold_orthogonal_cell()`).
 
 **Who does what.** The computation classes decide *what* is computed and in
 *which order*: the scheduler's groups of propagators, the initial condition of
@@ -392,6 +423,29 @@ FFT<T>                                        [Abstract Base]
 | Periodic | FFT | IFFT | Complex coefficients |
 | Reflecting | DCT-II | DCT-III | Real coefficients |
 | Absorbing | DST-II | DST-III | Real coefficients |
+
+**Fourier transform of whole fields** (`src/common/FourierTransform.h`,
+`CpuFourierTransform`, `CudaFourierTransform`): the Python layer reaches the platform
+FFT through `PropagatorSolver.fourier`. `FFT<T>` transforms one field in the memory of the
+platform; `FourierTransform<T>` works on host arrays of several fields and keeps multipliers. It transforms host fields (`forward`, `backward`)
+and evaluates `backward(Σ M(k) · forward(fields))` for Fourier multipliers stored once
+(`create_multiplier`, held by a `FourierMultiplier<T>` handle): matrices of
+`n_out × n_in` functions of k, or one function applied to each field. The CUDA version
+keeps the multipliers in device memory and runs a call on its own stream: upload,
+transforms, a grid-stride product kernel, inverse transforms and download. The
+coefficients have the layout of `FFT<T>`, and `get_k_squared()` gives |k|² in it for the
+current box with the alias convention of `Pseudo`. For real fields the multipliers and the
+coefficients given to `backward` are made Hermitian on the planes of the half spectrum that
+hold both k and −k, where the inverse r2c transforms of FFTW, MKL and cuFFT would read
+other values differently; on the device every field starts an even number of doubles from
+the next (cuFFT needs 16-byte aligned real data). Periodic and wall axes cannot be mixed;
+`PropagatorSolver.fourier` uses the cosine series along walls, whose fields have no
+boundary value. The Langevin steps use it for smearing (except in boxes that mix periodic
+and wall axes), the transforms of ψ, the `etd` integrator, the dilation of the smearing
+(osmotic pressure), the LR compressor of L-FTS in periodic boxes and in boxes with reflecting
+walls only (boxes that mix periodic and wall axes use `scipy.fft`; absorbing walls are refused)
+and, in periodic boxes, WTMD and the samples for the structure functions; boxes with walls
+record the Fourier coefficients of `numpy.fft`.
 
 ### 3.5 AndersonMixing Hierarchy
 
@@ -584,10 +638,11 @@ that throw need no cleanup code:
 - host arrays: `std::vector`; owned objects (solvers, transforms, CrysFFT engines,
   `Pseudo`, the scheduler, the backend): `std::unique_ptr`.
 
-Raw pointers are lent, never owned. Three places hand out ownership on purpose: the
-factory functions (`create_computation_box`, `create_propagator_computation`, ...),
-whose results the caller (the Python bindings or a C++ test) deletes; the backends'
-`allocate()`/`deallocate()` and `allocate_checkpoint()`/`deallocate_checkpoint()` pairs,
+Raw pointers are lent, never owned. The factory functions (`create_computation_box`,
+`create_propagator_computation`, ...) return `std::unique_ptr`, which the Python bindings
+take over as the holders of their objects. Two places hand out ownership through raw
+pointers on purpose: the backends' `allocate()`/`deallocate()` and
+`allocate_checkpoint()`/`deallocate_checkpoint()` pairs,
 the allocators of the propagator handles and the reduce-memory checkpoints, which the
 computation classes free in one place; and the `CudaCommon` singleton, which is created
 with `new` and deliberately never deleted (it lives until the process exits). cuFFT plans, CUDA streams and events are not memory and are destroyed
@@ -697,6 +752,7 @@ If GPU and CPU give different results:
 
 1. Run same test on both `cuda` and CPU platforms - results should match to ~10⁻¹³
 2. Check partition function consistency: `solver.check_total_partition()` should pass
+   (`solver.partition_errors()` returns the relative error of each polymer)
 3. Verify material conservation: `np.mean(sum(phi_species))` = 1.0 within round-off (10⁻¹⁵–10⁻¹⁴)
 
 ---

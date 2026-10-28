@@ -11,7 +11,8 @@ with Debye functions g(f, x) = 2 (f x + exp(-f x) - 1)/x^2 and x = k^2 R_g^2.
 With Gaussian smearing the interactions act on the smeared densities: chi N and
 X are multiplied by Gamma(k)^2, and the recorded S(k) is that of the densities.
 The checks use the first eight wavevectors of a 1D box: the mean ratio to RPA must
-lie within 5 % of 1 and every single ratio within 15 % (sampling noise).
+lie within 5 % of 1 and every single ratio within 15 % (sampling noise). CL-FTS also runs
+with the etd integrator at dt = 16, where LM steps diverge.
 
 From 2024-09-01 to 2026-10 the estimator used the inverse of the auxiliary-field
 matrix instead of the matrix itself and gave S/M (one half for AB: L-FTS 0.50 of
@@ -126,6 +127,17 @@ def main():
             sim.run(initial_fields={"A": np.zeros(NX), "B": np.zeros(NX)})
         data = loadmat(sorted(glob.glob(os.path.join(work, "structure_function_*.mat")))[-1])
         compare("CL-FTS (zeta N = 100)", data, "_real", rpa(100.0))
+
+        # CL-FTS with the etd integrator at dt = 16: LM steps diverge here from dt = 4 on
+        work = os.path.join(root, "clfts_etd")
+        p = params(work, 16.0)
+        p["zeta_n"] = 100.0
+        p["langevin"]["integrator"] = "etd"
+        with contextlib.redirect_stdout(io.StringIO()):
+            sim = CLFTS(p, random_seed=7)
+            sim.run(initial_fields={"A": np.zeros(NX), "B": np.zeros(NX)})
+        data = loadmat(sorted(glob.glob(os.path.join(work, "structure_function_*.mat")))[-1])
+        compare("CL-FTS etd, dt = 16 (zeta N = 100)", data, "_real", rpa(100.0))
 
         # Smeared interactions (Gaussian, a_int = 0.1: Gamma = 0.45 at the eighth mode)
         smearing = {"type": "gaussian", "a_int": 0.1}

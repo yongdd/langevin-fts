@@ -74,8 +74,7 @@ installation guide provides separate MKL and FFTW setup paths:
 
 ```bash
 conda activate polymerfts
-conda install --override-channels -c defaults --freeze-installed \
-    fftw mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11 mkl-devel=2026.1.0
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
@@ -89,6 +88,12 @@ nice -n 10 cmake --build build --parallel 4
 - The base environment includes LAPACKE but installs neither MKL nor FFTW.
   Install the libraries separately before enabling their CPU backends.
   See Installation for setup details.
+- The environment uses conda-forge (Miniforge) on Linux and Windows. On Windows,
+  build with MSVC from an x64 developer prompt in the activated environment and
+  select Ninja with `-G Ninja` (wheels: `-Ccmake.args=-GNinja`): the Visual Studio
+  generator cannot use conda's `nvcc`. conda-forge's `cuda-nvcc`,
+  `cuda-cudart-dev` and `libcufft-dev` supply the CUDA toolkit there. See
+  Installation.
 - Use `-DPOLYMERFTS_USE_CUDA=ON` when CUDA must be built: configuration then fails
   if the toolchain is unsuitable. `AUTO` can fall back to CPU; inspect the output.
 - Set `POLYMERFTS_CUDA_ARCHITECTURES` for the intended toolkit and target devices.
@@ -125,12 +130,12 @@ ctest --test-dir build --output-on-failure
 
 Run long suites through the scheduler. Use `-R` to select tests relevant to the
 change. The available tests depend on the compiled backends. A CUDA build needs
-an allocated, visible GPU to validate its CUDA tests; a CPU-only run does not
-establish GPU correctness. Report failures and skips accurately.
+an allocated, visible GPU to validate its CUDA tests; without one, every test
+with a CUDA part fails after running its CPU parts. Report failures and skips accurately.
 
-Constructing `SCFT`, `LFTS` or `CLFTS` writes `polymer_<id>.png` in the current
-directory. Run temporary checks and examples from a scratch directory so generated
-files do not enter the source tree. Some native tests read inputs from `tests/`;
+`LFTS` and `CLFTS` runs write `polymer_<id>.png` into `recording.dir`; `SCFT` writes it
+only into `polymer_figure_dir` when given. Run temporary checks and examples from a
+scratch directory so generated files do not enter the source tree. Some native tests read inputs from `tests/`;
 use CTest to preserve their configured working directory.
 
 For changes to numerical algorithms or propagator kernels:
@@ -143,7 +148,7 @@ For changes to numerical algorithms or propagator kernels:
    weak fields can conceal numerical errors. Preserve existing calibrated fields.
 4. Check analytical limits, contour/time-step refinement and backend agreement
    as appropriate to the change. Separate correctness tests from performance runs.
-5. Finish relevant solver changes with `examples/scft/Gyroid.py` using the
+5. Finish relevant solver changes with `examples/block_copolymer/scft/Gyroid.py` using the
    continuous chain model. Check convergence rather than a fixed execution time.
 
 For FTS changes, also check uninterrupted versus restarted runs, full RNG and
@@ -197,11 +202,12 @@ Keep each simulation class readable from top to bottom:
   `integrator=` interface for additional methods and named `callbacks=` for
   observables. Preserve accepted-step ordering and checkpoint contracts.
 - `propagator_solver.py` wraps the native solver API; `polymer_field_theory.py`
-  handles monomer/auxiliary-field transformations. `smearing.py`, `wtmd.py` and
-  `phase_equilibrium.py` contain their respective physical operations.
+  handles monomer/auxiliary-field transformations. `smearing.py`, `wtmd.py`,
+  `electrostatics.py` and `phase_equilibrium.py` contain their respective physical
+  operations.
 
 Use [Extensions](docs/internals/Extensions.md) and
-[CustomExtensions.py](examples/lfts/CustomExtensions.py) for callback and integrator
+[CustomExtensions.py](examples/tools/CustomExtensions.py) for callback and integrator
 contracts. The additive-noise example is called predictor-corrector; it uses one
 explicit Heun correction with the same noise in both stages.
 
@@ -252,7 +258,7 @@ field potentials use the per-reference-chain convention. See
 - Use owning RAII buffers and smart pointers. Device memory uses
   `CudaDeviceBuffer`, pinned host memory uses `CudaPinnedBuffer`; host arrays use
   standard containers. Raw pointers lend access rather than transferring ownership,
-  except where an existing factory or backend allocation interface requires it.
+  except where an existing backend allocation interface requires it.
 - Preserve allocation and resource counters used by safety tests. CUDA destruction
   and release paths must not throw; use the existing release helpers.
 - Share solver mechanics through `CpuSolverPseudoBase` and `CudaSolverPseudoBase`.
@@ -286,7 +292,8 @@ Guide for detailed transform dispatch, ownership and computation hierarchies.
 
 - Use [Parameter Reference](docs/references/Parameters.md) for complete input formats
   and compatibility rules; avoid copying a second parameter reference into this file.
-- Examples live in `examples/scft/`, `examples/lfts/` and `examples/clfts/`.
+- Examples live in `examples/`, grouped by physical system (`block_copolymer/`, `blend/`,
+  `charged/`) and then by method (`scft/`, `lfts/`, `clfts/`); `tools/` holds API examples.
   [Tutorials](tutorials/README.md) provides a learning sequence.
 - Explain physical conventions and derivations under `docs/theory/`. Keep measured
   performance results with their problem size, backend, hardware and precision.
@@ -295,8 +302,9 @@ Guide for detailed transform dispatch, ownership and computation hierarchies.
 
 For GitHub math, use protected inline syntax (`` $`...`$ ``) and unindented fenced
 blocks with the `math` language. Put display blocks outside list indentation.
-Within table math use `\vert` instead of a literal vertical bar. Escape literal
-dollar signs. Check documentation edits with:
+Within table math use `\vert` instead of a literal vertical bar. Write `\lt` for a
+`<` directly before a letter; GitHub can take it as an HTML tag and break the
+formula. Escape literal dollar signs. Check documentation edits with:
 
 ```bash
 python .github/scripts/check_latex.py AGENTS.md CLAUDE.md

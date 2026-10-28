@@ -47,15 +47,111 @@ int main()
         CUDA_CHECK(cudaMalloc((void**)&d_data_k, sizeof(double) * N));
 
         //=======================================================================
-        // Test 0: 1D Odd N DCT Round-trip
-        // NOTE: SKIPPED - CudaRealTransform DCT-2/DCT-3 only supports even N.
-        // The FCT algorithm (Makhoul 1980) used internally requires even N
-        // for the interleaved even/odd decomposition. Odd N would require
-        // a different algorithm (e.g., 2N mirror extension FFT).
+        // Test 0: Odd lengths along reflecting axes. CudaFFT's forward is the
+        // unnormalized DCT-II / DST-II per axis (FFTW REDFT10 / RODFT10), which
+        // a direct sum checks; absorbing axes must stay even.
         //=======================================================================
         {
-            std::cout << "Test 0: 1D Odd N=11 DCT Round-trip" << std::endl;
-            std::cout << "  SKIPPED (odd N not supported by current DCT-2/DCT-3 implementation)" << std::endl;
+            std::cout << "Test 0: odd reflecting axes (1D N=11, 3D 6x4x3 R/A/R) against direct sums" << std::endl;
+            auto basis = [](BoundaryCondition bc, int k, int n, int len) {
+                const double pi = std::numbers::pi;
+                return (bc == BoundaryCondition::REFLECTING) ? 2.0 * std::cos(pi * k * (2 * n + 1) / (2.0 * len))
+                                                             : 2.0 * std::sin(pi * (k + 1) * (2 * n + 1) / (2.0 * len));
+            };
+            std::mt19937 gen0(7);
+            std::normal_distribution<double> normal(0.0, 5.0);
+
+            // 1D, N = 11
+            {
+                const int N1 = 11;
+                std::vector<double> x(N1), coeff(N1), back(N1), ref(N1, 0.0);
+                for (double& v : x)
+                    v = normal(gen0);
+                for (int k = 0; k < N1; ++k)
+                    for (int n = 0; n < N1; ++n)
+                        ref[k] += x[n] * basis(BoundaryCondition::REFLECTING, k, n, N1);
+                CudaFFT<double, 1> fft_odd({N1}, {BoundaryCondition::REFLECTING});
+                CudaDeviceBuffer<double> d_x(N1), d_c(N1);
+                CUDA_CHECK(cudaMemcpy(d_x, x.data(), sizeof(double) * N1, cudaMemcpyHostToDevice));
+                fft_odd.forward(d_x, d_c);
+                CUDA_CHECK(cudaMemcpy(coeff.data(), d_c, sizeof(double) * N1, cudaMemcpyDeviceToHost));
+                fft_odd.backward(d_c, d_x);
+                CUDA_CHECK(cudaMemcpy(back.data(), d_x, sizeof(double) * N1, cudaMemcpyDeviceToHost));
+                double err_fwd = 0.0, err_back = 0.0, scale = 0.0;
+                for (int i = 0; i < N1; ++i)
+                {
+                    err_fwd = max_or_nan(err_fwd, std::abs(coeff[i] - ref[i]));
+                    err_back = max_or_nan(err_back, std::abs(back[i] - x[i]));
+                    scale = std::max(scale, std::abs(ref[i]));
+                }
+                std::cout << "  1D N=11: forward vs direct " << err_fwd / scale << ", round trip " << err_back << std::endl;
+                if (!(err_fwd / scale < 1e-12) || !(err_back < 1e-12))
+                {
+                    std::cout << "  FAILED!" << std::endl;
+                    return -1;
+                }
+            }
+
+            // 3D, 6 (reflecting) x 4 (absorbing) x 3 (reflecting)
+            {
+                const std::array<int, 3> n3 = {6, 4, 3};
+                const std::array<BoundaryCondition, 3> bc3 = {
+                    BoundaryCondition::REFLECTING, BoundaryCondition::ABSORBING, BoundaryCondition::REFLECTING};
+                const int M3 = n3[0] * n3[1] * n3[2];
+                std::vector<double> x(M3), coeff(M3), back(M3), ref(M3, 0.0);
+                for (double& v : x)
+                    v = normal(gen0);
+                for (int k0 = 0; k0 < n3[0]; ++k0)
+                    for (int k1 = 0; k1 < n3[1]; ++k1)
+                        for (int k2 = 0; k2 < n3[2]; ++k2)
+                        {
+                            double sum = 0.0;
+                            for (int i0 = 0; i0 < n3[0]; ++i0)
+                                for (int i1 = 0; i1 < n3[1]; ++i1)
+                                    for (int i2 = 0; i2 < n3[2]; ++i2)
+                                        sum += x[(i0 * n3[1] + i1) * n3[2] + i2] * basis(bc3[0], k0, i0, n3[0]) *
+                                               basis(bc3[1], k1, i1, n3[1]) * basis(bc3[2], k2, i2, n3[2]);
+                            ref[(k0 * n3[1] + k1) * n3[2] + k2] = sum;
+                        }
+                CudaFFT<double, 3> fft_odd3(n3, bc3);
+                CudaDeviceBuffer<double> d_x(M3), d_c(M3);
+                CUDA_CHECK(cudaMemcpy(d_x, x.data(), sizeof(double) * M3, cudaMemcpyHostToDevice));
+                fft_odd3.forward(d_x, d_c);
+                CUDA_CHECK(cudaMemcpy(coeff.data(), d_c, sizeof(double) * M3, cudaMemcpyDeviceToHost));
+                fft_odd3.backward(d_c, d_x);
+                CUDA_CHECK(cudaMemcpy(back.data(), d_x, sizeof(double) * M3, cudaMemcpyDeviceToHost));
+                double err_fwd = 0.0, err_back = 0.0, scale = 0.0;
+                for (int i = 0; i < M3; ++i)
+                {
+                    err_fwd = max_or_nan(err_fwd, std::abs(coeff[i] - ref[i]));
+                    err_back = max_or_nan(err_back, std::abs(back[i] - x[i]));
+                    scale = std::max(scale, std::abs(ref[i]));
+                }
+                std::cout << "  3D 6x4x3 R/A/R: forward vs direct " << err_fwd / scale << ", round trip " << err_back << std::endl;
+                if (!(err_fwd / scale < 1e-12) || !(err_back < 1e-12))
+                {
+                    std::cout << "  FAILED!" << std::endl;
+                    return -1;
+                }
+            }
+
+            // An odd absorbing axis is refused
+            bool refused = false;
+            try
+            {
+                CudaFFT<double, 2> fft_bad({6, 5}, {BoundaryCondition::REFLECTING, BoundaryCondition::ABSORBING});
+            }
+            catch (std::exception&)
+            {
+                refused = true;
+            }
+            std::cout << "  odd absorbing axis refused: " << (refused ? "yes" : "NO") << std::endl;
+            if (!refused)
+            {
+                std::cout << "  FAILED!" << std::endl;
+                return -1;
+            }
+            std::cout << "  PASSED!" << std::endl;
         }
 
         //=======================================================================
@@ -243,13 +339,10 @@ int main()
         cudaFree(d_data2d_k);
 
         //=======================================================================
-        // Test 5: 3D Mixed BC test
-        // NOTE: SKIPPED - NZ3=3 is odd, which is not supported by DCT-2/DCT-3.
+        // Test 5: 3D Mixed BC test (the reflecting z axis has an odd length)
         //=======================================================================
         std::cout << "\nTest 5: 3D Mixed BC Round-trip" << std::endl;
-        std::cout << "  SKIPPED (odd dimension not supported by current DCT-2/DCT-3 implementation)" << std::endl;
-
-#if 0  // Disabled: odd N not supported
+        {
         const int NX3 = 6, NY3 = 4, NZ3 = 3;  // Only dim 2 is odd
         const int M3 = NX3 * NY3 * NZ3;
         std::vector<double> data3d_init(M3), data3d_r(M3), data3d_k(M3);
@@ -296,7 +389,53 @@ int main()
 
         cudaFree(d_data3d_r);
         cudaFree(d_data3d_k);
-#endif  // Disabled: odd N not supported
+        }
+
+        //=======================================================================
+        // Periodic complex interface: backward() preserves its input spectrum
+        // (cuFFT Z2D may overwrite its input even out of place)
+        //=======================================================================
+        {
+            std::cout << "\nPeriodic backward(complex) preserves its input" << std::endl;
+            const std::array<int, 3> nx_p = {8, 6, 10};
+            const std::array<BoundaryCondition, 3> bc_p = {
+                BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC, BoundaryCondition::PERIODIC};
+            const int MP = nx_p[0] * nx_p[1] * nx_p[2];
+            const int MP_COMPLEX = nx_p[0] * nx_p[1] * (nx_p[2] / 2 + 1);
+            CudaFFT<double, 3> fft_p(nx_p, bc_p);
+
+            std::vector<double> data_p(MP), data_p_back(MP);
+            for (int i = 0; i < MP; ++i)
+                data_p[i] = std::sin(0.37 * i) + 0.1 * i / MP;
+            CudaDeviceBuffer<double> d_p(MP), d_p_back(MP);
+            CudaDeviceBuffer<cuDoubleComplex> d_pk(MP_COMPLEX);
+            std::complex<double>* pk = reinterpret_cast<std::complex<double>*>(d_pk.get());
+            CUDA_CHECK(cudaMemcpy(d_p, data_p.data(), sizeof(double) * MP, cudaMemcpyHostToDevice));
+
+            fft_p.forward(d_p, pk);
+            std::vector<std::complex<double>> spectrum(MP_COMPLEX), spectrum_after(MP_COMPLEX);
+            CUDA_CHECK(cudaMemcpy(spectrum.data(), pk, sizeof(cuDoubleComplex) * MP_COMPLEX, cudaMemcpyDeviceToHost));
+            fft_p.backward(pk, d_p_back);
+            CUDA_CHECK(cudaMemcpy(spectrum_after.data(), pk, sizeof(cuDoubleComplex) * MP_COMPLEX, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(data_p_back.data(), d_p_back, sizeof(double) * MP, cudaMemcpyDeviceToHost));
+
+            if (spectrum != spectrum_after)
+            {
+                std::cout << "  FAILED! backward() changed its input spectrum" << std::endl;
+                return -1;
+            }
+            std::vector<double> diff_p(MP);
+            for (int i = 0; i < MP; ++i)
+                diff_p[i] = std::abs(data_p_back[i] - data_p[i]);
+            error = max_or_nan(diff_p);
+            std::cout << "  Round-trip Error: " << error << std::endl;
+            if (!std::isfinite(error) || error > 1e-12)
+            {
+                std::cout << "  FAILED!" << std::endl;
+                return -1;
+            }
+            std::cout << "  PASSED!" << std::endl;
+        }
 
         std::cout << "\nAll tests passed!" << std::endl;
 

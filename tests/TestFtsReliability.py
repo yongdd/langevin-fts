@@ -61,12 +61,16 @@ def main():
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         previous = Path.cwd()
-        os.chdir(root)  # constructors draw chain architectures
+        os.chdir(root)  # any stray output stays in the temporary directory
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 for cls in (LFTS, CLFTS):
                     full = cls(parameters(root / (cls.__name__ + "full")), random_seed=11)
                     assert full.run(fields())["status"] == "completed"
+                    # The run draws the chain architectures into its recording directory, and
+                    # neither the constructor nor the run writes into the current directory
+                    assert (root / (cls.__name__ + "full") / "polymer_0.png").is_file(), cls.__name__
+                    assert not (root / "polymer_0.png").exists(), cls.__name__
                     first = cls(parameters(root / (cls.__name__ + "first"), 1), random_seed=11)
                     first.run(fields())
                     continued = cls(parameters(root / (cls.__name__ + "continued")), random_seed=99)
@@ -154,6 +158,16 @@ def main():
                     continued = cls(params, random_seed=99)
                     result = continued.continue_run(Path(params["recording"]["dir"]) / "fields_000001.mat")
                     assert result["last_completed_step"] == 2
+
+                # Options given as None (their defaults) are left out of the saved parameters,
+                # which MAT files could not hold
+                for cls, extra in ((LFTS, {"zeta_n": None, "wtmd": None}), (CLFTS, {"electrostatics": None})):
+                    params = parameters(root / (cls.__name__ + "_none"), 2)
+                    params.update(smearing=None, angles=None, bc=None, **extra)
+                    assert cls(params, random_seed=5).run(fields())["status"] == "completed"
+                    for name in ("fields_000002.mat", "structure_function_000002.mat"):
+                        saved = loadmat(root / (cls.__name__ + "_none") / name, squeeze_me=True)["initial_params"]
+                        assert "nx" in saved.dtype.names and "smearing" not in saved.dtype.names, (cls.__name__, name)
 
             for complex_fields in (False, True):
                 for section, key, value in ((None, "ds", np.nan), ("langevin", "dt", np.inf),

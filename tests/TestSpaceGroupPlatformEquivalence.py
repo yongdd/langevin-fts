@@ -9,7 +9,9 @@ cell exercising the z-mirror/ObliqueZ CrysFFT with an odd physical nz = 15,
 and P6_3/mmc on a 9x9x8 cell whose odd in-plane sizes are allowed because the
 grid check is per axis: only nz is constrained by the 6_3 screw, and Fddd on
 8x8x16, the recursive-3m fold with nx = ny below the selector's nz/2 >= 8
-heuristic axis), each chain model (continuous and
+heuristic axis, and P2/m with unique axis c on an 11x10x8 cell with
+gamma = 100 degrees, an oblique cell for ObliqueZ that is not hexagonal),
+each chain model (continuous and
 discrete), and each available platform, this test verifies that turning
 space-group (SG) reduction on does not change the physics relative to a
 full-grid computation with the identical symmetrized field:
@@ -34,9 +36,11 @@ full-grid computation with the identical symmetrized field:
 
 Both space-group basis modes are covered:
   - "physical" basis (m3 -> pmmm auto-enable for orthogonal cells, z-mirror
-    for the hexagonal cell, mirroring scft.py), which uses the CrysFFT
+    for the oblique cells, mirroring scft.py), which uses the CrysFFT
     PmmmDct / Recursive3m / ObliqueZ solvers, and
-  - "irreducible" basis (no physical basis enabled).
+  - "irreducible" basis (no physical basis enabled), where the solvers map
+    the reduced basis to the CrysFFT physical grid by gather/scatter; the
+    oblique cells take ObliqueZ here as well.
 
 ACTUAL mask + space-group contract encoded by this test
 -------------------------------------------------------
@@ -47,7 +51,8 @@ or expand it back to the full grid (non-CrysFFT SG paths).
 
   - continuous + SG + mask: SUPPORTED and numerically correct on cpu-mkl,
     cpu-fftw, and cuda (Q and pointwise phi match the SG-off masked control
-    to machine precision). Asserted below.
+    to machine precision), with rqm4, rk2 and (orthogonal cells) cn-adi2.
+    Asserted below.
   - discrete + SG + mask: SUPPORTED and numerically correct on cpu-mkl,
     cpu-fftw, and cuda. Asserted below.
   - The mask subtests go through the public PropagatorSolver wrapper's
@@ -84,6 +89,7 @@ import numpy as np
 
 from polymerfts import _core
 from polymerfts.propagator_solver import PropagatorSolver
+from cuda_part import cuda_part_missing
 
 DS = 0.02  # 1/50 contour steps
 BOND_LENGTHS = {"A": 1.0, "B": 1.0}
@@ -113,6 +119,8 @@ def create_space_group(case_name, nx):
         return _core.SpaceGroup(nx, "P6_3/mmc", 488)
     if case_name == "Fddd":
         return _core.SpaceGroup(nx, "Fddd", 336)
+    if case_name == "P2/m":
+        return _core.SpaceGroup(nx, "P2/m", 58)   # unique axis c: mirror (x, y, -z)
     return _core.SpaceGroup(nx, "Im-3m", 529)
 
 
@@ -121,8 +129,8 @@ def make_space_group(case_name, nx, physical):
     exactly like scft.py does for orthogonal cells (m3 -> pmmm)."""
     sg = create_space_group(case_name, nx)
     mode = "irreducible"
-    if physical and case_name in ("P6/mmm", "P6_3/mmc"):
-        sg.enable_z_mirror_physical_basis()   # hexagonal cell: z-mirror / ObliqueZ CrysFFT
+    if physical and case_name in ("P6/mmm", "P6_3/mmc", "P2/m"):
+        sg.enable_z_mirror_physical_basis()   # oblique cell: z-mirror / ObliqueZ CrysFFT
         mode = "z-mirror-physical"
     elif physical:
         try:
@@ -277,14 +285,15 @@ def run_grafted(platform, chain_model, nx, lx, sg, w_full, w_reduced, q_full,
 
 
 def run_masked(platform, chain_model, nx, lx, sg, w_full, w_reduced, mask,
-               use_sg, angles=None):
+               use_sg, angles=None, numerical_method="rqm4"):
     """Masked run through the public PropagatorSolver wrapper, exercising the
     `mask=` constructor argument (masks are always passed on the full grid;
     ComputationBox reduces the stored mask when the space group is set)."""
     solver = PropagatorSolver(
         nx=list(nx), lx=list(lx), ds=DS,
         bond_lengths=dict(BOND_LENGTHS), bc=list(BC),
-        chain_model=chain_model, numerical_method="rqm4",
+        chain_model=chain_model,
+        numerical_method=numerical_method if chain_model == "continuous" else None,
         platform=platform, mask=np.asarray(mask).flatten(), angles=angles,
         space_group=sg if use_sg else None)
     solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
@@ -339,6 +348,8 @@ def main():
         ("P6/mmm", [24, 24, 30], [2.0, 2.0, 2.5], [90.0, 90.0, 120.0]),
         # odd in-plane sizes: the 6_3 screw constrains only nz (per-axis grid check)
         ("P6_3/mmc", [9, 9, 8], [1.8, 1.8, 2.0], [90.0, 90.0, 120.0]),
+        # monoclinic oblique cell (cell-centered in-plane grid), ObliqueZ with odd nx
+        ("P2/m", [11, 10, 8], [1.5, 1.3, 1.2], [90.0, 90.0, 100.0]),
     ]
 
     for case_name, nx, lx, angles in cases:
@@ -450,12 +461,21 @@ def main():
                 # ---- mask + SG (supported for both chain models on all
                 # ---- platforms; factory API, see module docstring) ----
                 blocked = np.asarray(mask).flatten() == 0.0
-                for platform in platforms:
+                # Each continuous method applies the mask itself (RK2 through the
+                # shared multiply_mask helper, CN-ADI after its reduction to the basis)
+                methods = ["rqm4"]
+                if chain_model == "continuous":
+                    methods += ["rk2"] + (["cn-adi2"] if angles is None else [])
+                for platform, method in ((p, m) for p in platforms for m in methods):
                     tag = f"{case_name}/{mode}/{chain_model}/{platform}/mask"
+                    if chain_model == "continuous":
+                        tag += f"/{method}"
                     control = run_masked(platform, chain_model, nx, lx, sg,
-                                         w_full, w_reduced, mask, use_sg=False, angles=angles)
+                                         w_full, w_reduced, mask, use_sg=False, angles=angles,
+                                         numerical_method=method)
                     sg_run = run_masked(platform, chain_model, nx, lx, sg,
-                                        w_full, w_reduced, mask, use_sg=True, angles=angles)
+                                        w_full, w_reduced, mask, use_sg=True, angles=angles,
+                                        numerical_method=method)
                     check(control["chk"], f"{tag}: SG-off check_total_partition()")
                     check(sg_run["chk"], f"{tag}: SG-on check_total_partition()")
                     compare_runs(f"{tag}: SG-on vs SG-off", control, sg_run,
@@ -479,6 +499,8 @@ def main():
               f"(runtime {elapsed:.1f} s):")
         for f in FAILURES:
             print(f"  - {f}")
+        return 1
+    if cuda_part_missing():
         return 1
     print(f"All space-group platform equivalence tests PASSED "
           f"(runtime {elapsed:.1f} s)")

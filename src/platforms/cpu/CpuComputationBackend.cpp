@@ -17,17 +17,13 @@
 template <typename T>
 CpuComputationBackend<T>::CpuComputationBackend(
     ComputationBox<T>* cb, Molecules* molecules,
-    std::string method, std::string numerical_method,
+    const NumericalMethodInfo& method_info,
     FFTBackend fft_backend, SpaceGroup* space_group, int max_n_streams)
     : cb(cb), space_group(space_group), chain_model(molecules->get_model_name())
 {
     n_basis = cb->get_n_basis();
     n_streams = std::min(this->n_streams_from_env(/*default_n_streams=*/4), max_n_streams);
 
-    const auto& method_info = resolve_numerical_method(chain_model, numerical_method, method);
-    validate_numerical_method(method_info, std::is_same_v<T, std::complex<double>>, cb->is_orthogonal());
-    if (method != method_info.solver_type)
-        throw_with_line_number("Solver type does not match the registered numerical method.");
     switch (method_info.id)
     {
     case NumericalMethodId::Discrete:
@@ -40,8 +36,12 @@ CpuComputationBackend<T>::CpuComputationBackend(
         solver = std::make_unique<CpuSolverPseudoRK2<T>>(cb, molecules, fft_backend);
         break;
     case NumericalMethodId::CNADI2:
+        // The factory rejects this combination first (validate_numerical_method);
+        // without a solver the calls below would dereference null
         if constexpr (std::is_same_v<T, double>)
             solver = std::make_unique<CpuSolverCNADI>(cb, molecules);
+        else
+            throw_with_line_number("The cn-adi2 method is only available for real fields.");
         break;
     }
 

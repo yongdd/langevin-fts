@@ -92,7 +92,9 @@ def test_import_bundle_executes_independently_and_preserves_model(tmp_path, monk
     monkeypatch.chdir(tmp_path)
     calls = recording_solver(monkeypatch)
     runpy.run_path(str(output / 'simulation.py'), run_name='__main__')
-    assert calls['cwd'] == output / 'results'
+    # The script leaves the working directory alone (it draws no figures) and saves beside itself
+    assert calls['cwd'] == tmp_path and Path.cwd() == tmp_path and 'polymer_figure_dir' not in calls['params']
+    assert all(path.parent.parent == output / 'results' for path in calls['saved'])
     p = calls['params']
     assert p['platform'] == 'cpu-fftw'
     assert p['nx'] == [2, 3, 4] and p['lx'] == [3., 4., 5.]
@@ -261,12 +263,12 @@ def test_cli_and_column_metadata(tmp_path):
     output = tmp_path / 'job'
     command = [sys.executable, str(CONVERTER), 'import-script', str(source / 'param'), '--command',
                str(source / 'command'), '--metadata', str(metadata), '-o', str(output), '--platform', 'cpu-mkl']
-    result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert result.returncode == 0, result.stderr
     np.testing.assert_array_equal(loadmat(output / 'initial.mat')['w_X'].ravel(), fields[0].ravel())
     marker = output / 'keep'
     marker.write_text('original')
-    result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     assert result.returncode == 2 and 'Error:' in result.stderr and 'Traceback' not in result.stderr
     assert marker.read_text() == 'original'
 
@@ -309,3 +311,15 @@ def test_cell_metric_and_representable_relaxation(tmp_path, case, flexible):
         lattice_back, cell_back = TOOL['choose_lattice'](p, override=lattice)
         assert lattice_back == lattice and p['relax_cell'] is flexible
         np.testing.assert_allclose(cell_back, cell, rtol=0, atol=1e-12)
+
+
+def test_flat_cell_leaves_no_bundle(tmp_path):
+    """A cell flatter than V = 0.1 abc, which the solver rejects, is not turned into a job."""
+    source, _ = source_files(tmp_path)
+    text = PARAM.replace('mesh 2 3 4', 'mesh 4 4').replace('lattice orthorhombic', 'lattice oblique')
+    (source / 'param').write_text(text)
+    (source / 'in/omega').unlink()
+    TOOL['write_rgrid'](source / 'in/omega', [4, 4], 'oblique', [4., 3., np.radians(5.)], np.zeros((2, 4, 4)))
+    with pytest.raises(ValueError, match='below 0.1 abc'):
+        TOOL['import_script'](source / 'param', source / 'command', tmp_path / 'job')
+    assert not (tmp_path / 'job').exists()

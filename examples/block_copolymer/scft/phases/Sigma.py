@@ -1,0 +1,100 @@
+import os
+import numpy as np
+from scipy.io import savemat
+from scipy.ndimage import gaussian_filter
+
+# OpenMP environment variables (set before importing polymerfts)
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+from polymerfts import scft
+
+# Major Simulation params
+f = 0.25        # A-fraction of major BCP chain, f
+eps = 2.0       # a_A/a_B, conformational asymmetry
+
+params = {
+    # P4_2/mnm space group: tetragonal with 4-fold axis along z
+    "nx":[64,64,32],            # Simulation grid numbers [nx, ny, nz] for [a, a, c]
+    "lx":[7.0,7.0,4.0],         # Simulation box size [a, a, c] as a_Ref * N_Ref^(1/2) unit,
+                                # where "a_Ref" is reference statistical segment length
+                                # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+                                # Standard tetragonal setting: a = b ≠ c (4-fold axis along z)
+
+    "reduce_memory":False,     # Reduce memory usage by storing only check points.
+    "relax_cell":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)          # Relax cell lengths and allowed angles during SCFT iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
+
+    "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
+        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))),
+        "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": {"A,B": 25},       # Interaction parameter, Flory-Huggins params * N_Ref
+
+    "space_group":{
+        "symbol":"P4_2/mnm",   # IT symbol of the space group (No. 136)
+        "hall_number": 419,         # Hall number of the space group
+    },
+
+    "polymers":[{      # Polymer species
+        "volume_fraction":1.0,  # volume fraction of polymer chain
+        "blocks":[              # AB diBlock Copolymer
+            {"type":"B", "length":1-f}, # B-block
+            {"type":"A", "length":f, }, # A-block
+        ],},],
+
+    "optimizer":{
+        "name":"am",            # Anderson Mixing
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
+
+    "max_iter":1000,     # The maximum relaxation iterations
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+}
+
+# Set initial fields
+w_A = np.zeros(list(params["nx"]), dtype=np.float64)
+w_B = np.zeros(list(params["nx"]), dtype=np.float64)
+print("w_A and w_B are initialized to Sigma phase.")
+# [Ref: https://doi.org/10.3390/app2030654]
+# Sphere positions rotated from [c,a,a] to [a,a,c] via (x,y,z)->(y,z,x)
+sphere_positions = [
+    [0.00, 0.00, 0.00], [0.50, 0.50, 0.50],  # A
+    [0.40, 0.40, 0.00], [0.60, 0.60, 0.00], [0.90, 0.10, 0.50], [0.10, 0.90, 0.50],  # B
+    [0.46, 0.13, 0.00], [0.13, 0.46, 0.00], [0.87, 0.54, 0.00], [0.54, 0.87, 0.00],  # C
+    [0.63, 0.04, 0.50], [0.04, 0.63, 0.50], [0.96, 0.37, 0.50], [0.37, 0.96, 0.50],  # C
+    [0.74, 0.07, 0.00], [0.07, 0.74, 0.00], [0.93, 0.26, 0.00], [0.26, 0.93, 0.00],  # D
+    [0.43, 0.24, 0.50], [0.24, 0.43, 0.50], [0.76, 0.57, 0.50], [0.56, 0.77, 0.50],  # D
+    [0.18, 0.18, 0.25], [0.82, 0.82, 0.25], [0.68, 0.32, 0.25], [0.32, 0.68, 0.25],  # E
+    [0.18, 0.18, 0.75], [0.82, 0.82, 0.75], [0.68, 0.32, 0.75], [0.32, 0.68, 0.75]   # E
+]
+
+for x,y,z in sphere_positions:
+    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+    w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
+
+# Initialize calculation
+calculation = scft.SCFT(params=params)
+
+# Set a timer
+
+# Run
+calculation.run(initial_fields={"A": w_A, "B": w_B})
+
+# Estimate execution time
+
+# Save final results (.mat, .json or .yaml format)
+calculation.save_results("Sigma.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#        1   -1.919E-15  [ 1.0036881E+00  ]     0.014979879   1.9393191E+00  lx=[  7.0000000, 7.0000000, 4.0000000 ]
+#        2   -1.935E-16  [ 1.0020221E+00  ]     0.004863580   1.1474000E+00  lx=[  7.0000183, 7.0000183, 4.0000269 ]
+#        3   -1.784E-16  [ 1.0014981E+00  ]     0.001920932   6.7072112E-01  lx=[  7.0000264, 7.0000264, 4.0000376 ]
+#        4   -5.929E-16  [ 1.0013052E+00  ]     0.000862928   4.2512134E-01  lx=[  7.0000308, 7.0000308, 4.0000430 ]
+#        5   -4.261E-17  [ 1.0012298E+00  ]     0.000400475   3.2658868E-01  lx=[  7.0000336, 7.0000336, 4.0000461 ]

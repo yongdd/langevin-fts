@@ -277,6 +277,8 @@ public:
     PhysicalBasis physical_basis() const { return physical_basis_; }
     /// Human-readable name of the active basis ("irreducible", "pmmm", "m3", "z-mirror").
     std::string physical_basis_name() const;
+    /// Print the group, its crystal system and the sizes of its bases (nothing else prints).
+    void display_info() const;
     /// Called by the computation box and the solvers that take this group. Their
     /// reduced-basis sizes and maps are snapshots, so the physical basis is frozen
     /// afterwards (enable_*_physical_basis() throws).

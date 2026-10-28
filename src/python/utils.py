@@ -13,7 +13,7 @@ import warnings
 import hashlib
 import os
 import platform
-import tempfile
+import secrets
 import subprocess
 from functools import lru_cache
 from types import MappingProxyType
@@ -23,7 +23,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 import numpy as np
 import yaml
 
-from .validation import normalize_params, ValidationError
+from .validation import normalize_params, ValidationError, parse_chi_n  # noqa: F401 (parse_chi_n: former utils API)
 
 
 def json_ready(value):
@@ -40,6 +40,18 @@ def json_ready(value):
         return [json_ready(v) for v in value]
     if isinstance(value, complex):
         return {"real": value.real, "imag": value.imag}
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    return value
+
+
+def mat_ready(value):
+    """Convert a parameter dictionary for scipy.io.savemat, which has no None: an option
+    given as None (its default) is left out, and paths become strings."""
+    if isinstance(value, dict):
+        return {str(k): mat_ready(v) for k, v in value.items() if v is not None}
+    if isinstance(value, (list, tuple)):
+        return [np.empty(0) if v is None else mat_ready(v) for v in value]
     if isinstance(value, os.PathLike):
         return os.fspath(value)
     return value
@@ -76,13 +88,24 @@ def _package_hashes():
     return {"python_source_sha256": source.hexdigest(), "native_binary_sha256": native.hexdigest()}
 
 
+def _new_file_next_to(path, mode):
+    """Open a new hidden file in the directory of path for writing; return it and its name.
+
+    Unlike tempfile.mkstemp (mode 0600), the umask sets its permissions, as for a
+    file written directly to path, so results stay readable as the user's other files.
+    """
+    temporary = path.parent / f".{path.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)
+    return os.fdopen(fd, mode), temporary
+
+
 def atomic_savemat(path, data, **kwargs):
     """Replace a MAT file only after a complete write in the same directory."""
     from scipy.io import savemat
     path = Path(path)
-    fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".mat", dir=path.parent)
+    stream, temporary = _new_file_next_to(path, "wb")
     try:
-        with os.fdopen(fd, "wb") as stream:
+        with stream:
             savemat(stream, data, **kwargs)
             stream.flush()
             os.fsync(stream.fileno())
@@ -96,15 +119,46 @@ def write_run_status(sim):
     """Persist completion/failure separately from periodic field checkpoints."""
     path = Path(sim.recording["dir"])
     path.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".run_status.", dir=path)
+    stream, temporary = _new_file_next_to(path / "run_status.json", "w")
     try:
-        with os.fdopen(fd, "w") as stream:
+        with stream:
             json.dump(json_ready({**sim.run_status, "metadata": sim.metadata}), stream, indent=2, allow_nan=False)
             stream.write("\n")
         os.replace(temporary, path / "run_status.json")
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def report_partition_consistency(prop_solver):
+    """Print the forward/backward partition error of each polymer; True if all are within tolerance."""
+    from . import _core
+    errors = prop_solver.partition_errors()
+    print("Relative contour partition error of each polymer: " +
+          ", ".join(f"{p}: {error:.3e}" for p, error in enumerate(errors)))
+    return all(np.isfinite(error) and error <= _core.PARTITION_TOLERANCE for error in errors)
+
+
+def check_partition_functions(prop_solver, state):
+    """Reject an accepted state whose partition functions are not positive and finite.
+
+    With real fields Q is a sum of positive Boltzmann weights. Intermediate iterates can
+    still give Q <= 0 (the Richardson extrapolation of rqm4 or Crank-Nicolson steps on a
+    coarse grid in strong fields), so only accepted states are checked: the final SCFT
+    fields and an L-FTS saddle point whose Hamiltonian, which contains log Q, is not
+    finite. Complex fields (CL-FTS) have no sign to check.
+    """
+    if prop_solver.field_type != "real":
+        return
+    for p in range(prop_solver.get_n_polymer_types()):
+        Q = prop_solver.get_partition_function(p)
+        if not (np.isfinite(Q) and Q > 0):
+            raise ValidationError(
+                f"The partition function of polymer {p} is {Q:.6e} at {state}, but with real fields it must "
+                "be positive and finite. Either the discretization is too coarse for the fields (refine the "
+                "grid or the contour step), or the propagators fell below the round-off level of the spectral "
+                "transforms, which is relative to their largest value on the grid (for example strong fields "
+                "next to absorbing walls or a grafted source).")
 
 
 def simulation_metadata(sim, random_seed=None):
@@ -157,6 +211,8 @@ def checkpoint_settings(sim):
         "polymers": sim.polymers, "chi_n": sim.chi_n, "zeta_n": sim.zeta_n,
         "dt": sim.langevin["dt"], "nbar": sim.langevin["nbar"], "dt_scaling": sim.dt_scaling,
         "smearing": {"type": sim.smearing.type, "params": sim.smearing.params},
+        # None without electrostatics, which earlier checkpoints also give
+        "electrostatics": None if getattr(sim, "electrostatics", None) is None else sim.electrostatics.settings(),
         "sample_interval": sim.recording["sample_interval"],
         "statistics_save_interval": sim.recording["statistics_save_interval"],
         "extensions": extension_settings(sim),
@@ -189,6 +245,27 @@ def checkpoint_data(sim):
     if state is not None:
         data["record_H_history"] = np.asarray(state["H_history"])
         data["record_drift_history"] = np.asarray(state.get("drift_history", []))
+        if "psi_drift_history" in state:
+            data["record_psi_drift_history"] = np.asarray(state["psi_drift_history"])
+        # CL-FTS: the drifts of every step since the last statistics file (per auxiliary field)
+        if "drift_step_history" in state:
+            data["record_drift_step_history"] = np.reshape(np.asarray(state["drift_step_history"], dtype=np.float64),
+                                                           (-1, len(sim.monomer_types)))
+            data["record_drift_step_start"] = int(state["drift_step_start"])
+        if "psi_drift_step_history" in state:
+            data["record_psi_drift_step_history"] = np.asarray(state["psi_drift_step_history"], dtype=np.float64)
+        if "partition_ratio_step_history" in state:
+            data["record_partition_ratio_step_history"] = np.reshape(
+                np.asarray(state["partition_ratio_step_history"], dtype=np.float64), (-1, len(sim.partition_ratio_species)))
+        # CL-FTS: the chemical potentials (one row of all species per sample) and the pressure
+        if "chemical_potential_history" in state:
+            data["record_chemical_potential_history"] = np.reshape(
+                np.asarray(state["chemical_potential_history"], dtype=np.complex128), (-1, sim.n_chemical_potentials))
+        if "pressure_history" in state:
+            data["record_pressure_history"] = np.asarray(state["pressure_history"], dtype=np.complex128)
+        if "number_density_history" in state:
+            data["record_number_density_history"] = np.reshape(
+                np.asarray(state["number_density_history"], dtype=np.complex128), (-1, sim.n_chemical_potentials))
         data["record_sample_count"] = state["sample_count"]
         for key, values in state["dH_history"].items():
             data[_measurement_key("dH", key)] = np.asarray(values)
@@ -289,6 +366,39 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         if np.iscomplexobj(data["record_drift_history"]) or np.any(data["record_drift_history"] < 0):
             raise ValidationError("Checkpoint drift magnitudes must be real and nonnegative")
+        # The drifts of every step since the last statistics file, or since the first step of a run
+        # continued by hand or from a checkpoint without the record (record_drift_step_start).
+        # Checkpoints of earlier versions lack the record, whose continued runs record from the restart on
+        pending_steps = step % sim.recording["statistics_save_interval"]
+        if "record_drift_step_start" in data:
+            first = data["record_drift_step_start"]
+            if (isinstance(first, (bool, np.bool_)) or not isinstance(first, (int, np.integer))
+                    or not step - pending_steps < first <= step + 1):
+                raise ValidationError("Invalid checkpoint measurement 'record_drift_step_start'")
+            pending_steps = step + 1 - int(first)
+        for key, per_step in (("record_drift_step_history", n_fields), ("record_psi_drift_step_history", 1)):
+            if key in data:
+                values = np.atleast_1d(np.asarray(data[key]))
+                if (np.size(values) != pending_steps * per_step or np.iscomplexobj(values)
+                        or not np.all(np.isfinite(values)) or np.any(values < 0)):
+                    raise ValidationError(f"Invalid checkpoint measurement '{key}'")
+        # Partition ratios of the same steps, in [0, 1]; NaN for the steps of a checkpoint without them
+        if "record_partition_ratio_step_history" in data:
+            values = np.atleast_1d(np.asarray(data["record_partition_ratio_step_history"]))
+            n_ratios = len(getattr(sim, "partition_ratio_species", []))
+            if (np.size(values) != pending_steps * n_ratios or np.iscomplexobj(values)
+                    or np.any(values < 0) or np.any(values > 1)):
+                raise ValidationError("Invalid checkpoint measurement 'record_partition_ratio_step_history'")
+        # Pending chemical potentials and pressures (absent in checkpoints of earlier versions or
+        # of runs without them; continue_run then records NaN for those samples, which later
+        # checkpoints keep). A species without chains has the chemical potential -inf
+        for key, per_sample in (("record_chemical_potential_history", getattr(sim, "n_chemical_potentials", 0)),
+                                ("record_pressure_history", 1),
+                                ("record_number_density_history", getattr(sim, "n_chemical_potentials", 0))):
+            if key in data:
+                values = np.atleast_1d(np.asarray(data[key]))
+                if np.size(values) != count * per_sample or np.any(np.isposinf(np.real(values))):
+                    raise ValidationError(f"Invalid checkpoint measurement '{key}'")
         for monomer in sim.monomer_types:
             names = [kind + monomer + suffix for kind in ("w_", "phi_") for suffix in
                      (("",) if sim.prop_solver.field_type == "real" else ("_real", "_imag"))]
@@ -301,11 +411,60 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
             name = _measurement_key("sf", ",".join(pair))
             if np.size(data[name]) != sf_size or not np.all(np.isfinite(data[name])):
                 raise ValidationError(f"Invalid checkpoint structure function '{name}'")
+        electrostatics = getattr(sim, "electrostatics", None)
+        if electrostatics is not None:
+            # ψ, ψ(k), the previous noise and the stream of ψ (Electrostatics.checkpoint_data), the
+            # pending drifts of ψ and, with Coulomb coupling, the pending charge structure sums
+            missing = [key for key in electrostatics.CHECKPOINT_KEYS + ("record_psi_drift_history",) if key not in data]
+            if missing:
+                raise ValidationError(f"The checkpoint lacks electrostatic data: {', '.join(missing)}")
+            for key in ("psi_real", "psi_imag", "psi_k_real", "psi_k_imag", "psi_noise_prev"):
+                if (np.size(data[key]) != sim.prop_solver.n_grid or not np.all(np.isfinite(data[key]))
+                        or np.iscomplexobj(data[key])):
+                    raise ValidationError(f"Invalid checkpoint electrostatic array '{key}'")
+            try:
+                np.random.PCG64(0).state = json.loads(str(data["psi_rng_state_json"]))
+            except (ValueError, TypeError, KeyError) as exc:
+                raise ValidationError("Invalid checkpoint random-number state of psi") from exc
+            psi_drift = data["record_psi_drift_history"]
+            if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
+                    or np.any(psi_drift < 0)):
+                raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
+            # The settings keep the point ions by name; the columns of the pending chemical
+            # potentials and numbers follow their order (ion_names_json, absent in checkpoints
+            # of earlier versions)
+            if "ion_names_json" in data:
+                stored_ions = json.loads(str(data["ion_names_json"]))
+                if stored_ions != [ion["name"] for ion in electrostatics.ions]:
+                    raise ValidationError(f"'electrostatics.ions' lists the point ions in another order than "
+                                          f"the checkpoint ({', '.join(stored_ions)}); the recorded columns "
+                                          "follow that order")
+            # The charge structure function (with Coulomb coupling in a periodic box)
+            if electrostatics.coupling > 0 and electrostatics.periodic:
+                for key in electrostatics.CHARGE_SUMS:
+                    name = _measurement_key("sf", key)
+                    if (name not in data or np.size(data[name]) != int(np.prod(sim.prop_solver.nx))
+                            or not np.all(np.isfinite(data[name]))):
+                        raise ValidationError(f"Invalid checkpoint charge structure sum '{key}'")
         wtmd = getattr(sim, "wtmd", None)
         if wtmd is not None:
-            for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
+            def check_wtmd_array(key):
                 if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
                     raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+            def check_wtmd_copies(name):
+                # Both copies are written from one array; the restore uses the unscaled
+                # one, so a checkpoint whose scaled copy was edited is refused
+                check_wtmd_array("wtmd_unscaled_" + name)
+                if not np.allclose(np.ravel(data["wtmd_unscaled_" + name]) * wtmd.CV,
+                                   np.ravel(data["wtmd_" + name]), rtol=1e-12, atol=0):
+                    raise ValidationError(f"Checkpoint WTMD arrays 'wtmd_{name}' and 'wtmd_unscaled_{name}' disagree")
+            # Newer checkpoints also hold the bias arrays without the factor CV ("wtmd_unscaled_*")
+            unscaled = "wtmd_unscaled_u" in data
+            for key in ("wtmd_u", "wtmd_up", "wtmd_I0"):
+                check_wtmd_array(key)
+            if unscaled:
+                check_wtmd_copies("u")
+                check_wtmd_copies("up")
             pending = np.size(data["wtmd_order_parameter_history"])
             if (pending >= wtmd.update_freq or not np.all(np.isfinite(data["wtmd_order_parameter_history"])) or
                     np.iscomplexobj(data["wtmd_order_parameter_history"])):
@@ -314,8 +473,9 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
                 suffix = "_".join(sorted(pair.split(",")))
                 key = "wtmd_I1_" + suffix
                 if np.any(data["wtmd_I0"]) or key in data:
-                    if np.size(data[key]) != wtmd.bins or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key]):
-                        raise ValidationError(f"Invalid checkpoint WTMD array '{key}'")
+                    check_wtmd_array(key)
+                    if unscaled:
+                        check_wtmd_copies("I1_" + suffix)
                 key = "wtmd_dH_history_" + suffix
                 if pending and (np.size(data[key]) != pending or not np.all(np.isfinite(data[key])) or np.iscomplexobj(data[key])):
                     raise ValidationError(f"Invalid checkpoint WTMD history '{key}'")
@@ -323,18 +483,127 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
         raise ValidationError(f"Invalid checkpoint: {exc}") from exc
 
 
-def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None):
+def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None,
+                            drift_step_history=None, n_fields=1, psi_drift_step_history=None,
+                            partition_ratio_step_history=None, n_ratios=0, chemical_potential_history=None,
+                            pressure_history=None, n_polymers=1, number_density_history=None):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
+    # Chemical potentials and pressures that the checkpoint does not hold are NaN
+    count = int(data["record_sample_count"])
+    if chemical_potential_history is not None:
+        if "record_chemical_potential_history" in data:
+            values = np.reshape(np.asarray(data["record_chemical_potential_history"], dtype=np.complex128), (-1, n_polymers))
+        else:
+            values = np.full((count, n_polymers), np.nan + 0j)
+        chemical_potential_history.extend(values)
+    if number_density_history is not None:
+        if "record_number_density_history" in data:
+            values = np.reshape(np.asarray(data["record_number_density_history"], dtype=np.complex128), (-1, n_polymers))
+        else:
+            values = np.full((count, n_polymers), np.nan + 0j)
+        number_density_history.extend(values)
+    if pressure_history is not None:
+        if "record_pressure_history" in data:
+            values = np.atleast_1d(np.asarray(data["record_pressure_history"], dtype=np.complex128))
+        else:
+            values = np.full(count, np.nan + 0j)
+        pressure_history.extend(values.tolist())
     H_history.extend(np.atleast_1d(data["record_H_history"]).tolist())
     if drift_history is not None and "record_drift_history" in data:
         drift_history.extend(np.atleast_1d(data["record_drift_history"]).tolist())
+    if psi_drift_history is not None:
+        psi_drift_history.extend(np.atleast_1d(data["record_psi_drift_history"]).tolist())
+    if drift_step_history is not None and "record_drift_step_history" in data:
+        drift_step_history.extend(np.reshape(data["record_drift_step_history"], (-1, n_fields)))
+    if psi_drift_step_history is not None and "record_psi_drift_step_history" in data:
+        psi_drift_step_history.extend(np.atleast_1d(data["record_psi_drift_step_history"]).tolist())
+    # The partition ratios keep the rows of the drift record: NaN for its steps that a checkpoint
+    # without them (earlier versions) holds
+    if partition_ratio_step_history is not None and drift_step_history is not None:
+        if "record_partition_ratio_step_history" in data:
+            partition_ratio_step_history.extend(np.reshape(data["record_partition_ratio_step_history"], (-1, n_ratios)))
+        else:
+            partition_ratio_step_history.extend(np.full((len(drift_step_history), n_ratios), np.nan))
     for key in dH_history:
         dH_history[key].extend(np.atleast_1d(data[_measurement_key("dH", key)]).tolist())
     for key, array in sf_average.items():
         array[:] = np.asarray(data[_measurement_key("sf", key)]).reshape(array.shape)
     return int(data["record_sample_count"])
+
+
+class DriftTailSummary:
+    """Distribution of the largest drift of each step, summarized at the end of a CL-FTS run.
+
+    Complex Langevin averages need the distribution of the drift magnitude to fall off
+    exponentially or faster (Nagata, Nishimura & Shimasaki, Phys. Rev. D 94, 114515 (2016)).
+    The counts stay in memory, twenty bins per decade (the printed median and maximum are
+    bin edges); the step values themselves are recorded as drift_max_step_history and
+    psi_drift_max_step_history. The summary gives
+    numbers, not a verdict: a finite run cannot show an exponential tail, and the weight of
+    a power-law tail sets the size of the bias.
+    """
+    EDGES = 10.0 ** (np.arange(-120, 241) / 20)
+
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.counts = np.zeros((len(self.labels), self.EDGES.size + 1), dtype=np.int64)
+
+    def add(self, values):
+        self.counts[np.arange(len(self.labels)), np.searchsorted(self.EDGES, values)] += 1
+
+    def report(self):
+        steps = int(self.counts[0].sum()) if self.labels else 0
+        if steps == 0:
+            return
+        print(f"Largest drift per step ({steps} steps of this run); S(u) = P(drift > u) at 10 and 100 "
+              "times the median, and the log-log slope of S between them (scripts/analysis/drift_tail.py):")
+        for label, counts in zip(self.labels, self.counts):
+            beyond = steps - np.cumsum(counts)          # steps above EDGES[k]
+            k_median = int(np.searchsorted(-beyond, -steps / 2))
+            if k_median >= self.EDGES.size:
+                continue
+            median = self.EDGES[k_median]
+            if median <= self.EDGES[0]:
+                print(f"  {label}: no drift")
+                continue
+            k10 = min(np.searchsorted(self.EDGES, 10 * median), self.EDGES.size - 1)
+            k100 = min(np.searchsorted(self.EDGES, 100 * median), self.EDGES.size - 1)
+            s10, s100 = beyond[k10] / steps, beyond[k100] / steps
+            slope = f"{np.log(s100 / s10) / np.log(self.EDGES[k100] / self.EDGES[k10]):.2f}" \
+                if beyond[k100] >= 20 else "-"
+            largest = self.EDGES[min(np.flatnonzero(counts).max(), self.EDGES.size - 1)]
+            print(f"  {label}: median ~{median:.3g}, maximum < {largest:.3g}, "
+                  f"S(10x) {s10:.3g}, S(100x) {s100:.3g}, slope {slope}")
+
+
+class PartitionRatioSummary:
+    """Smallest |Q_s|/<|e^(-u_s)|> of each canonical single-site species (CLFTS.partition_ratios) over
+    a run, and the fractions of steps below 0.1 and 0.01. The step values are recorded as
+    partition_ratio_step_history. Like the drift summary it gives numbers, not a verdict: a ratio
+    near 0 means Q_s came close to its zero, the pole of -n_s ln Q_s."""
+    THRESHOLDS = (0.1, 0.01)
+
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.steps = 0
+        self.smallest = np.full(len(self.labels), np.inf)
+        self.below = np.zeros((len(self.labels), len(self.THRESHOLDS)), dtype=np.int64)
+
+    def add(self, ratios):
+        self.steps += 1
+        self.smallest = np.minimum(self.smallest, ratios)
+        self.below += np.asarray(ratios)[:, None] < np.asarray(self.THRESHOLDS)[None, :]
+
+    def report(self):
+        if self.steps == 0 or not self.labels:
+            return
+        print(f"Partition ratio |Q_s|/<|e^(-u_s)|> of the single-site species ({self.steps} steps of this run; "
+              "near 0: close to the pole of -n_s ln Q_s):")
+        for label, smallest, below in zip(self.labels, self.smallest, self.below):
+            print(f"  {label}: minimum {smallest:.3g}, steps below 0.1 {below[0] / self.steps:.3g}, "
+                  f"below 0.01 {below[1] / self.steps:.3g}")
 
 
 # Small extension mechanics; the physical order of calls stays in each run loop.
@@ -439,7 +708,7 @@ def notify_callbacks(sim, step, w_aux, phi, hamiltonian, drift_max, error_level,
 
 
 # =============================================================================
-# Polymer architecture drawing (SCFT/LFTS draw at construction; draw_polymer_architectures redraws)
+# Polymer architecture drawing (SCFT into polymer_figure_dir, LFTS/CLFTS into the recording directory)
 # =============================================================================
 
 DEFAULT_MONOMER_COLORS: List[str] = [
@@ -468,25 +737,31 @@ def create_monomer_color_dict(
     if colors is None:
         colors = DEFAULT_MONOMER_COLORS
 
+    # Colors beyond the list come from a fixed local stream: the same in every run, and the
+    # global NumPy random state stays untouched
+    extra_colors = np.random.default_rng(0)
     dict_color = {}
     for count, monomer_type in enumerate(segment_lengths.keys()):
         if count < len(colors):
             dict_color[monomer_type] = colors[count]
         else:
-            dict_color[monomer_type] = np.random.rand(3,)
+            dict_color[monomer_type] = extra_colors.random(3)
 
     return dict_color
 
 
-def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer"):
-    """Draw every polymer of a simulation to ``<prefix>_<id>.png`` in the current directory.
+def draw_polymer_architectures(polymers, ds, segment_lengths, prefix="polymer", directory="."):
+    """Draw every polymer of a simulation to ``<directory>/<prefix>_<id>.png``.
 
-    Example: ``draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths)``
-    after ``calc = SCFT(params)`` (or LFTS / CLFTS).
+    SCFT draws them into ``polymer_figure_dir`` when the input gives one; LFTS and CLFTS
+    draw them into the recording directory when a run starts. To draw them elsewhere:
+    ``draw_polymer_architectures(calc.polymers, calc.ds, calc.segment_lengths, directory=...)``.
     """
+    Path(directory).mkdir(parents=True, exist_ok=True)
     dict_color = create_monomer_color_dict(segment_lengths)
     for idx, polymer in enumerate(polymers):
-        draw_polymer_architecture(polymer, idx, ds, dict_color, output_file=f"{prefix}_{idx}.png")
+        draw_polymer_architecture(polymer, idx, ds, dict_color,
+                                  output_file=os.path.join(directory, f"{prefix}_{idx}.png"))
 
 
 def draw_polymer_architecture(
@@ -562,60 +837,6 @@ def draw_polymer_architecture(
         output_file = f"polymer_{polymer_id:01d}.png"
     plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
     plt.close()
-
-
-def parse_chi_n(
-    chi_n_params: Dict[str, float],
-    segment_lengths: Dict[str, float]
-) -> Dict[str, float]:
-    """Parse and validate Flory-Huggins interaction parameters.
-
-    Parameters
-    ----------
-    chi_n_params : dict
-        Dictionary of chi_n values with monomer pair keys (e.g., "A,B": 15.0).
-    segment_lengths : dict
-        Dictionary of segment lengths for validation.
-
-    Returns
-    -------
-    dict
-        Validated and normalized chi_n dictionary with sorted monomer pair keys.
-
-    Raises
-    ------
-    ValidationError
-        If monomer types are invalid, self-interactions are specified,
-        or duplicate parameters are found.
-    """
-    chi_n = {}
-    for monomer_pair_str, chin_value in chi_n_params.items():
-        if not isinstance(monomer_pair_str, str):
-            raise ValidationError("A chi_n key must name two monomer types, for example 'A,B'.")
-        if ',' in monomer_pair_str:
-            monomer_pair = [name.strip() for name in monomer_pair_str.split(',')]
-            if len(monomer_pair) != 2:
-                raise ValidationError(f"chi_n key '{monomer_pair_str}' must name exactly two monomer types.")
-        else:
-            # Keep legacy pair separators without splitting underscores inside names.
-            pairs = [(a, b) for a in segment_lengths for b in segment_lengths
-                     if any(monomer_pair_str == a + sep + b for sep in (' ', '_', '/'))]
-            if len(pairs) != 1:
-                raise ValidationError(f"chi_n key '{monomer_pair_str}' is invalid or ambiguous; use 'type1,type2'.")
-            monomer_pair = list(pairs[0])
-        if monomer_pair[0] not in segment_lengths:
-            raise ValidationError(f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'.")
-        if monomer_pair[1] not in segment_lengths:
-            raise ValidationError(f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'.")
-        if monomer_pair[0] == monomer_pair[1]:
-            raise ValidationError(f"Do not add self interaction parameter, {monomer_pair_str}.")
-        monomer_pair.sort()
-        sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-        if sorted_monomer_pair in chi_n:
-            raise ValidationError(f"There are duplicated χN ({sorted_monomer_pair}) parameters.")
-        chi_n[sorted_monomer_pair] = chin_value
-    return chi_n
-
 
 
 def process_polymer_blocks(

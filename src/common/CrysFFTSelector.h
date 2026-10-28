@@ -3,7 +3,9 @@
 
 #include <array>
 #include <cmath>
+#include <utility>
 #include <vector>
+#include "CrysFFTBasisMapping.h"
 #include "Recursive3mFoldParity.h"
 #include "SpaceGroup.h"
 #include "Exception.h"
@@ -27,8 +29,9 @@ struct CrysFFTSelection
 };
 
 /// Grid feasibility of the recursive 3m CrysFFT, and therefore of the m3
-/// physical basis that relies on it: even grid, nz/2 >= 8, and a translation-
-/// parity permutation that makes psi bijective (compute_m3_fold_permutation).
+/// physical basis that relies on it: even grid, nz/2 >= 8 (nz/2 >= 2 without
+/// the size heuristic, see below), and a translation-parity permutation that
+/// makes psi bijective (compute_m3_fold_permutation).
 ///
 /// The psi test is exactly m3-basis feasibility. The parity shift of a diagonal
 /// op O, Delta_d(O) = (tau_d + [sign_d = -1]) mod 2 with tau = t*N in grid
@@ -49,7 +52,8 @@ struct CrysFFTSelection
 inline bool crysfft_recursive_3m_feasible(
     const SpaceGroup* sg,
     const std::array<int, 3>& nx,
-    std::array<double, 9>& trans_part)
+    std::array<double, 9>& trans_part,
+    bool size_heuristic = true)
 {
     trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (!sg->get_m3_translations(trans_part))
@@ -58,8 +62,10 @@ inline bool crysfft_recursive_3m_feasible(
     // nz/2 >= 8 is a performance heuristic (small physical grids gain nothing from
     // the fold); the engines are exact for any even grid with nz/2 >= 2 (the Fddd
     // 8x8x16 case of tests/TestSpaceGroupPlatformEquivalence.py checks nx = ny = 8
-    // against the full-grid FFT).
-    if (!even_all || (nx[2] / 2) < 8)
+    // against the full-grid FFT, and tests/TestCrysFFTM3SmallGrid.py Im-3m 8^3 and
+    // 12^3). An m3 physical basis that is already enabled needs these engines
+    // whatever the grid size, so the selector drops the heuristic for it.
+    if (!even_all || (nx[2] / 2) < (size_heuristic ? 8 : 2))
         return false;
     std::array<int, 8> fold_perm{};
     bool fold_ok = compute_m3_fold_permutation(trans_part, nx, fold_perm);
@@ -117,7 +123,8 @@ inline CrysFFTSelection select_crysfft_mode(
     const bool even_z = (nx[2] % 2 == 0);
 
     std::array<double, 9> trans_part = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-    const bool recursive_ok = crysfft_recursive_3m_feasible(sg, nx, trans_part);
+    const bool recursive_ok = crysfft_recursive_3m_feasible(
+        sg, nx, trans_part, /*size_heuristic=*/!sg->using_m3_physical_basis());
     const bool has_pmmm = sg->has_mirror_planes_xyz();
 
     // A physical basis enabled by hand (on a SpaceGroup passed to PropagatorSolver,
@@ -184,9 +191,14 @@ inline CrysFFTSelection select_crysfft_mode(
         return selection;
     }
 
+    // Pmmm/3m need an orthogonal cell; ObliqueZ needs only alpha = beta = 90
+    // degrees and an even Nz (both part of can_oblique_z), so it also serves
+    // oblique cells on the irreducible basis
     if (!is_orthogonal)
     {
         selection.can_pmmm = false;
+        if (selection.can_oblique_z)
+            selection.mode = CrysFFTChoice::ObliqueZ;
         return selection;
     }
 
@@ -207,6 +219,85 @@ inline CrysFFTSelection select_crysfft_mode(
         selection.mode = CrysFFTChoice::ObliqueZ;
 
     return selection;
+}
+
+/// The CrysFFT engine a solver builds and the map between its physical grid and
+/// the space group's reduced basis (mode None: no engine applies).
+struct CrysFFTPlan
+{
+    CrysFFTChoice mode = CrysFFTChoice::None;
+    CrysFFTBasisMapping map;
+    bool physical_basis = false;   ///< the reduced basis is the engine's physical grid (map.identity)
+    std::array<double, 9> m3_translations = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+};
+
+/**
+ * @brief Engine choice shared by the CPU and CUDA solvers.
+ *
+ * Tries the recursive 3m transform, the Pmmm DCT and ObliqueZ in this order,
+ * each when select_crysfft_mode() allows it and its physical grid reaches every
+ * reduced-basis point (see crysfft_mapping_usable()). A physical basis that
+ * does not fit the engine raises.
+ */
+inline CrysFFTPlan plan_crysfft(
+    const SpaceGroup* sg,
+    const std::array<int, 3>& nx,
+    int dim,
+    bool is_periodic,
+    bool is_orthogonal,
+    bool z_axis_orthogonal)
+{
+    CrysFFTPlan plan;
+    const CrysFFTSelection selection = select_crysfft_mode(sg, nx, dim, is_periodic, is_orthogonal, z_axis_orthogonal);
+    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
+        return plan;
+
+    const int M_reduced = sg->get_n_reduced_basis();
+    const auto& full_to_reduced = sg->get_full_to_reduced_map();
+    const bool use_m3_basis = sg->using_m3_physical_basis();
+    const bool use_pmmm_basis = sg->using_pmmm_physical_basis();
+    const bool use_z_mirror_basis = sg->using_z_mirror_physical_basis();
+    auto adopt = [&](CrysFFTChoice mode, CrysFFTBasisMapping map, bool physical_basis) {
+        plan.mode = mode;
+        plan.map = std::move(map);
+        plan.physical_basis = physical_basis;
+        plan.m3_translations = selection.m3_translations;
+        return std::move(plan);
+    };
+
+    // Recursive 3m: octant sampled at even full-grid indices
+    if (selection.mode == CrysFFTChoice::Recursive3m)
+    {
+        if (use_pmmm_basis)
+            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
+        auto map = build_crysfft_mapping_octant(nx, full_to_reduced, M_reduced, /*even_indices=*/true);
+        if (crysfft_mapping_usable(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
+            return adopt(CrysFFTChoice::Recursive3m, std::move(map), use_m3_basis);
+    }
+
+    // Pmmm DCT: octant at consecutive indices
+    if (selection.can_pmmm)
+    {
+        if (use_m3_basis)
+            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
+        auto map = build_crysfft_mapping_octant(nx, full_to_reduced, M_reduced, /*even_indices=*/false);
+        if (crysfft_mapping_usable(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
+            return adopt(CrysFFTChoice::PmmmDct, std::move(map), use_pmmm_basis);
+    }
+
+    // ObliqueZ: lower z half (z-mirror)
+    if (selection.mode == CrysFFTChoice::ObliqueZ)
+    {
+        if (use_m3_basis || use_pmmm_basis)
+            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
+        const int z_shift = use_z_mirror_basis ? sg->get_z_mirror_shift() : selection.oblique_z_shift;
+        if (use_z_mirror_basis && z_shift != selection.oblique_z_shift)
+            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
+        auto map = build_crysfft_mapping_z_mirror(nx, full_to_reduced, M_reduced, z_shift);
+        if (crysfft_mapping_usable(map, use_z_mirror_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
+            return adopt(CrysFFTChoice::ObliqueZ, std::move(map), use_z_mirror_basis);
+    }
+    return plan;
 }
 
 #endif  // CRYSFFT_SELECTOR_H_

@@ -15,9 +15,12 @@
 | Document | Description |
 |----------|-------------|
 | [ChainPropagators.md](theory/ChainPropagators.md) | Chain propagators, partition functions, and concentrations |
-| [PolymerFieldTheory.md](theory/PolymerFieldTheory.md) | Field theory formulations (monomer, auxiliary fields) |
+| [PolymerFieldTheory.md](theory/PolymerFieldTheory.md) | Field theory formulations (monomer, auxiliary fields), smeared and electrostatic interactions |
 | [SelfConsistentFieldTheory.md](theory/SelfConsistentFieldTheory.md) | SCFT saddle-point equations and iterative methods |
-| [LangevinFieldTheoreticSimulation.md](theory/LangevinFieldTheoreticSimulation.md) | L-FTS with fluctuations and structure functions |
+| [LangevinFieldTheoreticSimulation.md](theory/LangevinFieldTheoreticSimulation.md) | What L-FTS and CL-FTS share: Langevin dynamics, observables and output files, structure functions, renormalization and calibration |
+| [PartialSaddlePointApproximation.md](theory/PartialSaddlePointApproximation.md) | L-FTS: partial saddle-point approximation, saddle-point iteration and the `LFTS` class |
+| [ComplexLangevinSimulation.md](theory/ComplexLangevinSimulation.md) | CL-FTS: complex Langevin dynamics, correct convergence, stabilization, charged systems, thermodynamic operators and the Gibbs ensemble |
+| [StructureFunctionEstimators.md](theory/StructureFunctionEstimators.md) | Derivation of the structure function estimators, their completion with charges, and a comparison with BioFTS |
 | [NumericalMethods.md](theory/NumericalMethods.md) | Pseudo-spectral and real-space solvers |
 | [StressTensor.md](theory/StressTensor.md) | Stress tensor calculation |
 | [SpaceGroup.md](theory/SpaceGroup.md) | Space group symmetry |
@@ -32,6 +35,8 @@
 | [PropagatorSystem.md](internals/PropagatorSystem.md) | Propagator identification and scheduling |
 | [MemoryManagement.md](internals/MemoryManagement.md) | Memory optimization and checkpointing |
 | [CudaMPS.md](internals/CudaMPS.md) | CUDA Multi-Process Service (MPS) for running multiple simulations on one GPU |
+| [NumericalValidation.md](internals/NumericalValidation.md) | Regression coverage, comparisons with published results and other codes, open differences and limits |
+| [ExampleValidation.md](internals/ExampleValidation.md) | What is validated for each example, with the compared numbers and figures |
 
 ## References
 
@@ -41,3 +46,4 @@
 | [Tools.md](references/Tools.md) | Utility scripts for visualization and data conversion |
 | [Bibliography.md](references/Bibliography.md) | Publication references |
 | [Errata.md](references/Errata.md) | Corrections to the publications on the algorithms of this library |
+| [RelatedSoftware.md](references/RelatedSoftware.md) | Other polymer field theory software |

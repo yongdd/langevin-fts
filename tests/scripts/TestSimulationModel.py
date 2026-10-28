@@ -86,7 +86,8 @@ def test_three_monomer_mat_fields(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("problem", ("duplicate_name", "invalid_name", "unknown_block", "negative_block",
     "volume_total", "negative_fraction", "duplicate_pair", "self_pair", "unused_monomer", "empty_polymer",
-    "angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique"))
+    "angles", "flat_angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique",
+    "discrete_ds", "lr_imaginary"))
 def test_invalid_structured_models(problem):
     form = values()
     model = form["model"]
@@ -101,6 +102,7 @@ def test_invalid_structured_models(problem):
     elif problem == "unused_monomer": model["monomers"].append({"name": "D", "segment_length": "1"})
     elif problem == "empty_polymer": model["polymers"][0]["blocks"] = []
     elif problem == "angles": model["box"].update(shape="triclinic", angles=["10", "10", "170"])
+    elif problem == "flat_angles": model["box"].update(shape="triclinic", angles=["90", "90", "5"])   # V = 0.087 abc
     elif problem == "cubic_lengths": model["box"]["shape"] = "cubic"
     elif problem == "hexagonal_angles": model["box"].update(shape="hexagonal", lx=["3", "3", "5"])
     elif problem == "grid_length": model["box"]["nx"] = ["8"]
@@ -109,8 +111,43 @@ def test_invalid_structured_models(problem):
     elif problem == "cn_oblique":
         model["box"].update(shape="triclinic", angles=["85", "80", "70"])
         form["numerical_method"] = "cn-adi2"
+    elif problem == "discrete_ds":   # 0.25 is 22.5 segments of ds = 1/90
+        form.update(chain_model="discrete", numerical_method="auto", ds="1/90")
+        model["polymers"][0]["blocks"] = [{"type": "A", "length": "0.25"}, {"type": "B", "length": "0.75"}]
+    elif problem == "lr_imaginary":   # A,B 20 and A,C 15 (B,C 0) give a second imaginary field
+        form.update(mode="L-FTS", compressor="lr")
     with pytest.raises(ValueError):
         BUILDER["build_script"](form)
+
+
+def test_lr_symmetric_chi(tmp_path, monkeypatch):
+    """With equal chi N for every pair, the pressure field is the only imaginary one: lr is allowed."""
+    form = values()
+    form.update(mode="L-FTS", compressor="lr")
+    form["model"]["interactions"] = [{"a": "A", "b": "B", "chi_n": "20"}, {"a": "A", "b": "C", "chi_n": "20"},
+                                     {"a": "B", "b": "C", "chi_n": "20"}]
+    calls = CHECKS["execute_export"](form, tmp_path, monkeypatch)
+    assert calls["params"]["compressor"]["name"] == "lr"
+
+
+@pytest.mark.parametrize("suffix, valid", (("1", False), ("_x", True)))
+def test_monomer_names_letters_only(suffix, valid):
+    """The library takes letters and underscores in monomer names: a digit is rejected at export."""
+    form = values()
+    model = form["model"]
+    for monomer in model["monomers"]:
+        monomer["name"] += suffix
+    for polymer in model["polymers"]:
+        for block in polymer["blocks"]:
+            block["type"] += suffix
+    for pair in model["interactions"]:
+        pair["a"] += suffix
+        pair["b"] += suffix
+    if valid:
+        BUILDER["build_script"](form)
+    else:
+        with pytest.raises(ValueError, match="letters or underscores"):
+            BUILDER["build_script"](form)
 
 
 def test_structured_model_http_save(tmp_path):
@@ -120,7 +157,8 @@ def test_structured_model_http_save(tmp_path):
     try:
         payload = {"values": values(), "filename": "mixture.py", "directory": "mixture"}
         request = Request(f"http://127.0.0.1:{server.server_address[1]}/api/save",
-                          data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+                          data=json.dumps(payload).encode(),
+                          headers={"Content-Type": "application/json", "X-Editor-Token": server.token})
         with urlopen(request, timeout=5) as response:
             assert response.status == 201
             result = json.load(response)

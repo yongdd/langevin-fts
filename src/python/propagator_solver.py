@@ -87,9 +87,9 @@ class PropagatorSolver:
 
         ``angles`` (lattice angles in degrees), ``aggregate_propagator_computation``
         (let the optimizer merge equivalent propagators) and ``field_type``
-        (``"real"`` or ``"complex"`` fields) are optional. After construction,
-        add the polymers with :meth:`add_polymer`; the C++ objects are created
-        on first use.
+        (``"real"`` or ``"complex"`` fields) are optional. The computation box is
+        created here; after construction, add the polymers with
+        :meth:`add_polymer`; the propagator computation is created on first use.
         """
 
         # Store grid parameters
@@ -119,24 +119,23 @@ class PropagatorSolver:
 
         self.method, self.numerical_method = self._resolve_numerical_method(self.chain_model, numerical_method)
 
-        self.platform = self._auto_platform(self.dim) if platform == "auto" else platform
+        self.field_type = field_type.lower()
+        if self.field_type not in ("real", "complex"):
+            raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
+
+        self.platform = self._auto_platform() if platform == "auto" else platform
 
         self._check_boundary_conditions()
 
         # Store checkpointing option
         self.reduce_memory = reduce_memory
-        # Lattice angles, optimizer aggregation and field type
+        # Lattice angles and optimizer aggregation
         self.angles = list(angles) if angles is not None else None
         self.aggregate_propagator_computation = bool(aggregate_propagator_computation)
-        self.field_type = field_type.lower()
-        if self.field_type not in ("real", "complex"):
-            raise ValueError(f"field_type must be 'real' or 'complex', got '{field_type}'")
 
         info = self.numerical_methods()[self.numerical_method]
         if self.field_type == "complex" and not info["supports_complex"]:
             raise ValueError(f"{self.numerical_method} does not support complex fields")
-        if self.angles is not None and info["requires_orthogonal_cell"] and not np.allclose(self.angles, 90, rtol=0, atol=1e-10):
-            raise ValueError(f"{self.numerical_method} requires an orthogonal computation box")
 
         # Store and validate mask.
         # Compare against the full grid size: the n_grid property cannot be
@@ -162,20 +161,26 @@ class PropagatorSolver:
             self.chain_model, self.ds, self.bond_lengths
         )
 
-        # Track polymers added
-        self._polymers_added = False
-
-        # Solver will be created after polymers are added
+        # The box does not depend on the polymers; the computation is created after they are added
+        box_kwargs = dict(nx=self.nx, lx=self.lx, bc=self.bc)
+        if self.angles is not None:
+            box_kwargs["angles"] = self.angles
+        if self.mask is not None:
+            box_kwargs["mask"] = self.mask
+        self._computation_box = self._factory.create_computation_box(**box_kwargs)
+        # Early form of the factory check, with the orthogonality tolerance of the box
+        if info["requires_orthogonal_cell"] and not self._computation_box.is_orthogonal():
+            raise ValueError(f"{self.numerical_method} requires an orthogonal computation box")
         self._propagator_computation = None
-        self._computation_box = None
         self._propagator_optimizer = None
-        self._fields_set = False
+        self._fourier = None
         if space_group is not None:
             activated = space_group.physical_basis_name()
+            size = space_group.get_n_reduced_basis()
             if activated == "irreducible":
-                print("Space-group basis: irreducible (physical basis not available)")
+                print(f"Space-group basis: irreducible, {size} points (physical basis not available)")
             else:
-                print(f"Space-group basis: {activated}-physical")
+                print(f"Space-group basis: {activated}-physical, {size} points")
         self._space_group = space_group
 
     # ------------------------------------------------------------------
@@ -184,34 +189,40 @@ class PropagatorSolver:
 
     @classmethod
     def _resolve_numerical_method(cls, chain_model, numerical_method):
-        """Return (method, numerical_method) for the chain model.
+        """Return (method, numerical_method) as the native factories resolve them.
 
         The discrete chain model has its own bond-convolution solver and ignores
         ``numerical_method``; continuous chains default to RQM4.
         """
-        if chain_model == "discrete":
-            if numerical_method is not None:
-                print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
-            return cls.numerical_methods()["discrete"]["solver_type"], "discrete"
-        numerical_method = "rqm4" if numerical_method is None else numerical_method.lower()
-        methods = cls.numerical_methods()
-        if numerical_method in methods and methods[numerical_method]["chain_model"] == chain_model:
-            return methods[numerical_method]["solver_type"], numerical_method
-        valid = [name for name, info in methods.items() if info["chain_model"] == chain_model]
-        raise ValueError(f"Unknown numerical_method '{numerical_method}'. Valid options: {valid}")
+        if chain_model == "discrete" and numerical_method is not None:
+            print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
+        try:
+            name = _core.resolve_numerical_method(chain_model, (numerical_method or "").lower())
+        except RuntimeError as exc:
+            raise ValueError(str(exc)) from None
+        return cls.numerical_methods()[name]["solver_type"], name
 
-    @staticmethod
-    def _auto_platform(dim):
+    def _auto_platform(self):
         """Platform for ``platform="auto"``: CPU for 1D (GPU overhead outweighs
         the gain), CUDA for 2D/3D when available, otherwise the first CPU
-        backend of this build.
+        backend of this build. Inputs that only the CPU backends run stay on
+        the CPU: the CUDA pseudo-spectral solvers need even sizes of at most 6142
+        points along absorbing axes (the sine transform stages a line of nx+2
+        values in the 48 KB of shared memory of a block), and periodic boxes for
+        complex fields of continuous chains.
         """
         avail = _core.PlatformSelector.avail_platforms()
         cpu_platforms = [p for p in avail if p.startswith("cpu")]
-        if dim == 1 and cpu_platforms:
+        if self.dim == 1 and cpu_platforms:
             return cpu_platforms[0]
         if "cuda" in avail:
-            return "cuda"
+            bc = [b.lower() for b in self.bc]
+            cpu_only = self.numerical_methods()[self.numerical_method]["solver_type"] == "pseudospectral" and (
+                any("absorbing" in bc[2*d:2*d+2] and (self.nx[d] % 2 or self.nx[d] > 6142) for d in range(self.dim))
+                or (self.field_type == "complex" and self.chain_model == "continuous"
+                    and any(b != "periodic" for b in bc)))
+            if not (cpu_only and cpu_platforms):
+                return "cuda"
         if cpu_platforms:
             return cpu_platforms[0]
         raise RuntimeError("No computational platform available in this build.")
@@ -221,9 +232,10 @@ class PropagatorSolver:
 
         Reflecting (DCT) and absorbing (DST) boundaries are supported on both
         platforms, verified against each other to machine precision in 1D/2D/3D
-        for continuous and discrete chains. Mixing periodic with non-periodic
-        directions is not supported by the spectral transform, so it fails
-        loudly instead of silently switching solvers.
+        for continuous and discrete chains. CUDA needs even sizes along absorbing
+        axes and, for continuous chains, real fields (see _auto_platform). Mixing
+        periodic with non-periodic directions is not supported by the spectral
+        transform, so it fails loudly instead of silently switching solvers.
         """
         bc_lower = [b.lower() for b in self.bc]
         self._has_non_periodic_bc = any(b in ["reflecting", "absorbing"] for b in bc_lower)
@@ -249,7 +261,7 @@ class PropagatorSolver:
 
     @property
     def computation_box(self) -> Any:
-        """The C++ ComputationBox (grid, box, integrals)."""
+        """The C++ ComputationBox (grid, box, integrals), with the computation's basis."""
         self._initialize_solver()
         return self._computation_box
 
@@ -274,6 +286,40 @@ class PropagatorSolver:
     def space_group(self) -> Optional[Any]:
         """The space group in use, or None."""
         return self._space_group
+
+    @property
+    def fourier(self) -> Any:
+        """Fourier transforms and Fourier multipliers of full-grid fields on this platform.
+
+        ``forward(fields)`` and ``backward(coefficients)`` transform one field
+        (shape ``(n_grid,)``) or several (``(n_fields, n_grid)``); ``backward`` includes
+        the normalization. ``set_multiplier(M)`` stores a multiplier, on
+        the GPU with CUDA, and returns its handle: ``M`` has the coefficient shape
+        (one function applied to each field) or ``(n_out, n_in)`` followed by it.
+        ``apply([(handle, fields), ...])`` returns ``backward(Σ M · forward(fields))``.
+
+        Periodic boxes use the FFT: the half spectrum of ``numpy.fft.rfftn`` for
+        real fields, the full ``fftn`` spectrum for complex fields. Boxes with walls
+        use the cosine series Σ_j f_j cos(πm(j+½)/N) along every axis, half of
+        ``scipy.fft.dctn(f, type=2)`` per axis. Real fields need real arrays (complex
+        ones are rejected), and their multipliers act as real operators: on the
+        planes of the half spectrum that hold both k and -k (last index 0 and n/2)
+        ``M`` is replaced by (M(k) + conj M(-k))/2, so an odd derivative i·k loses
+        its Nyquist mode; ``backward`` treats its coefficients the same way.
+
+        ``k_squared()`` gives |k|² in the coefficient shape for the current box; a
+        stored multiplier keeps its values, so store it again after the box
+        changes (``set_lx`` and ``set_lattice_parameters`` need the polymers to be
+        added). See ``examples/tools/FourierTransform.py``.
+        """
+        if self._fourier is None:
+            periodic = [self.bc[2 * d].lower() == "periodic" and self.bc[2 * d + 1].lower() == "periodic"
+                        for d in range(self.dim)]
+            if any(periodic) and not all(periodic):
+                raise ValueError("The Fourier transform cannot mix periodic and wall axes.")
+            axes = ["periodic" if p else "reflecting" for p in periodic]
+            self._fourier = self._factory.create_fourier_transform(self._computation_box, axes)
+        return self._fourier
 
     def display_platform_info(self) -> None:
         """Print the platform and device information of the backend."""
@@ -317,24 +363,24 @@ class PropagatorSolver:
             Keys are node indices (int), values are string labels for q_init.
             Example: {0: "G"} means node 0 uses q_init["G"] as initial condition.
         """
-        if self._propagator_computation is not None:
-            raise RuntimeError(
-                "Cannot add polymers after solver has been initialized. "
-                "Add all polymers before calling compute_propagators()."
-            )
-
+        # The native Molecules rejects a polymer once the computation exists
         if grafting_points is None:
             self._molecules.add_polymer(volume_fraction, blocks)
         else:
             self._molecules.add_polymer(volume_fraction, blocks, grafting_points)
-        self._polymers_added = True
+
+    def _computed(self) -> Any:
+        """The native computation, which rejects results that were not computed."""
+        if self._propagator_computation is None:
+            raise RuntimeError("Propagators not computed. Call compute_propagators() first.")
+        return self._propagator_computation
 
     def _initialize_solver(self) -> None:
         """Initialize the solver (called lazily when needed)."""
         if self._propagator_computation is not None:
             return
 
-        if not self._polymers_added:
+        if self._molecules.get_n_polymer_types() == 0:
             raise RuntimeError(
                 "No polymers added. Call add_polymer() before using the solver."
             )
@@ -343,15 +389,6 @@ class PropagatorSolver:
         self._propagator_optimizer = self._factory.create_propagator_computation_optimizer(
             self._molecules, self.aggregate_propagator_computation
         )
-
-        # Create computation box if not already set (e.g., by external code setting angles)
-        if self._computation_box is None:
-            box_kwargs = dict(nx=self.nx, lx=self.lx, bc=self.bc)
-            if self.angles is not None:
-                box_kwargs["angles"] = self.angles
-            if self.mask is not None:
-                box_kwargs["mask"] = self.mask
-            self._computation_box = self._factory.create_computation_box(**box_kwargs)
 
         # Create solver (with the space group when one is set)
         self._propagator_computation = self._factory.create_propagator_computation(
@@ -384,25 +421,12 @@ class PropagatorSolver:
             Example: {"G": delta_function_array}
         """
         self._initialize_solver()
-
-        # Validate field shapes
-        for key, field in w_fields.items():
-            if np.size(field) != self.n_grid:
-                raise ValueError(
-                    f"Field '{key}' has wrong size: {np.size(field)} != {self.n_grid}"
-                )
-
-        # Validate q_init shapes if provided
+        self._check_real(*w_fields.values(), *(q_init or {}).values())
+        # The native binding checks the sizes of w_fields and q_init against n_grid
         if q_init is not None:
-            for key, field in q_init.items():
-                if np.size(field) != self.n_grid:
-                    raise ValueError(
-                        f"q_init '{key}' has wrong size: {np.size(field)} != {self.n_grid}"
-                    )
             self._propagator_computation.compute_propagators(w_fields, q_init=q_init)
         else:
             self._propagator_computation.compute_propagators(w_fields)
-        self._fields_set = True
 
     def get_propagator(self, polymer: int, v: int, u: int, step: int) -> NDArray[np.floating]:
         """Get the chain propagator at a specific contour position.
@@ -423,12 +447,7 @@ class PropagatorSolver:
         numpy.ndarray
             Propagator field q(r, s) at the specified contour position.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
-
-        return self._propagator_computation.get_chain_propagator(polymer, v, u, step)
+        return self._computed().get_chain_propagator(polymer, v, u, step)
 
     def get_partition_function(self, polymer: int) -> float:
         """Get the single-chain partition function.
@@ -443,26 +462,31 @@ class PropagatorSolver:
         float
             Partition function Q for the specified polymer.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
+        return self._computed().get_total_partition(polymer)
 
-        return self._propagator_computation.get_total_partition(polymer)
-
-    def check_total_partition(self) -> bool:
+    def check_total_partition(self, tolerance: float = _core.PARTITION_TOLERANCE) -> bool:
         """Check forward/backward partition function consistency.
+
+        Parameters
+        ----------
+        tolerance : float
+            Largest accepted relative error of :meth:`partition_errors`.
 
         Returns
         -------
         bool
-            True when the solver reports consistent total partitions.
+            True when every polymer's error is finite and at most ``tolerance``.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
-        return bool(self._propagator_computation.check_total_partition())
+        return bool(self._computed().check_total_partition(tolerance))
+
+    def partition_errors(self) -> List[float]:
+        """Relative partition function error of each polymer.
+
+        Q = ∫ q(r,s) q†(r,N-s) dr must be the same at every contour point; the error
+        is the largest relative deviation (infinite for a non-finite or zero Q).
+        Nothing is printed.
+        """
+        return list(self._computed().compute_partition_errors())
 
     def compute_concentrations(self) -> None:
         """Compute ensemble-averaged concentrations.
@@ -470,12 +494,7 @@ class PropagatorSolver:
         Must be called after compute_propagators(). Computes the segment density
         for each monomer type.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
-
-        self._propagator_computation.compute_concentrations()
+        self._computed().compute_concentrations()
 
     def get_concentration(self, monomer_type: str) -> NDArray[np.floating]:
         """Get the total concentration for a monomer type.
@@ -492,15 +511,25 @@ class PropagatorSolver:
         numpy.ndarray
             Concentration field phi(r) for the specified monomer type.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
+        return self._computed().get_total_concentration(monomer_type)
 
-        return self._propagator_computation.get_total_concentration(monomer_type)
+    def get_concentration_gce(self, fugacity: float, polymer: int, monomer_type: str) -> NDArray[np.floating]:
+        """Concentration of one monomer type from one polymer in the grand-canonical ensemble.
+
+        fugacity = exp(βμ_p) in the convention βμ_p = ln(φ_p/α_p) - ln Q_p, so the chains number
+        fugacity Q_p per reference chain; the result is fugacity times the unnormalized segment
+        density (independent of the volume fraction given to add_polymer). Must be called after
+        compute_concentrations().
+        """
+        return self._computed().get_total_concentration_gce(fugacity, polymer, monomer_type)
 
     def get_grid_points(self) -> Tuple[NDArray[np.floating], ...]:
-        """Get the coordinates of grid points.
+        """Get the Cartesian coordinates of the grid points.
+
+        The points sit at the fractional coordinates (i + 1/2)/n along the lattice
+        vectors of the current box (a along x, b in the xy plane), so the angles
+        and later box changes are included. Hexagonal-axes space groups index x
+        and y from the nodes, i/n (docs/theory/SpaceGroup.md).
 
         Returns
         -------
@@ -509,22 +538,13 @@ class PropagatorSolver:
             for 2D returns (x, y), for 3D returns (x, y, z).
             Each array has shape matching the grid.
         """
-        coords = []
-        for d in range(self.dim):
-            dx = self.lx[d] / self.nx[d]
-            coord_1d = (np.arange(self.nx[d]) + 0.5) * dx
-
-            # Create full grid array
-            shape = [1] * self.dim
-            shape[d] = self.nx[d]
-            coord = coord_1d.reshape(shape)
-
-            # Broadcast to full grid
-            full_shape = self.nx
-            coord = np.broadcast_to(coord, full_shape)
-            coords.append(coord.copy())
-
-        return tuple(coords)
+        offsets = [0.5] * self.dim
+        if self._space_group is not None and self._space_group.uses_hexagonal_axes():
+            offsets[0] = offsets[1] = 0.0
+        vectors = np.array(self._computation_box.get_lattice_vectors())[:self.dim, :self.dim]
+        fractions = np.meshgrid(*[(np.arange(n) + offset) / n for n, offset in zip(self.nx, offsets)],
+                                indexing="ij")
+        return tuple(sum(fractions[d] * vectors[d, k] for d in range(self.dim)) for k in range(self.dim))
 
     def gaussian_initial_condition(
         self,
@@ -536,8 +556,8 @@ class PropagatorSolver:
         Parameters
         ----------
         center : list of float, optional
-            Center of the Gaussian in each dimension.
-            Default: center of the box.
+            Cartesian center of the Gaussian.
+            Default: center of the cell (half the sum of the lattice vectors).
         sigma : float, optional
             Standard deviation of the Gaussian. Default: 0.4
 
@@ -549,7 +569,8 @@ class PropagatorSolver:
             distribution is needed).
         """
         if center is None:
-            center = [L / 2 for L in self.lx]
+            vectors = np.array(self._computation_box.get_lattice_vectors())[:self.dim, :self.dim]
+            center = 0.5 * vectors.sum(axis=0)
 
         coords = self.get_grid_points()
         r_squared = sum(
@@ -566,19 +587,17 @@ class PropagatorSolver:
         Returns
         -------
         float
-            Volume of each grid cell: dv = (Lx/Nx) * (Ly/Ny) * ...
+            Volume of each grid cell, V / (Nx Ny Nz) of the current box (the
+            cell volume includes the angles; a mask leaves it unchanged).
         """
-        dv = 1.0
-        for i in range(self.dim):
-            dv *= self.lx[i] / self.nx[i]
-        return dv
+        return self._computation_box.get_volume() / self._total_grid
 
     @property
     def n_grid(self):
         """Number of grid points for field operations.
 
-        Returns n_reduced when space group is set on the propagator
-        computation, otherwise returns total_grid.
+        Returns n_reduced when a space group is given, also before the first
+        computation creates the native solver, otherwise returns total_grid.
 
         Returns
         -------
@@ -587,6 +606,9 @@ class PropagatorSolver:
         """
         if self._propagator_computation is not None:
             return self._propagator_computation.get_cb().get_n_basis()
+        # The computation will use the group's current basis (frozen once it is created)
+        if self._space_group is not None:
+            return self._space_group.get_n_reduced_basis()
         return self._total_grid
 
     @property
@@ -656,6 +678,7 @@ class PropagatorSolver:
             Integral of the field over the box volume.
         """
         self._initialize_solver()
+        self._check_real(field)
         field_use = self._maybe_to_reduced(field)
         return self._computation_box.integral(field_use)
 
@@ -673,6 +696,7 @@ class PropagatorSolver:
             Spatial average of the field (integral / volume).
         """
         self._initialize_solver()
+        self._check_real(field)
         field_use = self._maybe_to_reduced(field)
         return self._computation_box.mean(field_use)
 
@@ -696,6 +720,7 @@ class PropagatorSolver:
             Inner product of the two fields.
         """
         self._initialize_solver()
+        self._check_real(field1, field2)
         field1_use = self._maybe_to_reduced(field1)
         field2_use = self._maybe_to_reduced(field2)
         return self._computation_box.inner_product(field1_use, field2_use)
@@ -723,6 +748,7 @@ class PropagatorSolver:
             Sum of inner products.
         """
         self._initialize_solver()
+        self._check_real(fields1, fields2)
         fields1_use = self._maybe_to_reduced_multi(n_fields, fields1)
         fields2_use = self._maybe_to_reduced_multi(n_fields, fields2)
         return self._computation_box.multi_inner_product(n_fields, fields1_use, fields2_use)
@@ -730,11 +756,15 @@ class PropagatorSolver:
     def zero_mean(self, field: NDArray[np.floating]) -> None:
         """Subtract the spatial mean from a field in-place.
 
+        With a mask the mean over the accessible volume is subtracted (at every
+        point), so that mean() of the result is zero.
+
         Parameters
         ----------
         field : numpy.ndarray
             Field to modify.
         """
+        self._check_real(field)
         self._initialize_solver()
         if self._space_group is None:
             self._computation_box.zero_mean(field)
@@ -742,9 +772,12 @@ class PropagatorSolver:
 
         n_irreducible = self._space_group.get_n_reduced_basis_full()
         if self._physical_basis_active() and field.size == n_irreducible:
-            # Compute mean in reduced basis, apply shift in irreducible basis.
+            # Compute mean in reduced basis, apply shift in irreducible basis. As in
+            # ComputationBox.zero_mean, a mask makes it the mean over the accessible volume
             field_reduced = self._space_group.irreducible_to_reduced(field)
             mean_val = self._computation_box.mean(field_reduced)
+            if self.mask is not None:
+                mean_val *= self._computation_box.get_volume() / self._computation_box.get_accessible_volume()
             field -= mean_val
         else:
             self._computation_box.zero_mean(field)
@@ -757,6 +790,12 @@ class PropagatorSolver:
         basis), so the conversion must never be skipped on a size comparison.
         """
         return self._space_group is not None and self._space_group.physical_basis_name() != "irreducible"
+
+    def _check_real(self, *fields) -> None:
+        """Reject complex arrays for real fields: the conversion would drop their imaginary parts."""
+        if self.field_type == "real" and any(np.iscomplexobj(field) for field in fields):
+            raise ValueError('This solver has real fields: got a complex array. Complex fields need a '
+                             'solver created with field_type="complex".')
 
     def _maybe_to_reduced(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
         """Convert irreducible-basis field to reduced basis when physical basis is active."""
@@ -807,8 +846,6 @@ class PropagatorSolver:
             New lattice angles in degrees [alpha, beta, gamma].
         """
         self._initialize_solver()
-        if self.numerical_methods()[self.numerical_method]["requires_orthogonal_cell"] and not np.all(np.abs(np.deg2rad(angles) - np.pi/2) < 1e-10):
-            raise ValueError(f"{self.numerical_method} requires orthogonal lattice angles.")
         self._computation_box.set_lattice_parameters(lx, angles)
         self.lx = list(lx)
         self.update_laplacian_operator()
@@ -835,11 +872,7 @@ class PropagatorSolver:
 
         Must be called after compute_propagators().
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
-        self._propagator_computation.compute_stress()
+        self._computed().compute_stress()
 
     def get_stress(self) -> List[float]:
         """Get the computed stress tensor.
@@ -853,11 +886,13 @@ class PropagatorSolver:
             3D: [dH/dL1, dH/dL2, dH/dL3, dH/d(gamma), dH/d(beta), dH/d(alpha)]
             2D: [dH/dL1, dH/dL2, dH/d(gamma), 0, 0, 0]; 1D: only index 0.
         """
-        if not self._fields_set:
-            raise RuntimeError(
-                "Propagators not computed. Call compute_propagators() first."
-            )
-        return self._propagator_computation.get_stress()
+        return self._computed().get_stress()
+
+    def get_stress_gce(self, fugacities: List[float]) -> List[float]:
+        """Lattice-parameter derivatives -Σ_p z_p dQ_p/dθ of the grand-canonical term -Σ_p z_p Q_p of H,
+        with the chains weighted by the fugacities z_p (get_stress gives the derivatives of
+        -Σ_p (φ_p/α_p) ln Q_p). Must be called after compute_stress()."""
+        return self._computed().get_stress_gce([float(z) for z in fugacities])
 
     def update_laplacian_operator(self) -> None:
         """Update the Laplacian operator after changing box dimensions.
@@ -887,6 +922,7 @@ class PropagatorSolver:
             raise RuntimeError(
                 "Space group not set. Pass space_group= to PropagatorSolver()."
             )
+        self._check_real(field)
         field_2d = np.reshape(field, (1, -1))
         return self._space_group.to_reduced_basis(field_2d)[0]
 
@@ -907,6 +943,7 @@ class PropagatorSolver:
             raise RuntimeError(
                 "Space group not set. Pass space_group= to PropagatorSolver()."
             )
+        self._check_real(field_reduced)
         field_2d = np.reshape(field_reduced, (1, -1))
         return self._space_group.from_reduced_basis(field_2d)[0]
 

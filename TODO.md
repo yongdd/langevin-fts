@@ -7,9 +7,11 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 2. Parameter sweep / continuation: reuse the previous solution as the initial guess when building phase diagrams.
 3. Direct grand-canonical SCFT/L-FTS solver API: accept prescribed chemical
    potentials (fugacities) and handle density, field means and normalization
-   consistently. The native GCE functions, CE SCFT thermodynamic transforms and
-   incompressible phase coexistence are already implemented; see
-   [Phase Equilibrium](docs/theory/PhaseEquilibrium.md).
+   consistently. CL-FTS already takes `chemical_potential` in place of the amount of
+   a polymer or a point ion (docs/theory/PolymerFieldTheory.md, Section 6), and SCFT
+   takes grand-canonical point ions; SCFT and L-FTS reject grand-canonical polymers.
+   The native GCE functions, CE SCFT thermodynamic transforms and incompressible phase
+   coexistence are implemented; see [Phase Equilibrium](docs/theory/PhaseEquilibrium.md).
 4. SCFT preconditioner for Anderson mixing (left preconditioning failed; try right preconditioning or a modified inner product).
 6. Option to print a data file in a human-readable text format.
 7. Progress bar.
@@ -31,6 +33,17 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 10. GPU bandwidth test.
 11. Check whether two GPUs can be used for `CudaAndersonMixing`, and why two-GPU performance fluctuates on A100.
 13. Reduce the number of splits in the scheduler.
+33. Make the basis of the `PropagatorSolver` field operations explicit (found 2026-10-26).
+    With a physical basis active, `integral()`, `mean()`, `inner_product()`,
+    `multi_inner_product()` and `zero_mean()` take an array with as many entries as the
+    irreducible basis for an irreducible one and convert it. For the primitive
+    orthorhombic settings with the m3 basis (Hall numbers 227-297) both bases have N/8
+    points in a different order, so a reduced-basis array, such as the result of
+    `get_concentration()`, is reordered too. The orbit weights are then uniform, so means
+    and products of two arrays of the same basis are unchanged, but a product of an
+    irreducible and a reduced array is wrong (Pmmm, 16^3: 4.48 instead of -5.11). SCFT
+    keeps every array in the irreducible basis and is not affected. Take the basis as an
+    argument, or accept only the reduced basis and convert in SCFT.
 
 ## Tests
 
@@ -38,7 +51,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 17. Validation of pseudo-spectral parameters.
 18. Syntax check of keys in `Molecules`.
 19. `TestComparePropagatorKey`.
-20. Tests for the example scripts.
 21. Check `get_negative_frequency_mapping()` and `compute_single_segment_stress()`.
 
 ## Build and packaging
@@ -49,7 +61,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Documentation
 
 26. Python API reference (Sphinx + autodoc for `PropagatorSolver`, `SCFT`, `LFTS`).
-28. Examples guide (detailed README for `examples/scft/` and `examples/lfts/`).
 
 ## Open investigations (research notes)
 
@@ -70,65 +81,32 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     Reproducer locations and historical experiment archives are recorded in
     private research notes; the model parameters and required checks are given above.
 
-30. Resolve charged CL discrepancies against exact finite-lattice particles (2026-09-07).
+    Guard (2026-10-26): SCFT (final fields) and L-FTS (a saddle point whose Hamiltonian
+    is not finite) raise `ValidationError` when a partition function with real fields
+    is not positive and finite (`TestPartitionGuard`); the native library only reports
+    values. Intermediate iterates are not checked: with `rqm4`, the L-FTS/WTMD run of
+    `TestCheckpointValidation` passes through Q <= 0 during saddle iterations and still
+    converges. With the reproducer Q is about -3e-19 to -7e-19 on CPU-FFTW, CPU-MKL and
+    CUDA (the sign of the noise changes with the FFTW plan). The check cannot catch a
+    positive Q made of round-off noise: at W = 30-50 the platforms give different Q,
+    sometimes positive, and only `check_total_partition()` reports the inconsistency
+    (relative errors 1e-3 to 1 against 1e-11 at W = 10).
 
-    The 24-run benchmark in `devel/charged_polymers/reports/CLFTS_VALIDATION.md` passes
-    mass/partition and final-state conditional-density checks, but charged CL
-    averages differ from exhaustive positive particle sums. At E=100, dt=0.0025,
-    the cell-0 counterion density is 0.21308439 +/- 0.00112541 versus exact
-    0.20718911. E=0 controls agree within estimated uncertainty.
-    Distinguish integration bias, rare-event sampling, and possible incorrect CL
-    convergence before treating target PRL simulations as validated. Preserve the
-    finite action and native FFT; changing the model cannot validate this benchmark.
+    Proposed fix (not implemented): apply the same discrete bond operator in real space,
+    as a banded matrix per axis, K = S^-1 diag(g) S with S the transform of the axis,
+    computed once in extended precision. The round-off of each point is then relative to
+    the values within the kernel width instead of to the largest value on the grid, so
+    the far tails keep their relative accuracy. For orthogonal boxes the operator
+    factorizes over the axes and costs O(N x band) per axis and step. Complex fields
+    keep the localization, though not the positivity argument; non-orthogonal cells and
+    the stress would keep the FFT. Offer it as an optional method, not the default, and
+    pass the checks listed above before using it.
 
-    Follow-up: 21 trajectories and direct original-contour field quadrature are in
-    `devel/charged_polymers/reports/CLFTS_VALIDATION.md`. Quadrature agrees with the
-    particle sum to 2.8e-15. At dt=0.00015625, longer LM/ETD, Heun and adaptive Euler
-    still give C density near 0.2132 versus exact 0.20719. Entire field moments also
-    disagree. Large drifts occur near analytically located Q_P or Q_SP zeros;
-    native and independent densities agree at the drift extremes. Longer E=0
-    controls also reveal a smaller bias. These results strongly support incorrect
-    CL convergence in this fixture. A validated sampling formulation or validated
-    parameter regime is still needed; no production FFT or drift patch was made.
-
-    Further diagnostic: `devel/charged_polymers/reports/CLFTS_VALIDATION.md` exactly
-    integrates the repulsive fields, leaving a positive one-real-field marginal
-    of the SAME finite action. Twelve real-Langevin runs recover all 19 reference
-    observables within 1.36 estimated SE. Original CL remains biased even though
-    its tested low-order stationarity identities pass; near-zero measurements
-    do not account directly for the density bias. This supplies a finite-model
-    control, not a scalable production repair or a complete pole-boundary proof.
-    Original CL validation and PRL reproduction remain open; FFT is unchanged.
-
-    1D follow-up: `devel/charged_polymers/reports/CLFTS_VALIDATION.md` and
-    `devel/charged_polymers/reports/PRL_REPRODUCTION.md` implements
-    particle/real-field Gibbs updates without exhaustive enumeration, tested on
-    4/16/32 cells of the same finite action. It also recalculates PRL Fig. 1 at
-    two grid resolutions. Current LDA curves still differ from digitized paper
-    values beyond grid/raster errors; ensemble/box and nonlocal-theory differences
-    remain. A working positive sampler for this small system does not validate
-    the existing CL dynamics or reproduce the complete PRL theory.
-
-31. Resolve the remaining PRL Fig. 2-3 discrepancies (2026-09-07).
-
-    See `devel/charged_polymers/reports/PRL_REPRODUCTION.md` and the added LaTeX
-    report pages. Fixed-parameter, canonical-C smoothed LDA gives collapse and
-    reexpansion, but the low-salt onset differs substantially from the paper.
-    Establish the paper's Gibbs-height prescription, box/ensemble and chosen
-    nonlocal Green-function/I_ex treatment before claiming quantitative reproduction.
-    The paper explicitly neglects u_P^ex in its brush calculations; its omission
-    alone is not an established explanation for the discrepancy.
-    Fig. 3's monovalent potential raster differs from Eq. (9), with M converted
-    to nm^-3, by approximately the 0.6022 conversion factor. Confirm the figure's
-    normalization with original data/code; do not silently rescale computed data.
-
-    The separate Fig. 2-3 Python runner also exposes a NON-FFT low-salt issue:
-    legacy real-space bead-slice underflow plus its 1e-300 floor/global mass
-    normalization can mask an O(0.2) density error. The research runner uses
-    extended-range positive convolution, a common partition function, and an
-    independent all-log reference. It also includes the canonical PB rank-one
-    normalization derivative. These remain isolated research implementations;
-    production FFT, CL drift and `prl_scft.py` were not changed in this campaign.
+34. Unresolved differences of the CL-FTS comparisons with other codes and papers (2026-10-29):
+    the pressure of charged systems against BioFTS (0.7 % lower, 3 standard errors), the
+    time-step dependent excess pressure of the Lequieu polyampholyte and the dense branch of
+    the Danielsen A50C50 binodal (4 % below). Data, numbers and the limits of CL-FTS found in
+    the same comparisons: docs/internals/NumericalValidation.md, "Open differences and limits".
 
 ## Done (removed from the list above)
 
@@ -139,6 +117,8 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
   Arora projection denominator; see `TestScftOptions` and `TestScftCompressible`.
 - 12. cuFFT callbacks (2026-10-20 kernel review): measured slower than the separate
   kernels on an A10, so they are not used.
+- 20. Tests for the example scripts: `TestExamples` builds the simulation of every script
+  under `examples/` and stops at its first run (2026-10-26).
 - 25. `std::map` errors in `omp parallel for` (2026-10-21): `operator[]` inserts a missing
   key, which is a write; two threads doing it race on the tree. `find()`/`at()` only read,
   which the standard allows concurrently. The propagator loops read their maps with
@@ -146,6 +126,13 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 - 27. File formats: `fields_*.mat`, SCFT results and `structure_function_*.mat` are
   described in docs/references/Tools.md (section 5), YAML/JSON parameter files in
   docs/references/Parameters.md.
+- 28. Examples guide: `examples/README.md` lists every example by physical system and method
+  (2026-10-28); docs/internals/ExampleValidation.md gives what is validated, with the compared
+  numbers and figures.
+- 30. Charged CL discrepancies against exact finite-lattice particles: moved to the
+  charged-polymer research notes (2026-10-26). The user-facing caveat is the "Checked
+  range" paragraph of docs/theory/ComplexLangevinSimulation.md (Section 6) and its
+  Section 3.2.
 - Check whether CUDA cub works with CUDA 12.0 and later (2026-10-21): the CUDA code is
   C++20 and needs CUDA 12.2+; it builds with 12.2.1, 12.4.1 and configures with 13.0.2,
   and the full test suite passes with 12.4.1.

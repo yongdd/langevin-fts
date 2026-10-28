@@ -18,7 +18,9 @@ From the repository root:
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in a browser on the same computer. The editor uses only
+Open the URL that the editor prints, `http://127.0.0.1:8765/?token=...`, in a browser
+on the same computer. The token keeps other accounts of a shared server from using the
+editor's port; a page opened without it cannot load or save settings. The editor uses only
 the Python standard library. Keep the `scripts/gui/assets/` asset directory
 next to `simulation_gui.py`; all browser assets are served locally. Running an
 exported script later requires the installed polymerfts package and its
@@ -35,18 +37,19 @@ ssh -L 8765:127.0.0.1:8765 user@server
 In that SSH session, change to the repository and start the editor:
 
 ```bash
-cd /path/to/langevin-fts
+cd /path/to/polymerfts
 python3 scripts/gui/simulation_gui.py
 ```
 
-Open `http://127.0.0.1:8765` in your own computer's browser. Keep the SSH connection
+Open the printed URL, `http://127.0.0.1:8765/?token=...`, in your own computer's browser. Keep the SSH connection
 and editor running while editing; press **Ctrl+C** to stop the editor. The server
 listens on `127.0.0.1`. X11 forwarding is unnecessary.
 
 In VS Code Remote-SSH, run the same command in the remote terminal and forward
-port `8765` in the **Ports** tab. Open the forwarded address in your local browser.
-If port `8765` is occupied, use another port with `--port 8766` and adjust the SSH
-forwarding command and browser address to match.
+port `8765` in the **Ports** tab. Open the printed URL, or the forwarded address
+followed by the printed `?token=...`, in your local browser. If port `8765` is
+occupied, use another port with `--port 8766`, adjust the SSH forwarding command to
+match and open the URL that this run prints (each run prints a new token).
 
 ## Configure a script
 
@@ -155,8 +158,8 @@ recording keys; new exports use the names above.
 ## Space groups and CrysFFT
 
 **Space group (SCFT only)** in **System** defaults to **None (full grid)**. The
-selector offers 423 supported Hall settings across the orthorhombic, tetragonal,
-trigonal, hexagonal and cubic crystal systems. Common polymer-phase groups appear
+selector offers all 530 Hall settings, from the triclinic and monoclinic to the cubic
+crystal systems. Common polymer-phase groups appear
 first. A **Hall number** distinguishes axis and origin settings; it differs from
 the International space group number.
 
@@ -164,7 +167,11 @@ Space group symmetry requires 3D. The editor checks cell lengths, angles,
 equal-grid constraints and translation divisors before exporting both the
 `symbol` and `hall_number`. For tetragonal groups, use Orthorhombic with `a = b`.
 For rhombohedral-axis settings, use Triclinic with equal lengths and equal angles,
-and disable box relaxation. The selected group's requirements appear below the
+and disable box relaxation. Monoclinic groups need the unique axis of their setting
+perpendicular to the other two (for the unique axis b, α = γ = 90°) and triclinic
+groups accept any cell; use Triclinic for oblique angles. Box relaxation varies the
+angle between the axes perpendicular to the unique axis, or all three angles of a
+triclinic group. The selected group's requirements appear below the
 selector. Initial fields are projected onto the selected symmetry by SCFT.
 
 The selector is disabled for L-FTS and CL-FTS, and space group settings are omitted
@@ -192,7 +199,7 @@ no `--save-dir` option is needed. To save scripts in a job directory, start ther
 ```bash
 mkdir -p ~/polymer-jobs
 cd ~/polymer-jobs
-python3 /path/to/langevin-fts/scripts/gui/simulation_gui.py
+python3 /path/to/polymerfts/scripts/gui/simulation_gui.py
 ```
 
 With **Filename** set to `simulation.py` and **Server subfolder** empty, a server
@@ -200,7 +207,11 @@ save creates `~/polymer-jobs/simulation.py`. A subfolder of `gyroid/run01` inste
 creates `~/polymer-jobs/gyroid/run01/simulation.py`. New subfolders are created as
 needed. Existing files are never overwritten; choose another filename or folder
 for a new version. Subfolders must stay within the base directory, and symbolic
-links are not followed. The optional `--save-dir` flag overrides the base directory.
+links are not followed. Folder and file names may not contain `:`. On Windows,
+which has no directory descriptors, the editor refuses symbolic links and junctions
+when it checks each folder, but does not catch a folder that another process
+replaces by a link during a save. The optional `--save-dir` flag overrides the
+base directory.
 
 The **Simulation output directory** is separate: the exported script creates it
 when you run the simulation later. Relative input and output paths resolve next

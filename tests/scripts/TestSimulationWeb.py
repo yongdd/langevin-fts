@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import runpy
 import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -29,6 +30,7 @@ def web_server():
 
 def request(server, method="GET", path="/", body=None, headers=None):
     headers = dict(headers or {})
+    headers.setdefault("X-Editor-Token", server.token)
     if isinstance(body, dict):
         body = json.dumps(body).encode("utf-8")
         headers.setdefault("Content-Type", "application/json")
@@ -62,7 +64,7 @@ def test_editor_assets_are_not_git_ignored():
     assets = ["index.html", "app.js", "model-editor.js", "style.css", "icon.svg", "space-groups.json"]
     result = subprocess.run(["git", "check-ignore", "--no-index", "--",
                              *["scripts/gui/assets/" + name for name in assets]],
-                            cwd=root, capture_output=True, text=True, timeout=5)
+                            cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
     assert result.returncode == 1, result.stdout + result.stderr
 
 
@@ -133,6 +135,18 @@ def test_browser_origin_and_tunnel_ports(web_server):
     assert status == 200
 
 
+def test_api_needs_the_token(web_server):
+    # Another account on the machine reaches loopback too, but not the printed URL
+    values = BUILDER["preset_settings"](BUILDER["PRESETS"][0])
+    for token in ("", "x" + web_server.token, "é"):    # (a non-ASCII byte gets a 403 too)
+        for method, path, body in (("GET", "/api/config", None), ("GET", "/api/presets", None),
+                                   ("POST", "/api/generate", values)):
+            status, _, _ = request(web_server, method, path, body, {"X-Editor-Token": token})
+            assert status == 403, (path, token)
+    status, _, _ = request(web_server, headers={"X-Editor-Token": ""})
+    assert status == 200    # the page itself carries nothing private
+
+
 @pytest.mark.parametrize("path", ("/CLAUDE.md", "/../CLAUDE.md", "/.git/config", "/api/run"))
 def test_no_filesystem_or_execution_routes(web_server, path):
     status, _, _ = request(web_server, path=path)
@@ -167,7 +181,7 @@ def test_server_save_config_and_new_script(save_server):
     saved = json.loads(body)
     path = save_server.save_dir / "gyroid" / "run01" / "simulation.py"
     assert saved["path"] == str(path)
-    assert path.read_text() == saved["script"]
+    assert path.read_bytes() == saved["script"].encode("utf-8")
     compile(path.read_text(), str(path), "exec")
     assert not (path.parent / "simulation").exists()  # Saving does not run the script.
 
@@ -189,6 +203,7 @@ def test_server_save_preserves_existing_file(save_server):
     ("simulation.py", "../escape"), ("simulation.py", "/tmp/escape"),
     ("simulation.py", "nested/../escape"), ("simulation.py", "nested\\escape"),
     ("simulation.py", "\0"), ("simulation.py", False), (None, ""),
+    ("C:escape.py", ""), ("stream:simulation.py", ""), ("simulation.py", "C:escape"),
 ))
 def test_server_save_rejects_invalid_paths(save_server, filename, directory):
     status, _, body = request(save_server, "POST", "/api/save", save_payload(filename, directory))
@@ -197,22 +212,63 @@ def test_server_save_rejects_invalid_paths(save_server, filename, directory):
     assert not save_server.save_dir.exists()
 
 
+def symlink_or_skip(link, target, **kwargs):
+    try:
+        link.symlink_to(target, **kwargs)
+    except OSError as exc:
+        # Windows needs Developer Mode or administrator rights to create symbolic links
+        pytest.skip(f"Cannot create symbolic links here: {exc}")
+
+
 def test_server_save_rejects_symlink_directory(save_server, tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     save_server.save_dir.mkdir()
-    (save_server.save_dir / "linked").symlink_to(outside, target_is_directory=True)
+    symlink_or_skip(save_server.save_dir / "linked", outside, target_is_directory=True)
     status, _, body = request(save_server, "POST", "/api/save", save_payload(directory="linked"))
     assert status == 500
     assert json.loads(body)["error"]
     assert not (outside / "simulation.py").exists()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Directory junctions exist on Windows only")
+def test_server_save_rejects_junction_directory(save_server, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    save_server.save_dir.mkdir()
+    # A junction needs no privilege, unlike a symbolic link
+    subprocess.run(["cmd", "/c", "mklink", "/J", str(save_server.save_dir / "linked"), str(outside)],
+                   check=True, capture_output=True)
+    status, _, body = request(save_server, "POST", "/api/save", save_payload(directory="linked/run01"))
+    assert status == 500
+    assert json.loads(body)["error"]
+    assert not (outside / "run01").exists()
+
+
+def test_path_based_save_refuses_links(save_server, tmp_path, monkeypatch):
+    # The save of Windows, which has no directory descriptors, also where symlinks are allowed
+    monkeypatch.setitem(BUILDER["save_script"].__globals__, "DIRECTORY_DESCRIPTORS", False)
+    status, _, body = request(save_server, "POST", "/api/save", save_payload(directory="gyroid/run01"))
+    assert status == 201
+    path = save_server.save_dir / "gyroid" / "run01" / "simulation.py"
+    assert path.read_bytes() == json.loads(body)["script"].encode("utf-8")
+    assert request(save_server, "POST", "/api/save", save_payload(directory="gyroid/run01"))[0] == 409
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "original.py").write_text("original content")
+    symlink_or_skip(save_server.save_dir / "linked", outside, target_is_directory=True)
+    assert request(save_server, "POST", "/api/save", save_payload(directory="linked/run01"))[0] == 500
+    assert not (outside / "run01").exists()
+    symlink_or_skip(save_server.save_dir / "original.py", outside / "original.py")
+    assert request(save_server, "POST", "/api/save", save_payload("original.py"))[0] == 409
+    assert (outside / "original.py").read_text() == "original content"
+
+
 def test_server_save_preserves_symlink_file(save_server, tmp_path):
     outside = tmp_path / "original.py"
     outside.write_text("original content")
     save_server.save_dir.mkdir()
-    (save_server.save_dir / "simulation.py").symlink_to(outside)
+    symlink_or_skip(save_server.save_dir / "simulation.py", outside)
     status, _, _ = request(save_server, "POST", "/api/save", save_payload())
     assert status == 409
     assert outside.read_text() == "original content"

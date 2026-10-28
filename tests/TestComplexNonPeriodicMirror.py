@@ -35,6 +35,7 @@ os.environ["OMP_NUM_THREADS"] = "2"
 
 import numpy as np
 from polymerfts import _core
+from cuda_part import cuda_part_missing
 
 TOL = 1e-12
 
@@ -124,8 +125,11 @@ def main():
             run_case(platform, "discrete", diblock=True)
             ran += 2
     assert ran > 0, "no platform available"
+    if cuda_part_missing():
+        return 1
     print(f"ALL {ran} COMPLEX NON-PERIODIC MIRROR CASES PASSED")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

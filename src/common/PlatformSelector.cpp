@@ -83,23 +83,23 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  * @param platform       Platform name ("cpu-fftw", "cpu-mkl", or "cuda")
  * @param reduce_memory  Enable checkpointing mode (reduces memory, increases compute)
  *
- * @return Pointer to platform-specific AbstractFactory<double>
+ * @return Owning pointer to the platform-specific AbstractFactory<double>
  * @throws Exception if platform not found or not compiled
  */
-AbstractFactory<double>* PlatformSelector::create_factory_real(
+std::unique_ptr<AbstractFactory<double>> PlatformSelector::create_factory_real(
     std::string platform, bool reduce_memory)
 {
 #ifdef USE_CPU_FFTW
     if (platform == "cpu-fftw")
-        return new FftwFactory<double>(reduce_memory);
+        return std::make_unique<FftwFactory<double>>(reduce_memory);
 #endif
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<double>(reduce_memory);
+        return std::make_unique<MklFactory<double>>(reduce_memory);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<double>(reduce_memory);
+        return std::make_unique<CudaFactory<double>>(reduce_memory);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;
@@ -115,23 +115,23 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
  * @param platform       Platform name ("cpu-fftw", "cpu-mkl", or "cuda")
  * @param reduce_memory  Enable checkpointing mode (reduces memory, increases compute)
  *
- * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
+ * @return Owning pointer to the platform-specific AbstractFactory<std::complex<double>>
  * @throws Exception if platform not found or not compiled
  */
-AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
+std::unique_ptr<AbstractFactory<std::complex<double>>> PlatformSelector::create_factory_complex(
     std::string platform, bool reduce_memory)
 {
 #ifdef USE_CPU_FFTW
     if (platform == "cpu-fftw")
-        return new FftwFactory<std::complex<double>>(reduce_memory);
+        return std::make_unique<FftwFactory<std::complex<double>>>(reduce_memory);
 #endif
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<std::complex<double>>(reduce_memory);
+        return std::make_unique<MklFactory<std::complex<double>>>(reduce_memory);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<std::complex<double>>(reduce_memory);
+        return std::make_unique<CudaFactory<std::complex<double>>>(reduce_memory);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;

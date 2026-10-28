@@ -7,8 +7,13 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 ## Features
 
 - SCFT, L-FTS, and CL-FTS (beta) simulations
-- Arbitrary acyclic branched polymers and their mixtures
+- Arbitrary acyclic branched polymers, random copolymers, and their mixtures
 - Continuous and discrete chain models
+- Dynamic-programming reuse of equivalent propagators in branched polymers and mixtures
+- SCFT unit-cell relaxation for orthogonal and non-orthogonal cells, and space-group symmetry (beta)
+- Well-tempered metadynamics (L-FTS) and charged polymers with smeared Coulomb interactions, point ions and
+  grand-canonical species (CL-FTS; mean field in SCFT)
+- Gibbs-ensemble CL-FTS for coexisting phases
 - CPU (MKL, FFTW) and GPU (NVIDIA CUDA) platforms
 
 For details, see [Features.md](docs/getting-started/Features.md).
@@ -18,22 +23,22 @@ For details, see [Features.md](docs/getting-started/Features.md).
 ### Quick Start (Conda)
 
 ```bash
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts
+git clone https://github.com/yongdd/polymerfts.git
+cd polymerfts
 conda env create -f environment.yml
 conda activate polymerfts
 ```
 
 For GPU support, put CUDA 12.2+ `nvcc` on PATH before building the wheel; CUDA is
 detected automatically. The Conda environment does not include the toolkit.
+On Windows, follow the [Windows notes](docs/getting-started/Installation.md#windows).
 
 Choose one CPU backend.
 
 **MKL**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed \
-    mkl=2025.0.0 mkl-include=2025.0.0
+conda install --override-channels -c conda-forge --freeze-installed mkl-devel=2026.1.0
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=ON -Ccmake.define.POLYMERFTS_USE_FFTW=OFF
 ```
@@ -41,7 +46,7 @@ CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir di
 **FFTW**
 
 ```bash
-conda install --override-channels -c defaults --freeze-installed fftw
+conda install --override-channels -c conda-forge --freeze-installed fftw=3.3.11
 CMAKE_PREFIX_PATH="$CONDA_PREFIX" python -m pip wheel . --no-deps --wheel-dir dist \
     -Ccmake.define.POLYMERFTS_USE_MKL=OFF -Ccmake.define.POLYMERFTS_USE_FFTW=ON
 ```
@@ -64,11 +69,11 @@ For detailed instructions, troubleshooting, and dependencies, see [Installation.
 
 ```bash
 conda activate polymerfts
-cd examples/scft
+cd examples/block_copolymer/scft
 python Lamella3D.py
 ```
 
-Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `examples/lfts/`, and `examples/clfts/`.
+Tutorials are in the `tutorials/` folder. Examples are in `examples/`, grouped by physical system and simulation method ([index](examples/README.md)).
 
 ## Documentation
 
@@ -80,26 +85,8 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | [References](docs/references/) | Parameter reference, bibliography, tools |
 | `tutorials/` | Jupyter notebooks explaining theory and usage |
 
-## Numerical Methods
-
-| Method | Type | Description |
-|--------|------|-------------|
-| `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
-| `rk2` | Pseudo-spectral | 2nd-order Rasmussen-Kalosakas |
-| `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
-
-**Note**: `rqm4` is the default. See [benchmarks](docs/theory/NumericalMethods.md) for details.
-
 ## Citation
 
 If you use this software, please cite:
 
 > D. Yong and J. U. Kim, "Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations", *J. Chem. Theory Comput.* **2025**, 21, 3676
-
-## Contributing
-
-Contributions are welcome. See [DeveloperGuide.md](docs/internals/DeveloperGuide.md) for development guidelines.
-
-## References
-
-See [Bibliography.md](docs/references/Bibliography.md) for the complete list of publications.

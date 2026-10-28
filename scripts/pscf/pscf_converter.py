@@ -114,6 +114,21 @@ def lattice_geometry(lattice, cell, dim):
     return lx, angles
 
 
+def spglib_call(spglib, function, *args):
+    """Call spglib with its raising error handling, which spglib 2.7+ asks for (with a
+    DeprecationWarning otherwise) and makes the only one in 3.0, without changing the
+    handling for other code. spglib's SPGLIB_OLD_ERROR_HANDLING variable takes precedence."""
+    errors = getattr(spglib, "error", None)
+    old = getattr(errors, "OLD_ERROR_HANDLING", None)
+    if old is not None:
+        errors.OLD_ERROR_HANDLING = False
+    try:
+        return function(*args)
+    finally:
+        if old is not None:
+            errors.OLD_ERROR_HANDLING = old
+
+
 def choose_lattice(params, override=None):
     nx, lx, angles = validate_cell(params["nx"], params["lx"], params.get("angles", [90.] * 3))
     dim = len(nx)
@@ -133,20 +148,37 @@ def choose_lattice(params, override=None):
             numbers = vector(hall, "hall_number", integer=True)
             if len(numbers) != 1 or numbers[0] > 530:
                 raise ValueError("hall_number must be an integer between 1 and 530.")
-            sg = spglib.get_spacegroup_type(numbers[0])
+            hall = numbers[0]
         else:
             symbol = group.get("symbol", "")
             if not isinstance(symbol, str):
                 raise ValueError("space_group.symbol must be a string.")
             symbol = symbol.replace(" ", "")
-            sg = next((g for h in range(1, 531) if (g := spglib.get_spacegroup_type(h)).international_short.replace("_", "")
-                       == symbol.replace("_", "")), None)
-        if sg is None:
+            hall = next((h for h in range(1, 531) if spglib_call(spglib, spglib.get_spacegroup_type, h)
+                         .international_short.replace("_", "") == symbol.replace("_", "")), None)
+        if hall is None:
             raise ValueError("Could not identify the space group. Specify --lattice explicitly.")
+        sg = spglib_call(spglib, spglib.get_spacegroup_type, hall)
         number = sg.number
         system = ("Triclinic" if number <= 2 else "Monoclinic" if number <= 15 else
                   "Orthorhombic" if number <= 74 else "Tetragonal" if number <= 142 else
                   "Trigonal" if number <= 167 else "Hexagonal" if number <= 194 else "Cubic")
+        if system == "Monoclinic":
+            # PSCF's monoclinic lattice frees beta, the angle of the unique axis b. A setting with
+            # the unique axis a or c keeps its fixed cell as a triclinic lattice; relaxing it would
+            # free every angle in PSCF. The unique axis is the 2-fold axis or mirror normal, which
+            # every operation keeps in place (R[u][u] = det R without mixing it with other axes)
+            rotations = spglib_call(spglib, spglib.get_symmetry_from_database, hall)["rotations"]
+            unique = next(u for u in range(3) if all(
+                round(np.linalg.det(r)) == r[u][u] and all(r[u][k] == 0 and r[k][u] == 0 for k in range(3) if k != u)
+                for r in rotations))
+            if unique != 1:
+                if params.get("relax_cell", False):
+                    raise ValueError(f"PSCF's monoclinic lattice relaxes beta (unique axis b), but space group "
+                                     f"{sg.international_short} (Hall {hall}) has the unique axis {'abc'[unique]}. "
+                                     "Export a fixed cell, use the unique-axis-b setting of the group, or give "
+                                     "--lattice triclinic (PSCF then relaxes every angle).")
+                system = "Triclinic"
     if override:
         lattice = override.lower()
     elif dim == 1:
@@ -398,6 +430,8 @@ def prepare_export(source, field_source=None, lattice=None):
         raise ValueError("Finite-compressibility models are not supported by this incompressible PSCF export.")
     if params.get("mask") is not None or params.get("smearing") is not None:
         raise ValueError("Masks and interaction smearing cannot be transferred to this PSCF input.")
+    if params.get("electrostatics") is not None:
+        raise ValueError("Electrostatics cannot be transferred to this PSCF input.")
     bc = params.get("bc")
     if bc is not None and (not isinstance(bc, (list, tuple, np.ndarray))
             or len(bc) != 2 * len(params["nx"]) or any(value != "periodic" for value in bc)):
@@ -418,6 +452,8 @@ def prepare_export(source, field_source=None, lattice=None):
     for polymer in params["polymers"]:
         if any(polymer.get(key) is not None for key in ("initial_conditions", "grafting_points")):
             raise ValueError("Grafted chains and custom initial propagator conditions are not supported by this PSCF export.")
+        if "chemical_potential" in polymer:
+            raise ValueError("Grand-canonical polymers (chemical_potential) are not supported by this canonical PSCF export.")
         blocks = polymer["blocks"]
         explicit = any("v" in b or "u" in b for b in blocks)
         edges, parent = set(), {}
@@ -790,7 +826,8 @@ def script_commands(text):
             stage = "write"
         elif name in writes and stage == "write":
             source = Path(argument)
-            if (not argument or source.is_absolute() or ".." in source.parts or "\\" in argument
+            # anchor: a root or a drive; on Windows "/tmp/x" is rooted on the current drive
+            if (not argument or source.anchor or ".." in source.parts or "\\" in argument
                     or argument.endswith("/") or source == Path(".")):
                 raise ValueError(f"PSCF output must be a relative file path without '..': {argument!r}.")
             outputs.append({"command": name, "source": argument, "target": source.as_posix() + ".mat"})
@@ -831,10 +868,9 @@ def main():
     initial = loadmat(directory / "initial.mat", simplify_cells=True)
     initial_fields = {name: np.asarray(initial["w_" + name]).reshape(params["nx"])
                       for name in params["segment_lengths"]}
-    # Keep output, including polymer architecture drawings, beside this script.
+    # Keep the results beside this script.
     results = directory / "results"
     results.mkdir(exist_ok=False)
-    os.chdir(results)
     calculation = scft.SCFT(params=params)
     result = calculation.run(initial_fields=initial_fields, return_result=True)
     if not result.converged:
@@ -861,6 +897,12 @@ def import_script(param, command, output_dir, *, input_dir=None, monomers=None, 
     if model not in (None, "continuous"):
         raise ValueError("Script import requires continuous chains in the field metadata.")
     params, group = script_params(param.read_text(encoding="utf-8"), data, names)
+    # polymerfts rejects cells flatter than V = 0.1 abc (field import and export keep them);
+    # the small margin keeps rounding from letting through a cell that it rejects
+    ca, cb, cg = np.cos(np.deg2rad(params["angles"]))
+    if 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg < 0.1 * 0.1 * (1 + 1e-9):
+        raise ValueError("The PSCF cell has a volume below 0.1 abc, which polymerfts rejects; "
+                         "convert the reduced (Niggli) cell of the lattice, spanned by its shortest vectors.")
     if platform not in ("auto", "cuda", "cpu-fftw", "cpu-mkl"):
         raise ValueError(f"Unknown platform: {platform}.")
     if platform != "auto":

@@ -26,10 +26,10 @@
  * @see AndersonMixing for algorithm description
  */
 
-#include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>
 #include "CudaCommon.h"
+#include "CudaTypeDispatch.h"
 #include "CudaComputationBox.h"
 #include "CudaCircularBuffer.h"
 #include "CudaAndersonMixing.h"
@@ -79,10 +79,7 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
 
         // Allocate memory for cub reduction sum (the first call only queries the size)
         temp_storage_bytes = 0;
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+        CUDA_CHECK(cuda_reduce_sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
         d_temp_storage.allocate(temp_storage_bytes);
 
         // Reset_count
@@ -152,10 +149,7 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             {
                 ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, this->n_var);
                 CUDA_CHECK_LAUNCH();
-                if constexpr (std::is_same<T, double>::value)
-                    CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-                else
-                    CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+                CUDA_CHECK(cuda_reduce_sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
                 CUDA_CHECK(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
 
@@ -198,7 +192,6 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             // Calculate the new field
             d_w_hist1 = d_cb_w_hist->get_array(0);
             d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
-            CUDA_CHECK(cudaMemcpy(d_w_new, d_w_hist1, sizeof(T)*this->n_var,cudaMemcpyDeviceToDevice));
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
             CUDA_CHECK_LAUNCH();
             for(int i=0; i<this->n_anderson; i++)
@@ -227,19 +220,6 @@ void CudaAndersonMixing<T>::calculate_new_fields(
     {
         throw_without_line_number(exc.what());
     }
-}
-template <typename T>
-void CudaAndersonMixing<T>::print_array(int n, T *a)
-{
-    #ifndef NDEBUG
-    for(int i=0; i<n-1; i++)
-    {
-        std::cout << a[i] << ", ";
-    }
-    std::cout << a[n-1] << std::endl;
-    #else
-    (void)n; (void)a;  // Suppress unused parameter warnings
-    #endif
 }
 
 // Explicit template instantiation

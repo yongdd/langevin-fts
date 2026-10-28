@@ -433,6 +433,134 @@ void CudaSolverPseudoBase<T>::cleanup_crysfft()
 }
 
 template <typename T>
+CuDeviceData<T>* CudaSolverPseudoBase<T>::expand_to_full_grid(int STREAM, CuDeviceData<T>* d_q_in)
+{
+    if (space_group_ == nullptr)
+        return d_q_in;
+    // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+    if constexpr (!std::is_same_v<T, double>)
+    {
+        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+    }
+    else
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, cb->get_total_grid());
+        CUDA_CHECK_LAUNCH();
+        return d_q_full_in_[STREAM];
+    }
+}
+
+template <typename T>
+CuDeviceData<T>* CudaSolverPseudoBase<T>::full_grid_output(int STREAM, CuDeviceData<T>* d_q_out)
+{
+    return (space_group_ != nullptr) ? d_q_full_out_[STREAM].get() : d_q_out;
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::store_full_grid(
+    int STREAM, CuDeviceData<T>* d_full, CuDeviceData<T>* d_q_out, const double* d_q_mask)
+{
+    if (space_group_ != nullptr)
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_out, d_full, d_reduced_basis_indices_, n_basis_);
+        CUDA_CHECK_LAUNCH();
+    }
+    // The mask is stored in the basis of d_q_out, so it applies after the reduction
+    multiply_mask(STREAM, d_q_out, d_q_mask);
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::multiply_mask(int STREAM, CuDeviceData<T>* d_q, const double* d_q_mask)
+{
+    if (d_q_mask == nullptr)
+        return;
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int n = (space_group_ != nullptr) ? n_basis_ : cb->get_total_grid();
+    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q, d_q, d_q_mask, 1.0, n);
+    CUDA_CHECK_LAUNCH();
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::crysfft_diffuse(
+    int STREAM, double* d_q_in, double* d_q_out, double coeff,
+    const double* pre, const double* mid, const double* post)
+{
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int M_phys = crysfft_physical_size_;
+    const cudaStream_t stream = streams[STREAM][0];
+    CudaCrysFFTBase* crysfft = crysfft_[STREAM].get();
+    // A coefficient without a prebuilt table would be built here, inside the
+    // propagator loop: its step is missing from crysfft_block_coeffs()
+    if (!crysfft_coeffs_.contains(coeff))
+        throw_with_line_number("The CrysFFT table of the step coefficient " + std::to_string(coeff) +
+            " was not prebuilt (see crysfft_block_coeffs()).");
+    crysfft->set_contour_step(coeff);
+
+    if (crysfft_identity_map_)
+    {
+        // The physical grid is the reduced basis: work in d_q_out, in place (an
+        // out-of-place diffusion would first copy its input into d_q_out)
+        if (pre != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_in, pre, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+            crysfft->diffusion(d_q_out, d_q_out, stream);
+        }
+        else
+        {
+            crysfft->diffusion(d_q_in, d_q_out, stream);   // preserves d_q_in when out of place
+        }
+        if (mid != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_out, mid, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+            crysfft->diffusion(d_q_out, d_q_out, stream);
+        }
+        if (post != nullptr)
+        {
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_q_out, d_q_out, post, 1.0, M_phys);
+            CUDA_CHECK_LAUNCH();
+        }
+        return;
+    }
+
+    // Expand to the physical grid, diffuse there in place and reduce back
+    double* d_work = d_crysfft_in_[STREAM];
+    if (pre != nullptr)
+        ker_expand_reduced_basis_multi<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_work, d_q_in, pre, d_crysfft_phys_to_reduced_, M_phys);
+    else
+        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_work, d_q_in, d_crysfft_phys_to_reduced_, M_phys);
+    CUDA_CHECK_LAUNCH();
+
+    crysfft->diffusion(d_work, d_work, stream);
+    if (mid != nullptr)
+    {
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work, mid, d_crysfft_phys_to_reduced_, M_phys);
+        CUDA_CHECK_LAUNCH();
+        crysfft->diffusion(d_work, d_work, stream);
+    }
+    if (post != nullptr)
+    {
+        ker_multi_map<<<N_BLOCKS, N_THREADS, 0, stream>>>(d_work, post, d_crysfft_phys_to_reduced_, M_phys);
+        CUDA_CHECK_LAUNCH();
+    }
+
+    ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+        d_q_out, d_work, d_crysfft_reduced_to_phys_, n_basis_);
+    CUDA_CHECK_LAUNCH();
+}
+
+template <typename T>
 void CudaSolverPseudoBase<T>::set_space_group(
     SpaceGroup* sg,
     int* d_reduced_basis_indices,
@@ -487,52 +615,15 @@ void CudaSolverPseudoBase<T>::init_crysfft()
         (angles.size() >= 3 &&
          std::abs(angles[0] - M_PI / 2.0) < 1e-10 &&
          std::abs(angles[1] - M_PI / 2.0) < 1e-10);
-    const auto selection = select_crysfft_mode(
+    // Engine choice and its basis map, shared with the CPU solver
+    const CrysFFTPlan plan = plan_crysfft(
         space_group_, nx_logical, dim_, is_periodic_, cb->is_orthogonal(), z_axis_orthogonal);
-    if (selection.mode == CrysFFTChoice::None && !selection.can_pmmm && !selection.can_oblique_z)
-        return;
-
-    const int M_reduced = space_group_->get_n_reduced_basis();
-    const auto& full_to_reduced = space_group_->get_full_to_reduced_map();
-    const bool use_m3_basis = space_group_->using_m3_physical_basis();
-    const bool use_pmmm_basis = space_group_->using_pmmm_physical_basis();
-    const bool use_hex_basis = space_group_->using_z_mirror_physical_basis();
-
-    // Recursive 3m: octant sampled at even full-grid indices
-    if (selection.mode == CrysFFTChoice::Recursive3m)
-    {
-        if (use_pmmm_basis)
-            throw_with_line_number("Pmmm physical basis is enabled but recursive 3m CrysFFT is selected.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/true);
-        if (crysfft_mapping_usable(map, use_m3_basis, "M3 physical basis does not match recursive 3m CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::Recursive3m, map, selection.m3_translations);
-    }
-
-    // ObliqueZ: lower z half (z-mirror)
-    if (!use_crysfft_ && selection.mode == CrysFFTChoice::ObliqueZ)
-    {
-        if (use_m3_basis || use_pmmm_basis)
-            throw_with_line_number("ObliqueZ CrysFFT selected but Pmmm/M3 physical basis is enabled.");
-        if (!selection.can_oblique_z)
-            throw_with_line_number("ObliqueZ CrysFFT selected but z-mirror symmetry is unavailable.");
-        const int z_shift = use_hex_basis ? space_group_->get_z_mirror_shift()
-                                          : selection.oblique_z_shift;
-        if (use_hex_basis && z_shift != selection.oblique_z_shift)
-            throw_with_line_number("Z-mirror physical basis shift does not match CrysFFT selection.");
-        const auto map = build_crysfft_mapping_z_mirror(nx_logical, full_to_reduced, M_reduced, z_shift);
-        if (crysfft_mapping_usable(map, use_hex_basis, "Z-mirror physical basis does not match ObliqueZ CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::ObliqueZ, map, selection.m3_translations);
-    }
-
-    // Pmmm DCT: octant at consecutive indices
-    if (!use_crysfft_ && selection.can_pmmm)
-    {
-        if (use_m3_basis)
-            throw_with_line_number("M3 physical basis is enabled but recursive 3m CrysFFT is unavailable.");
-        const auto map = build_crysfft_mapping_octant(nx_logical, full_to_reduced, M_reduced, /*even_indices=*/false);
-        if (crysfft_mapping_usable(map, use_pmmm_basis, "Pmmm physical basis does not match Pmmm CrysFFT grid ordering."))
-            setup_crysfft(CudaCrysFFTMode::PmmmDct, map, selection.m3_translations);
-    }
+    if (plan.mode == CrysFFTChoice::Recursive3m)
+        setup_crysfft(CudaCrysFFTMode::Recursive3m, plan.map, plan.m3_translations);
+    else if (plan.mode == CrysFFTChoice::PmmmDct)
+        setup_crysfft(CudaCrysFFTMode::PmmmDct, plan.map, plan.m3_translations);
+    else if (plan.mode == CrysFFTChoice::ObliqueZ)
+        setup_crysfft(CudaCrysFFTMode::ObliqueZ, plan.map, plan.m3_translations);
 }
 
 template <typename T>
@@ -567,18 +658,63 @@ void CudaSolverPseudoBase<T>::setup_crysfft(
 
     for (int i = 0; i < n_streams; i++)
     {
-        if (mode == CudaCrysFFTMode::Recursive3m)
+        // One transform per stream; the clones share the read-only k-space tables
+        if (i > 0)
+            crysfft_[i] = crysfft_[0]->clone_sharing_tables();
+        else if (mode == CudaCrysFFTMode::Recursive3m)
             crysfft_[i] = std::make_unique<CudaCrysFFTRecursive3m>(nx_logical, cell_para, m3_translations);
         else if (mode == CudaCrysFFTMode::ObliqueZ)
             crysfft_[i] = std::make_unique<CudaCrysFFTObliqueZ>(nx_logical, cell_para);
         else
             crysfft_[i] = std::make_unique<CudaCrysFFT>(nx_logical, cell_para);
+        // Its transforms and table uploads run on the stream of the propagators
+        crysfft_[i]->set_stream(streams[i][0]);
 
         d_crysfft_in_[i].allocate(map.M_phys);
         d_crysfft_out_[i].allocate(map.M_phys);
     }
     crysfft_mode_ = mode;
     use_crysfft_ = true;
+    update_crysfft_tables();
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::update_crysfft_tables()
+{
+    const auto lx = cb->get_lx();
+    const auto angles = cb->get_angles();
+    const std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
+
+    // Building a table allocates and uploads it: do it here, outside the propagator
+    // loop, for the monomer type and contour step of each block (not for every
+    // combination: each table holds up to 16 physical-grid arrays)
+    const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+    std::set<std::pair<std::string, int>> block_steps;
+    for (int p = 0; p < molecules->get_n_polymer_types(); ++p)
+        for (const Block& block : molecules->get_polymer(p).get_blocks())
+            block_steps.insert({block.monomer_type, mapping.get_ds_index(block.contour_length)});
+    crysfft_coeffs_.clear();
+    crysfft_stress_keys_.clear();   // the cell change drops the stress multipliers too
+    for (const auto& [monomer_type, ds_idx] : block_steps)
+        for (double coeff : crysfft_block_coeffs(monomer_type, ds_idx))
+            crysfft_coeffs_.insert(coeff);
+
+    for (int i = 0; i < n_streams; ++i)
+    {
+        if (crysfft_[i] == nullptr)
+            continue;
+        crysfft_[i]->set_cell_para(cell_para);
+        for (double coeff : crysfft_coeffs_)
+            crysfft_[i]->set_contour_step(coeff);
+    }
+}
+
+template <typename T>
+double CudaSolverPseudoBase<T>::crysfft_coeff(const std::string& monomer_type, int ds_index, double divisor) const
+{
+    const double local_ds = molecules->get_contour_length_mapping().get_ds_from_index(ds_index);
+    const double bond_length = molecules->get_bond_lengths().at(monomer_type);   // no map copy per step
+    return bond_length * bond_length * local_ds / divisor;
 }
 
 template <typename T>
@@ -601,16 +737,7 @@ void CudaSolverPseudoBase<T>::update_laplacian_operator()
             this->cb->get_recip_vec());
 
         if (use_crysfft_)
-        {
-            auto lx = cb->get_lx();
-            auto angles = cb->get_angles();
-            std::array<double, 6> cell_para = {lx[0], lx[1], lx[2], angles[0], angles[1], angles[2]};
-            for (int i = 0; i < n_streams; ++i)
-            {
-                if (crysfft_[i] != nullptr)
-                    crysfft_[i]->set_cell_para(cell_para);
-            }
-        }
+            update_crysfft_tables();
     }
     catch(std::exception& exc)
     {
@@ -636,78 +763,174 @@ void CudaSolverPseudoBase<T>::update_dw_impl(
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         const int n_unique_ds = mapping.get_n_unique_ds();
 
-        cudaMemcpyKind cudaMemcpyInputToDevice;
-        if (device == "gpu")
-            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
-        else if(device == "cpu")
-            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
-        else
-        {
+        if (device != "gpu" && device != "cpu")
             throw_with_line_number("Invalid device \"" + device + "\".");
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (!std::is_same_v<T, double>)
+        {
+            if (use_reduced_basis)
+                throw_with_line_number("Space group reduced basis is only supported for real fields.");
         }
 
-        // Compute exp_dw for each ds_index and monomer type
-        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+        for(const auto& item: w_input)
         {
-            const double local_ds = mapping.get_ds_from_index(ds_idx);
-            for(const auto& item: w_input)
-            {
-                const std::string& monomer_type = item.first;
-                const T *w = item.second;
+            const std::string& monomer_type = item.first;
+            const T *w = item.second;
 
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+            {
                 if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
                     throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-                CuDeviceData<T>* d_full = this->d_exp_dw.at(ds_idx).at(monomer_type).get();
-                CuDeviceData<T>* d_half = with_half ? this->d_exp_dw_half.at(ds_idx).at(monomer_type).get() : nullptr;
+            }
 
-                if (use_reduced_basis && device == "gpu" && !use_crysfft)
+            // The field on the device (M_use values): the input itself, or a copy in
+            // the table written last below, which is then computed in place
+            CuDeviceData<T>* d_stage = (with_half ? this->d_exp_dw_half : this->d_exp_dw)
+                                       .at(n_unique_ds - 1).at(monomer_type).get();
+            const CuDeviceData<T>* d_w = reinterpret_cast<const CuDeviceData<T>*>(w);
+            if (use_reduced_basis && !use_crysfft)
+            {
+                // [real-only feature] (complex fields were rejected above)
+                if constexpr (std::is_same_v<T, double>)
                 {
-                    if constexpr (std::is_same_v<T, double>)
+                    // Expand reduced basis -> full grid
+                    if (device == "gpu")
                     {
-                        // Expand reduced basis -> full grid on device
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_full, w, d_full_to_reduced_map_, M);
-                        CUDA_CHECK_LAUNCH();
-                        if (with_half)
-                            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_half, w, d_full_to_reduced_map_, M);
+                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS>>>(d_stage, w, d_full_to_reduced_map_, M);
                         CUDA_CHECK_LAUNCH();
                     }
                     else
                     {
-                        throw_with_line_number("Space group reduced basis is only supported for real fields.");
+                        std::vector<double> w_full_host(M);
+                        space_group_->from_reduced_basis(w, w_full_host.data(), 1);
+                        CUDA_CHECK(cudaMemcpyAsync(d_stage, w_full_host.data(), sizeof(double)*M, cudaMemcpyHostToDevice));
                     }
+                    d_w = d_stage;
                 }
-                else
-                {
-                    const T* w_full = w;
-                    std::vector<T> w_full_host;
-                    if (use_reduced_basis && !use_crysfft)
-                    {
-                        if constexpr (std::is_same_v<T, double>)
-                        {
-                            w_full_host.resize(M);
-                            space_group_->from_reduced_basis(w, w_full_host.data(), 1);
-                            w_full = w_full_host.data();
-                        }
-                        else
-                        {
-                            throw_with_line_number("Space group reduced basis is only supported for real fields.");
-                        }
-                    }
-                    // Copy field configurations to the device
-                    CUDA_CHECK(cudaMemcpyAsync(d_full, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                    if (with_half)
-                        CUDA_CHECK(cudaMemcpyAsync(d_half, w_full, sizeof(T)*M_use, cudaMemcpyInputToDevice));
-                }
+            }
+            else if (device == "cpu")
+            {
+                CUDA_CHECK(cudaMemcpyAsync(d_stage, w, sizeof(T)*M_use, cudaMemcpyHostToDevice));
+                d_w = d_stage;
+            }
 
-                // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
-                ker_exp<<<N_BLOCKS, N_THREADS>>>(d_full, d_full, 1.0, -factor*local_ds, M_use);
+            // d_exp_dw = exp(-w * local_ds * factor); d_exp_dw_half = exp(-w * local_ds * factor_half)
+            for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
+            {
+                const double local_ds = mapping.get_ds_from_index(ds_idx);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>(this->d_exp_dw.at(ds_idx).at(monomer_type).get(),
+                                                 d_w, 1.0, -factor*local_ds, M_use);
                 CUDA_CHECK_LAUNCH();
                 if (with_half)
-                    ker_exp<<<N_BLOCKS, N_THREADS>>>(d_half, d_half, 1.0, -factor_half*local_ds, M_use);
-                CUDA_CHECK_LAUNCH();
+                {
+                    ker_exp<<<N_BLOCKS, N_THREADS>>>(this->d_exp_dw_half.at(ds_idx).at(monomer_type).get(),
+                                                     d_w, 1.0, -factor_half*local_ds, M_use);
+                    CUDA_CHECK_LAUNCH();
+                }
             }
         }
         CUDA_CHECK(cudaDeviceSynchronize());
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// CrysFFT stress fast path
+//------------------------------------------------------------------------------
+template <typename T>
+bool CudaSolverPseudoBase<T>::crysfft_stress_fast_path() const
+{
+    // The fast path computes only the diagonal sums (V₁₁, V₂₂, V₃₃). Crystal systems
+    // eligible for CrysFFT are orthogonal and never optimize angles; with the
+    // force-off-diagonal flag (angle optimization active) the standard path,
+    // which computes the cross terms, takes over.
+    return use_crysfft_ && space_group_ != nullptr && is_periodic_ && dim_ == 3
+        && this->cb->is_orthogonal()
+        && !this->force_off_diagonal_stress_
+        && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m);
+}
+
+template <typename T>
+double CudaSolverPseudoBase<T>::stress_bond_length_sq(const std::string& monomer_type, bool is_half_bond_length) const
+{
+    const auto& bond_lengths = this->molecules->get_bond_lengths();
+    auto bond_it = bond_lengths.find(monomer_type);
+    if (bond_it == bond_lengths.end())
+        throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
+    double bond_length_sq = bond_it->second * bond_it->second;
+    if (is_half_bond_length)
+        bond_length_sq *= 0.5;
+    return bond_length_sq;
+}
+
+template <typename T>
+CudaCrysFFTStressArgs CudaSolverPseudoBase<T>::crysfft_stress_args(int STREAM, double bond_length_sq, bool include_bond_factor)
+{
+    const std::vector<double> lx_vec = this->cb->get_lx();
+
+    CudaCrysFFTStressArgs args{};
+    args.crysfft = crysfft_[STREAM].get();
+    args.mode = crysfft_mode_;
+    args.identity_map = crysfft_identity_map_;
+    args.M_phys = crysfft_physical_size_;
+    args.n_basis = n_basis_;
+    args.M_full = this->cb->get_total_grid();
+    args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
+    args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
+    args.d_orbit_counts = d_crysfft_orbit_counts_;
+    args.d_phys_work = d_crysfft_in_[STREAM];
+    args.d_phys_out = d_crysfft_out_[STREAM];
+    if constexpr (std::is_same_v<T, double>)
+        args.d_reduce_buf = d_stress_sum[STREAM];
+    args.d_cub_temp = d_temp_storage[STREAM];
+    args.cub_temp_bytes = temp_storage_bytes[STREAM];
+    args.space_group = space_group_;
+    args.lx[0] = lx_vec[0];
+    args.lx[1] = lx_vec[1];
+    args.lx[2] = lx_vec[2];
+    args.bond_length_sq = bond_length_sq;
+    args.include_bond_factor = include_bond_factor;
+    args.global_ds = include_bond_factor ? this->molecules->get_global_ds() : 0.0;
+    args.stream = streams[STREAM][0];
+    return args;
+}
+
+template <typename T>
+void CudaSolverPseudoBase<T>::prepare_stress()
+{
+    try
+    {
+        // [real-only feature] Space-group reduced basis, CrysFFT and non-periodic stress are implemented for real fields; complex fields take the generic path or raise.
+        if constexpr (std::is_same_v<T, double>)
+        {
+            crysfft_stress_keys_.clear();
+            if (!crysfft_stress_fast_path())
+                return;
+
+            // The multipliers of each block's monomer type, full and (discrete chains)
+            // half bonds: the first stream builds them, and every stream records them
+            // in its table view, so the segment loop neither builds nor locks
+            std::set<std::string> monomer_types;
+            for (int p = 0; p < molecules->get_n_polymer_types(); ++p)
+                for (const Block& block : molecules->get_polymer(p).get_blocks())
+                    monomer_types.insert(block.monomer_type);
+            for (const std::string& monomer_type : monomer_types)
+            {
+                for (const bool half : {false, true})
+                {
+                    const bool include_bond_factor = (get_stress_boltz_bond(monomer_type, half) != nullptr);
+                    if (half && !include_bond_factor)
+                        continue;   // continuous chains: one multiplier per axis group
+                    const double bond_length_sq = stress_bond_length_sq(monomer_type, half);
+                    for (int i = 0; i < n_streams; ++i)
+                        cuda_crysfft_prepare_stress_tables(crysfft_stress_args(i, bond_length_sq, include_bond_factor));
+                    crysfft_stress_keys_.insert({bond_length_sq, include_bond_factor});
+                }
+            }
+        }
     }
     catch(std::exception& exc)
     {
@@ -747,13 +970,7 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
         const int M = this->cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        const auto& bond_lengths = this->molecules->get_bond_lengths();
-        auto bond_it = bond_lengths.find(monomer_type);
-        if (bond_it == bond_lengths.end())
-            throw_with_line_number("monomer_type \"" + monomer_type + "\" not found in bond_lengths.");
-        double bond_length_sq = bond_it->second * bond_it->second;
-        if (is_half_bond_length)
-            bond_length_sq *= 0.5;
+        const double bond_length_sq = stress_bond_length_sq(monomer_type, is_half_bond_length);
 
         // Chain-model-specific Boltzmann bond factor (nullptr for continuous chains).
         // The discrete chain multiplies exp(-k^2 b^2 ds/6) * b^2 into the integrand
@@ -783,37 +1000,15 @@ void CudaSolverPseudoBase<T>::compute_single_segment_stress(
             // force-off-diagonal flag is set (angle optimization active),
             // fall back to the standard path below — which can compute the
             // cross terms — instead of silently returning zeros for them.
-            if (use_crysfft_ && space_group_ != nullptr && is_periodic_ && DIM == 3
-                && this->cb->is_orthogonal()
-                && !this->force_off_diagonal_stress_
-                && (crysfft_mode_ == CudaCrysFFTMode::PmmmDct || crysfft_mode_ == CudaCrysFFTMode::Recursive3m))
+            if (crysfft_stress_fast_path())
             {
-                const std::vector<double> lx_vec = this->cb->get_lx();
-
-                CudaCrysFFTStressArgs args{};
-                args.crysfft = crysfft_[STREAM].get();
-                args.mode = crysfft_mode_;
-                args.identity_map = crysfft_identity_map_;
-                args.M_phys = crysfft_physical_size_;
-                args.n_basis = n_basis_;
-                args.M_full = M;
-                args.d_phys_to_reduced = d_crysfft_phys_to_reduced_;
-                args.d_reduced_to_phys = d_crysfft_reduced_to_phys_;
-                args.d_orbit_counts = d_crysfft_orbit_counts_;
-                args.d_phys_work = d_crysfft_in_[STREAM];
-                args.d_phys_out = d_crysfft_out_[STREAM];
-                args.d_reduce_buf = d_stress_sum[STREAM];
-                args.d_cub_temp = d_temp_storage[STREAM];
-                args.cub_temp_bytes = temp_storage_bytes[STREAM];
-                args.space_group = space_group_;
-                args.lx[0] = lx_vec[0];
-                args.lx[1] = lx_vec[1];
-                args.lx[2] = lx_vec[2];
-                args.bond_length_sq = bond_length_sq;
-                args.include_bond_factor = (_d_boltz_bond != nullptr);   // discrete chains
-                args.global_ds = (_d_boltz_bond != nullptr) ? this->molecules->get_global_ds() : 0.0;
-                args.stream = streams[STREAM][0];
-
+                // discrete chains carry the bond factor. A multiplier missing from
+                // prepare_stress() would be built here, inside the segment loop.
+                const bool include_bond_factor = (_d_boltz_bond != nullptr);
+                if (!crysfft_stress_keys_.contains({bond_length_sq, include_bond_factor}))
+                    throw_with_line_number("The CrysFFT stress multipliers of monomer type \"" + monomer_type +
+                        "\" were not prepared (see prepare_stress()).");
+                const CudaCrysFFTStressArgs args = crysfft_stress_args(STREAM, bond_length_sq, include_bond_factor);
                 cuda_crysfft_compute_single_segment_stress(
                     args, d_q_pair, &d_q_pair[n_basis_], d_segment_stress);
                 return;

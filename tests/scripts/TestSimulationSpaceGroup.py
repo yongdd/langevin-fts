@@ -30,6 +30,12 @@ def values(hall=530):
     elif system == "Trigonal":
         shape, angles = "triclinic", ["80", "80", "80"]
         form["relax_cell"] = False
+    elif system == "Monoclinic":
+        # The angle between the two axes perpendicular to the unique axis (alpha for a, ...) is free
+        shape, lengths = "triclinic", ["3", "4", "5"]
+        angles = ["100" if i == group["unique_axis"] else "90" for i in range(3)]
+    elif system == "Triclinic":
+        shape, lengths, angles = "triclinic", ["3", "4", "5"], ["80", "100", "110"]
     n = 8 * math.lcm(*group["grid_divisors"])
     form["model"]["box"] = {"dimension": 3, "shape": shape, "nx": [str(n)] * 3,
                              "lx": lengths, "angles": angles}
@@ -43,7 +49,7 @@ def parameters(script):
 
 def test_every_catalog_setting_can_be_exported():
     groups = BUILDER["space_groups"]()
-    assert len(groups) == 423
+    assert len(groups) == 530
     for key, group in groups.items():
         script = BUILDER["build_script"](values(int(key)))
         compile(script, key, "exec")
@@ -51,7 +57,7 @@ def test_every_catalog_setting_can_be_exported():
 
 
 @pytest.mark.parametrize("hall, symbol", ((529, "Im-3m"), (530, "Ia-3d"), (526, "Fd-3m"),
-    (419, "P4_2/mnm"), (488, "P6_3/mmc"), (336, "Fddd"), (434, "R3")))
+    (419, "P4_2/mnm"), (488, "P6_3/mmc"), (336, "Fddd"), (434, "R3"), (81, "P2_1/c"), (58, "P2/m"), (2, "P-1")))
 def test_selected_symmetry_reaches_scft(hall, symbol, tmp_path, monkeypatch):
     form = values(hall)
     calls = MODEL["CHECKS"]["execute_export"](form, tmp_path, monkeypatch)
@@ -75,7 +81,7 @@ def test_space_group_is_ignored_by_fts(mode, selection, tmp_path, monkeypatch):
     ("tetragonal_lengths", "a = b"), ("hexagonal_angles", "120"),
     ("hexagonal_divisor", "nz.*multiple of 2"),
     ("rhombohedral_relaxation", "require fixed box size"),
-    ("unknown_hall", "supported space group"), ("unsupported_system", "supported space group"),
+    ("unknown_hall", "supported space group"), ("monoclinic_angles", "unique axis b perpendicular"),
 ))
 def test_invalid_symmetry_is_rejected(problem, message):
     form = values()
@@ -91,7 +97,7 @@ def test_invalid_symmetry_is_rejected(problem, message):
     elif problem == "hexagonal_divisor": form = values(488); form["model"]["box"]["nx"] = ["7"] * 3
     elif problem == "rhombohedral_relaxation": form = values(434); form["relax_cell"] = True
     elif problem == "unknown_hall": form["space_group"] = "531"
-    elif problem == "unsupported_system": form["space_group"] = "1"
+    elif problem == "monoclinic_angles": form = values(57); form["model"]["box"]["angles"] = ["90", "90", "100"]
     with pytest.raises(ValueError, match=message):
         BUILDER["build_script"](form)
 
@@ -125,7 +131,7 @@ def test_symmetry_catalog_and_server_save(tmp_path):
         status, _, body = WEB["request"](server, path="/api/config")
         assert status == 200
         options = json.loads(body)["space_groups"]
-        assert len(options) == 423 and len({o["hall"] for o in options}) == 423
+        assert len(options) == 530 and len({o["hall"] for o in options}) == 530
         assert any(o["hall"] == 530 and "Gyroid" in o["label"] for o in options[:11])
         form = values()
         form["model"]["box"]["nx"] = ["10"] * 3

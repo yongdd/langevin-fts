@@ -33,6 +33,8 @@
 #include <map>
 #include <complex>
 #include <cmath>
+#include <iomanip>
+#include <limits>
 #include <numbers>
 
 #include "ComputationBox.h"
@@ -114,6 +116,52 @@ namespace {
         if (has_wall(bc) && !orthogonal)
             throw_with_line_number("Reflecting and absorbing boundary conditions need an orthogonal box "
                 "(all angles 90 degrees).")
+    }
+
+    /**
+     * @brief Reject angles that do not form a unit cell or form a nearly flat one.
+     *
+     * The cell volume is V = abc sqrt(1 - cos²α - cos²β - cos²γ + 2 cosα cosβ cosγ).
+     * A lattice with a cell of V < MIN_VOLUME_RATIO abc also has a reduced (Niggli)
+     * cell, spanned by its shortest vectors, with angles between 60 and 120 degrees
+     * and V >= abc/sqrt(2). The flat cell is rejected: the alias search of its
+     * oblique Fourier modes (MinimalFormAlias.h) spans about abc/V periods along
+     * each axis, and the volume formula loses its precision when a cosine rounds
+     * to +-1. A rhombohedral space group fixes the cell to its rhombohedral axes;
+     * its hexagonal-axes setting describes the same structure.
+     */
+    constexpr double MIN_VOLUME_RATIO = 0.1;
+
+    void require_cell_volume(const std::vector<double>& full_angles)
+    {
+        const double deg_to_rad = std::numbers::pi / 180.0;
+        const double ca = std::cos(full_angles[0] * deg_to_rad);
+        const double cb = std::cos(full_angles[1] * deg_to_rad);
+        const double cg = std::cos(full_angles[2] * deg_to_rad);
+        const double ratio_sq = 1.0 - ca*ca - cb*cb - cg*cg + 2.0*ca*cb*cg;
+        const std::string combination = "(alpha=" + std::to_string(full_angles[0]) +
+            ", beta=" + std::to_string(full_angles[1]) + ", gamma=" + std::to_string(full_angles[2]) + ") degrees";
+        if (ratio_sq <= 0.0)
+            throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell. The combination " +
+                combination + " is geometrically impossible.");
+        const double ratio = std::sqrt(ratio_sq);
+        if (ratio < MIN_VOLUME_RATIO)
+        {
+            // Ten significant digits, or all of them when ten would round the ratio up to the bound
+            std::ostringstream value;
+            value << std::setprecision(10) << ratio;
+            if (std::stod(value.str()) >= MIN_VOLUME_RATIO)
+            {
+                value.str("");
+                value << std::setprecision(std::numeric_limits<double>::max_digits10) << ratio;
+            }
+            std::ostringstream message;
+            message << "The lattice angles " << combination << " give a cell volume of " << value.str()
+                    << " abc, below the minimum of " << MIN_VOLUME_RATIO << " abc. "
+                    << "Use the reduced (Niggli) cell of the lattice, spanned by its shortest vectors, or for a "
+                    << "rhombohedral space group its hexagonal-axes setting.";
+            throw_with_line_number(message.str());
+        }
     }
 }
 
@@ -305,6 +353,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
                 "angles[" + std::to_string(i) + "]");
         }
+        require_cell_volume(full_angles);
 
         // Convert angles from degrees to radians and store
         angles_.resize(3);
@@ -317,19 +366,6 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         is_orthogonal_ = (std::abs(angles_[0] - std::numbers::pi/2.0) < angle_tolerance &&
                           std::abs(angles_[1] - std::numbers::pi/2.0) < angle_tolerance &&
                           std::abs(angles_[2] - std::numbers::pi/2.0) < angle_tolerance);
-
-        // Validate that angles can form a valid unit cell
-        // For a valid cell: the volume must be positive
-        // V = abc * sqrt(1 - cos²α - cos²β - cos²γ + 2*cosα*cosβ*cosγ)
-        double cos_a = std::cos(angles_[0]);
-        double cos_b = std::cos(angles_[1]);
-        double cos_g = std::cos(angles_[2]);
-        double vol_factor = 1.0 - cos_a*cos_a - cos_b*cos_b - cos_g*cos_g + 2.0*cos_a*cos_b*cos_g;
-        if (vol_factor <= 0.0)
-            throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell. "
-                                   "The combination (alpha=" + std::to_string(angles[0]) +
-                                   ", beta=" + std::to_string(angles[1]) +
-                                   ", gamma=" + std::to_string(angles[2]) + ") degrees is geometrically impossible.");
 
         // Grid interval
         for(int d=0; d<DIM; d++)
@@ -757,20 +793,18 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
         validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
             "angles[" + std::to_string(i) + "]");
     }
-    require_orthogonal_with_walls(bc, std::all_of(full_angles.begin(), full_angles.end(), [](double a) {
-        return std::abs(a * std::numbers::pi / 180.0 - std::numbers::pi / 2.0) < ANGLE_TOLERANCE; }));
+    const bool orthogonal = std::all_of(full_angles.begin(), full_angles.end(), [](double a) {
+        return std::abs(a * std::numbers::pi / 180.0 - std::numbers::pi / 2.0) < ANGLE_TOLERANCE; });
+    require_orthogonal_with_walls(bc, orthogonal);
+    if (orthogonal_cell_holders_ > 0 && !orthogonal)
+        throw_with_line_number("A computation of this box uses a numerical method that requires an "
+            "orthogonal cell (all angles 90 degrees).");
     if (space_group_ != nullptr)
         space_group_->check_cell(new_lx, full_angles);
 
     // Validate that the angles form a unit cell before anything changes
+    require_cell_volume(full_angles);
     const double deg_to_rad = std::numbers::pi / 180.0;
-    {
-        const double ca = std::cos(full_angles[0] * deg_to_rad);
-        const double cb = std::cos(full_angles[1] * deg_to_rad);
-        const double cg = std::cos(full_angles[2] * deg_to_rad);
-        if (1.0 - ca*ca - cb*cb - cg*cg + 2.0*ca*cb*cg <= 0.0)
-            throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell.");
-    }
 
     lx = new_lx;
 
@@ -1089,7 +1123,9 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
 /**
  * @brief Remove the spatial mean from a field (make it zero-mean).
  *
- * When space_group_ is set, operates on reduced basis using weighted mean.
+ * Subtracts the mean over the accessible volume, so that integral() and mean() of
+ * the result vanish also with a mask. When space_group_ is set, operates on reduced
+ * basis using weighted mean.
  */
 template <typename T>
 void ComputationBox<T>::zero_mean(T *g)
@@ -1098,22 +1134,27 @@ void ComputationBox<T>::zero_mean(T *g)
 
     if (space_group_ != nullptr)
     {
-        // Reduced basis mode: the weighted sum over the volume, as in the full-grid
-        // branch (Σ dv g / V; the weights carry the mask)
+        // Reduced basis mode: the weighted sum over the accessible grid points, as in the
+        // full-grid branch (the weights are the orbit sizes times the mask)
+        double accessible_points = 0.0;
         for (int i = 0; i < n_basis_; i++)
+        {
             sum += static_cast<T>(basis_weights_[i]) * g[i];
-        T mean = sum / static_cast<T>(total_grid);
+            accessible_points += basis_weights_[i];
+        }
+        T mean = sum / static_cast<T>(mask_full_.empty() ? static_cast<double>(total_grid) : accessible_points);
 
         for (int i = 0; i < n_basis_; i++)
             g[i] -= mean;
     }
     else
     {
-        // Full grid mode
+        // Full grid mode: Σ dv g over the accessible volume (dv is zero at masked points)
+        const double norm = mask_full_.empty() ? volume : accessible_volume;
         for (int i = 0; i < total_grid; i++)
             sum += dv[i] * g[i];
         for (int i = 0; i < total_grid; i++)
-            g[i] -= sum / volume;
+            g[i] -= sum / norm;
     }
 }
 

@@ -30,4 +30,17 @@ double relative_partition_error(const std::vector<T>& values, T reference)
     return error;
 }
 
+// The error of every polymer: its contour values against the Q that normalizes
+// its concentrations. A uniform field shift can make Q arbitrarily small, hence
+// the relative (complex) error.
+template <typename T>
+std::vector<double> relative_partition_errors(const std::vector<std::vector<T>>& values, const std::vector<T>& references)
+{
+    std::vector<double> errors;
+    errors.reserve(references.size());
+    for (std::size_t p = 0; p < references.size(); p++)
+        errors.push_back(relative_partition_error(values[p], references[p]));
+    return errors;
+}
+
 #endif

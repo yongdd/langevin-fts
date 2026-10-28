@@ -36,6 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
@@ -46,6 +47,8 @@ dependencies = [
     "matplotlib>=3.10",
     "networkx>=3.0",
     "pyyaml>=6.0",
+    # _core links the spglib C library, which a pip-installed spglib supplies
+    "spglib>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -64,14 +67,13 @@ jupyter = [
 ]
 full = [
     "pandas>=2.0",
-    "spglib>=2.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yongdd/langevin-fts"
-Documentation = "https://github.com/yongdd/langevin-fts#readme"
-Repository = "https://github.com/yongdd/langevin-fts.git"
-Issues = "https://github.com/yongdd/langevin-fts/issues"
+Homepage = "https://github.com/yongdd/polymerfts"
+Documentation = "https://github.com/yongdd/polymerfts#readme"
+Repository = "https://github.com/yongdd/polymerfts.git"
+Issues = "https://github.com/yongdd/polymerfts/issues"
 
 [tool.scikit-build]
 # CMake configuration
@@ -103,18 +105,8 @@ logging.level = "INFO"
 CMAKE_BUILD_TYPE = "Release"
 POLYMERFTS_BUILD_TESTS = "OFF"
 
-[tool.cibuildwheel]
-# Build for Linux only initially
-build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64"
-skip = "*-musllinux*"
-
-# Test configuration
-test-requires = ["pytest", "numpy", "scipy"]
-test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector.avail_platforms())\""
-
-[tool.cibuildwheel.linux]
-environment = { OMP_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
-
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# The tests/Test*.py files are CTest scripts (run their main() through ctest);
+# only tests/scripts holds pytest tests
+testpaths = ["tests/scripts"]
 python_files = ["Test*.py"]

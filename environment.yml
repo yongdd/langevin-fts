@@ -1,28 +1,35 @@
 name: polymerfts
 channels:
-  - defaults
+  - conda-forge
   - nodefaults
 dependencies:
-  - python=3.14
-  - cmake>=3.25.2
-  - pybind11=3.1
-  - numpy=2.3
-  - scipy=1.16
-  - pandas=2.3
-  - matplotlib=3.10
-  # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS.
-  - blas=1.0=openblas
-  - openblas-devel=0.3.31
-  - nomkl
-  - make
-  - git
-  - pip
-  - pyyaml
-  - jupyter
-  - networkx
-  - pygraphviz
-  - plotly
-  - pytest
-  - pip:
-      # Maintainer-published wheels include the C library and headers.
-      - spglib==2.8.0
+  # Python 3.15 runs in UTF-8 mode, so redirected output keeps the Greek symbols.
+  # Every package is pinned to the version tested on Linux and Windows, so a new
+  # environment gets the same libraries. The build itself needs CMake 3.30+ (MSVC)
+  # and pybind11 3+ (Python 3.14+). MKL and FFTW are installed separately with the
+  # pinned versions given in docs/getting-started/Installation.md.
+  - python=3.15.1
+  - cmake=4.4.4
+  - pybind11=3.1.0
+  - numpy=2.5.4
+  - scipy=1.18.1
+  - pandas=3.1.0
+  - matplotlib=3.11.2
+  # OpenBLAS supplies LAPACKE for Anderson mixing and NumPy/SciPy's BLAS. libblas
+  # only selects the implementation and openblas fixes the version: with a version
+  # in the libblas spec, the MKL install on Linux fails in conda's retried solve.
+  - libblas=*=*openblas
+  - openblas=0.3.34
+  # The spglib package includes the C library and headers.
+  - spglib=2.8.0
+  - make=4.4.1
+  - ninja=1.13.2
+  # Git comes from the system (it cloned this repository): conda-forge's Windows git
+  # installs MSYS tools such as link.exe, which shadow the MSVC linker on PATH.
+  - pip=26.2.2
+  - pyyaml=6.0.3
+  - jupyter=1.1.1
+  - networkx=3.7
+  - pygraphviz=2.0.4
+  - plotly=7.1.0
+  - pytest=9.1.1

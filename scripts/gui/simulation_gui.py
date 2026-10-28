@@ -7,10 +7,12 @@ Phase-specific initial fields currently support lamella and gyroid.
 """
 
 import argparse
+import hmac
 import json
 import math
 import os
 import re
+import secrets
 from fractions import Fraction
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,6 +61,15 @@ def apply_space_group(params, selection, relax_cell):
         need = "a = b and angles [90, 90, 90] (use an Orthorhombic box with a = b)"
     elif system == "Orthorhombic":
         valid, need = orthogonal, "angles [90, 90, 90]"
+    elif system == "Monoclinic":
+        # The unique axis is perpendicular to the other two; the angle between those is free
+        unique = group["unique_axis"]
+        names = ("alpha", "beta", "gamma")
+        valid = all(abs(angles[i] - 90) < 1e-8 for i in range(3) if i != unique)
+        need = (f"the unique axis {'abc'[unique]} perpendicular to the other two, "
+                + " = ".join(names[i] for i in range(3) if i != unique) + " = 90 (use a Triclinic box)")
+    elif system == "Triclinic":
+        valid, need = True, "any cell"
     elif group["hexagonal_axes"]:
         valid = same(lx[0], lx[1]) and abs(angles[0] - 90) < 1e-8 and abs(angles[1] - 90) < 1e-8 and same(angles[2], 120)
         need = "a = b and angles [90, 90, 120] (choose Hexagonal in Box)"
@@ -109,7 +120,7 @@ def preset_settings(name):
                       ds="1/90", chain_model="discrete", blocks="A:0.4, B:0.6",
                       chi_n="17.0", mix_min="0.01", mix_init="0.01", start_error="0.5")
     elif name == "CL-FTS: AB lamella":
-        # Parameter defaults from examples/clfts/Lamella.py.
+        # Parameter defaults from examples/block_copolymer/clfts/Lamella.py.
         values.update(mode="CL-FTS", nx="32, 32, 32", lx="4.21, 4.21, 4.21",
                       ds="1/90", chain_model="discrete", chi_n="12.0",
                       max_step="100000", dt="1.0", amplitude="2.0",
@@ -197,8 +208,12 @@ def model_parameters(model):
     if shape != "triclinic" and angles != expected:
         raise ValueError(f"{shape.title()} box angles must be {expected} degrees.")
     ca, cb, cg = [math.cos(math.radians(a)) for a in angles]
-    if 1 + 2 * ca * cb * cg - ca * ca - cb * cb - cg * cg <= 1e-12:
-        raise ValueError("Box angles define a degenerate or impossible cell.")
+    # The solver rejects cells flatter than V = 0.1 abc; the small margin keeps
+    # rounding from letting through a cell that it rejects
+    if 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg < 0.1 * 0.1 * (1 + 1e-9):
+        raise ValueError("Box angles must form a cell of volume at least 0.1 abc; "
+                         "use the reduced (Niggli) cell of the lattice, spanned by its shortest vectors, "
+                         "or for a rhombohedral-axis Hall setting the hexagonal-axis setting of the group.")
 
     monomers = model["monomers"]
     if not isinstance(monomers, list) or not 2 <= len(monomers) <= 32:
@@ -207,8 +222,9 @@ def model_parameters(model):
     for monomer in monomers:
         row(monomer, "name segment_length", "Monomer")
         name = monomer["name"]
-        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,15}", name):
-            raise ValueError("Monomer names must start with a letter and contain up to 16 letters, digits or underscores.")
+        # The library takes letters and underscores only (Polymer.cpp)
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z_]{0,15}", name):
+            raise ValueError("Monomer names must start with a letter and contain up to 16 letters or underscores.")
         if name in segments:
             raise ValueError(f"Duplicate monomer name: {name}.")
         segments[name] = number(monomer["segment_length"], f"Segment length {name}")
@@ -271,6 +287,37 @@ def model_parameters(model):
     return params
 
 
+def imaginary_exchange_fields(types, chi_n):
+    """Number of imaginary auxiliary fields besides the pressure field of an incompressible
+    model: the positive eigenvalues of chi N on compositions with zero sum. By Sylvester's law
+    of inertia the basis e_i - e_last gives the same count as the orthonormal one of
+    polymer_field_theory; the eigenvalues come from cyclic Jacobi rotations."""
+    chi = lambda a, b: 0.0 if a == b else chi_n.get(f"{a},{b}", chi_n.get(f"{b},{a}", 0.0))
+    last, rest = types[-1], types[:-1]
+    m = [[chi(a, b) - chi(a, last) - chi(last, b) for b in rest] for a in rest]
+    n = len(m)
+    for _ in range(100):
+        if all(abs(m[p][q]) < 1e-14 * (1.0 + abs(m[p][p]) + abs(m[q][q])) for p in range(n) for q in range(p + 1, n)):
+            break
+        for p in range(n):
+            for q in range(p + 1, n):
+                if m[p][q] == 0.0:
+                    continue
+                theta = (m[q][q] - m[p][p]) / (2.0 * m[p][q])
+                t = math.copysign(1.0, theta) / (abs(theta) + math.sqrt(theta * theta + 1.0))
+                c = 1.0 / math.sqrt(t * t + 1.0)
+                s = t * c
+                m[p][p] -= t * m[p][q]
+                m[q][q] += t * m[p][q]
+                m[p][q] = m[q][p] = 0.0
+                for r in range(n):
+                    if r not in (p, q):
+                        rp, rq = m[r][p], m[r][q]
+                        m[r][p] = m[p][r] = c * rp - s * rq
+                        m[r][q] = m[q][r] = s * rp + c * rq
+    return sum(m[i][i] > 1e-8 for i in range(n))
+
+
 def build_script(values):
     """Validate form values and render a standalone, editable Python script."""
     def num(key, **kwargs):
@@ -322,6 +369,14 @@ def build_script(values):
                   polymers=[{"volume_fraction": 1.0, "blocks": blocks}])
     params.update(chain_model=choice("chain_model", ("continuous", "discrete")), ds=ds,
                   reduce_memory=bool(values["reduce_memory"]))
+    if params["chain_model"] == "discrete":
+        # The library's rule (Molecules::add_polymer): a whole number of segments per block
+        for polymer in params["polymers"]:
+            for block in polymer["blocks"]:
+                n_segment = round(block["length"] / ds)
+                if abs(block["length"] - n_segment * ds) > 1e-9:
+                    raise ValueError(f"Discrete chains: block length {block['length']:g} must be a multiple of "
+                                     f"ds = {ds:g} (closest: {n_segment * ds:g}).")
     platform = choice("platform", ("auto", "cuda", "cpu-mkl", "cpu-fftw"))
     if platform != "auto":
         params["platform"] = platform
@@ -368,6 +423,10 @@ def build_script(values):
             if len(params["segment_lengths"]) == 2 and next(iter(params["chi_n"].values())) <= 0:
                 raise ValueError("This A/B L-FTS setup requires positive chi N.")
             mixing["name"] = choice("compressor", ("am", "lr", "lram"))
+            # The library's rule (lfts.py): LR needs the pressure field as the only imaginary one
+            if mixing["name"] != "am" and imaginary_exchange_fields(list(params["segment_lengths"]), params["chi_n"]):
+                raise ValueError("Compressors lr and lram need the pressure field as the only imaginary field; "
+                                 "these chi N values give another one. Choose am.")
             params.update(saddle=dict(max_iter=num("saddle_max_iter", integer=True),
                                       tolerance=num("saddle_tolerance")), compressor=mixing)
         else:
@@ -438,7 +497,7 @@ def build_script(values):
                 """)
         elif initial == "gyroid":
             field_code = dedent(f"""\
-                # Gyroid seed from examples/scft/Gyroid.py, on cell-centered grids.
+                # Gyroid seed from examples/block_copolymer/scft/Gyroid.py, on cell-centered grids.
                 axes = [2 * np.pi * (np.arange(n) + 0.5) / n for n in params["nx"]]
                 x, y, z = np.meshgrid(*axes, indexing="ij", sparse=True)
                 c1 = np.sqrt(8 / 3) * (np.cos(x) * np.sin(y) * np.sin(2 * z)
@@ -497,24 +556,33 @@ def build_script(values):
     )
 
 
+# Directory descriptors keep every write inside the root; Windows has none
+DIRECTORY_DESCRIPTORS = (os.open in os.supports_dir_fd and os.mkdir in os.supports_dir_fd
+                         and hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW"))
+
+
 def save_script(script, root, directory, filename):
-    """Create a new script under the configured root, without following symlinks."""
+    """Create a new script under the configured root, without following links."""
     if not isinstance(directory, str) or not isinstance(filename, str):
         raise ValueError("Server folder and filename must be text.")
     filename = filename.strip()
     folder = Path(directory.strip())
     if len(directory) > 512 or len(folder.parts) > 16:
         raise ValueError("Server subfolder must have at most 512 characters and 16 path components.")
-    if (folder.is_absolute() or ".." in folder.parts or "\\" in directory
+    # anchor: a root or a drive. On Windows "/tmp" is not absolute but rooted on the current
+    # drive, and ':' separates a drive ("C:x") or names an alternate data stream
+    if (folder.anchor or ".." in folder.parts or "\\" in directory or ":" in directory
             or any(ord(char) < 32 for char in directory)):
         raise ValueError("Server subfolder must be a relative path without '..'.")
-    if (not filename.lower().endswith(".py") or "/" in filename or "\\" in filename
+    if (not filename.lower().endswith(".py") or "/" in filename or "\\" in filename or ":" in filename
             or any(ord(char) < 32 for char in filename) or len(filename.encode("utf-8")) > 240):
         raise ValueError("Enter a .py filename without path separators.")
     try:
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
     except FileExistsError as exc:
         raise NotADirectoryError(f"Server script directory is not a directory: {root}") from exc
+    if not DIRECTORY_DESCRIPTORS:
+        return save_script_by_path(script, root, folder, filename)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     directory_fd = os.open(root, flags)
     try:
@@ -531,7 +599,7 @@ def save_script(script, root, directory, filename):
         file_fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                           mode=0o600, dir_fd=directory_fd)
         try:
-            with os.fdopen(file_fd, "w", encoding="utf-8") as output:
+            with os.fdopen(file_fd, "w", encoding="utf-8", newline="\n") as output:
                 output.write(script)
         except OSError:
             os.unlink(filename, dir_fd=directory_fd)
@@ -539,6 +607,38 @@ def save_script(script, root, directory, filename):
     finally:
         os.close(directory_fd)
     return root / folder / filename
+
+
+def save_script_by_path(script, root, folder, filename):
+    """Windows: create the folders one at a time and refuse links (symlinks, junctions).
+
+    Without directory descriptors, a folder that another process replaces by a link
+    between this check and the write is not caught.
+    """
+    def refuse_link(path):
+        # A link resolves to another path
+        if not path.is_dir() or os.path.normcase(path.resolve(strict=True)) != os.path.normcase(path.absolute()):
+            raise OSError(f"Server subfolder is a link or not a folder: {path}")
+
+    path = root
+    refuse_link(path)
+    for part in folder.parts:
+        path = path / part
+        try:
+            path.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        refuse_link(path)
+    # O_EXCL also refuses an existing link; O_BINARY keeps the line endings of the script
+    target = path / filename
+    file_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        with os.fdopen(file_fd, "w", encoding="utf-8", newline="\n") as output:
+            output.write(script)
+    except OSError:
+        os.unlink(target)
+        raise
+    return target
 
 
 class ScriptRequestHandler(BaseHTTPRequestHandler):
@@ -578,6 +678,13 @@ class ScriptRequestHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin is not None and origin != "http://" + host:
             self.respond_json(403, {"error": "Cross-origin requests are not accepted."})
+            return False
+        # Loopback is shared by every account on the machine: the API also needs the
+        # token of the editor's URL, which only the user who started it sees
+        # (as bytes: compare_digest refuses str with non-ASCII characters)
+        if urlsplit(self.path).path.startswith("/api/") and not hmac.compare_digest(
+                self.headers.get("X-Editor-Token", "").encode("latin-1", "replace"), self.server.token.encode()):
+            self.respond_json(403, {"error": "Open the editor with the URL (including its token) that the server printed."})
             return False
         return True
 
@@ -669,10 +776,12 @@ class ScriptRequestHandler(BaseHTTPRequestHandler):
 
 
 def create_server(port=8765, save_dir=None):
-    """Bind to loopback only; SSH forwarding supplies remote browser access."""
+    """Bind to loopback only; SSH forwarding supplies remote browser access. The
+    API requires the random token of server.token, which the printed URL carries."""
     save_dir = Path(save_dir if save_dir is not None else Path.cwd()).expanduser().resolve()
     server = ThreadingHTTPServer(("127.0.0.1", port), ScriptRequestHandler)
     server.save_dir = save_dir
+    server.token = secrets.token_urlsafe(32)
     return server
 
 
@@ -690,7 +799,7 @@ def main():
         parser.exit(1, f"Could not start editor: {exc}. Check --port and --save-dir.\n")
     with server:
         port = server.server_address[1]
-        print(f"Simulation Script Builder (beta): http://127.0.0.1:{port}", flush=True)
+        print(f"Simulation Script Builder (beta): http://127.0.0.1:{port}/?token={server.token}", flush=True)
         print(f"Server script directory: {server.save_dir}", flush=True)
         print(f"SSH tunnel (on your computer): ssh -L {port}:127.0.0.1:{port} user@server", flush=True)
         print("Press Ctrl+C to stop. This editor only generates scripts.", flush=True)

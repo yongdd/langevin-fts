@@ -29,10 +29,10 @@
  * @see PinnedCircularBuffer for host memory storage
  */
 
-#include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>
 #include "CudaCommon.h"
+#include "CudaTypeDispatch.h"
 #include "CudaComputationBox.h"
 #include "PinnedCircularBuffer.h"
 #include "CudaAndersonMixingReduceMemory.h"
@@ -66,7 +66,6 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
         // Temporary fields arrays
         d_w_hist1.allocate(this->n_var);
         d_w_hist2.allocate(this->n_var);
-        d_w_deriv_hist1.allocate(this->n_var);
         d_w_deriv_hist2.allocate(this->n_var);
 
         d_w_new.allocate(this->n_var);
@@ -75,10 +74,7 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
 
         // Allocate memory for cub reduction sum (the first call only queries the size)
         d_sum_out.allocate(1);
-        if constexpr (std::is_same<T, double>::value)
-            CUDA_CHECK(cub::DeviceReduce::Sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-        else
-            CUDA_CHECK(cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+        CUDA_CHECK(cuda_reduce_sum(nullptr, temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
         d_temp_storage.allocate(temp_storage_bytes);
 
         // Reset_count
@@ -141,16 +137,18 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
             for(int i=0; i<= this->n_anderson; i++)
             {
-                CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, this->n_var);
+                // The newest residual (i = 0) is already on the device
+                const CuDeviceData<T>* d_w_deriv_i = d_w_deriv;
+                if (i > 0)
+                {
+                    CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+                    d_w_deriv_i = d_w_hist1;
+                }
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_deriv_i, 1.0, this->n_var);
                 CUDA_CHECK_LAUNCH();
-                if constexpr (std::is_same<T, double>::value)
-                    CUDA_CHECK(cub::DeviceReduce::Sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var));
-                else
-                    CUDA_CHECK(cub::DeviceReduce::Reduce(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}));
+                CUDA_CHECK(cuda_reduce_sum(d_temp_storage.get(), temp_storage_bytes, d_sum.get(), d_sum_out.get(), this->n_var, 0));
                 CUDA_CHECK(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
-            //print_array(this->max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots.data());
         }
 
@@ -184,16 +182,12 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                                                     std::abs(i-j));
                 }
             }
-            //print_array(this->max_hist, v_n);
-            //exit(-1);
             this->find_an(u_nm.data(), v_n.data(), a_n.data(), this->n_anderson);
 
-            // Calculate the new field
-            CUDA_CHECK(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+            // Calculate the new field; the newest residual is d_w_deriv
+            CUDA_CHECK(cudaMemcpy(d_w_hist1, pinned_cb_w_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
 
-            CUDA_CHECK(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(T)*this->n_var, cudaMemcpyDeviceToDevice));
-            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
+            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv, this->n_var);
             CUDA_CHECK_LAUNCH();
             for(int i=0; i<this->n_anderson; i++)
             {
@@ -203,14 +197,14 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
                     CUDA_CHECK_LAUNCH();
-                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv,       this->n_var);
                     CUDA_CHECK_LAUNCH();
                 }
                 else
                 {
                     ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_hist2,       stdToCuDoubleComplex(-a_n[i]), d_w_hist1,       this->n_var);
                     CUDA_CHECK_LAUNCH();
-                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv_hist1, this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv,       this->n_var);
                     CUDA_CHECK_LAUNCH();
                 }
             }
@@ -221,19 +215,6 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
     {
         throw_without_line_number(exc.what());
     }
-}
-template <typename T>
-void CudaAndersonMixingReduceMemory<T>::print_array(int n, T *a)
-{
-    #ifndef NDEBUG
-    for(int i=0; i<n-1; i++)
-    {
-        std::cout << a[i] << ", ";
-    }
-    std::cout << a[n-1] << std::endl;
-    #else
-    (void)n; (void)a;  // Suppress unused parameter warnings
-    #endif
 }
 
 // Explicit template instantiation

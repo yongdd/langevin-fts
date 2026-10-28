@@ -155,7 +155,8 @@ const ModelEditor = (() => {
     const monomers = section(moleculesPanel, "Monomer types", "Define a name and statistical segment length for each monomer.", "+ Add monomer", () => {
       if (model.monomers.length >= 32) return;
       let index = 0, name;
-      do { name = index < 26 ? String.fromCharCode(65 + index) : `M${index + 1}`; index++; }
+      // A ... Z, then AA, AB, ...: monomer names take letters and underscores only
+      do { name = (index < 26 ? "" : String.fromCharCode(64 + Math.floor(index / 26))) + String.fromCharCode(65 + index % 26); index++; }
       while (model.monomers.some(m => m.name === name));
       model.monomers.push({id: uid(), name, segment_length: "1.0"});
       structuralChange();

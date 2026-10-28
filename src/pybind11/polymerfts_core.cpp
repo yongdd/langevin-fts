@@ -12,6 +12,7 @@
  * - Polymer: Individual polymer chain data
  * - PropagatorComputation (Real/Complex): Propagator solving
  * - AndersonMixing (Real/Complex): Field mixing acceleration
+ * - FourierTransform (Real/Complex): Fourier multipliers of whole fields
  * - AbstractFactory (Real/Complex): Platform-specific object creation
  * - PlatformSelector: Platform detection and factory creation
  * - PropagatorComputationOptimizer: Propagator computation planning
@@ -23,8 +24,12 @@
  *
  * **NumPy Integration:**
  *
- * All array parameters use py::array_t for zero-copy NumPy interoperability.
- * Size validation is performed to ensure array dimensions match grid size.
+ * An input array is read in place when it is C-contiguous and of the expected
+ * dtype; other arrays (strided views, float32, ...) are first copied into a
+ * converted temporary (see array_in). Functions that modify an array in place
+ * (ComputationBox.zero_mean, SpaceGroup.symmetrize_reduced_basis) reject arrays
+ * that would need such a copy. Results are returned as new NumPy arrays.
+ * Array sizes are checked against the grid.
  *
  * **Usage from Python:**
  *
@@ -105,7 +110,7 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
  * - get_dv(): Volume element
  * - get_total_grid(): Total grid points
  * - get_volume(): Total box volume
- * - get_angles(), get_angles_degrees(), is_orthogonal(), get_recip_metric(): Cell geometry
+ * - get_angles(), get_angles_degrees(), get_lattice_vectors(), is_orthogonal(), get_recip_metric(): Cell geometry
  * - set_lx(): Update box dimensions
  * - set_lattice_parameters(): Update box dimensions and angles
  * - set_space_group(), get_space_group(), get_n_basis(), get_orbit_counts(): Reduced basis
@@ -138,8 +143,15 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("get_total_grid", &ComputationBox<T>::get_total_grid)
         .def("get_volume", &ComputationBox<T>::get_volume)
+        .def("get_accessible_volume", &ComputationBox<T>::get_accessible_volume)
         .def("get_angles", &ComputationBox<T>::get_angles)
         .def("get_angles_degrees", &ComputationBox<T>::get_angles_degrees)
+        .def("get_lattice_vectors", [](const ComputationBox<T>& obj)
+        {
+            // Rows a, b, c in Cartesian coordinates (a along x, b in the xy plane)
+            const std::array<double, 9>& v = obj.get_lattice_vec();
+            return std::vector<std::vector<double>>{{v[0], v[1], v[2]}, {v[3], v[4], v[5]}, {v[6], v[7], v[8]}};
+        })
         .def("is_orthogonal", &ComputationBox<T>::is_orthogonal)
         .def("get_recip_metric", &ComputationBox<T>::get_recip_metric)
         .def("set_lx", &ComputationBox<T>::set_lx)
@@ -209,9 +221,10 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         {
             // Modified in place: a converted copy would leave the caller's array
             // unchanged, so the array must already be C-contiguous and of the field type
-            // (a wrong dtype is rejected by pybind11 before the call).
-            if (!(g.flags() & py::array::c_style))
-                throw_with_line_number("zero_mean modifies the array in place; pass a C-contiguous array.");
+            // (a wrong dtype is rejected by pybind11 before the call), and writable
+            // (a read-only memory map would crash, an immutable buffer would change).
+            if (!(g.flags() & py::array::c_style) || !g.writeable())
+                throw_with_line_number("zero_mean modifies the array in place; pass a writable C-contiguous array.");
             const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != N) {
@@ -242,7 +255,8 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - compute_stress(): Calculate stress tensor
  * - get_stress(): Retrieve computed stress
  * - get_stress_gce(): Grand canonical stress
- * - check_total_partition(): Validate partition function
+ * - compute_partition_errors(): Relative partition function error of each polymer
+ * - check_total_partition(tolerance): Whether every error is within the tolerance
  * - set_force_off_diagonal_stress(), get_force_off_diagonal_stress(): Cross-term stress for orthogonal boxes
  *
  * When space group is set:
@@ -266,7 +280,6 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         {
             try{
                 const int N = obj.get_cb()->get_n_basis();
-                const bool use_reduced = (obj.get_space_group() != nullptr);
 
                 std::map<std::string, const T*> map_buf_w_input;
                 std::map<std::string, const T*> map_buf_q_init;
@@ -299,11 +312,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                     }
                 }
 
-                if (use_reduced) {
-                    obj.compute_propagators_reduced(map_buf_w_input, map_buf_q_init);
-                } else {
-                    obj.compute_propagators(map_buf_w_input, map_buf_q_init);
-                }
+                obj.compute_propagators(map_buf_w_input, map_buf_q_init);
             }
             catch(std::exception& exc)
             {
@@ -317,16 +326,16 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 py::buffer_info buf_q_in = q_in.request();
                 T* q_in_ptr = static_cast<T*>(buf_q_in.ptr);
 
-                // Allocate output buffer
-                const int M = obj.get_cb()->get_total_grid();
-                py::array_t<T> q_out(M);
+                // Allocate output buffer: reduced basis with a space group, as in compute_propagators
+                const int N = obj.get_cb()->get_n_basis();
+                py::array_t<T> q_out(N);
                 py::buffer_info buf_q_out = q_out.request();
                 T* q_out_ptr = static_cast<T*>(buf_q_out.ptr);
 
                 // Call C++ implementation
-                if (buf_q_in.size != M)
+                if (buf_q_in.size != N)
                 {
-                    throw_with_line_number("Size of input q_in (" + std::to_string(buf_q_in.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+                    throw_with_line_number("Size of input q_in (" + std::to_string(buf_q_in.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
                 }
                 else
                 {
@@ -437,7 +446,11 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_force_off_diagonal_stress", &PropagatorComputation<T>::get_force_off_diagonal_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
+        .def("compute_partition_errors", &PropagatorComputation<T>::compute_partition_errors,
+            "Relative partition function error of each polymer (nothing is printed)")
+        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition,
+            py::arg("tolerance") = PARTITION_TOLERANCE,
+            "Whether every error of compute_partition_errors() is finite and at most tolerance");
 }
 
 /**
@@ -496,6 +509,175 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
 }
 
 /**
+ * @brief Bind FourierTransform<T> and its FourierMultiplier<T> handles to Python.
+ *
+ * Creates the Python classes "FourierTransform_{Real|Complex}" and
+ * "FourierMultiplier_{Real|Complex}":
+ * - coefficient_shape, complex_coefficients: Layout of the coefficients of a field
+ * - field_type: "real" or "complex", the fields the transform takes; periodic: FFT (or wall series)
+ * - k_squared(): |k|² in the coefficient shape, from the current box
+ * - set_multiplier(values): Store a multiplier of shape coefficient_shape
+ *   (diagonal: applied to each field) or (n_out, n_in) + coefficient_shape
+ * - apply([(multiplier, fields), ...]): backward(Σ M · forward(fields))
+ * - forward(fields), backward(coefficients): Transforms of one or more fields
+ *
+ * Fields are flat (n_grid,) or (n_fields, n_grid); the output of apply() is flat
+ * when every input is flat and there is one output field.
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module
+ * @param type_name Suffix ("Real" or "Complex")
+ */
+template<typename T>
+void bind_fourier_transform(py::module &m, const std::string &type_name)
+{
+    // Number of fields of a flat (n_grid,) or (n_fields, n_grid) array
+    auto field_count = [](const py::buffer_info& buf, int n_grid) -> int
+    {
+        if ((buf.ndim != 1 && buf.ndim != 2) || buf.shape[buf.ndim - 1] != n_grid || buf.size == 0)
+            throw_with_line_number("Fields must be shaped (" + std::to_string(n_grid) + ",) or (n_fields, "
+                + std::to_string(n_grid) + ").");
+        return buf.ndim == 1 ? 1 : static_cast<int>(buf.shape[0]);
+    };
+    // Number of fields of an array of coefficients: coefficient_shape or (n_fields,) + coefficient_shape
+    auto coefficient_count = [](const py::buffer_info& buf, const std::vector<int>& shape) -> int
+    {
+        const int lead = static_cast<int>(buf.ndim) - static_cast<int>(shape.size());
+        bool ok = (lead == 0 || lead == 1) && buf.size > 0;
+        for (size_t d = 0; ok && d < shape.size(); ++d)
+            ok = buf.shape[lead + d] == shape[d];
+        if (!ok)
+            throw_with_line_number("Coefficients must have the coefficient shape, optionally after the number of fields.");
+        return lead == 0 ? 1 : static_cast<int>(buf.shape[0]);
+    };
+    auto shaped = [](std::vector<py::ssize_t> lead, const std::vector<int>& shape)
+    {
+        for (int n : shape)
+            lead.push_back(n);
+        return lead;
+    };
+    // The conversion to a real array would drop the imaginary part (with only a ComplexWarning)
+    auto reject_complex = [](py::handle values, bool real, const char* what)
+    {
+        if (real && py::module_::import("numpy").attr("iscomplexobj")(values).cast<bool>())
+            throw_with_line_number(std::string(what) + " of this transform are real: got a complex array. "
+                "Complex fields need a solver created with field_type=\"complex\".");
+    };
+    constexpr bool real_fields = std::is_same_v<T, double>;
+
+    py::class_<FourierMultiplier<T>>(m, ("FourierMultiplier_" + type_name).c_str())
+        .def_property_readonly("n_out", &FourierMultiplier<T>::get_n_out)
+        .def_property_readonly("n_in", &FourierMultiplier<T>::get_n_in)
+        .def_property_readonly("diagonal", &FourierMultiplier<T>::is_diagonal);
+
+    py::class_<FourierTransform<T>>(m, ("FourierTransform_" + type_name).c_str())
+        .def_property_readonly("coefficient_shape", [](FourierTransform<T>& obj)
+        {
+            return py::tuple(py::cast(obj.get_coefficient_shape()));
+        })
+        .def_property_readonly("complex_coefficients", &FourierTransform<T>::has_complex_coefficients)
+        .def_property_readonly("field_type", [](FourierTransform<T>&) { return real_fields ? "real" : "complex"; })
+        .def_property_readonly("periodic", [](FourierTransform<T>& obj)
+        {
+            return obj.get_boundary_conditions()[0] == BoundaryCondition::PERIODIC;   // all axes alike
+        })
+        .def("k_squared", [](FourierTransform<T>& obj)
+        {
+            const std::vector<double> k_sq = obj.get_k_squared();
+            py::array_t<double> result(obj.get_coefficient_shape());
+            std::copy(k_sq.begin(), k_sq.end(), result.mutable_data());
+            return result;
+        })
+        // The handle keeps its transform alive (it is used only with that transform)
+        .def("set_multiplier", [](FourierTransform<T>& obj, array_in<std::complex<double>> values)
+        {
+            py::buffer_info buf = values.request();
+            const std::vector<int>& shape = obj.get_coefficient_shape();
+            const int lead = static_cast<int>(buf.ndim) - static_cast<int>(shape.size());
+            bool ok = lead == 0 || lead == 2;
+            for (size_t d = 0; ok && d < shape.size(); ++d)
+                ok = buf.shape[lead + d] == shape[d];
+            if (!ok || buf.size == 0)
+                throw_with_line_number("A multiplier is shaped like the coefficients (diagonal) "
+                    "or (n_out, n_in) + coefficient_shape.");
+            const bool diagonal = lead == 0;
+            const int n_out = diagonal ? 1 : static_cast<int>(buf.shape[0]);
+            const int n_in = diagonal ? 1 : static_cast<int>(buf.shape[1]);
+            return obj.create_multiplier(static_cast<const std::complex<double>*>(buf.ptr), n_out, n_in, diagonal);
+        }, py::arg("values"), py::keep_alive<0, 1>())
+        .def("apply", [field_count, reject_complex](FourierTransform<T>& obj, py::list terms)
+        {
+            const int n_grid = obj.get_n_grid();
+            std::vector<array_in<T>> inputs;   // keeps converted inputs alive
+            std::vector<FourierTerm<T>> fourier_terms;
+            bool all_flat = true;
+            for (py::handle item : terms)
+            {
+                py::tuple pair = py::cast<py::tuple>(item);
+                if (pair.size() != 2)
+                    throw_with_line_number("Each term is a (multiplier, fields) pair.");
+                const FourierMultiplier<T>* multiplier = pair[0].cast<const FourierMultiplier<T>*>();
+                if (multiplier == nullptr)
+                    throw_with_line_number("Each term needs a multiplier made by set_multiplier().");
+                reject_complex(pair[1], real_fields, "The fields");
+                inputs.push_back(pair[1].cast<array_in<T>>());
+                py::buffer_info buf = inputs.back().request();
+                const int n_fields = field_count(buf, n_grid);
+                all_flat = all_flat && buf.ndim == 1;
+                fourier_terms.push_back({multiplier, static_cast<const T*>(buf.ptr), n_fields});
+            }
+            if (fourier_terms.empty())
+                throw_with_line_number("apply() needs at least one term.");
+            const FourierTerm<T>& first = fourier_terms[0];
+            const int n_out = first.multiplier->is_diagonal() ? first.n_fields : first.multiplier->get_n_out();
+            py::array_t<T> result = (all_flat && n_out == 1)
+                ? py::array_t<T>(n_grid) : py::array_t<T>({static_cast<py::ssize_t>(n_out), static_cast<py::ssize_t>(n_grid)});
+            obj.apply(fourier_terms, n_out, result.mutable_data());
+            return result;
+        }, py::arg("terms"))
+        .def("forward", [field_count, shaped, reject_complex](FourierTransform<T>& obj, py::object values) -> py::array
+        {
+            reject_complex(values, real_fields, "The fields");
+            array_in<T> fields = values.cast<array_in<T>>();
+            py::buffer_info buf = fields.request();
+            const int n_fields = field_count(buf, obj.get_n_grid());
+            const std::vector<py::ssize_t> lead = buf.ndim == 1 ? std::vector<py::ssize_t>{} : std::vector<py::ssize_t>{n_fields};
+            const std::vector<py::ssize_t> shape = shaped(lead, obj.get_coefficient_shape());
+            if (obj.has_complex_coefficients())
+            {
+                py::array_t<std::complex<double>> result(shape);
+                obj.forward(static_cast<const T*>(buf.ptr), n_fields, reinterpret_cast<double*>(result.mutable_data()));
+                return result;
+            }
+            py::array_t<double> result(shape);
+            obj.forward(static_cast<const T*>(buf.ptr), n_fields, result.mutable_data());
+            return result;
+        }, py::arg("fields"))
+        .def("backward", [coefficient_count, reject_complex](FourierTransform<T>& obj, py::object coefficients)
+        {
+            const int n_grid = obj.get_n_grid();
+            auto run = [&](auto input, const double* values)
+            {
+                py::buffer_info buf = input.request();
+                const int n_fields = coefficient_count(buf, obj.get_coefficient_shape());
+                const bool flat = buf.ndim == static_cast<py::ssize_t>(obj.get_coefficient_shape().size());
+                py::array_t<T> result = flat ? py::array_t<T>(n_grid)
+                    : py::array_t<T>({static_cast<py::ssize_t>(n_fields), static_cast<py::ssize_t>(n_grid)});
+                obj.backward(values, n_fields, result.mutable_data());
+                return result;
+            };
+            if (obj.has_complex_coefficients())
+            {
+                array_in<std::complex<double>> input = coefficients.cast<array_in<std::complex<double>>>();
+                return run(input, reinterpret_cast<const double*>(input.data()));
+            }
+            reject_complex(coefficients, true, "The coefficients");
+            array_in<double> input = coefficients.cast<array_in<double>>();
+            return run(input, input.data());
+        }, py::arg("coefficients"));
+}
+
+/**
  * @brief Bind AbstractFactory<T> class to Python.
  *
  * Creates Python class "AbstractFactory_{Real|Complex}" with factory methods:
@@ -504,6 +686,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
  * - create_propagator_computation_optimizer(): Create optimizer
  * - create_propagator_computation(): Create propagator solver
  * - create_anderson_mixing(): Create Anderson mixing
+ * - create_fourier_transform(cb, bc): Create a Fourier transform (one transform per axis)
  * - display_info(): Print platform information
  *
  * The factory pattern ensures all created objects are compatible with
@@ -581,7 +764,31 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
             py::arg("numerical_method"), py::arg("space_group") = nullptr,
             py::keep_alive<0, 2>(), py::keep_alive<0, 3>(), py::keep_alive<0, 4>(), py::keep_alive<0, 6>(),
             py::keep_alive<2, 6>())  // the constructor also sets the space group on the box
-        .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
+        .def("create_anderson_mixing", [](AbstractFactory<T>& obj, long long n_var, int max_hist,
+                                          double start_error, double mix_min, double mix_init)
+        {
+            // A Python size can exceed int: check it before narrowing
+            check_anderson_variables(n_var);
+            return obj.create_anderson_mixing(static_cast<int>(n_var), max_hist, start_error, mix_min, mix_init);
+        }, py::arg("n_var"), py::arg("max_hist"), py::arg("start_error"), py::arg("mix_min"), py::arg("mix_init"))
+        .def("create_fourier_transform", [](AbstractFactory<T>& obj, ComputationBox<T>* cb, std::vector<std::string> bc)
+        {
+            // One transform per axis: "periodic", "reflecting" (cosine) or "absorbing" (sine)
+            std::vector<BoundaryCondition> bc_vec;
+            for (std::string name : bc)
+            {
+                std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+                if (name == "periodic")
+                    bc_vec.push_back(BoundaryCondition::PERIODIC);
+                else if (name == "reflecting")
+                    bc_vec.push_back(BoundaryCondition::REFLECTING);
+                else if (name == "absorbing")
+                    bc_vec.push_back(BoundaryCondition::ABSORBING);
+                else
+                    throw_with_line_number("Unknown transform '" + name + "': use periodic, reflecting or absorbing.");
+            }
+            return obj.create_fourier_transform(cb, bc_vec);
+        }, py::arg("cb"), py::arg("bc"), py::keep_alive<0, 2>())
         .def("display_info", &AbstractFactory<T>::display_info);
 }
 
@@ -603,6 +810,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  * - ComputationBoxReal, ComputationBoxComplex
  * - PropagatorComputation_Real, PropagatorComputation_Complex
  * - AndersonMixing_Real, AndersonMixing_Complex
+ * - FourierTransform_Real, FourierTransform_Complex (with FourierMultiplier_*)
  * - AbstractFactory_Real, AbstractFactory_Complex
  *
  * **Platform Selection:**
@@ -693,6 +901,10 @@ PYBIND11_MODULE(_core, m)
         }
         return result;
     }, "Registered propagator methods and their compiled capabilities.");
+    m.def("resolve_numerical_method", [](const std::string& chain_model, const std::string& numerical_method) {
+        return std::string(resolve_numerical_method(chain_model, numerical_method).name);
+    }, py::arg("chain_model"), py::arg("numerical_method") = "",
+       "The method the factories use: 'discrete' for discrete chains, rqm4 for an empty name.");
     m.def("runtime_info", [](bool include_cuda) {
         py::dict info;
 #ifdef USE_CPU_FFTW
@@ -737,6 +949,8 @@ PYBIND11_MODULE(_core, m)
     // Grid-size limits of the 32-bit grid indices (GridLimits.h)
     m.attr("MAX_GRID_POINTS") = MAX_GRID_POINTS;
     m.attr("MAX_GRID_ARRAY") = MAX_GRID_ARRAY;
+    // Default tolerance of check_total_partition (PropagatorComputation.h)
+    m.attr("PARTITION_TOLERANCE") = PARTITION_TOLERANCE;
 
 
     py::class_<Block>(m, "Block")
@@ -842,6 +1056,8 @@ Example:
              "False for rhombohedral-axes settings (a = b = c, alpha = beta = gamma).")
         .def("get_crystal_system", &SpaceGroup::get_crystal_system,
              "Crystal system name.")
+        .def("check_cell", &SpaceGroup::check_cell, py::arg("lx"), py::arg("angles"),
+             "Raise unless the cell (lengths, angles in degrees) belongs to the crystal system of the group.")
         .def("get_nx", &SpaceGroup::get_nx,
              "Grid dimensions [nx, ny, nz].")
         .def("get_total_grid", &SpaceGroup::get_total_grid,
@@ -860,6 +1076,8 @@ Example:
              "Number of equivalent points for each reduced-basis point.")
         .def("physical_basis_name", &SpaceGroup::physical_basis_name,
              "Name of the active physical basis: 'irreducible', 'pmmm', 'm3' or 'z-mirror'.")
+        .def("display_info", &SpaceGroup::display_info,
+             "Print the group, its crystal system and the sizes of its bases.")
         .def("in_use", &SpaceGroup::in_use,
              "True once a computation box or solver holds this group; the physical basis is then frozen.")
         .def("enable_pmmm_physical_basis", &SpaceGroup::enable_pmmm_physical_basis,
@@ -887,9 +1105,10 @@ Example:
         .def("symmetrize_reduced_basis", [](SpaceGroup& obj, py::array_t<double, 0> reduced_field)
         {
             // Modified in place (like ComputationBox.zero_mean): a converted copy would
-            // leave the caller's array unchanged, so it must already be C-contiguous float64.
-            if (!(reduced_field.flags() & py::array::c_style))
-                throw_with_line_number("symmetrize_reduced_basis modifies the array in place; pass a C-contiguous float64 array.");
+            // leave the caller's array unchanged, so it must already be C-contiguous float64,
+            // and writable.
+            if (!(reduced_field.flags() & py::array::c_style) || !reduced_field.writeable())
+                throw_with_line_number("symmetrize_reduced_basis modifies the array in place; pass a writable C-contiguous float64 array.");
             py::buffer_info buf = reduced_field.request();
             const int n_fields = sg_field_count(buf, obj.get_n_reduced_basis(), "n_reduced_basis");
             obj.symmetrize_reduced_basis(static_cast<double*>(buf.ptr), n_fields);
@@ -941,6 +1160,10 @@ Example:
     bind_anderson_mixing<double>(m, "Real");
     bind_anderson_mixing<std::complex<double>>(m, "Complex");
 
+    // Bind FourierTransform
+    bind_fourier_transform<double>(m, "Real");
+    bind_fourier_transform<std::complex<double>>(m, "Complex");
+
     // Bind AbstractFactory
     bind_abstract_factory<double>(m, "Real");
     bind_abstract_factory<std::complex<double>>(m, "Complex");
@@ -955,15 +1178,14 @@ Example:
             std::transform(type.begin(), type.end(), type.begin(),
             [](unsigned char c){ return std::tolower(c); });
 
+            // The unique_ptr hands the factory to the Python object
             if (type == "real")
             {
-                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory),
-                                py::return_value_policy::take_ownership);
+                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory));
             }
             else if (type == "complex")
             {
-                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory),
-                                py::return_value_policy::take_ownership);
+                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory));
             }
             else {
                 throw std::runtime_error("Invalid type parameter. Must be either 'real' or 'complex'");

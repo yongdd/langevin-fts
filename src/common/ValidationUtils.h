@@ -24,36 +24,37 @@
 namespace validation {
 
 /**
- * @brief Validate that a value is positive.
+ * @brief Validate that a value is finite and positive.
  *
  * @tparam T Numeric type (int, double, etc.)
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value <= 0
+ * @throws Exception if value <= 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_positive(T value, const std::string& name)
 {
-    if (value <= 0)
+    // Negated so that NaN, for which every comparison is false, is rejected
+    if (!(value > 0) || !std::isfinite(value))
     {
-        throw_with_line_number(name + " must be a positive number, got: " + std::to_string(value));
+        throw_with_line_number(name + " must be a finite positive number, got: " + std::to_string(value));
     }
 }
 
 /**
- * @brief Validate that a value is non-negative.
+ * @brief Validate that a value is finite and non-negative.
  *
  * @tparam T Numeric type
  * @param value Value to check
  * @param name  Variable name for error message
- * @throws Exception if value < 0
+ * @throws Exception if value < 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_non_negative(T value, const std::string& name)
 {
-    if (value < 0)
+    if (!(value >= 0) || !std::isfinite(value))
     {
-        throw_with_line_number(name + " must be a non-negative number, got: " + std::to_string(value));
+        throw_with_line_number(name + " must be a finite non-negative number, got: " + std::to_string(value));
     }
 }
 
@@ -65,12 +66,12 @@ inline void require_non_negative(T value, const std::string& name)
  * @param min_val Minimum allowed value (inclusive)
  * @param max_val Maximum allowed value (inclusive)
  * @param name    Variable name for error message
- * @throws Exception if value < min_val or value > max_val
+ * @throws Exception if value < min_val, value > max_val or value is NaN
  */
 template<typename T>
 inline void require_in_range(T value, T min_val, T max_val, const std::string& name)
 {
-    if (value < min_val || value > max_val)
+    if (!(value >= min_val && value <= max_val))
     {
         throw_with_line_number(name + " (" + std::to_string(value) +
             ") must be in range [" + std::to_string(min_val) +
@@ -79,12 +80,12 @@ inline void require_in_range(T value, T min_val, T max_val, const std::string& n
 }
 
 /**
- * @brief Validate that all elements in a vector are positive.
+ * @brief Validate that all elements in a vector are finite and positive.
  *
  * @tparam T Numeric type
  * @param values Vector of values to check
  * @param name   Variable name for error message
- * @throws Exception if any value <= 0
+ * @throws Exception if any value <= 0, is infinite or is NaN
  */
 template<typename T>
 inline void require_all_positive(const std::vector<T>& values, const std::string& name)
@@ -98,9 +99,9 @@ inline void require_all_positive(const std::vector<T>& values, const std::string
 
     for (const auto& v : values)
     {
-        if (v <= 0)
+        if (!(v > 0) || !std::isfinite(v))
         {
-            throw_with_line_number(name + " (" + str_values + ") must contain only positive numbers");
+            throw_with_line_number(name + " (" + str_values + ") must contain only finite positive numbers");
         }
     }
 }
@@ -182,12 +183,12 @@ inline void require_string_key(const Map& container, const std::string& key,
 /**
  * @brief Validate and normalize a mask array.
  *
- * Ensures all mask values are either 0.0 or 1.0 within tolerance.
+ * Ensures all mask values are either 0.0 or 1.0 within tolerance, and at least one is 1.0.
  *
  * @param mask      Mask array to validate and normalize
  * @param size      Number of elements
  * @param tolerance Tolerance for floating point comparison
- * @throws Exception if any value is not approximately 0.0 or 1.0
+ * @throws Exception if any value is not approximately 0.0 or 1.0, or if none is 1.0
  */
 inline void validate_mask(double* mask, int size, double tolerance = 1e-7)
 {
@@ -207,6 +208,9 @@ inline void validate_mask(double* mask, int size, double tolerance = 1e-7)
                 std::to_string(mask[i]));
         }
     }
+    // Without an accessible point the polymers have no volume (Q = 0, NaN concentrations)
+    if (std::none_of(mask, mask + size, [](double value) { return value == 1.0; }))
+        throw_with_line_number("mask must leave at least one accessible grid point (value 1.0)");
 }
 
 /**

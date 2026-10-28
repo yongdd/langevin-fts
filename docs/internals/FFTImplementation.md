@@ -230,24 +230,26 @@ CrysFFT is enabled automatically when:
 - Dimension is 3D
 - Boundary conditions are periodic
 - Fields are real-valued
-- Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis)
+- Grid parity matches the algorithm: `Nx`, `Ny`, `Nz` all even for the Pmmm/3m variants; only `Nz` even for ObliqueZ (odd `Nx`/`Ny` are allowed with the z-mirror physical basis and on cells with γ≠90°)
 
 **Selection order:** an enabled physical basis (Section 6.4) fixes the variant:
-3m recursive for the m3 basis, Pmmm DCT for the Pmmm basis and ObliqueZ for the
-z-mirror basis. With the irreducible basis the cell must be orthogonal and `Nx`,
-`Ny`, `Nz` all even, and the first applicable variant is used:
+3m recursive for the m3 basis (on any grid it maps, since the engines are exact
+for `Nz/2 >= 2`; the `Nz/2 >= 8` size rule below only chooses), Pmmm DCT for the
+Pmmm basis and ObliqueZ for the z-mirror basis. With the irreducible basis, a cell
+with α=β=90° and γ≠90° (e.g. hexagonal) uses ObliqueZ when the space group has a z-mirror, and the standard FFT
+otherwise. An orthogonal cell needs `Nx`, `Ny`, `Nz` all even, and the first
+applicable variant is used:
 
 1. **3m recursive** if the space group provides 3m translations, the
    translation-parity fold permutation is valid (every generator translation
    must be an integral number of grid cells with a bijective parity map — see
    `Recursive3mFoldParity.h`; e.g. for Fddd's quarter-cell glides at most one
-   of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8`
+   of `Nx/4`, `Ny/4`, `Nz/4` may be odd), and `Nz/2 >= 8` (a performance rule:
+   smaller grids gain nothing from the fold; `SpaceGroup.m3_crysfft_feasible()`,
+   which SCFT uses to choose the m3 basis, applies it too)
 2. **Pmmm DCT** if space group has mirror planes in x/y/z
 3. **ObliqueZ** if space group has a z-mirror
 4. Fall back to standard FFT
-
-A cell with α=β=90° and γ≠90° (e.g. hexagonal) therefore uses ObliqueZ only with the
-z-mirror physical basis.
 
 The 3m fold pairs each twiddle factor with the Boltzmann sub-array selected by
 the translation-parity permutation; glide translations by an odd number of
@@ -320,7 +322,11 @@ basis on the `SpaceGroup` before passing it (`enable_m3_physical_basis()`,
 - `CudaRealTransform1D/2D/3D`: DCT/DST using FCT/FST algorithms
 - `CudaCrysFFT`: Pmmm DCT via CudaRealTransform
 - `CudaCrysFFTRecursive3m`: Recursive 3m on GPU with stream-aware diffusion
-- `CudaCrysFFTObliqueZ`: DCT-z + FFT-xy
+- `CudaCrysFFTObliqueZ`: DCT-z + FFT-xy as one real 3D FFT of the physical grid
+  after Makhoul's permutation along z (even samples forward, odd samples backward).
+  One kernel forms the DCT coefficients of `kz` and `Nz/2 - kz` from the half
+  spectrum, applies both Boltzmann factors and returns to the half spectrum, so a
+  diffusion step is three kernels and two cuFFT calls
 
 **Backward Compatibility:**
 

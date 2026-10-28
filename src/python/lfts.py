@@ -6,21 +6,23 @@ import json
 import warnings
 import numpy as np
 import itertools
-from scipy.io import savemat, loadmat
+import scipy.fft
+from scipy.io import loadmat
 
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
 from .integrators import checked_fields
-from . import _core
-from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError
+from .validation import normalize_params, validate_lfts_params, ValidationError, SaddlePointError, parse_chi_n
 from .utils import (
-    parse_chi_n,
     process_polymer_blocks,
     process_random_copolymer,
     draw_polymer_architectures,
+    report_partition_consistency,
+    check_partition_functions,
     calculate_sigma,
     load_config,
     atomic_savemat,
+    mat_ready,
     simulation_metadata,
     checkpoint_data,
     validate_checkpoint,
@@ -38,6 +40,16 @@ from .wtmd import WTMD
 # OpenMP environment variables
 os.environ.setdefault("OMP_NUM_THREADS", "1")  # respect user override
 os.environ.setdefault("OMP_STACKSIZE", "1G")
+
+
+def _axis_transform(field, axis_bc, inverse=False):
+    """Orthonormal transform of each axis: FFT ("periodic") or cosine series (DCT-II, "wall"), or its inverse."""
+    for axis, kind in enumerate(axis_bc):
+        if kind == "periodic":
+            field = (scipy.fft.ifft if inverse else scipy.fft.fft)(field, axis=axis, norm="ortho")
+        else:
+            field = (scipy.fft.idct if inverse else scipy.fft.dct)(field, type=2, axis=axis, norm="ortho")
+    return field
 
 
 class LR:
@@ -59,7 +71,15 @@ class LR:
         Box dimensions in units of a_Ref * N_Ref^(1/2).
     jk : ndarray
         Jacobian (Hessian) matrix in Fourier space. Precomputed from
-        finite difference of δH/δw. Shape matches rfft output of nx.
+        finite difference of δH/δw. Shape: the coefficients of fourier when it
+        is given, the rfftn half spectrum of nx in a periodic box, or nx with axis_bc.
+    fourier : FourierTransform, optional
+        PropagatorSolver.fourier of real fields (FFT in a periodic box, cosine series in
+        a box with reflecting walls), which applies 1/J(k) (on the GPU with CUDA);
+        without it the update uses numpy.fft or, with axis_bc, scipy.fft.
+    axis_bc : list of str, optional
+        "periodic" or "wall" for each axis of a box that mixes periodic axes and
+        reflecting walls (no fourier there): FFT and cosine series (orthonormal).
 
     Attributes
     ----------
@@ -70,10 +90,13 @@ class LR:
     jk : ndarray
         Jacobian in Fourier space.
     """
-    def __init__(self, nx, lx, jk):
+    def __init__(self, nx, lx, jk, fourier=None, axis_bc=None):
         self.nx = nx
         self.lx = lx
         self.jk = jk.copy()
+        self._fourier = fourier
+        self._inverse = None if fourier is None else fourier.set_multiplier(1.0 / self.jk)
+        self.axis_bc = axis_bc
 
     def reset_count(self,):
         """Reset compressor state (no-op for LR).
@@ -104,7 +127,14 @@ class LR:
         w_new : ndarray
             Updated field values, same shape as w_current.
         """
+        if self._fourier is not None:
+            w_diff = self._fourier.apply([(self._inverse, np.reshape(negative_h_deriv, -1))])
+            return w_current + np.reshape(w_diff, np.shape(w_current))
         nx = self.nx
+        if self.axis_bc is not None:
+            w_diff_k = _axis_transform(np.reshape(negative_h_deriv, nx), self.axis_bc)/self.jk
+            w_diff = np.real(_axis_transform(w_diff_k, self.axis_bc, inverse=True))
+            return w_current + np.reshape(w_diff, np.shape(w_current))
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.jk
         w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx, axes=tuple(range(len(nx))))*np.prod(nx), np.shape(w_current))
@@ -221,7 +251,8 @@ class LFTS:
     >>> sim.run(initial_fields={"A": w_A, "B": w_B})   # writes data/fields_*.mat, structure_function_*.mat
     >>> sim.continue_run("data/fields_001000.mat")
 
-    Complete scripts: examples/lfts/ (Lamella.py, Gyroid.py, MixtureBlockRandom.py).
+    Complete scripts: examples/block_copolymer/lfts/ (Lamella.py, Gyroid.py) and
+    examples/blend/lfts/MixtureBlockRandom.py.
     """
     @classmethod
     def from_file(cls, path, random_seed=None, *, integrator=None, callbacks=None, **overrides):
@@ -272,9 +303,6 @@ class LFTS:
                 self.segment_lengths[random_type] = effective_segment_length
                 self.random_fraction[random_type] = fraction
 
-        # Draw the chain architectures (polymer_<id>.png in the current directory)
-        draw_polymer_architectures(self.polymers, params["ds"], self.segment_lengths)
-
         # Boundary conditions (default: periodic)
         bc = params.get("bc", None)
         if bc is None:
@@ -308,16 +336,24 @@ class LFTS:
         self.prop_solver.display_platform_info()
 
         # Initialize smearing (must be after self.cb is set)
+        # Γ(k) is applied with the platform FFT (PropagatorSolver.fourier), except in a box
+        # that mixes periodic and wall axes, which smearing transforms with NumPy/SciPy
+        periodic_sides = [b.lower() == "periodic" for b in self.prop_solver.bc]
+        mixed_box = any(periodic_sides) and not all(periodic_sides)
+        periodic_box = all(periodic_sides)   # WTMD and the structure functions transform with rfftn
+        self._periodic_box = periodic_box
         self.smearing = Smearing(
             self.cb.get_nx(),
             self.cb.get_lx(),
             params.get("smearing", None),
             angles=self.prop_solver.get_angles_degrees(),
-            bc=self.prop_solver.bc
+            bc=self.prop_solver.bc,
+            transform=self.prop_solver.fourier if params.get("smearing") is not None and not mixed_box else None
         )
 
-        # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided
-        # Uses same interface as deep-langevin-fts
+        # Initialize Well-Tempered Metadynamics (WTMD) if parameters provided. The WTMD class
+        # follows deep-langevin-fts; the input names differ: "ell" and "delta_t" here for its
+        # "l" and "dT"
         wtmd_params = params.get("wtmd", None)
         if wtmd_params is not None:
             self.wtmd = WTMD(
@@ -336,6 +372,7 @@ class LFTS:
                 dpsi=wtmd_params.get("dpsi", 1e-3),
                 update_freq=wtmd_params.get("update_freq", 1000),
                 recording_period=wtmd_params.get("recording_period", 100000),
+                fourier=self.prop_solver.fourier if periodic_box else None,
             )
             print("WTMD enabled: l=%d, sigma_psi=%.4f, dT=%.4f, kc=%.4f, exchange_idx=%d, langevin_idx=%d" % (
                 self.wtmd.l, self.wtmd.sigma_psi, self.wtmd.dT, self.wtmd.kc,
@@ -346,10 +383,6 @@ class LFTS:
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
             n_am = int(len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]))
-            if n_am > _core.MAX_GRID_ARRAY:
-                raise ValidationError(
-                    f"Anderson mixing would adjust {n_am} variables ({len(self.mpt.aux_fields_imag_idx)} imaginary fields "
-                    f"of {int(np.prod(params['nx']))} points); at most {_core.MAX_GRID_ARRAY} are supported (32-bit indices).")
             am = self.prop_solver.create_anderson_mixing(
                 n_am,                                                      # the number of variables
                 params["compressor"]["max_hist"],                          # maximum number of history
@@ -361,6 +394,14 @@ class LFTS:
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
             if len(self.mpt.aux_fields_imag_idx) != 1:
                 raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
+            # The response J to a kick at w = 0 is diagonal in the Fourier basis of the box:
+            # the FFT in a periodic box, the cosine series along reflecting walls (the box is
+            # half of a periodic box of twice its size, with the mirror image of the kick).
+            # Next to an absorbing wall the concentrations at w = 0 are depleted, and no
+            # Fourier basis makes J diagonal
+            if any(b.lower() == "absorbing" for b in self.prop_solver.bc):
+                raise ValidationError("compressor 'lr' and 'lram' need periodic axes or reflecting walls; "
+                                      "use 'am' in a box with absorbing walls")
 
             # Baseline: h_deriv at w=0
             w_aux_zero = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
@@ -370,17 +411,29 @@ class LFTS:
             # Perturbed: h_deriv at w with small perturbation
             w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field
-            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.prop_solver.nx))/np.prod(self.prop_solver.nx)
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, self.smearing.apply_to_dict(phi_perturbed), self.mpt.aux_fields_imag_idx)
 
             # jk = (h(w_pert) - h(0)) / w_pert  (correct finite difference)
             h_deriv_diff = h_deriv_perturbed - h_deriv_zero
-            h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
-            jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
-
-            lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric)
+            nx = self.prop_solver.nx
+            if periodic_box:
+                w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], nx))/np.prod(nx)
+                h_deriv_diff_k = np.fft.rfftn(np.reshape(h_deriv_diff, nx))/np.prod(nx)
+                jk_numeric = np.real(h_deriv_diff_k/w_aux_perturbed_k)
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, fourier=self.prop_solver.fourier)
+            elif not mixed_box:
+                # Reflecting walls only: the cosine series of PropagatorSolver.fourier
+                fourier = self.prop_solver.fourier
+                jk_numeric = np.real(fourier.forward(np.reshape(h_deriv_diff, -1))/fourier.forward(w_aux_perturbed[M-1]))
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, fourier=fourier)
+            else:
+                # Periodic axes and reflecting walls: FFT and cosine series with scipy.fft
+                axis_bc = ["periodic" if periodic else "wall" for periodic in periodic_sides[::2]]
+                jk_numeric = np.real(_axis_transform(np.reshape(h_deriv_diff, nx), axis_bc)
+                                     /_axis_transform(np.reshape(w_aux_perturbed[M-1], nx), axis_bc))
+                lr = LR(nx, self.prop_solver.get_lx(), jk_numeric, axis_bc=axis_bc)
 
         if params["compressor"]["name"] == "am":
             self.compressor = am
@@ -451,6 +504,9 @@ class LFTS:
         self.recording = params["recording"].copy()
         self.metadata = simulation_metadata(self, random_seed)
         initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        # The linear response of the homogeneous state (the "etd" integrator) is measured by CLFTS only
+        if getattr(self.integrator, "linear_response", False):
+            raise ValidationError(f"The integrator '{self.integrator.name}' (linear_response) is supported in CL-FTS only")
         self.run_status = {"status": "initialized", "last_completed_step": 0}
 
     def compute_concentrations(self, w_aux):
@@ -524,7 +580,7 @@ class LFTS:
         # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
             self._partition_checked = True
-            if not self.prop_solver.check_total_partition():
+            if not report_partition_consistency(self.prop_solver):
                 raise ValidationError("Partition consistency check failed (forward/backward mismatch).")
 
         return phi, elapsed_time
@@ -552,7 +608,7 @@ class LFTS:
 
         # Make dictionary for data
         mdic = {
-            "initial_params": self.params,
+            "initial_params": mat_ready(self.params),
             "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
             "monomer_types":self.monomer_types, "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"],
@@ -582,11 +638,16 @@ class LFTS:
             mdic["wtmd_u"] = self.wtmd.u * self.wtmd.CV
             mdic["wtmd_up"] = self.wtmd.up * self.wtmd.CV
             mdic["wtmd_I0"] = self.wtmd.I0
+            # The same arrays without the factor CV, which a continued run restores exactly:
+            # (x*CV)/CV can differ from x in the last bit
+            mdic["wtmd_unscaled_u"] = self.wtmd.u
+            mdic["wtmd_unscaled_up"] = self.wtmd.up
             # I1 and the samples stored since the last update, so that a continued run
             # carries the same statistics as an uninterrupted one
             for key, value in self.wtmd.I1.items():
                 monomer_pair = sorted(key.split(","))
                 mdic["wtmd_I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = value * self.wtmd.CV
+                mdic["wtmd_unscaled_I1_" + monomer_pair[0] + "_" + monomer_pair[1]] = value
             mdic["wtmd_order_parameter_history"] = np.array(self.wtmd.order_parameter_history, dtype=np.float64)
             for key, values in self.wtmd.dH_history.items():
                 monomer_pair = sorted(key.split(","))
@@ -648,10 +709,15 @@ class LFTS:
                 "has_uint32": 0, "uinteger": 0}
         print("Restored Random Number Generator: ", self.random_bg.state)
 
-        # Restore WTMD state if available (normalize by CV as in deep-langevin-fts)
+        # Restore WTMD state if available: the arrays without the factor CV, or for an older
+        # checkpoint the scaled ones divided by CV (as in deep-langevin-fts)
         if self.wtmd is not None and "wtmd_u" in load_data:
-            self.wtmd.u = np.array(load_data["wtmd_u"]) / self.wtmd.CV
-            self.wtmd.up = np.array(load_data["wtmd_up"]) / self.wtmd.CV
+            def bias(name):
+                if "wtmd_unscaled_u" in load_data:
+                    return np.array(load_data["wtmd_unscaled_" + name])
+                return np.array(load_data["wtmd_" + name]) / self.wtmd.CV
+            self.wtmd.u = bias("u")
+            self.wtmd.up = bias("up")
             if "wtmd_I0" in load_data:
                 self.wtmd.I0 = np.array(load_data["wtmd_I0"])
             n_pending = np.atleast_1d(load_data.get("wtmd_order_parameter_history", np.zeros(0))).size
@@ -662,7 +728,7 @@ class LFTS:
                 monomer_pair = sorted(key.split(","))
                 name = monomer_pair[0] + "_" + monomer_pair[1]
                 if "wtmd_I1_" + name in load_data:
-                    self.wtmd.I1[key] = np.array(load_data["wtmd_I1_" + name]) / self.wtmd.CV
+                    self.wtmd.I1[key] = bias("I1_" + name)
                 if n_pending > 0 and "wtmd_dH_history_" + name in load_data:
                     self.wtmd.dH_history[key] = list(np.atleast_1d(load_data["wtmd_dH_history_" + name]))
             print("Restored WTMD state")
@@ -688,6 +754,13 @@ class LFTS:
         first_step = 1 if start_langevin_step is None else start_langevin_step
         if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
             raise ValidationError("start_langevin_step must be a positive integer")
+        # The histogram, the Gaussian kernels and the integrals all use the bin width dpsi.
+        # Checked unless WTMD statistics are restored, so that a run started with another
+        # dpsi still continues
+        if self.wtmd is not None and (_restart_data is None or "wtmd_u" not in _restart_data):
+            bins = (self.wtmd.psi_max - self.wtmd.psi_min) / self.wtmd.dpsi
+            if abs(bins - round(bins)) > 1e-9 * bins:
+                raise ValidationError("wtmd.dpsi must divide psi_max - psi_min into a whole number of bins")
         self.run_status = {"status": "running", "last_completed_step": first_step - 1,
                            "requested_last_step": self.langevin["max_step"],
                            "saddle_failures": 0, "noise_resamples": 0}
@@ -761,8 +834,9 @@ class LFTS:
         # (the LR/LRAM setup already called compute_concentrations on w = 0)
         self._partition_checked = False
 
-        # Simulation data directory
+        # Simulation data directory, with the drawings of the chain architectures (polymer_<id>.png)
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
+        draw_polymer_architectures(self.polymers, self.ds, self.segment_lengths, directory=self.recording["dir"])
 
         # Reshape initial fields
         w = np.array([np.reshape(initial_fields[m], self.prop_solver.n_grid)
@@ -787,6 +861,8 @@ class LFTS:
             for attempt in range(self.saddle.get("max_retries", 5) + 1):
                 phi, initial_hamiltonian, _, error_level = self.find_saddle_point(w_aux=w_aux)
                 if not np.isfinite(initial_hamiltonian):
+                    # H contains log Q: name a partition function that is not positive as the cause
+                    check_partition_functions(self.prop_solver, "the initial saddle point")
                     raise ValidationError("Non-finite initial Hamiltonian")
                 if np.isfinite(error_level) and error_level < self.saddle["tolerance"]:
                     break
@@ -886,6 +962,8 @@ class LFTS:
                 # Find saddle point of the pressure field
                 phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
                 if not np.isfinite(hamiltonian):
+                    # H contains log Q: name a partition function that is not positive as the cause
+                    check_partition_functions(self.prop_solver, f"the saddle point of step {langevin_step}")
                     raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
                 total_saddle_iter += saddle_iter
                 total_error_level += error_level
@@ -906,11 +984,11 @@ class LFTS:
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
             self.run_status["last_completed_step"] = langevin_step
 
-            # WTMD: store order parameter and update statistics (same as deep-langevin-fts)
+            # WTMD: store order parameter and update statistics (wtmd.py)
             if self.wtmd is not None:
                 # Store the order parameter with dH/dχN of the same fields (the fields
                 # before the update, at which psi and the bias were computed)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux_copy, phi_for_force, wtmd=True)
+                dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux_copy, phi=phi_for_force, wtmd=True)
                 self.wtmd.store_order_parameter(psi, dH)
 
                 # Update WTMD bias
@@ -926,7 +1004,7 @@ class LFTS:
                 H_history.append(hamiltonian)
                 drift_history.append(drift_max)
                 sf_sample_count += 1
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux, self.smearing.apply_to_dict(phi))
+                dH = self.mpt.compute_h_deriv_chin(w_aux=w_aux, phi=self.smearing.apply_to_dict(phi))
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 
@@ -939,7 +1017,7 @@ class LFTS:
                     dH_history[key] = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_history[key]
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
+                atomic_savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset dictionary
                 H_history = []
                 drift_history = []
@@ -948,19 +1026,20 @@ class LFTS:
                     
             # Calculate structure function
             if langevin_step % self.recording["sample_interval"] == 0:
-                # Perform Fourier transforms.
+                # Perform Fourier transforms (all densities in one call, all fields in another).
                 # Shifting the Gaussian integral over Ω_k gives <Ω_k φ_j> = (λ_k/M) Σ_l A_lk <φ_l φ_j>,
                 # and A Aᵀ = M I, so μ_i = Σ_k A_ik Ω_k/λ_k gives <μ_i φ_j> = <δφ_i δφ_j>
+                kept = [k for k in range(M-1) if not np.isclose(self.mpt.eigenvalues[k], 0.0)]
+                phi_k = self._rfft_fields([phi[name] for name in self.monomer_types])/self.prop_solver.n_grid
+                w_k = self._rfft_fields(w_aux[kept])/self.prop_solver.n_grid if kept else None
                 mu_fourier = {}
                 phi_fourier = {}
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))/self.prop_solver.n_grid
+                    phi_fourier[key] = phi_k[i]
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(M-1) :
-                        if np.isclose(self.mpt.eigenvalues[k], 0.0):
-                            continue
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.prop_solver.nx))*self.mpt.matrix_a[i,k]/self.mpt.eigenvalues[k]/self.prop_solver.n_grid
+                    for j, k in enumerate(kept):
+                        mu_fourier[key] += w_k[j]*self.mpt.matrix_a[i,k]/self.mpt.eigenvalues[k]
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -975,7 +1054,7 @@ class LFTS:
                     chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
                 mdic = {"dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
                         "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
+                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":mat_ready(self.params)}
                 # Add structure functions to the dictionary
                 for key in sf_average:
                     sf_average[key] *= 1.0/max(sf_sample_count, 1)* \
@@ -991,7 +1070,7 @@ class LFTS:
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
                 mdic["sample_count"] = sf_sample_count
                 mdic["simulation_metadata_json"] = json.dumps(self.metadata)
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
+                atomic_savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
                     sf_average[key][:] = 0.0
@@ -1051,6 +1130,15 @@ class LFTS:
         if not np.all(np.isfinite(force)):
             raise ValidationError("Non-finite intermediate LFTS force")
         return force
+
+    def _rfft_fields(self, fields):
+        """rfftn of each field (n_fields, n_grid) on the grid: with the platform FFT
+        (PropagatorSolver.fourier) in a periodic box, with numpy.fft otherwise."""
+        fields = np.reshape(fields, (-1, self.prop_solver.n_grid))
+        if self._periodic_box:
+            return self.prop_solver.fourier.forward(fields)
+        nx = tuple(self.prop_solver.nx)
+        return np.fft.rfftn(np.reshape(fields, (-1,) + nx), axes=tuple(range(1, len(nx) + 1)))
 
     def find_saddle_point(self, w_aux):
         """Find saddle point of imaginary auxiliary fields.

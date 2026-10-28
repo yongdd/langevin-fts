@@ -40,8 +40,8 @@
  * @example
  * @code
  * // Create solver
- * PropagatorComputation<double>* solver = factory->create_propagator_computation(
- *     cb, molecules, optimizer, "rqm4");
+ * std::unique_ptr<PropagatorComputation<double>> solver = factory->create_propagator_computation(
+ *     cb.get(), molecules.get(), optimizer.get(), "rqm4");
  *
  * // Compute propagators with given potential fields
  * std::map<std::string, const double*> w = {{"A", w_A}, {"B", w_B}};
@@ -159,6 +159,26 @@ protected:
      */
     bool force_off_diagonal_stress_ = false;
 
+    /**
+     * @brief What has been computed for the current fields and box.
+     *
+     * A new compute_propagators() and update_laplacian_operator() clear all
+     * three; each computation sets its own flag when it completes. The
+     * getters throw instead of returning values of other fields or another
+     * box (or the zeros and uninitialized arrays before the first run).
+     */
+    bool propagators_computed_ = false;
+    bool concentrations_computed_ = false;
+    bool stress_computed_ = false;
+
+    void clear_computed();
+    void require_propagators() const;
+    void require_concentrations() const;
+    void require_stress() const;
+
+    /// Whether this computation holds its box orthogonal (hold_orthogonal_cell())
+    bool holds_orthogonal_cell_ = false;
+
 public:
     /**
      * @brief Construct a PropagatorComputation solver.
@@ -171,6 +191,14 @@ public:
 
     /// Virtual destructor.
     virtual ~PropagatorComputation();
+
+    /**
+     * @brief Keep the box orthogonal for the lifetime of this computation.
+     *
+     * The factory calls it once for a numerical method that requires an
+     * orthogonal cell; see ComputationBox::hold_orthogonal_cell().
+     */
+    void hold_orthogonal_cell();
 
     /**
      * @brief Get the computation box.
@@ -367,17 +395,28 @@ public:
     virtual std::vector<T> get_stress_gce(std::vector<double> fugacities);
 
     /**
+     * @brief Relative partition function error of each polymer.
+     *
+     * Q = ∫ q(r,s) q†(r,N-s) dr is the same at every contour point s of every
+     * block; the error is the largest relative deviation from the Q used to
+     * normalize the concentrations (infinite when Q or a value is not finite,
+     * or Q is zero). Every polymer is evaluated and nothing is printed; the
+     * caller decides how to report the errors.
+     *
+     * @return One error per polymer type
+     *
+     * @note Small deviations are normal due to numerical discretization.
+     */
+    virtual std::vector<double> compute_partition_errors() = 0;
+
+    /**
      * @brief Verify partition function consistency.
      *
-     * Checks that Q = ∫ q(r,s) q†(r,N-s) dr is constant for all s.
-     * This is a mathematical identity that should hold for correct propagators.
-     *
-     * @return true if partition function is consistent, false otherwise
-     *
-     * @note Useful for debugging and validation. Small deviations are normal
-     *       due to numerical discretization.
+     * @param tolerance Largest accepted relative error (PARTITION_TOLERANCE by default)
+     * @return true if every error of compute_partition_errors() is finite and at
+     *         most tolerance
      */
-    virtual bool check_total_partition() = 0;
+    bool check_total_partition(double tolerance = PARTITION_TOLERANCE);
 
     // ==================== Space Group / Reduced Basis Methods ====================
 
@@ -416,22 +455,5 @@ public:
      * @return Current flag value (default false)
      */
     bool get_force_off_diagonal_stress() const { return force_off_diagonal_stress_; }
-
-    /**
-     * @brief Compute propagators using reduced basis input fields.
-     *
-     * Uses reduced basis fields directly. When a space group is set, the
-     * solver handles expand/reduce internally around FFT operations.
-     *
-     * If you are unsure how reduced basis works, see docs/theory/SpaceGroup.md.
-     *
-     * @param w_reduced Map from monomer type to reduced basis field
-     *                  (size: n_basis per field)
-     * @param q_init    Optional: initial conditions for grafted chains
-     */
-    virtual void compute_propagators_reduced(
-        std::map<std::string, const T*> w_reduced,
-        std::map<std::string, const T*> q_init = {});
-
 };
 #endif

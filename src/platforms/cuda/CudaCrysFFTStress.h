@@ -74,4 +74,13 @@ void cuda_crysfft_compute_single_segment_stress(
     const double* d_q2_reduced,
     double* d_segment_stress);
 
+/**
+ * @brief Build the multipliers that cuda_crysfft_compute_single_segment_stress()
+ *        takes for these arguments, so that the stress loop only looks them up.
+ *
+ * Reads crysfft, mode, space_group, bond_length_sq, include_bond_factor and
+ * global_ds; enqueues no stress work.
+ */
+void cuda_crysfft_prepare_stress_tables(const CudaCrysFFTStressArgs& args);
+
 #endif  // CUDA_CRYS_FFT_STRESS_H_

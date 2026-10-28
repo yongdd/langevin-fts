@@ -370,11 +370,12 @@ std::string PropagatorCode::generate_edge_code_with_mapping(
  */
 std::string PropagatorCode::get_key_from_code(std::string code)
 {
-    // Strip trailing digits (length_index) to get DK
+    // Strip trailing digits (length_index) to get DK. A monomer type has no
+    // digits but may end with an underscore.
     int pos = 0;
     for (int i = code.size() - 1; i >= 0; i--)
     {
-        if (isalpha(code[i]))
+        if (!isdigit(code[i]))
         {
             pos = i + 1;
             break;
@@ -400,11 +401,12 @@ std::string PropagatorCode::get_key_from_code(std::string code)
  */
 std::string PropagatorCode::get_key_from_code(std::string code, const ContourLengthMapping& mapping)
 {
-    // Find the position after the last alpha character (end of DK)
+    // Find the position after the last non-digit character (end of DK). A
+    // monomer type has no digits but may end with an underscore.
     int pos = 0;
     for (int i = code.size() - 1; i >= 0; i--)
     {
-        if (isalpha(code[i]))
+        if (!isdigit(code[i]))
         {
             pos = i + 1;
             break;

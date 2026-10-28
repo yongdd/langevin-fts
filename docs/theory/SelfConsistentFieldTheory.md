@@ -124,6 +124,32 @@ At convergence with $`\phi_A = \phi_B \approx 0.5`$ and $`\xi \approx 0`$:
 
 using the implemented normalization $`\boldsymbol{\Omega} = O^T \mathbf{w} / M`$ with $`M = 2`$ (see [PolymerFieldTheory.md](PolymerFieldTheory.md)).
 
+### 2.5 Charged Systems
+
+With `electrostatics` ([Polymer Field Theory, Section 5](PolymerFieldTheory.md#5-electrostatic-interactions)) SCFT takes the saddle point of the Hamiltonian that CL-FTS samples. The electrostatic potential $`\psi`$ is real there, the charged types feel $`w_i + z_i \psi`$, and the free energy per reference chain is
+
+```math
+\frac{\beta F}{C V/R_0^3} = F_{\mathrm{chains}}[w_i + z_i \psi] - \frac{1}{2E} \left\langle \psi \, (\kappa^2 - \nabla^2) \, \psi \right\rangle + \sum_s F_s
+```
+
+with the free energy $`F_{\mathrm{chains}}`$ of Section 2 in the fields the chains feel, the coupling $`\langle \psi c_f \rangle`$ of a fixed charge density (`fixed_charge`, left out of the formula above), and the point ions $`F_s = N c_s (\ln(N c_s) - 1) - N c_s \ln Q_s`$ (canonical) or $`-e^{\beta\mu_s} Q_s`$ (grand canonical). $`F`$ is stationary in $`w`$ and $`\psi`$ at the saddle point, where $`\psi`$ solves the (screened) Poisson equation $`(k^2 + \kappa^2)\psi/E = c`$ with the smeared charge density $`c`$ of the chains and the ions; at the saddle point $`-\langle \psi (\kappa^2 - \nabla^2) \psi \rangle/(2E) = -\langle \psi c \rangle/2`$.
+
+**Residual of ψ.** $`\psi`$ is iterated with the fields, after them in the optimizer vector. Its residual is the Newton step of the linearized Poisson equation,
+
+```math
+R_\psi(\mathbf{k}) = \frac{c(\mathbf{k}) - (k^2 + \kappa^2) \psi(\mathbf{k})/E}{(k^2 + \kappa^2)/E + D(\mathbf{k})}
+```
+
+where $`D(\mathbf{k}) = -\partial c(\mathbf{k})/\partial \psi(\mathbf{k})`$ is the response of the charges in the homogeneous state, measured before the iteration by central differences of a kick of $`\psi`$ at one grid point divided by the transform of the kick (two computations of the propagators). In a closed box the modes are those of the cosine series. Without the division the residual would be stiff where $`E/k^2`$ is large. The uniform mode of $`\psi`$ is zero in a neutral canonical system without screening; with screening or charged grand-canonical ions it is iterated, and it starts at the homogeneous $`\psi_0`$. $`\psi_0`$ shifts with the chemical potentials of the ions (the Donnan potential), so the error of Section 3.3 adds $`\int R_\psi^2`$ to the numerator and $`\int (\psi - \langle\psi\rangle)^2`$ to the denominator.
+
+**Homogeneous reference.** $`\psi_0`$ solves $`\kappa^2 \psi_0/E = q(\psi_0)`$, with the net charge $`q`$ per segment of the polymers, the canonical ions and the grand-canonical ions $`e^{\beta\mu_s} e^{-z_s \psi_0/N}/N`$ ($`\psi_0 = 0`$ in a neutral canonical system without screening). The homogeneous free energy adds $`-\kappa^2 \psi_0^2/(2E) + \psi_0 q_p + \sum_s F_s(\psi_0)`$ to the Flory-Huggins value, where $`q_p`$ is the charge of the polymers and the fixed charge; the canonical ions enter through $`F_s`$, whose $`-N c_s \ln Q_s = z_s c_s \psi_0`$. For a screened net charge $`q`$ of canonical species this is $`E q^2/(2\kappa^2)`$ plus the ideal terms of the ions.
+
+**Stress.** At fixed $`w`$ and $`\psi`$ the box enters the propagators, the smearing of the fields $`w_i + z_i \psi`$, the Coulomb kernel, $`-(1/2E) \sum_{\mathbf{k}} (\partial k^2/\partial \theta) \vert\psi(\mathbf{k})\vert^2/n^2`$, and the smearing of the ions, $`\langle c_s \, z_s ((\partial \Gamma_s/\partial \theta) * \psi) \rangle`$ (`SCFT.compute_stress`). In a closed box the sums run over the cosine modes.
+
+**Limitations.** Periodic boxes or closed boxes with walls on every side (box relaxation: periodic boxes), one smearing length for all monomer types, no space group, and `coupling` in place of `bjerrum_length` (SCFT has no $`\bar N`$). Grand-canonical polymers are not available in SCFT. At strong coupling with little salt the joint iteration of $`\psi`$ and the fields can wander without converging, and the result then reports `converged = False`: for a symmetric diblock with $`z_A = 0.2`$, $`N = 50`$ and $`\chi N = 18`$ (64 grid points, cosine initial fields), several runs with $`E \ge 2 \times 10^4`$ and salt concentrations up to 0.01 did not converge in 3000 iterations, while every run with $`E \le 10^4`$ converged. Applying the full step $`R_\psi`$ in every iteration converges there, but from weak initial fields it often reaches the homogeneous state instead of a lamella of lower free energy, so the iteration does not use it. The round-off of the pseudo-spectral methods, about $`10^{-16}`$ of the largest value of a propagator, grows into spurious and negative concentrations where the propagators fall by many orders of magnitude across the box, for example those of chains grafted to a wall of a box much wider than the brush, which strong fields along the chains (the pressure, and the charge times the Donnan potential of a charged brush) make worse; such systems need the real-space method `cn-adi2`. [ChargedDiblockLamella.py](../../examples/charged/scft/ChargedDiblockLamella.py) and [PolyelectrolyteBrush.py](../../examples/charged/scft/PolyelectrolyteBrush.py) are complete scripts. `TestConfinedElectrostatics` checks $`\psi`$ in a closed box against the Poisson-Boltzmann solution between charged layers and the stress with a fixed charge against $`dF/dL`$.
+
+**Tests.** `TestScftElectrostatics` checks that zero valences reproduce SCFT without charges; that under strong screening the free energy and the relaxed period of a lamella approach those of the neutral diblock with $`\chi_{\mathrm{eff}} N = \chi N - E (z_A - z_B)^2/(2\kappa^2)`$ as $`1/\kappa^2`$, with the Richardson extrapolation within $`10^{-5}`$; that the stress equals the derivative of the free energy with respect to the box length (canonical ions unscreened, grand-canonical ions screened); the Donnan potential and the screened homogeneous state; that grand-canonical ions with the chemical potentials of a canonical lamella reach the same state with the free energy $`F - \sum_s N c_s \mu_s`$; and the agreement of the platforms.
+
 ---
 
 ## 3. Iterative Methods
@@ -179,7 +205,7 @@ The self-consistency error is defined as:
 
 The constant 1 in the denominator prevents divergence when the field magnitudes are small.
 
-Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `relax_cell=True`, the Euclidean norm of the stress components (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test.
+Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `relax_cell=True`, the Euclidean norm of the stress along the relaxed lattice parameters (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test. The $`n`$ lengths tied by the crystal system (a = b or a = b = c) contribute one component, the sum of their derivatives divided by $`\sqrt{n}`$ (§4.2).
 
 ---
 
@@ -214,6 +240,7 @@ where $`\eta`$ is the `stress_scale` parameter. At equilibrium, all stress compo
 - Angle changes are limited to 5° per iteration
 - Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 1)
 - Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
+- Lengths tied by the crystal system move together along the mean of their derivatives, so the relaxation and its convergence test reach the optimum of the tied cell. A structure without the symmetry of the tie (for example a = b of `"Tetragonal"` without a space group) can have tied lengths whose derivatives are nonzero and opposite at that optimum; no cell of that crystal system is then free of stress, and SCFT prints a warning that names a crystal system with free lengths
 - Stress computation supports periodic, reflecting, and absorbing boundary conditions with pseudo-spectral methods (real fields); the real-space CN-ADI2 solver does not support stress. `relax_cell=True` therefore requires a pseudo-spectral method; with non-periodic boundaries only box lengths are optimized (angles stay at 90°).
 
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.

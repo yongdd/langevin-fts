@@ -18,6 +18,7 @@ import tempfile
 
 from polymerfts import SCFT
 from polymerfts import _core
+from cuda_part import cuda_part_missing
 
 
 def get_platform():
@@ -497,6 +498,8 @@ def main():
         test_save_results_full_grid()
         test_save_results_m3_same_size()
         test_masked_box_changes_space_group()
+        if cuda_part_missing():
+            return 1
 
         print("=" * 60)
         print("All tests PASSED")

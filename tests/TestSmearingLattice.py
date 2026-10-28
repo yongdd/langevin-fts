@@ -39,6 +39,11 @@ that go with them.
    and concentrations are even): it must equal the periodic smearing of the even
    extension. Until 2026-10 it wrapped around the box (a ramp in a reflecting box
    gave 0.89 instead of 0.08 in the first cell). Item 2 includes boxes with walls.
+
+7. With the Fourier transform of the simulation (Smearing(..., transform=PropagatorSolver.fourier),
+   as SCFT, LFTS and CLFTS create it) apply() equals the NumPy path: periodic 3D, an oblique 2D
+   cell, reflecting and absorbing walls, real and complex fields, per-type and shared kernels,
+   also after set_box().
 """
 
 import os
@@ -247,6 +252,37 @@ def test_walls():
           "an axis with different walls is smeared with the mirror image; without smearing it is accepted")
 
 
+def test_native_transform():
+    """apply() through PropagatorSolver.fourier equals the NumPy transforms."""
+    rng = np.random.default_rng(7)
+    cases = [([8, 6, 10], [1.6, 1.3, 2.0], None, ["periodic"] * 6),
+             ([12, 10], [1.5, 1.4], [110.0], ["periodic"] * 4),
+             ([12, 10], [1.5, 1.3], None, ["reflecting"] * 4),
+             ([12, 10], [1.5, 1.3], None, ["absorbing"] * 4)]
+    for smearing in ({"type": "gaussian", "a_int": {"A": 0.12, "B": 0.2}}, {"type": "sigmoidal", "k_int": 10.0, "dk_int": 3.0}):
+        for nx, lx, angles, bc in cases:
+            for field_type in ("real", "complex"):
+                solver = quiet(PropagatorSolver, nx=nx, lx=lx, ds=0.1, bond_lengths={"A": 1.0}, bc=bc,
+                               chain_model="continuous", platform=cpu_platform(), field_type=field_type, angles=angles)
+                native = quiet(Smearing, nx, lx, smearing, angles=angles, bc=bc, transform=solver.fourier)
+                reference = quiet(Smearing, nx, lx, smearing, angles=angles, bc=bc)
+                n = int(np.prod(nx))
+                field = rng.normal(0.0, 5.0, n)
+                if field_type == "complex":
+                    field = field + 1j * rng.normal(0.0, 5.0, n)
+                errors = []
+                for box in (lx, [1.1 * length for length in lx]):
+                    native.set_box(box, angles)
+                    reference.set_box(box, angles)
+                    for name in "AB":
+                        expected = reference.apply(field, name)
+                        errors.append(np.max(np.abs(native.apply(field, name) - expected)) / np.max(np.abs(expected)))
+                check(max(errors) < 1e-12,
+                      f"{smearing['type']} smearing through the Fourier transform, {bc[0]} {len(nx)}D"
+                      f"{' oblique' if angles else ''}, {field_type} fields, also after set_box: "
+                      f"equals NumPy (max rel diff {max(errors):.1e})")
+
+
 def test_scft_box_relaxation():
     def params(lx, box):
         return {"nx": [32], "lx": [lx], "relax_cell": box, "stress_interval": 1,
@@ -342,6 +378,7 @@ def main():
     test_wavenumbers()
     test_stress()
     test_walls()
+    test_native_transform()
     test_scft_box_relaxation()
     test_noise_volume()
     test_cell_checks()
