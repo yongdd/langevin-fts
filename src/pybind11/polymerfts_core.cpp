@@ -143,6 +143,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("get_total_grid", &ComputationBox<T>::get_total_grid)
         .def("get_volume", &ComputationBox<T>::get_volume)
+        .def("get_accessible_volume", &ComputationBox<T>::get_accessible_volume)
         .def("get_angles", &ComputationBox<T>::get_angles)
         .def("get_angles_degrees", &ComputationBox<T>::get_angles_degrees)
         .def("get_lattice_vectors", [](const ComputationBox<T>& obj)

@@ -398,6 +398,8 @@ def prepare_export(source, field_source=None, lattice=None):
         raise ValueError("Finite-compressibility models are not supported by this incompressible PSCF export.")
     if params.get("mask") is not None or params.get("smearing") is not None:
         raise ValueError("Masks and interaction smearing cannot be transferred to this PSCF input.")
+    if params.get("electrostatics") is not None:
+        raise ValueError("Electrostatics cannot be transferred to this PSCF input.")
     bc = params.get("bc")
     if bc is not None and (not isinstance(bc, (list, tuple, np.ndarray))
             or len(bc) != 2 * len(params["nx"]) or any(value != "periodic" for value in bc)):
@@ -418,6 +420,8 @@ def prepare_export(source, field_source=None, lattice=None):
     for polymer in params["polymers"]:
         if any(polymer.get(key) is not None for key in ("initial_conditions", "grafting_points")):
             raise ValueError("Grafted chains and custom initial propagator conditions are not supported by this PSCF export.")
+        if "chemical_potential" in polymer:
+            raise ValueError("Grand-canonical polymers (chemical_potential) are not supported by this canonical PSCF export.")
         blocks = polymer["blocks"]
         explicit = any("v" in b or "u" in b for b in blocks)
         edges, parent = set(), {}

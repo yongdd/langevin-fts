@@ -218,6 +218,33 @@ def parse_chi_n(
     return chi_n
 
 
+def _validate_smearing(params: Dict[str, Any], complex_fields: bool) -> None:
+    """The `smearing` option; per-type Gaussian lengths need complex fields (CL-FTS)."""
+    smearing = params.get("smearing")
+    if smearing is None:
+        return
+    if not isinstance(smearing, dict):
+        raise ValidationError("'smearing' must be a dict or None")
+    kind = smearing.get("type", "gaussian")
+    if kind not in ("gaussian", "sigmoidal"):
+        raise ValidationError("Unknown smearing type")
+    if kind == "gaussian" and isinstance(smearing.get("a_int"), dict):
+        # One smearing length per monomer type (CL-FTS)
+        if not complex_fields:
+            raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
+        if set(smearing["a_int"]) != set(params["segment_lengths"]):
+            raise ValidationError("Per-type 'smearing.a_int' needs one length for each monomer type")
+        if _has_random_copolymer(params):
+            raise ValidationError("Per-type 'smearing.a_int' does not support random copolymers")
+        for name, a_int in smearing["a_int"].items():
+            _finite_number(a_int, f"smearing.a_int.{name}", nonnegative=True)
+    else:
+        keys = ("a_int",) if kind == "gaussian" else ("k_int", "dk_int")
+        for key in keys:
+            _finite_number(smearing.get(key, 5.0 if key == "dk_int" else None), "smearing." + key,
+                           positive=key != "a_int", nonnegative=key == "a_int")
+
+
 def validate_scft_params(params: Dict[str, Any]) -> None:
     """Validate the SCFT options before constructing numerical objects."""
     params = normalize_params(params)
@@ -236,6 +263,9 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
                                   "(E = 4 pi l_B rho0 N R0^2)")
         if isinstance(electrostatics, dict) and "psi_dt_scaling" in electrostatics:
             raise ValidationError("'electrostatics.psi_dt_scaling' is a CL-FTS option")
+    # Before validate_electrostatics, which reads the smearing length of the charges
+    _validate_smearing(params, complex_fields=False)
+    if electrostatics is not None:
         validate_electrostatics(params)
         if not electrostatics["coupling"] > 0:
             raise ValidationError("SCFT needs a positive 'electrostatics.coupling'; leave out 'electrostatics' "
@@ -252,9 +282,6 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
         _finite_number(optimizer.get(key), "optimizer." + key, nonnegative=True)
     _finite_number(params.get("tolerance", 1e-8), "tolerance", positive=True)
     _finite_number(params.get("stress_scale", 1), "stress_scale", positive=True)
-    smearing = params.get("smearing")
-    if isinstance(smearing, dict) and isinstance(smearing.get("a_int"), dict):
-        raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
 
 
 def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> None:
@@ -311,28 +338,7 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
                                   "(initial_conditions) need q_init, which only SCFT takes")
     if "dynamic_stabilization" in params:
         _finite_number(params["dynamic_stabilization"], "dynamic_stabilization", nonnegative=True)
-    smearing = params.get("smearing")
-    if smearing is not None:
-        if not isinstance(smearing, dict):
-            raise ValidationError("'smearing' must be a dict or None")
-        kind = smearing.get("type", "gaussian")
-        if kind not in ("gaussian", "sigmoidal"):
-            raise ValidationError("Unknown smearing type")
-        if kind == "gaussian" and isinstance(smearing.get("a_int"), dict):
-            # One smearing length per monomer type (CL-FTS)
-            if not complex_fields:
-                raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
-            if set(smearing["a_int"]) != set(params["segment_lengths"]):
-                raise ValidationError("Per-type 'smearing.a_int' needs one length for each monomer type")
-            if _has_random_copolymer(params):
-                raise ValidationError("Per-type 'smearing.a_int' does not support random copolymers")
-            for name, a_int in smearing["a_int"].items():
-                _finite_number(a_int, f"smearing.a_int.{name}", nonnegative=True)
-        else:
-            keys = ("a_int",) if kind == "gaussian" else ("k_int", "dk_int")
-            for key in keys:
-                _finite_number(smearing.get(key, 5.0 if key == "dk_int" else None), "smearing." + key,
-                               positive=key != "a_int", nonnegative=key == "a_int")
+    _validate_smearing(params, complex_fields)
     if params.get("electrostatics") is not None:
         if not complex_fields:
             raise ValidationError("'electrostatics' is supported in CL-FTS only")
@@ -530,7 +536,8 @@ def point_ion_concentrations(params: Dict[str, Any]) -> Dict[str, float]:
     The given concentrations are added salt; grand-canonical ions (chemical_potential) have none.
     The counterion species, 'electrostatics.counterion' or the only canonical ion species whose
     valence has the opposite sign of the net charge, receives the concentration that neutralizes
-    the canonical polymers and the given ions; 'counterion': None adds none.
+    the canonical polymers and the given ions; 'counterion': None, or no such species, adds none
+    (the electroneutrality check of validate_electrostatics then applies).
     """
     electrostatics = params["electrostatics"]
     ions = {name: ion for name, ion in (electrostatics.get("ions") or {}).items() if "concentration" in ion}
@@ -541,7 +548,9 @@ def point_ion_concentrations(params: Dict[str, Any]) -> Dict[str, float]:
         return concentrations
     if counterion == "":
         candidates = [name for name, ion in ions.items() if ion["valence"] * total < 0]
-        if len(candidates) != 1:
+        if not candidates:
+            return concentrations
+        if len(candidates) > 1:
             raise ValidationError(f"The net charge {total:.3e} has {len(candidates)} ion species of opposite sign; "
                                   "name the counterion with 'electrostatics.counterion' (None: no counterions)")
         counterion = candidates[0]

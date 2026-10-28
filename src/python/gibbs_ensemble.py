@@ -113,6 +113,8 @@ class GibbsEnsemble:
         es = params.get("electrostatics")
         ions = (es.get("ions") or {}) if es is not None else {}
         self.ion_names = [name for name, ion in ions.items() if "concentration" in ion]
+        # Every point ion in the input order, which the chemical potentials of the boxes follow
+        self.point_ion_names = list(ions)
         self.n_segments = None
         if self.ion_names:
             self.n_segments = (round(1.0 / params["ds"]) if str(params["chain_model"]).lower() == "discrete"
@@ -166,8 +168,10 @@ class GibbsEnsemble:
         gibbs = {key: value for key, value in self.params["gibbs_ensemble"].items() if key != "cycles"}
         template = {key: value for key, value in self.params.items() if key != "gibbs_ensemble"}
         template["langevin"] = {key: value for key, value in template["langevin"].items() if key != "max_step"}
+        # The amounts and the chemical potentials of the history follow the order of the point ions;
+        # the hash of the input does not see that order
         return {"input_hash": input_hash(json_ready(template)), "gibbs_ensemble": json_ready(gibbs),
-                "random_seed": self.random_seed}
+                "random_seed": self.random_seed, "ion_names": self.point_ion_names}
 
     def box_params(self, b, amounts, cycle):
         """CL-FTS input of box b with the given amounts for the given cycle."""
@@ -257,9 +261,16 @@ class GibbsEnsemble:
             self.history = json.load(f)
         if not self.history["cycles"]:
             raise ValidationError("The Gibbs-ensemble history has no completed cycle; start again with run()")
-        stored = self.history["settings"]
+        stored = dict(self.history["settings"])
         self.random_seed = int(stored["random_seed"])
-        if stored != json.loads(json.dumps(json_ready(self.settings()))):
+        current = json.loads(json.dumps(json_ready(self.settings())))
+        # Histories of earlier versions do not store the order of the ions
+        ion_names = current.pop("ion_names")
+        stored_names = stored.pop("ion_names", ion_names)
+        if stored_names != ion_names and sorted(stored_names) == sorted(ion_names):
+            raise ValidationError("'electrostatics.ions' lists the point ions in another order than the "
+                                  "Gibbs-ensemble history; its amounts and chemical potentials follow that order")
+        if stored != current or stored_names != ion_names:
             raise ValidationError("The input differs from that of the Gibbs-ensemble history (only 'cycles' may change)")
         if self.history["cycles"]:
             self.amounts = np.array(self.history["cycles"][-1]["amounts_after"], dtype=np.float64)

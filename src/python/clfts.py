@@ -345,7 +345,7 @@ class CLFTS:
                 raise ValidationError(f"The integrator '{self.integrator.name}' (linear_response) needs a periodic box")
             self.integrator = copy.deepcopy(self.integrator)
             self._joint_psi = self.electrostatics is not None and self.electrostatics.coupling > 0
-            self.integrator.set_linear_response(self._force_jacobian(), dt=self.langevin["dt"],
+            self.integrator.set_linear_response(self._symmetric_jacobian(self._force_jacobian()), dt=self.langevin["dt"],
                                                 mobility=self._integrated_mobility(),
                                                 noise_direction=self._integrated_noise_direction(),
                                                 fourier=self.prop_solver.fourier)
@@ -423,6 +423,30 @@ class CLFTS:
         if self._joint_psi:
             jacobian[M, M] += es.screened_k_sq / es.coupling
         return jacobian
+
+    def _symmetric_jacobian(self, jacobian):
+        """Symmetric part of the measured Jacobian in the variables w/n of the noise directions n.
+
+        K = N⁻¹ J N holds second derivatives of H and is complex symmetric. The forces of
+        continuous chains are the gradient of the discretized H only up to the contour error, so
+        the measured K is symmetric only to O(ds²) (rk2 and rqm4 alike), notably where the
+        segment lengths differ; the linear response takes its symmetric part. A relative
+        asymmetry above 1e-2 among the fields that move means a far too coarse contour step or
+        a wrong measurement.
+        """
+        m = jacobian.shape[0]
+        direction = self._integrated_noise_direction()
+        ratio = (direction[None, :] / direction[:, None]).reshape((m, m) + (1,) * (jacobian.ndim - 2))
+        K = jacobian * ratio
+        moving = self._integrated_mobility() > 0
+        K_moving = K[np.ix_(moving, moving)]
+        asymmetry = np.max(np.abs(K_moving - np.swapaxes(K_moving, 0, 1))) / max(np.max(np.abs(K_moving)), 1e-300)
+        if asymmetry > 1e-2:
+            raise ValidationError(f"The Jacobian of the forces is not symmetric (relative asymmetry {asymmetry:.1e}); "
+                                  "with continuous chains use a smaller ds")
+        if asymmetry > 1e-5:
+            print(f"Jacobian of the forces: relative asymmetry {asymmetry:.1e} from the contour step, symmetrized")
+        return 0.5 * (K + np.swapaxes(K, 0, 1)) / ratio
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.

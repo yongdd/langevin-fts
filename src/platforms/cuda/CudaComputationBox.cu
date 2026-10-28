@@ -33,6 +33,7 @@
 
 #include <iostream>
 #include <complex>
+#include <numeric>
 #include <cuda_runtime.h>
 #include <cuComplex.h>
 
@@ -259,11 +260,17 @@ void CudaComputationBox<T>::zero_mean_device(CuDeviceData<T>* d_g)
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    // Mean = Σ dv g / V; in reduced basis mode Σ weight g / total_grid (as in ComputationBox::zero_mean)
+    // The mean over the accessible volume, as in ComputationBox::zero_mean: Σ dv g / V_accessible;
+    // in reduced basis mode Σ weight g / Σ weight (total_grid without a mask)
     const bool reduced = this->space_group_ != nullptr;
+    const bool masked = !this->mask_full_.empty();
     const int N = reduced ? this->n_basis_ : this->total_grid;
     const double* d_weight = reduced ? d_basis_weights_.get() : d_dv.get();
-    const double norm = reduced ? static_cast<double>(this->total_grid) : this->volume;
+    double norm = reduced ? static_cast<double>(this->total_grid) : this->volume;
+    if (masked && reduced)
+        norm = std::accumulate(this->basis_weights_.begin(), this->basis_weights_.end(), 0.0);
+    else if (masked)
+        norm = this->accessible_volume;
 
     ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_weight, 1.0, N);
     CUDA_CHECK_LAUNCH();

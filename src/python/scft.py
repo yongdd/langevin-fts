@@ -1115,8 +1115,9 @@ class SCFT:
             If True, return an SCFTResult object with the fields on the full
             grid (default: False). The results are also stored as attributes.
         initial_psi : ndarray, optional
-            Initial electrostatic potential ψ (with `electrostatics`); by default the uniform
-            ψ₀ of the homogeneous state (zero for a neutral canonical system without screening).
+            Initial electrostatic potential ψ, one real value per grid point (only with
+            `electrostatics`); by default the uniform ψ₀ of the homogeneous state (zero for a
+            neutral canonical system without screening).
 
         Attributes Set
         --------------
@@ -1135,6 +1136,14 @@ class SCFT:
         """
 
         M = len(self.monomer_types)
+
+        # ψ of SCFT is real (the mean field of the Coulomb interaction)
+        if initial_psi is not None:
+            if self.electrostatics is None:
+                raise ValidationError("initial_psi needs 'electrostatics'")
+            if np.size(initial_psi) != self.prop_solver.n_grid or np.iscomplexobj(initial_psi) \
+                    or not np.all(np.isfinite(initial_psi)):
+                raise ValidationError("initial_psi must hold one real, finite value per grid point")
 
         # Assign large initial value for the energy and error
         energy_total = 1.0e20

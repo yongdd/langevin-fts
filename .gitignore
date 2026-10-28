@@ -28,6 +28,8 @@ temp*
 *.qdrep
 *.sqlite
 data_simulation*
+examples/**/data_*/
+examples/**/custom_extensions/
 fields*.mat
 fields*.json
 fields*.yaml

@@ -108,7 +108,8 @@ or the construction raises `ValidationError`
 ([CL-FTS theory, Section 6](../theory/ComplexLangevinSimulation.md#6-charged-systems)).
 
 An integrator that declares `linear_response = True` (CLFTS only, periodic boxes) receives
-the Jacobian of the forces at the homogeneous state before the run:
+the Jacobian of the forces at the homogeneous state (its symmetric part, see the
+[CL-FTS theory, Section 2.1](../theory/ComplexLangevinSimulation.md#21-exponential-time-differencing)) before the run:
 
 ```python
 def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourier):

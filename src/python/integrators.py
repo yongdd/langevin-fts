@@ -135,7 +135,8 @@ class ExponentialTimeDifferencing:
         K = root[:, None] * (J * direction[None, :] / direction[:, None]) * root[None, :]
 
         # K' is complex symmetric (the second derivatives of H); an asymmetric Jacobian means an
-        # inconsistent measurement, and the factorizations below would not match the drift
+        # inconsistent measurement, and the factorizations below would not match the drift. CLFTS
+        # passes the symmetric part of its measurement (CLFTS._symmetric_jacobian)
         transpose = np.swapaxes(K, 1, 2)
         asymmetry = np.max(np.abs(K - transpose)) / max(np.max(np.abs(K)), 1e-300)
         if asymmetry > 1e-5:

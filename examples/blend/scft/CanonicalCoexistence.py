@@ -1,8 +1,8 @@
 """A binary binodal from CE SCFT and analytic FH states, without a GCE solver.
 
-Run from a scratch directory: SCFT constructors draw polymer architectures.
-For modulated phases, give each callback its own phase-specific initial fields
-and reuse that branch's converged fields and cell for nearby compositions.
+The script writes no files. For modulated phases, give each callback its own
+phase-specific initial fields and reuse that branch's converged fields and cell
+for nearby compositions.
 """
 
 import contextlib

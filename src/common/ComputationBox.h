@@ -593,7 +593,9 @@ public:
     /**
      * @brief Remove the spatial mean from a field (make it zero-mean).
      *
-     * Modifies g in-place: g[i] -= mean(g)
+     * Modifies g in-place: g[i] -= integral(g) / accessible volume, so that
+     * integral(g) and mean(g) vanish afterwards. Without a mask this is
+     * g[i] -= mean(g); with one, masked points shift with the rest.
      *
      * When space group is set, uses the mean weighted with the basis weights
      * (orbit counts times the mask).

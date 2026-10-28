@@ -93,7 +93,7 @@ Simulation files contain `simulation_metadata_json`; FTS also writes `run_status
 
 The embedded Git information (commit and whether `CMakeLists.txt`, `cmake/` or `src/` differ from it) is refreshed at every build; an unchanged state recompiles nothing. Hashes identify the actual installed artifacts even when a build is dirty or the simulation runs outside a checkout. Preserve the corresponding source/wheel and environment/build files; recording versions alone does not recreate them. `run_status.json` records the final execution outcome; periodic checkpoints describe an in-progress run at their saved accepted step.
 
-Versioned checkpoints compare effective model and sampling settings before mutating the RNG. Output location, final step and backend are not part of physical compatibility. Same-backend deterministic regression checks auxiliary fields, concentrations and pending observables exactly; cross-backend continuations can differ by floating-point rounding. Unversioned files require explicit legacy opt-in and cannot recover measurements that were never stored.
+Versioned checkpoints compare effective model and sampling settings before mutating the RNG. Output location, final step and backend are not part of physical compatibility. Same-backend deterministic regression checks auxiliary fields, concentrations and pending observables exactly; cross-backend continuations can differ by floating-point rounding, and so can `cpu-fftw` continuations in a new process, because FFTW chooses its transform plans by timing them (the restart tests continue within one process). Unversioned files require explicit legacy opt-in and cannot recover measurements that were never stored.
 
 ## Performance measurements
 

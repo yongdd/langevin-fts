@@ -13,7 +13,9 @@
    (even and odd sizes, 1D to 3D).
 2. Jacobian of CL-FTS: the complex-step columns equal central differences of the forces of all
    fields, psi included, for a charged diblock with counterions (with and without screening)
-   and for a diblock on a 67-point grid, whose FFTs leave imaginary rounding errors.
+   and for a diblock on a 67-point grid, whose FFTs leave imaginary rounding errors; continuous
+   chains with unequal segment lengths, whose measured Jacobian is asymmetric by the contour
+   error, run with its symmetric part.
 3. Runs: a continued run reproduces the uninterrupted one bit for bit (fields, psi, noise
    streams, measurements); psi keeps a zero uniform mode without screening; with zero
    valences psi has the Gaussian statistics of exp(-H) in a run at a time step beyond the LM
@@ -237,6 +239,21 @@ def jacobian(root):
         for i in range(2):
             worst = max(worst, np.max(np.abs(np.fft.fft(difference[i]) - J[i, j])) / np.max(np.abs(J)))
     assert worst < 1e-6, f"Jacobian on 67 grid points against central differences: {worst:.2e}"
+
+    # Continuous chains with unequal segment lengths: their forces are the gradient of the discretized
+    # H only up to the contour error, so the measured Jacobian is slightly asymmetric; the simulation
+    # passes its symmetric part to the integrator
+    params.update(nx=[64], lx=[4.0], numerical_method="rk2", ds=1 / 40, chi_n={"A,B": 14.0},
+                  segment_lengths={"A": 1.0, "B": 1.2},
+                  polymers=[{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}])
+    sim = quiet(lambda: CLFTS(params, random_seed=5))
+    J = sim._force_jacobian()
+    ratio = (sim._integrated_noise_direction()[None, :] / sim._integrated_noise_direction()[:, None])[:, :, None]
+    K, K_symmetric = J * ratio, sim._symmetric_jacobian(J) * ratio
+    asymmetry = np.max(np.abs(K - np.swapaxes(K, 0, 1))) / np.max(np.abs(K))
+    assert 1e-5 < asymmetry < 1e-3, f"asymmetry of the measured Jacobian {asymmetry:.1e}"
+    assert np.max(np.abs(K_symmetric - 0.5 * (K + np.swapaxes(K, 0, 1)))) < 1e-14 * np.max(np.abs(K)), \
+        "symmetric part of the Jacobian"
 
 
 def runs(root):

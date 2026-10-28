@@ -294,8 +294,8 @@ Hall setting are not transferred. All exported fields must be on the full grid.
 SCFT result files already expand symmetry-reduced fields before saving.
 
 Discrete chains, complex fields, finite compressibility, random-copolymer blocks,
-grafting, masks, nonperiodic boundaries and interaction smearing are rejected
-instead of being approximated. Use a supported continuous incompressible model
+grafting, grand-canonical polymers, masks, nonperiodic boundaries, interaction
+smearing and electrostatics are rejected instead of being approximated. Use a supported continuous incompressible model
 for cross-code comparisons. A PSCF calculation still needs its own convergence
 checks; conversion does not establish thermodynamic equivalence of different
 models or solver stopping criteria.

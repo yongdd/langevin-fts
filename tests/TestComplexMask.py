@@ -2,7 +2,9 @@
 """Array handling of the Python bindings.
 
 1. A mask given to the complex-field factory is read as a real array (the
-   same integral as with the real-field factory).
+   same integral as with the real-field factory). With a mask, zero_mean
+   subtracts the mean over the accessible volume: the mean of the result
+   vanishes on the full grid and with a space group (reduced and m3 basis).
 2. Strided and Fortran-ordered NumPy arrays are copied before the C++ side
    reads them, so they give the same result as contiguous copies.
 3. Objects created by the factory keep the objects they point to alive
@@ -12,12 +14,14 @@
    long as the objects that point to it and is released after them.
 """
 
+import contextlib
 import gc
+import io
 import sys
 import weakref
 
 import numpy as np
-from polymerfts import _core
+from polymerfts import PropagatorSolver, SpaceGroup, _core
 
 
 def cpu_platform():
@@ -45,10 +49,37 @@ def main():
         cb = factory.create_computation_box(nx, lx, mask=mask)
         ones = np.ones(n, dtype=np.complex128 if field_type == "complex" else np.float64)
         integrals[field_type] = cb.integral(ones)
+        # zero_mean subtracts the mean over the accessible volume, so the mean vanishes
+        f = 3.0 * ones + np.random.default_rng(8).normal(size=n)
+        cb.zero_mean(f)
+        if not abs(cb.mean(f)) < 1e-12:
+            print(f"FAILED: zero_mean with a mask leaves the mean {cb.mean(f)} ({field_type} fields)")
+            ok = False
     expected = np.prod(lx) * (n - 64) / n
     if not (np.isclose(integrals["real"], expected) and np.isclose(integrals["complex"], expected)):
         print(f"FAILED: masked integral real {integrals['real']} complex {integrals['complex']} expected {expected}")
         ok = False
+
+    # ---- the same with a space group, in the reduced basis and in the physical (m3) basis
+    for physical in (False, True):
+        sg = SpaceGroup([16] * 3, "Im-3m", 529)
+        if physical:
+            sg.enable_m3_physical_basis()
+        coordinates = np.meshgrid(*[(np.arange(16) + 0.5) / 16 - 0.5] * 3, indexing="ij")
+        sphere = (sum(c ** 2 for c in coordinates) > 0.09).astype(float).reshape(1, -1)
+        mask = (sg.symmetrize(sphere).reshape(-1) > 1 - 1e-12).astype(float)
+        with contextlib.redirect_stdout(io.StringIO()):
+            solver = PropagatorSolver(nx=[16] * 3, lx=[2.0] * 3, ds=0.1, bond_lengths={"A": 1.0},
+                                      bc=["periodic"] * 6, chain_model="continuous", numerical_method="rqm4",
+                                      platform=platform, mask=mask, space_group=sg)
+            solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
+        f = sg.symmetrize(3.0 + np.random.default_rng(9).normal(size=(1, 16 ** 3)))
+        f = np.ascontiguousarray(sg.reduced_to_irreducible(sg.to_reduced_basis(f))).reshape(-1)
+        solver.zero_mean(f)
+        if not abs(solver.mean(f)) < 1e-12:
+            print(f"FAILED: zero_mean with a mask and a space group leaves the mean {solver.mean(f)} "
+                  f"(physical basis {physical})")
+            ok = False
 
     # ---- strided view and Fortran order give the same answer as contiguous copies
     factory = _core.PlatformSelector.create_factory(platform, False, "real")

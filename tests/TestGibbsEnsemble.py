@@ -20,7 +20,7 @@ Two homopolymers A and B (discrete chains, N = 20) on 4x4 grids:
    the amounts approach it.
 5. Fluctuating blend (nbar 1e4): three cycles continued by continue_run() reproduce six
    uninterrupted ones bit for bit (history and fields), and a second run() starts again from the
-   boxes of the input.
+   boxes of the input; a continuation that lists the point ions in another order is refused.
 """
 
 import contextlib
@@ -237,6 +237,18 @@ def restart(root):
     quiet(part.run)
     c = json.loads((root / "part" / "gibbs_history.json").read_text())["cycles"]
     assert c == a, "a second run() differs from the first"
+
+    # The amounts and chemical potentials follow the order of the point ions, which a continuation
+    # must keep, grand-canonical ones included
+    ions = dict(salt(), K={"valence": 1.0, "chemical_potential": np.log(N * 0.005), "smearing_length": 0.1})
+    def charged(cycles, ions):
+        params = parameters(root / "ions", cycles, charge=0.05, ions=ions)
+        params["electrostatics"]["screening_length"] = 0.5
+        return quiet(lambda: GibbsEnsemble(params, random_seed=3))
+    quiet(charged(1, ions).run)
+    for order in (("Cl", "Na", "K"), ("K", "Na", "Cl")):
+        expect_validation_error(lambda: charged(2, {name: ions[name] for name in order}).continue_run(), "another order")
+    expect_validation_error(lambda: charged(2, salt()).continue_run(), "input differs")
 
 
 def main():

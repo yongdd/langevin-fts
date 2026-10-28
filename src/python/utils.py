@@ -420,6 +420,15 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
             if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
                     or np.any(psi_drift < 0)):
                 raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
+            # The settings keep the point ions by name; the columns of the pending chemical
+            # potentials and numbers follow their order (ion_names_json, absent in checkpoints
+            # of earlier versions)
+            if "ion_names_json" in data:
+                stored_ions = json.loads(str(data["ion_names_json"]))
+                if stored_ions != [ion["name"] for ion in electrostatics.ions]:
+                    raise ValidationError(f"'electrostatics.ions' lists the point ions in another order than "
+                                          f"the checkpoint ({', '.join(stored_ions)}); the recorded columns "
+                                          "follow that order")
             # The charge structure function (with Coulomb coupling in a periodic box)
             if electrostatics.coupling > 0 and electrostatics.periodic:
                 for key in electrostatics.CHARGE_SUMS:

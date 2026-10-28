@@ -196,7 +196,7 @@ public:
     /**
      * @brief Subtract mean from device array.
      *
-     * Makes the array have zero mean: g = g - mean(g), mean = integral / volume
+     * Makes the array have zero mean: g = g - integral(g) / accessible volume
      * (as ComputationBox::zero_mean)
      *
      * @param d_g Device array to modify in-place (size n_grid; n_basis with a space group)

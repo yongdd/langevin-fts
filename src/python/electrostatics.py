@@ -399,9 +399,11 @@ class Electrostatics:
         return settings
 
     def checkpoint_data(self):
+        # The order of the ions, which the record columns follow (settings() keeps them by name)
         return {"psi_real": np.real(self.psi), "psi_imag": np.imag(self.psi),
                 "psi_k_real": np.real(self._psi_k), "psi_k_imag": np.imag(self._psi_k),
-                "psi_rng_state_json": json.dumps(self.random_bg.state), "psi_noise_prev": self.previous_noise}
+                "psi_rng_state_json": json.dumps(self.random_bg.state), "psi_noise_prev": self.previous_noise,
+                "ion_names_json": json.dumps([ion["name"] for ion in self.ions])}
 
     def restore(self, data):
         """ψ, ψ(k), the previous noise and the noise stream from a checkpoint.

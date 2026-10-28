@@ -3,15 +3,16 @@
 
 An AB diblock with charged A blocks (discrete chains, N = 20) in a salt of point ions Na+ and Cl-:
 1. Input: the counterions neutralize the polymer charge (Cl- receives the polymer charge on top of
-   the salt); an ambiguous counterion, a counterion of the wrong sign, no counterions without
-   screening, an ion named like a monomer type, a missing smearing length and continuous chains
-   without n_segments are rejected; with n_segments, continuous chains accept bjerrum_length.
+   the salt; without an ion of the opposite sign there are none); an ambiguous counterion, a
+   counterion of the wrong sign, no counterions without screening, an ion named like a monomer
+   type, a missing smearing length and continuous chains without n_segments are rejected; with
+   n_segments, continuous chains accept bjerrum_length.
 2. Forces of psi and of the auxiliary fields against central differences of H, which contains
    -N c_s ln Q_s of the ions, on random fields (standard deviation 5 for the auxiliary fields).
 3. Linear response: the smeared ion charge of psi = i eps cos(k.r) is -sum_s z_s^2 c_s Gamma_s(k)^2 psi/N.
 4. Chemical potentials: ln(N c_s) at psi = 0 and in the records, after the polymers; restarts are
-   bitwise; the osmotic pressure equals -dH/dV at fixed grid values and fixed numbers of ions, with
-   and without screening.
+   bitwise and refuse the ions in another order; the osmotic pressure equals -dH/dV at fixed grid
+   values and fixed numbers of ions, with and without screening.
 5. Debye-Hueckel statistics: with neutral chains and weak coupling psi is Gaussian with the screening
    operator (k^2 + kappa^2)/E + sum_s z_s^2 c_s Gamma_s^2/N: V Nbar^(1/2) times this operator times
    <|psi(k)/n|^2> is 1 and the holomorphic <psi(k) psi(-k)> -1, mode by mode on average (etd steps).
@@ -96,6 +97,10 @@ def inputs(root):
     expect_validation_error(changed(counterion="Na"), "has the sign of the net charge")
     expect_validation_error(changed(counterion=None), "not electroneutral")
     quiet(changed(counterion=None, screening_length=0.3))   # an implicit electrolyte screens a net charge
+    # Without a canonical ion of the opposite sign there are no counterions
+    cations = {"Na": {"valence": 1.0, "concentration": 0.05, "smearing_length": 0.1}}
+    quiet(changed(ions=cations, screening_length=0.3))
+    expect_validation_error(changed(ions=cations), "not electroneutral")
     expect_validation_error(changed(ions={"A": {"valence": 1.0, "concentration": 0.1, "smearing_length": 0.1}}),
                             "not a monomer type")
     expect_validation_error(changed(ions={"Na": {"valence": 1.0, "concentration": 0.1}}), "smearing_length")
@@ -200,6 +205,11 @@ def restart(root):
         keys = [k for k in a if not k.startswith("__") and isinstance(a[k], np.ndarray) and a[k].dtype.kind in "fc"
                 and a[k].size]
         assert keys and max(np.max(np.abs(a[k] - b[k])) for k in keys) == 0.0, f"continued run with point ions, {name}"
+    # The record columns follow the order of the ions, which a continuation must keep
+    params = parameters(root / "part", steps=4)
+    params["electrostatics"]["ions"] = dict(reversed(list(params["electrostatics"]["ions"].items())))
+    sim = quiet(lambda: CLFTS(params, random_seed=7))
+    expect_validation_error(lambda: sim.continue_run(root / "part" / "fields_000002.mat"), "another order")
 
 
 def pressure(root):

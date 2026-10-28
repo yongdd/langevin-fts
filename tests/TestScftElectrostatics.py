@@ -2,8 +2,9 @@
 """Mean-field electrostatics of SCFT: psi from the Poisson equation, point ions, Donnan potential.
 
 AB diblocks with charged blocks in 1D periodic boxes (Gaussian smearing 0.05):
-1. Input: bjerrum_length (SCFT has no N̄), psi_dt_scaling, a zero coupling and grand-canonical ions
-   that cannot neutralize the system are rejected.
+1. Input: bjerrum_length (SCFT has no N̄), psi_dt_scaling, a zero coupling, grand-canonical ions
+   that cannot neutralize the system and a smearing without a length are rejected, and so is an
+   initial_psi without electrostatics or with complex or non-finite values.
 2. Zero valences reproduce SCFT without electrostatics.
 3. Strong screening: E/(k^2 + kappa^2) -> E/kappa^2 turns the charges into the contact interaction
    chi_eff N = chi N - E (z_A - z_B)^2/(2 kappa^2). The free energy and the relaxed period of a
@@ -12,7 +13,8 @@ AB diblocks with charged blocks in 1D periodic boxes (Gaussian smearing 0.05):
 4. The stress equals the derivative of the free energy with respect to the box length, with
    canonical point ions (unscreened) and with grand-canonical ions and screening.
 5. Homogeneous states: grand-canonical salt gives the Donnan potential, a screened net charge
-   psi_0 = E q/kappa^2, and both have the free energy of the homogeneous reference.
+   psi_0 = E q/kappa^2, and both have the free energy of the homogeneous reference; canonical
+   point ions add their ideal terms N c_s (ln N c_s - 1) to it, and their charge to q.
 6. Ensembles: grand-canonical ions with the chemical potentials of a canonical lamella reach the
    same state, with the free energy F - sum_s N c_s mu_s; coexistence_quantities() refuses
    results with electrostatics.
@@ -86,6 +88,17 @@ def inputs():
     cations = {"Na": {"valence": 1.0, "chemical_potential": 0.0, "smearing_length": 0.05}}
     expect_validation_error(lambda: SCFT(parameters(18.0, {"charges": {"A": 0.2}, "coupling": 2e3, "ions": cations})),
                             "cannot neutralize")
+    # The smearing is checked before the charges use its length
+    params = parameters(18.0, {"charges": {"A": 0.2}, "coupling": 2e3, "ions": ions()})
+    params["smearing"] = {"type": "gaussian"}
+    expect_validation_error(lambda: SCFT(params), "smearing.a_int")
+    # initial_psi: only with electrostatics, real and finite
+    fields = {"A": np.zeros(NX), "B": np.zeros(NX)}
+    expect_validation_error(lambda: SCFT(parameters(18.0)).run(initial_fields=fields, initial_psi=np.zeros(NX)),
+                            "initial_psi needs")
+    charged = parameters(18.0, {"charges": {"A": 0.2}, "coupling": 2e3, "ions": ions()})
+    for psi in (np.ones(NX) + 1j, np.full(NX, np.nan), np.zeros(NX + 1)):
+        expect_validation_error(lambda: SCFT(charged).run(initial_fields=fields, initial_psi=psi), "real, finite")
 
 
 def neutral_reduction():
@@ -151,6 +164,22 @@ def homogeneous():
     assert abs(result.free_energy) < 1e-10, f"screened free energy {result.free_energy}"
     assert abs(result.free_energy_homogeneous - (5.0 / 4 + 0.5 * coupling * 0.01 * screening_length ** 2
                                                  + np.log(1.0) - 1.0)) < 1e-10, "homogeneous free energy"
+    # Canonical salt with counterions (0.1 Cl- for the A charge): psi_0 = 0 and the ideal terms of the ions
+    def ideal(*concentrations):
+        return sum(N * c * (np.log(N * c) - 1.0) for c in concentrations)
+    _, result = run(parameters(5.0, {"charges": {"A": 0.2}, "coupling": coupling, "ions": ions()}))
+    assert np.max(np.abs(result.psi)) < 1e-8, "psi_0 of a neutral canonical system"
+    assert abs(result.free_energy) < 1e-10, f"free energy with canonical ions {result.free_energy}"
+    assert abs(result.free_energy_homogeneous - (5.0 / 4 + np.log(1.0) - 1.0 + ideal(0.02, 0.12))) < 1e-10, \
+        "homogeneous free energy with canonical ions"
+    # Screened, without counterions: the ions add their charge to q = 0.1 + 0.03 - 0.01
+    _, result = run(parameters(5.0, {"charges": {"A": 0.2}, "coupling": coupling, "screening_length": screening_length,
+                                     "ions": ions(values=(0.03, 0.01)), "counterion": None}))
+    assert np.max(np.abs(result.psi - coupling * 0.12 * screening_length ** 2)) < 1e-8, "screened psi_0 with ions"
+    assert abs(result.free_energy) < 1e-10, f"screened free energy with canonical ions {result.free_energy}"
+    assert abs(result.free_energy_homogeneous - (5.0 / 4 + 0.5 * coupling * 0.12 ** 2 * screening_length ** 2
+                                                 + np.log(1.0) - 1.0 + ideal(0.03, 0.01))) < 1e-10, \
+        "homogeneous free energy with screened canonical ions"
 
 
 def ensembles():

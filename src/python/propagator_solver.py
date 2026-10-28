@@ -756,6 +756,9 @@ class PropagatorSolver:
     def zero_mean(self, field: NDArray[np.floating]) -> None:
         """Subtract the spatial mean from a field in-place.
 
+        With a mask the mean over the accessible volume is subtracted (at every
+        point), so that mean() of the result is zero.
+
         Parameters
         ----------
         field : numpy.ndarray
@@ -769,9 +772,12 @@ class PropagatorSolver:
 
         n_irreducible = self._space_group.get_n_reduced_basis_full()
         if self._physical_basis_active() and field.size == n_irreducible:
-            # Compute mean in reduced basis, apply shift in irreducible basis.
+            # Compute mean in reduced basis, apply shift in irreducible basis. As in
+            # ComputationBox.zero_mean, a mask makes it the mean over the accessible volume
             field_reduced = self._space_group.irreducible_to_reduced(field)
             mean_val = self._computation_box.mean(field_reduced)
+            if self.mask is not None:
+                mean_val *= self._computation_box.get_volume() / self._computation_box.get_accessible_volume()
             field -= mean_val
         else:
             self._computation_box.zero_mean(field)

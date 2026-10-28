@@ -1123,7 +1123,9 @@ T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
 /**
  * @brief Remove the spatial mean from a field (make it zero-mean).
  *
- * When space_group_ is set, operates on reduced basis using weighted mean.
+ * Subtracts the mean over the accessible volume, so that integral() and mean() of
+ * the result vanish also with a mask. When space_group_ is set, operates on reduced
+ * basis using weighted mean.
  */
 template <typename T>
 void ComputationBox<T>::zero_mean(T *g)
@@ -1132,22 +1134,27 @@ void ComputationBox<T>::zero_mean(T *g)
 
     if (space_group_ != nullptr)
     {
-        // Reduced basis mode: the weighted sum over the volume, as in the full-grid
-        // branch (Σ dv g / V; the weights carry the mask)
+        // Reduced basis mode: the weighted sum over the accessible grid points, as in the
+        // full-grid branch (the weights are the orbit sizes times the mask)
+        double accessible_points = 0.0;
         for (int i = 0; i < n_basis_; i++)
+        {
             sum += static_cast<T>(basis_weights_[i]) * g[i];
-        T mean = sum / static_cast<T>(total_grid);
+            accessible_points += basis_weights_[i];
+        }
+        T mean = sum / static_cast<T>(mask_full_.empty() ? static_cast<double>(total_grid) : accessible_points);
 
         for (int i = 0; i < n_basis_; i++)
             g[i] -= mean;
     }
     else
     {
-        // Full grid mode
+        // Full grid mode: Σ dv g over the accessible volume (dv is zero at masked points)
+        const double norm = mask_full_.empty() ? volume : accessible_volume;
         for (int i = 0; i < total_grid; i++)
             sum += dv[i] * g[i];
         for (int i = 0; i < total_grid; i++)
-            g[i] -= sum / volume;
+            g[i] -= sum / norm;
     }
 }
 

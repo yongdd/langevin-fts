@@ -315,7 +315,8 @@ def test_unchanged_literal_containers_and_indexing_are_supported(tmp_path):
 
 @pytest.mark.parametrize('problem', ('discrete', 'complex', 'nonfinite', 'field_size', 'nx_mismatch',
                                    'missing_field', 'finite_compressibility', 'walls', 'random_block',
-                                   'cycle', 'disconnected', 'partial_nodes', 'duplicate_chi', 'bad_cell'))
+                                   'cycle', 'disconnected', 'partial_nodes', 'duplicate_chi', 'bad_cell',
+                                   'electrostatics', 'grand_canonical'))
 def test_invalid_exports_are_rejected_before_writing(tmp_path, problem):
     data = result()
     p = data['initial_params']
@@ -336,6 +337,8 @@ def test_invalid_exports_are_rejected_before_writing(tmp_path, problem):
     elif problem == 'partial_nodes': p['polymers'][0]['blocks'][0]['v'] = 0
     elif problem == 'duplicate_chi': p['chi_n']['long_B,Zed'] = 20.
     elif problem == 'bad_cell': data['angles'] = [10., 10., 170.]
+    elif problem == 'electrostatics': p['electrostatics'] = {'charges': {'Zed': .1, 'long_B': -.1}, 'coupling': 100.}
+    elif problem == 'grand_canonical': p['polymers'][0]['chemical_potential'] = p['polymers'][0].pop('volume_fraction')
     source = tmp_path / 'source.mat'
     savemat(source, data, long_field_names=True)
     with pytest.raises((ValueError, TypeError)): TOOL['export_files'](source, tmp_path / 'pscf')
