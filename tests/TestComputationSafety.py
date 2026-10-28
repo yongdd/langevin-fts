@@ -192,6 +192,15 @@ def test_angles_and_grafting(platform):
     # An impossible cell given by gamma alone is reported with all three angles
     rejects(lambda: fac.create_computation_box([8, 8], [2.0, 2.0], [179.99999999]),
             "(alpha=90.000000, beta=90.000000, gamma=180.000000)")
+    # A nearly flat cell (V < 0.1 abc) is rejected: the alias search of its oblique
+    # modes used to take minutes at gamma = 0.01 degrees and not end at 1e-4
+    for nx, angles in (([8, 8], [5.0]), ([8, 8], [1e-4]), ([8, 8], [175.0]), ([8]*3, [10.0, 10.0, 10.0])):
+        rejects(lambda: fac.create_computation_box(nx, [2.0]*len(nx), angles), "below the minimum of 0.1")
+    fac.create_computation_box([8, 8], [2.0, 2.0], [6.0])
+    cb = fac.create_computation_box([8, 8], [2.0, 2.0], [120.0])
+    rejects(lambda: cb.set_lattice_parameters([3.0, 3.0], [1e-4]), "below the minimum of 0.1")
+    assert cb.get_lx() == [2.0, 2.0]
+    np.testing.assert_allclose(cb.get_angles_degrees(), [90.0, 90.0, 120.0], rtol=0, atol=1e-12)
     for graft in ({7: "G"}, {1: "G"}):
         mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0})
         rejects(lambda: mol.add_polymer(1.0, [["A", 0.5, 0, 1], ["A", 0.5, 1, 2]], graft))

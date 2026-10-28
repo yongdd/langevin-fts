@@ -199,8 +199,12 @@ def model_parameters(model):
     if shape != "triclinic" and angles != expected:
         raise ValueError(f"{shape.title()} box angles must be {expected} degrees.")
     ca, cb, cg = [math.cos(math.radians(a)) for a in angles]
-    if 1 + 2 * ca * cb * cg - ca * ca - cb * cb - cg * cg <= 1e-12:
-        raise ValueError("Box angles define a degenerate or impossible cell.")
+    # The solver rejects cells flatter than V = 0.1 abc; the small margin keeps
+    # rounding from letting through a cell that it rejects
+    if 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg < 0.1 * 0.1 * (1 + 1e-9):
+        raise ValueError("Box angles must form a cell of volume at least 0.1 abc; "
+                         "use the reduced (Niggli) cell of the lattice, spanned by its shortest vectors, "
+                         "or for a rhombohedral-axis Hall setting the hexagonal-axis setting of the group.")
 
     monomers = model["monomers"]
     if not isinstance(monomers, list) or not 2 <= len(monomers) <= 32:

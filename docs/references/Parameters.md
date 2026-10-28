@@ -504,7 +504,7 @@ Following crystallographic convention:
 "angles": [90.0, 90.0, 120.0]  # Hexagonal: alpha=90, beta=90, gamma=120
 ```
 
-Non-orthogonal cells need periodic boundaries in every direction (walls are rejected), and the angles must form a cell ($`1 - \cos^2\alpha - \cos^2\beta - \cos^2\gamma + 2\cos\alpha\cos\beta\cos\gamma > 0`$).
+Non-orthogonal cells need periodic boundaries in every direction (walls are rejected), and the angles must give a cell that is not nearly flat: the ratio of the cell volume to $`abc`$, $`\sqrt{1 - \cos^2\alpha - \cos^2\beta - \cos^2\gamma + 2\cos\alpha\cos\beta\cos\gamma}`$ ($`\sin\gamma`$ in 2D), must be at least 0.1. With one oblique angle this allows 5.74° to 174.26°. A flatter cell raises an error, also when box relaxation reaches it, because the Fourier modes of a flat cell are expensive to set up and its volume loses precision. Describe such a lattice with its reduced (Niggli) cell, spanned by its shortest vectors, whose angles lie between 60° and 120° and whose volume ratio is at least $`1/\sqrt{2}`$; with a rhombohedral space group, use the hexagonal-axes setting of the group.
 
 ### Parameter Files (YAML/JSON)
 

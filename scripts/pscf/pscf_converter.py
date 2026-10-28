@@ -861,6 +861,12 @@ def import_script(param, command, output_dir, *, input_dir=None, monomers=None, 
     if model not in (None, "continuous"):
         raise ValueError("Script import requires continuous chains in the field metadata.")
     params, group = script_params(param.read_text(encoding="utf-8"), data, names)
+    # polymerfts rejects cells flatter than V = 0.1 abc (field import and export keep them);
+    # the small margin keeps rounding from letting through a cell that it rejects
+    ca, cb, cg = np.cos(np.deg2rad(params["angles"]))
+    if 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg < 0.1 * 0.1 * (1 + 1e-9):
+        raise ValueError("The PSCF cell has a volume below 0.1 abc, which polymerfts rejects; "
+                         "convert the reduced (Niggli) cell of the lattice, spanned by its shortest vectors.")
     if platform not in ("auto", "cuda", "cpu-fftw", "cpu-mkl"):
         raise ValueError(f"Unknown platform: {platform}.")
     if platform != "auto":

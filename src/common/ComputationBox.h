@@ -334,7 +334,8 @@ public:
      *               - gamma: angle between a and b vectors
      * @param mask   Optional mask array for impenetrable regions
      *
-     * @throws Exception if angles are invalid (must be > 0 and < 180, and form valid cell)
+     * @throws Exception if angles are invalid (must be > 0 and < 180 and form a cell of
+     *         volume at least 0.1 abc)
      *
      * @example
      * @code
@@ -627,7 +628,8 @@ public:
      * @note After calling set_lattice_parameters(), you should also update the Laplacian
      *       operator in the propagator solver.
      *
-     * @throws Exception before changing the box for invalid angles, for a
+     * @throws Exception before changing the box for invalid angles (including a
+     *         cell of volume below 0.1 abc), for a
      *         non-orthogonal cell with walls or while hold_orthogonal_cell()
      *         is in effect, and for a cell that does not match the space group
      */

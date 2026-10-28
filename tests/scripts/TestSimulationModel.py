@@ -86,7 +86,7 @@ def test_three_monomer_mat_fields(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("problem", ("duplicate_name", "invalid_name", "unknown_block", "negative_block",
     "volume_total", "negative_fraction", "duplicate_pair", "self_pair", "unused_monomer", "empty_polymer",
-    "angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique",
+    "angles", "flat_angles", "cubic_lengths", "hexagonal_angles", "grid_length", "dimension", "ordered_seed", "cn_oblique",
     "discrete_ds", "lr_imaginary"))
 def test_invalid_structured_models(problem):
     form = values()
@@ -102,6 +102,7 @@ def test_invalid_structured_models(problem):
     elif problem == "unused_monomer": model["monomers"].append({"name": "D", "segment_length": "1"})
     elif problem == "empty_polymer": model["polymers"][0]["blocks"] = []
     elif problem == "angles": model["box"].update(shape="triclinic", angles=["10", "10", "170"])
+    elif problem == "flat_angles": model["box"].update(shape="triclinic", angles=["90", "90", "5"])   # V = 0.087 abc
     elif problem == "cubic_lengths": model["box"]["shape"] = "cubic"
     elif problem == "hexagonal_angles": model["box"].update(shape="hexagonal", lx=["3", "3", "5"])
     elif problem == "grid_length": model["box"]["nx"] = ["8"]
