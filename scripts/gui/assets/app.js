@@ -174,6 +174,9 @@ function updateConditionalFields() {
     const cell = group.crystal_system === "Cubic" ? "a = b = c; angles 90°" :
       group.crystal_system === "Tetragonal" ? "a = b; angles 90° (use Orthorhombic with a = b)" :
       group.crystal_system === "Orthorhombic" ? "angles 90°" :
+      group.crystal_system === "Monoclinic" ? `${["α", "β", "γ"].filter((_, i) => i !== group.unique_axis).join(" = ")} = 90°, ` +
+        `${["α", "β", "γ"][group.unique_axis]} free (unique axis ${"abc"[group.unique_axis]}; use Triclinic)` :
+      group.crystal_system === "Triclinic" ? "any cell (use Triclinic)" :
       group.hexagonal_axes ? "a = b; angles 90°, 90°, 120° (choose Hexagonal)" :
       "a = b = c; equal angles; disable box relaxation (use Triclinic)";
     const grid = [...group.equal_grid_axes.map(([a, b]) => `n${"xyz"[a]} = n${"xyz"[b]}`),

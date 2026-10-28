@@ -61,6 +61,15 @@ def apply_space_group(params, selection, relax_cell):
         need = "a = b and angles [90, 90, 90] (use an Orthorhombic box with a = b)"
     elif system == "Orthorhombic":
         valid, need = orthogonal, "angles [90, 90, 90]"
+    elif system == "Monoclinic":
+        # The unique axis is perpendicular to the other two; the angle between those is free
+        unique = group["unique_axis"]
+        names = ("alpha", "beta", "gamma")
+        valid = all(abs(angles[i] - 90) < 1e-8 for i in range(3) if i != unique)
+        need = (f"the unique axis {'abc'[unique]} perpendicular to the other two, "
+                + " = ".join(names[i] for i in range(3) if i != unique) + " = 90 (use a Triclinic box)")
+    elif system == "Triclinic":
+        valid, need = True, "any cell"
     elif group["hexagonal_axes"]:
         valid = same(lx[0], lx[1]) and abs(angles[0] - 90) < 1e-8 and abs(angles[1] - 90) < 1e-8 and same(angles[2], 120)
         need = "a = b and angles [90, 90, 120] (choose Hexagonal in Box)"

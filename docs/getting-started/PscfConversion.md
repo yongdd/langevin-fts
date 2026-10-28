@@ -272,7 +272,10 @@ PSCF's [UnitCell2.cpp](https://github.com/dmorse/pscfpp/blob/dfaddb98d6436fadee2
 and [UnitCell3.cpp](https://github.com/dmorse/pscfpp/blob/dfaddb98d6436fadee2ca16b84d82880f1759710/src/prdc/crystal/UnitCell3.cpp).
 
 Lattice selection follows SCFT: a space group's crystal system takes precedence
-over `crystal_system`. An explicit `--lattice` override is checked against the
+over `crystal_system`. PSCF's monoclinic lattice relaxes β, the angle of the unique
+axis b; a monoclinic group with the unique axis a or c is exported as a triclinic
+lattice with a fixed cell and rejected with box relaxation (use the unique-axis-b
+setting of the group, or `--lattice triclinic`, which relaxes every angle in PSCF). An explicit `--lattice` override is checked against the
 actual geometry. Flexible skewed 3D inputs without an explicit crystal system
 require this choice so that angle constraints are not silently changed.
 Flexible skewed 2D cells with explicit `crystal_system="Orthorhombic"` are rejected

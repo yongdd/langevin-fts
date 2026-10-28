@@ -161,6 +161,37 @@ def test_grafting_and_custom_propagators_are_not_dropped(key):
         TOOL['prepare_export'](result(p))
 
 
+@pytest.mark.filterwarnings('error::DeprecationWarning')
+@pytest.mark.parametrize('hall, angles, relax, lattice', (
+    (57, [90., 100., 90.], True, 'monoclinic'), (58, [90., 90., 100.], False, 'triclinic'),
+    (5, [100., 90., 90.], False, 'triclinic'), (58, [90., 90., 100.], True, None)))
+def test_monoclinic_unique_axis(hall, angles, relax, lattice, monkeypatch):
+    # PSCF's monoclinic lattice has the unique axis b; the unique axes a and c keep a fixed cell as triclinic.
+    # The spglib calls use its raising error handling (no DeprecationWarning) and restore the setting;
+    # spglib's environment variable, which overrides that setting, is left out here
+    monkeypatch.delenv('SPGLIB_OLD_ERROR_HANDLING', raising=False)
+    spglib = pytest.importorskip('spglib')
+    handling = getattr(getattr(spglib, 'error', None), 'OLD_ERROR_HANDLING', None)
+    p = params()
+    p.update(angles=angles, relax_cell=relax, space_group={'symbol': 'P2/m' if hall in (57, 58) else 'P2',
+                                                           'hall_number': hall})
+    if lattice is None:
+        with pytest.raises(ValueError, match='unique axis c'):
+            TOOL['prepare_export'](result(p))
+    else:
+        assert TOOL['prepare_export'](result(p))[2] == lattice
+    assert getattr(getattr(spglib, 'error', None), 'OLD_ERROR_HANDLING', None) == handling
+
+
+@pytest.mark.parametrize('hall, message', ((0, 'positive'), (531, 'between 1 and 530')))
+def test_hall_number_range(hall, message):
+    pytest.importorskip('spglib')
+    p = params()
+    p['space_group'] = {'symbol': 'P1', 'hall_number': hall}
+    with pytest.raises(ValueError, match=message):
+        TOOL['choose_lattice'](p)
+
+
 def test_invalid_space_group_symbol_has_a_clear_error():
     p = params()
     p['space_group'] = {'symbol': 123}

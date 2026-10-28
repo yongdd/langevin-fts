@@ -114,6 +114,21 @@ def lattice_geometry(lattice, cell, dim):
     return lx, angles
 
 
+def spglib_call(spglib, function, *args):
+    """Call spglib with its raising error handling, which spglib 2.7+ asks for (with a
+    DeprecationWarning otherwise) and makes the only one in 3.0, without changing the
+    handling for other code. spglib's SPGLIB_OLD_ERROR_HANDLING variable takes precedence."""
+    errors = getattr(spglib, "error", None)
+    old = getattr(errors, "OLD_ERROR_HANDLING", None)
+    if old is not None:
+        errors.OLD_ERROR_HANDLING = False
+    try:
+        return function(*args)
+    finally:
+        if old is not None:
+            errors.OLD_ERROR_HANDLING = old
+
+
 def choose_lattice(params, override=None):
     nx, lx, angles = validate_cell(params["nx"], params["lx"], params.get("angles", [90.] * 3))
     dim = len(nx)
@@ -133,20 +148,37 @@ def choose_lattice(params, override=None):
             numbers = vector(hall, "hall_number", integer=True)
             if len(numbers) != 1 or numbers[0] > 530:
                 raise ValueError("hall_number must be an integer between 1 and 530.")
-            sg = spglib.get_spacegroup_type(numbers[0])
+            hall = numbers[0]
         else:
             symbol = group.get("symbol", "")
             if not isinstance(symbol, str):
                 raise ValueError("space_group.symbol must be a string.")
             symbol = symbol.replace(" ", "")
-            sg = next((g for h in range(1, 531) if (g := spglib.get_spacegroup_type(h)).international_short.replace("_", "")
-                       == symbol.replace("_", "")), None)
-        if sg is None:
+            hall = next((h for h in range(1, 531) if spglib_call(spglib, spglib.get_spacegroup_type, h)
+                         .international_short.replace("_", "") == symbol.replace("_", "")), None)
+        if hall is None:
             raise ValueError("Could not identify the space group. Specify --lattice explicitly.")
+        sg = spglib_call(spglib, spglib.get_spacegroup_type, hall)
         number = sg.number
         system = ("Triclinic" if number <= 2 else "Monoclinic" if number <= 15 else
                   "Orthorhombic" if number <= 74 else "Tetragonal" if number <= 142 else
                   "Trigonal" if number <= 167 else "Hexagonal" if number <= 194 else "Cubic")
+        if system == "Monoclinic":
+            # PSCF's monoclinic lattice frees beta, the angle of the unique axis b. A setting with
+            # the unique axis a or c keeps its fixed cell as a triclinic lattice; relaxing it would
+            # free every angle in PSCF. The unique axis is the 2-fold axis or mirror normal, which
+            # every operation keeps in place (R[u][u] = det R without mixing it with other axes)
+            rotations = spglib_call(spglib, spglib.get_symmetry_from_database, hall)["rotations"]
+            unique = next(u for u in range(3) if all(
+                round(np.linalg.det(r)) == r[u][u] and all(r[u][k] == 0 and r[k][u] == 0 for k in range(3) if k != u)
+                for r in rotations))
+            if unique != 1:
+                if params.get("relax_cell", False):
+                    raise ValueError(f"PSCF's monoclinic lattice relaxes beta (unique axis b), but space group "
+                                     f"{sg.international_short} (Hall {hall}) has the unique axis {'abc'[unique]}. "
+                                     "Export a fixed cell, use the unique-axis-b setting of the group, or give "
+                                     "--lattice triclinic (PSCF then relaxes every angle).")
+                system = "Triclinic"
     if override:
         lattice = override.lower()
     elif dim == 1:

@@ -247,7 +247,7 @@ before passing it in. SCFT chooses:
 | Hexagonal | a, c | nx = ny |
 | Trigonal | a, c | nx = ny |
 | Orthorhombic | a, b, c | none |
-| Monoclinic | a, b, c, β | none |
+| Monoclinic | a, b, c and the angle between the axes perpendicular to the unique axis (β for unique axis b) | none |
 | Triclinic | a, b, c, α, β, γ | none |
 
 ### Grid Divisibility Requirements
@@ -458,8 +458,10 @@ Note: The reduction factor (32x) is less than the number of symmetry operations 
 - The box must match the crystal system of the group (cubic: a = b = c and 90° angles;
   tetragonal: a = b and 90° angles; orthorhombic: 90° angles; hexagonal/trigonal on
   hexagonal axes: a = b and γ = 120°;
-  rhombohedral axes: a = b = c and α = β = γ, without box relaxation). `SCFT` raises a
-  `ValidationError` otherwise.
+  rhombohedral axes: a = b = c and α = β = γ, without box relaxation; monoclinic: the
+  unique axis perpendicular to the other two; triclinic: any cell). `SCFT` raises a
+  `ValidationError` otherwise. With box relaxation, a monoclinic group frees the angle
+  between the two axes perpendicular to its unique axis and a triclinic group all three.
 - Beta feature - validate results carefully
 - Requires `spglib` library
 - **Initial-field symmetry**: input fields are projected onto the **full**

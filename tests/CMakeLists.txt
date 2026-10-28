@@ -135,7 +135,7 @@ ENDFOREACH()
 
 SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation TestExtensions TestPropagatorAnalytic TestConvergenceOrderLite TestSamplingStatistics
     TestStructureFunctionRPA TestChargedStructureFunctionRPA TestStructureFunctionRecords TestClftsElectrostatics TestClftsPointIons TestClftsGrandCanonical TestScftElectrostatics TestGibbsEnsemble TestConfinedElectrostatics TestClftsEtd TestClftsThermodynamics
-    TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress
+    TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress TestScftObliqueSpaceGroups
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
     TestCnAdiLongLines TestCrysFFTCellChange
     APPEND PROPERTY LABELS numerical)

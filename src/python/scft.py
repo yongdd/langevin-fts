@@ -189,7 +189,7 @@ CRYSTAL_SYSTEMS = {
     "Cubic":        {"lx_reduced": [0],       "lx_full": [0, 0, 0], "angles": []},         # a = b = c
     "Hexagonal":    {"lx_reduced": [0, 2],    "lx_full": [0, 0, 1], "angles": []},         # a = b != c, gamma = 120
     "Trigonal":     {"lx_reduced": [0, 2],    "lx_full": [0, 0, 1], "angles": []},         # hexagonal axes (space group only)
-    "Monoclinic":   {"lx_reduced": [0, 1, 2], "lx_full": [0, 1, 2], "angles": [1]},        # beta free
+    "Monoclinic":   {"lx_reduced": [0, 1, 2], "lx_full": [0, 1, 2], "angles": [1]},        # beta free (a space group: see below)
     "Triclinic":    {"lx_reduced": [0, 1, 2], "lx_full": [0, 1, 2], "angles": [0, 1, 2]},  # all free
     "Hexagonal2D":  {"lx_reduced": [0],       "lx_full": [0, 0],    "angles": []},         # a = b, gamma = 120
     "Oblique2D":    {"lx_reduced": [0, 1],    "lx_full": [0, 1],    "angles": [2]},        # gamma free
@@ -496,11 +496,8 @@ class SCFT:
         # Which lattice parameters may vary during box relaxation (table CRYSTAL_SYSTEMS)
         dim = len(params["nx"])
         if self.sg is not None:
-            # The space group fixes the crystal system; angles never vary
+            # The space group fixes the crystal system (and which angles vary, below)
             crystal_system = self.sg.get_crystal_system()
-            if crystal_system not in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
-                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
-                    "The current crystal system is " + crystal_system + ".")
             n_field_var = len(self.monomer_types) * self.sg.get_n_reduced_basis_full()
         else:
             # The user chooses; a 2D cell without "crystal_system" is classified from gamma
@@ -560,7 +557,25 @@ class SCFT:
         else:
             self.lx_reduced_indices = list(row["lx_reduced"])
             self.lx_full_indices = list(row["lx_full"])
-        self.angles_reduced_indices = [] if self.sg is not None else list(row["angles"])
+        if self.sg is None:
+            self.angles_reduced_indices = list(row["angles"])
+        else:
+            # Angles vary only in monoclinic and triclinic groups: those whose change keeps every
+            # symmetry operation an isometry of the cell (SpaceGroup.check_cell), the angle between
+            # the two axes perpendicular to the unique axis of a monoclinic setting (beta for the
+            # unique axis b, gamma for c, alpha for a) and all three in a triclinic group
+            self.angles_reduced_indices = []
+            if crystal_system in ("Monoclinic", "Triclinic"):
+                cell_lx = list(self.prop_solver.get_lx())
+                cell_angles = list(self.prop_solver.get_angles_degrees())
+                for i in range(3):
+                    trial = list(cell_angles)
+                    trial[i] += 1.0
+                    try:
+                        self.sg.check_cell(cell_lx, trial)
+                        self.angles_reduced_indices.append(i)
+                    except RuntimeError:
+                        pass
         self.angles_full_indices = list(self.angles_reduced_indices)
 
         # Number of variables the optimizer adjusts: the fields, plus the free box lengths and angles

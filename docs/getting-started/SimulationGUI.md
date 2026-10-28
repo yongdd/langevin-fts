@@ -158,8 +158,8 @@ recording keys; new exports use the names above.
 ## Space groups and CrysFFT
 
 **Space group (SCFT only)** in **System** defaults to **None (full grid)**. The
-selector offers 423 supported Hall settings across the orthorhombic, tetragonal,
-trigonal, hexagonal and cubic crystal systems. Common polymer-phase groups appear
+selector offers all 530 Hall settings, from the triclinic and monoclinic to the cubic
+crystal systems. Common polymer-phase groups appear
 first. A **Hall number** distinguishes axis and origin settings; it differs from
 the International space group number.
 
@@ -167,7 +167,11 @@ Space group symmetry requires 3D. The editor checks cell lengths, angles,
 equal-grid constraints and translation divisors before exporting both the
 `symbol` and `hall_number`. For tetragonal groups, use Orthorhombic with `a = b`.
 For rhombohedral-axis settings, use Triclinic with equal lengths and equal angles,
-and disable box relaxation. The selected group's requirements appear below the
+and disable box relaxation. Monoclinic groups need the unique axis of their setting
+perpendicular to the other two (for the unique axis b, α = γ = 90°) and triclinic
+groups accept any cell; use Triclinic for oblique angles. Box relaxation varies the
+angle between the axes perpendicular to the unique axis, or all three angles of a
+triclinic group. The selected group's requirements appear below the
 selector. Initial fields are projected onto the selected symmetry by SCFT.
 
 The selector is disabled for L-FTS and CL-FTS, and space group settings are omitted
