@@ -21,7 +21,7 @@ from polymerfts.integrators import checked_fields
 from TestFtsReliability import parameters, fields, expect_error, FailingLFTS
 from cuda_part import cuda_part_missing
 
-example_path = Path(__file__).resolve().parents[1] / "examples/lfts/CustomExtensions.py"
+example_path = Path(__file__).resolve().parents[1] / "examples/tools/CustomExtensions.py"
 spec = importlib.util.spec_from_file_location("custom_fts_extensions", example_path)
 example = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = example

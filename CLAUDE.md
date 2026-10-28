@@ -148,7 +148,7 @@ For changes to numerical algorithms or propagator kernels:
    weak fields can conceal numerical errors. Preserve existing calibrated fields.
 4. Check analytical limits, contour/time-step refinement and backend agreement
    as appropriate to the change. Separate correctness tests from performance runs.
-5. Finish relevant solver changes with `examples/scft/Gyroid.py` using the
+5. Finish relevant solver changes with `examples/block_copolymer/scft/Gyroid.py` using the
    continuous chain model. Check convergence rather than a fixed execution time.
 
 For FTS changes, also check uninterrupted versus restarted runs, full RNG and
@@ -207,7 +207,7 @@ Keep each simulation class readable from top to bottom:
   operations.
 
 Use [Extensions](docs/internals/Extensions.md) and
-[CustomExtensions.py](examples/lfts/CustomExtensions.py) for callback and integrator
+[CustomExtensions.py](examples/tools/CustomExtensions.py) for callback and integrator
 contracts. The additive-noise example is called predictor-corrector; it uses one
 explicit Heun correction with the same noise in both stages.
 
@@ -292,7 +292,8 @@ Guide for detailed transform dispatch, ownership and computation hierarchies.
 
 - Use [Parameter Reference](docs/references/Parameters.md) for complete input formats
   and compatibility rules; avoid copying a second parameter reference into this file.
-- Examples live in `examples/scft/`, `examples/lfts/` and `examples/clfts/`.
+- Examples live in `examples/`, grouped by physical system (`block_copolymer/`, `blend/`,
+  `charged/`) and then by method (`scft/`, `lfts/`, `clfts/`); `tools/` holds API examples.
   [Tutorials](tutorials/README.md) provides a learning sequence.
 - Explain physical conventions and derivations under `docs/theory/`. Keep measured
   performance results with their problem size, backend, hardware and precision.

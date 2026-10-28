@@ -43,7 +43,7 @@ validating uninstalled changes. For example, inside the allocation:
 ctest --test-dir /path/to/polymerfts/build -L numerical --output-on-failure \
     --output-junit /path/to/report/numerical.xml
 cd /path/to/report
-python /path/to/polymerfts/examples/scft/Gyroid.py > gyroid.log 2>&1
+python /path/to/polymerfts/examples/block_copolymer/scft/Gyroid.py > gyroid.log 2>&1
 ```
 
 For CPU/GPU agreement, the build must include both backends and the job must

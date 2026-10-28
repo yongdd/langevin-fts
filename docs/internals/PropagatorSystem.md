@@ -25,7 +25,7 @@ The propagator system:
 2. **Optimizes** by detecting and reusing equivalent computations
 3. **Schedules** parallel execution across multiple streams/threads
 
-**Measured speedup** (A10 GPU, ds = 0.01, time of one propagator and concentration computation): computing independent propagators on 4 CUDA streams instead of 1 gives 1.9x for the bottle-brush of `examples/scft/BottleBrushLamella3D.py` (50 side chains, discrete chains) on a 32³ grid but 1.1x on 64³, and 1.0–1.1x for the 9-arm star of `examples/scft/Star9ArmsGyroid.py` and for a comb with 9 side chains on either grid. Merging equivalent propagators (item 2, `aggregate_propagator_computation`) saves more: with one stream it gives 3.6x for the bottle-brush and 2.0x for the comb, and nothing for the star, whose identical arms are computed once either way.
+**Measured speedup** (A10 GPU, ds = 0.01, time of one propagator and concentration computation): computing independent propagators on 4 CUDA streams instead of 1 gives 1.9x for the bottle-brush of `examples/block_copolymer/scft/BottleBrushLamella3D.py` (50 side chains, discrete chains) on a 32³ grid but 1.1x on 64³, and 1.0–1.1x for the 9-arm star of `examples/block_copolymer/scft/Star9ArmsGyroid.py` and for a comb with 9 side chains on either grid. Merging equivalent propagators (item 2, `aggregate_propagator_computation`) saves more: with one stream it gives 3.6x for the bottle-brush and 2.0x for the comb, and nothing for the star, whose identical arms are computed once either way.
 
 ---
 

@@ -43,6 +43,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- Examples of charged systems (2026-10-28): `examples/charged/scft/ChargedDiblockLamella.py` relaxes
+  the period of a charged diblock lamella with point counterions over a range of added salt,
+  `examples/charged/scft/PolyelectrolyteBrush.py` solves a charged brush grafted to a charged wall of a
+  closed box with the real-space `cn-adi2` method, and `examples/charged/clfts/SaltReservoir.py` runs a
+  charged diblock melt in contact with a salt reservoir (grand-canonical point ions) and compares
+  the uptake of ions with the Donnan equilibrium. `examples/block_copolymer/scft/crystal_systems/`
+  relaxes cylinders in hexagonal, oblique and triclinic cells and a lamella in a monoclinic cell, and
+  scans the free energy against the angle of fixed cells.
 - Electrostatics in closed boxes and fixed charges (2026-10-28): `electrostatics` accepts
   boxes with walls on every side, where ψ lives in the cosine series (no normal derivative at
   the walls), in CL-FTS and SCFT, and `electrostatics.fixed_charge`, a fixed charge density on
@@ -67,7 +75,7 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   `TestGibbsEnsemble` checks, in the mean-field limit, the Flory-Huggins binodal of a blend,
   the coexistence of charged chains with canonical ions (neutral combinations) and with
   grand-canonical salt (Donnan potentials) against independent solutions, the input checks and
-  bitwise restarts; `examples/clfts/GibbsEnsemble.py` runs a blend.
+  bitwise restarts; `examples/blend/clfts/GibbsEnsemble.py` runs a blend.
 - Mean-field electrostatics in SCFT (2026-10-28): SCFT accepts `electrostatics` (with
   `coupling`), point ions and grand-canonical ions, and iterates the electrostatic potential ψ
   with the fields. The residual of ψ is the Newton step of the linearized Poisson equation with
@@ -114,7 +122,7 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   fields a multiplier acts as a real operator, made Hermitian where the half spectrum holds
   both k and -k, so every backend gives the same result.
   `AbstractFactory::create_fourier_transform()`; `TestFourierTransform`; explained step
-  by step in `examples/fourier/FourierTransform.py`.
+  by step in `examples/tools/FourierTransform.py`.
 - CL-FTS integrator `"etd"` (`langevin.integrator`, 2026-10-26): Leimkuhler-Matthews steps
   whose linear part is integrated exactly for each wavevector. Before the run `CLFTS`
   measures the Jacobian of the forces at the homogeneous state with complex-step
@@ -207,10 +215,15 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   compares two systems with the RPA: a charged diblock with counterions, and a
   polyampholyte melt whose charge mode has no auxiliary field. It estimates standard
   errors from block means and requires every tolerance to exceed 2 of them.
-  Example: `examples/clfts/ChargedDiblock.py`.
+  Example: `examples/charged/clfts/ChargedDiblock.py`.
 
 ### Interface changes
 
+- The examples are grouped by physical system and then by simulation method (2026-10-28):
+  `examples/block_copolymer/`, `examples/blend/` and `examples/charged/`, each with `scft/`,
+  `lfts/` and `clfts/` as available, and `examples/tools/` for the Fourier transform and the
+  extension examples. `examples/README.md` lists every example in a table of systems and
+  methods. The scripts are unchanged apart from the paths in their comments.
 - The C++ factory functions return `std::unique_ptr` (2026-10-26):
   `PlatformSelector::create_factory_real`/`create_factory_complex` and every `create_*`
   function of `AbstractFactory`. C++ callers no longer delete the objects. An object

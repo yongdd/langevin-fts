@@ -60,7 +60,7 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
 ## Documentation
 
 26. Python API reference (Sphinx + autodoc for `PropagatorSolver`, `SCFT`, `LFTS`).
-28. Examples guide (detailed README for `examples/scft/` and `examples/lfts/`).
+28. Examples guide (detailed README for the folders of `examples/`).
 
 ## Open investigations (research notes)
 
@@ -101,27 +101,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     keep the localization, though not the positivity argument; non-orthogonal cells and
     the stress would keep the FFT. Offer it as an optional method, not the default, and
     pass the checks listed above before using it.
-
-31. Resolve the remaining PRL Fig. 2-3 discrepancies (2026-09-07).
-
-    See `devel/charged_polymers/reports/PRL_REPRODUCTION.md` and the added LaTeX
-    report pages. Fixed-parameter, canonical-C smoothed LDA gives collapse and
-    reexpansion, but the low-salt onset differs substantially from the paper.
-    Establish the paper's Gibbs-height prescription, box/ensemble and chosen
-    nonlocal Green-function/I_ex treatment before claiming quantitative reproduction.
-    The paper explicitly neglects u_P^ex in its brush calculations; its omission
-    alone is not an established explanation for the discrepancy.
-    Fig. 3's monovalent potential raster differs from Eq. (9), with M converted
-    to nm^-3, by approximately the 0.6022 conversion factor. Confirm the figure's
-    normalization with original data/code; do not silently rescale computed data.
-
-    The separate Fig. 2-3 Python runner also exposes a NON-FFT low-salt issue:
-    legacy real-space bead-slice underflow plus its 1e-300 floor/global mass
-    normalization can mask an O(0.2) density error. The research runner uses
-    extended-range positive convolution, a common partition function, and an
-    independent all-log reference. It also includes the canonical PB rank-one
-    normalization derivative. These remain isolated research implementations;
-    production FFT, CL drift and `prl_scft.py` were not changed in this campaign.
 
 ## Done (removed from the list above)
 

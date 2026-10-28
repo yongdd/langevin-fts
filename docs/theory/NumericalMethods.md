@@ -321,7 +321,7 @@ The benchmarks below use the system of Fig. 1 from Song et al., *Chinese J. Poly
 - **Platform**: NVIDIA A10 GPU (CUDA), `OMP_MAX_ACTIVE_LEVELS=0` and `OMP_NUM_THREADS=4`, so the two propagators of each iteration are computed one after another
 - **System**: AB diblock copolymer, continuous chains, $`b_A = b_B`$, Gyroid phase
 - **Conditions**: f = 0.375, χN = 18, M = 32³, L = 3.65 (box fixed), Ns = 1/ds
-- **Initial field**: gyroid level-set field as in `examples/scft/Gyroid.py`, with amplitudes 0.3 and 0.1
+- **Initial field**: gyroid level-set field as in `examples/block_copolymer/scft/Gyroid.py`, with amplitudes 0.3 and 0.1
 - **Optimizer**: Anderson mixing, `max_hist` = 20, `start_error` = 10⁻², `mix_init` = `mix_min` = 0.02
 - **SCFT convergence**: tolerance = 10⁻⁹ (reached after 240–300 iterations)
 - **Max iterations**: 2000

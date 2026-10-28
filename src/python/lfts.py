@@ -251,7 +251,8 @@ class LFTS:
     >>> sim.run(initial_fields={"A": w_A, "B": w_B})   # writes data/fields_*.mat, structure_function_*.mat
     >>> sim.continue_run("data/fields_001000.mat")
 
-    Complete scripts: examples/lfts/ (Lamella.py, Gyroid.py, MixtureBlockRandom.py).
+    Complete scripts: examples/block_copolymer/lfts/ (Lamella.py, Gyroid.py) and
+    examples/blend/lfts/MixtureBlockRandom.py.
     """
     @classmethod
     def from_file(cls, path, random_seed=None, *, integrator=None, callbacks=None, **overrides):

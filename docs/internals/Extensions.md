@@ -5,7 +5,7 @@ integrate, resolve the saddle or concentrations, accept the step, update WTMD,
 record observables, call observers, and checkpoint. The default integrator is
 Leimkuhler–Matthews (LM). Existing simulation scripts keep working.
 
-Start with [CustomExtensions.py](../../examples/lfts/CustomExtensions.py), which
+Start with [CustomExtensions.py](../../examples/tools/CustomExtensions.py), which
 implements a composition observable and an additive-noise predictor–corrector
 integrator (one explicit Heun correction).
 Both work with `LFTS` and `CLFTS`. No subclass of either simulation is needed.
@@ -119,7 +119,7 @@ def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourie
 
 `fourier` transforms and multiplies whole fields with the FFT of the platform: matrices of
 functions of k stored once with `set_multiplier` (on the GPU with CUDA) and applied with
-`apply` ([Fourier transform example](../../examples/fourier/FourierTransform.py)).
+`apply` ([Fourier transform example](../../examples/tools/FourierTransform.py)).
 
 With Coulomb coupling, CLFTS then passes ψ to `step` as the last of the m fields: its force
 is -δH/δψ, its mobility `psi_dt_scaling`, its noise imaginary and drawn from the ψ stream,

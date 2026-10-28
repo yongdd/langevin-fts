@@ -146,7 +146,7 @@ coexistence = find_binary_coexistence(
 print(coexistence["compositions"])  # approximately [0.0595665046, 0.8490591390]
 ```
 
-For a modulated phase, the callback builds CE parameters for `[1-x, x]`, runs `SCFT`, and returns its result. Reuse the preceding solution's fields and cell as initial guesses to follow that phase branch. `examples/scft/CanonicalCoexistence.py` demonstrates a CE SCFT callback paired with an analytic homogeneous callback for a homopolymer blend.
+For a modulated phase, the callback builds CE parameters for `[1-x, x]`, runs `SCFT`, and returns its result. Reuse the preceding solution's fields and cell as initial guesses to follow that phase branch. `examples/blend/scft/CanonicalCoexistence.py` demonstrates a CE SCFT callback paired with an analytic homogeneous callback for a homopolymer blend.
 
 Use a preliminary CE composition scan to select the phase branches and narrow their bounds. The solver caches scalar thermodynamic evaluations, not full field arrays. It verifies both coexistence residuals against `tolerance`; optimizer step convergence alone is insufficient. An unconverged CE state, nonperiodic boundaries, a compressible model, `electrostatics` (whose point ions and potential gauge need exchange potentials of neutral combinations) or an incorrect callback composition is rejected. Callbacks are responsible for following the intended morphology. Changing morphology or finding another local CE minimum requires a different branch initialization.
 

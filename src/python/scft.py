@@ -229,7 +229,8 @@ class SCFT:
     >>> calc.save_results("fields.mat")
     >>> calc.free_energy, calc.phi["A"], calc.w[0]
 
-    Complete scripts: examples/scft/ (Lamella3D.py, Gyroid.py, phases/).
+    Complete scripts: examples/block_copolymer/scft/ (Lamella3D.py, Gyroid.py, phases/),
+    examples/blend/scft/ and examples/charged/scft/.
     """
     @staticmethod
     def _apply_axis_ordering(params):

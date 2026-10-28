@@ -85,7 +85,7 @@ Reduce-memory mode runs the same steps one propagator at a time, keeping q only 
 
 For adding observables, Langevin integrators or propagator methods, see
 [Extensions.md](Extensions.md) and the runnable
-[CustomExtensions.py](../../examples/lfts/CustomExtensions.py).
+[CustomExtensions.py](../../examples/tools/CustomExtensions.py).
 
 **Location**: `src/common/AbstractFactory.h`
 

@@ -105,7 +105,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 
 The volume fractions sum to 1. With grand-canonical polymers (`chemical_potential`) those of the canonical polymers sum to at most 1, and the grand-canonical chains fill the rest on average ([model](../theory/PolymerFieldTheory.md#6-grand-canonical-species)).
 
-**Random copolymer:** a polymer with a single block that has a `"monomer_fractions"` dictionary, e.g. `{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/lfts/MixtureBlockRandom.py`).
+**Random copolymer:** a polymer with a single block that has a `"monomer_fractions"` dictionary, e.g. `{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/blend/lfts/MixtureBlockRandom.py`).
 
 ### Polymer Architectures
 
@@ -240,7 +240,7 @@ Box relaxation needs a pseudo-spectral method with real fields (see [Box Optimiz
 | `"Monoclinic"` | a, b, c (3D only) | β |
 | `"Triclinic"` | a, b, c (3D only) | α, β, γ |
 
-Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). Relaxation never changes the angles that are not free, and its first step overwrites the tied lengths with the first one: with `relax_cell` and without a space group, a given `crystal_system` (and a 2D cell classified as hexagonal) needs `lx` and `angles` that already satisfy the table, for example `"angles": [90, 90, 120]` with a = b for `"Hexagonal"`; otherwise SCFT raises `ValidationError`. A fixed cell (`"relax_cell": false`) is not checked. Tied lengths relax along the sum of their stresses, which is also what the convergence test measures; when the structure lacks the symmetry of the tie and the stresses of the tied lengths do not vanish separately, SCFT prints a warning that names a crystal system with free lengths (Orthorhombic, Triclinic for Hexagonal, Oblique2D for Hexagonal2D). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`. Valid values depend on the dimension: 3D accepts Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic and Triclinic; 2D accepts Orthorhombic, Hexagonal2D and Oblique2D; 1D only Orthorhombic.
+Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° → hexagonal (a = b), other non-90° → oblique (a, b and γ free). Relaxation never changes the angles that are not free, and its first step overwrites the tied lengths with the first one: with `relax_cell` and without a space group, a given `crystal_system` (and a 2D cell classified as hexagonal) needs `lx` and `angles` that already satisfy the table, for example `"angles": [90, 90, 120]` with a = b for `"Hexagonal"`; otherwise SCFT raises `ValidationError`. A fixed cell (`"relax_cell": false`) is not checked. Tied lengths relax along the sum of their stresses, which is also what the convergence test measures; when the structure lacks the symmetry of the tie and the stresses of the tied lengths do not vanish separately, SCFT prints a warning that names a crystal system with free lengths (Orthorhombic, Triclinic for Hexagonal, Oblique2D for Hexagonal2D). With a `space_group` the crystal system comes from the group and the angles never vary. The table lives in `CRYSTAL_SYSTEMS` at the top of `scft.py`; [crystal_systems/](../../examples/block_copolymer/scft/crystal_systems/) has examples of the non-orthogonal systems. Valid values depend on the dimension: 3D accepts Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic and Triclinic; 2D accepts Orthorhombic, Hexagonal2D and Oblique2D; 1D only Orthorhombic.
 
 ### Axis Ordering
 
@@ -258,7 +258,7 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 
 ### Electrostatics (Mean Field)
 
-SCFT accepts `electrostatics` as described under [Electrostatics](#electrostatics) and solves the Poisson equation for the electrostatic potential $`\psi`$ together with the fields ([theory](../theory/SelfConsistentFieldTheory.md#25-charged-systems)). It needs `coupling` ($`E`$; SCFT has no $`\bar N`$ for `bjerrum_length`), takes no `psi_dt_scaling`, one smearing length for all monomer types and no `space_group`; box relaxation needs a periodic box. Point ions may be canonical or grand canonical; grand-canonical polymers are not available. `run(..., initial_psi=...)` takes an initial $`\psi`$, by default the uniform potential of the homogeneous state. The results hold `psi` and `ion_chemical_potentials` (also in `save_results`).
+SCFT accepts `electrostatics` as described under [Electrostatics](#electrostatics) and solves the Poisson equation for the electrostatic potential $`\psi`$ together with the fields ([theory](../theory/SelfConsistentFieldTheory.md#25-charged-systems)). It needs `coupling` ($`E`$; SCFT has no $`\bar N`$ for `bjerrum_length`), takes no `psi_dt_scaling`, one smearing length for all monomer types and no `space_group`; box relaxation needs a periodic box. Point ions may be canonical or grand canonical; grand-canonical polymers are not available. `run(..., initial_psi=...)` takes an initial $`\psi`$, by default the uniform potential of the homogeneous state. The results hold `psi` and `ion_chemical_potentials` (also in `save_results`). [ChargedDiblockLamella.py](../../examples/charged/scft/ChargedDiblockLamella.py) relaxes a charged lamella in salt, and [PolyelectrolyteBrush.py](../../examples/charged/scft/PolyelectrolyteBrush.py) grafts charged chains to a charged wall of a closed box.
 
 ---
 
@@ -413,7 +413,7 @@ params["electrostatics"] = {"charges": {"A": 0.2}, "bjerrum_length": 0.01,
                                      "Cl": {"valence": -1, "chemical_potential": mu, "smearing_length": 0.1}}}
 ```
 
-The point ions add one chemical potential each to `chemical_potential_history`, after the polymers.
+The point ions add one chemical potential each to `chemical_potential_history`, after the polymers. [SaltReservoir.py](../../examples/charged/clfts/SaltReservoir.py) runs a charged melt in contact with a salt reservoir.
 
 ### Gibbs Ensemble
 
@@ -429,7 +429,7 @@ The point ions add one chemical potential each to `chemical_potential_history`, 
 
 The polymers must be canonical free chains and the boxes periodic, and every polymer and canonical point ion needs a positive amount in both boxes (leave ions that are absent out of `electrostatics.ions`). Without screening, charged boxes with only canonical point ions must be neutral; charged grand-canonical point ions keep their chemical potential in both boxes and set the Donnan potential of each box, which then need not be neutral by itself. `random_seed` is a non-negative integer.
 
-The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file, and the previous noise of its Leimkuhler-Matthews step through `psi_noise_prev` (zero if omitted); without `initial_psi` $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
+The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file, and the previous noise of its Leimkuhler-Matthews step through `psi_noise_prev` (zero if omitted); without `initial_psi` $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly. [ChargedDiblock.py](../../examples/charged/clfts/ChargedDiblock.py) is a complete script.
 
 ---
 
@@ -444,7 +444,7 @@ The checkpoints store $`\psi`$ and its random-number stream, and a continuation 
 
 When `True`:
 - Stores only checkpoints every ~$`2\sqrt{N_{tot}}`$ contour steps, i.e. ~$`\sqrt{N_{tot}}/2`$ checkpoints per propagator (where $`N_{tot}`$ is the total number of contour steps)
-- Reduces the memory that grows with the grid and the number of contour steps: for `examples/scft/Gyroid.py` (AB diblock, $`ds = 0.01`$) the GPU memory of the process on an A10 falls from 332 to 254 MiB on its 32³ grid and from 1064 to 420 MiB on a 64³ grid, of which about 236 MiB is the CUDA context. The CUDA checkpoints are kept in pinned host memory, which raises the host memory at 64³ from 298 to 494 MiB. On cpu-mkl the peak host memory at 64³ falls from 783 to 448 MiB
+- Reduces the memory that grows with the grid and the number of contour steps: for `examples/block_copolymer/scft/Gyroid.py` (AB diblock, $`ds = 0.01`$) the GPU memory of the process on an A10 falls from 332 to 254 MiB on its 32³ grid and from 1064 to 420 MiB on a 64³ grid, of which about 236 MiB is the CUDA context. The CUDA checkpoints are kept in pinned host memory, which raises the host memory at 64³ from 298 to 494 MiB. On cpu-mkl the peak host memory at 64³ falls from 783 to 448 MiB
 - Increases computation time by 2-4x
 
 `reduce_memory=True` works with every chain model and with space-group symmetry, including **discrete chains combined with a space group**, on both CPU and CUDA (see [SpaceGroup.md](../theory/SpaceGroup.md)).

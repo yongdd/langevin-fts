@@ -69,11 +69,11 @@ For detailed instructions, troubleshooting, and dependencies, see [Installation.
 
 ```bash
 conda activate polymerfts
-cd examples/scft
+cd examples/block_copolymer/scft
 python Lamella3D.py
 ```
 
-Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `examples/lfts/`, and `examples/clfts/`.
+Tutorials are in the `tutorials/` folder. Examples are in `examples/`, grouped by physical system and simulation method ([index](examples/README.md)).
 
 ## Documentation
 

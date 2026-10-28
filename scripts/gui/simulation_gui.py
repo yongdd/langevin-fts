@@ -111,7 +111,7 @@ def preset_settings(name):
                       ds="1/90", chain_model="discrete", blocks="A:0.4, B:0.6",
                       chi_n="17.0", mix_min="0.01", mix_init="0.01", start_error="0.5")
     elif name == "CL-FTS: AB lamella":
-        # Parameter defaults from examples/clfts/Lamella.py.
+        # Parameter defaults from examples/block_copolymer/clfts/Lamella.py.
         values.update(mode="CL-FTS", nx="32, 32, 32", lx="4.21, 4.21, 4.21",
                       ds="1/90", chain_model="discrete", chi_n="12.0",
                       max_step="100000", dt="1.0", amplitude="2.0",
@@ -488,7 +488,7 @@ def build_script(values):
                 """)
         elif initial == "gyroid":
             field_code = dedent(f"""\
-                # Gyroid seed from examples/scft/Gyroid.py, on cell-centered grids.
+                # Gyroid seed from examples/block_copolymer/scft/Gyroid.py, on cell-centered grids.
                 axes = [2 * np.pi * (np.arange(n) + 0.5) / n for n in params["nx"]]
                 x, y, z = np.meshgrid(*axes, indexing="ij", sparse=True)
                 c1 = np.sqrt(8 / 3) * (np.cos(x) * np.sin(y) * np.sin(2 * z)

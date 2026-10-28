@@ -163,6 +163,6 @@ jupyter notebook
 
 ## Additional Resources
 
-- **Examples**: See `examples/scft/`, `examples/lfts/` and `examples/clfts/` for production simulation scripts
+- **Examples**: See `examples/` ([index](../examples/README.md)) for production simulation scripts, grouped by physical system and method
 - **Documentation**: Run `doxygen Doxyfile` in root directory for API docs
 - **Deep Learning Extension**: https://github.com/yongdd/deep-langevin-fts

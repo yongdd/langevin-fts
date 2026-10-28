@@ -6,8 +6,8 @@ stabilization (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024)),
 smearing (Matsen et al., J. Chem. Phys. 164, 014905 (2026)) and smeared
 Coulomb interactions through a fluctuating electrostatic potential
 (electrostatics.py). Parameters are documented in
-docs/references/Parameters.md; complete scripts are examples/clfts/Lamella.py
-and examples/clfts/ChargedDiblock.py.
+docs/references/Parameters.md; complete scripts are examples/block_copolymer/clfts/Lamella.py,
+examples/charged/clfts/ and examples/blend/clfts/GibbsEnsemble.py.
 """
 
 import os

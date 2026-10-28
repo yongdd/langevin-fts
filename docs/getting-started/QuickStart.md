@@ -16,7 +16,7 @@ Ensure you have:
 ### Running the Lamellar Example
 
 ```bash
-cd examples/scft
+cd examples/block_copolymer/scft
 python Lamella3D.py
 ```
 
@@ -91,7 +91,7 @@ For large systems that exceed GPU memory:
 params["reduce_memory"] = True
 ```
 
-This stores only checkpoints and recomputes intermediate values, which cuts the memory that grows with the grid and the number of contour steps (for `examples/scft/Gyroid.py` on a 64³ grid the GPU memory falls from 1064 to 420 MiB) at the cost of 2-4x slower execution.
+This stores only checkpoints and recomputes intermediate values, which cuts the memory that grows with the grid and the number of contour steps (for `examples/block_copolymer/scft/Gyroid.py` on a 64³ grid the GPU memory falls from 1064 to 420 MiB) at the cost of 2-4x slower execution.
 
 ### Multi-threading Settings
 
@@ -182,7 +182,7 @@ Other options:
 ## Next Steps
 
 - **Tutorials**: Start with notebooks in `tutorials/` (see `tutorials/README.md` for order)
-- **Examples**: Explore `examples/scft/`, `examples/lfts/`, and `examples/clfts/` for various polymer systems
+- **Examples**: Explore `examples/` ([index](../../examples/README.md)), grouped by physical system and simulation method
 - **Parameters**: See [Parameters.md](../references/Parameters.md) for complete parameter reference
 - **Theory**: Read [NumericalMethods.md](../theory/NumericalMethods.md) for algorithm details
 

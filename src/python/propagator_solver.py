@@ -310,7 +310,7 @@ class PropagatorSolver:
         ``k_squared()`` gives |k|² in the coefficient shape for the current box; a
         stored multiplier keeps its values, so store it again after the box
         changes (``set_lx`` and ``set_lattice_parameters`` need the polymers to be
-        added). See ``examples/fourier/FourierTransform.py``.
+        added). See ``examples/tools/FourierTransform.py``.
         """
         if self._fourier is None:
             periodic = [self.bc[2 * d].lower() == "periodic" and self.bc[2 * d + 1].lower() == "periodic"
