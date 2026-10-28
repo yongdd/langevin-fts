@@ -16,7 +16,8 @@ Here d = 4 mu, a = mu/4, a lateral box of 4 mu and 50 counterions: Xi = 0.10, l_
 The images deplete the counterions next to the plates by 5 %, against an enrichment in Netz's model
 without images (his Fig. 2). Code units: lengths in R0, c per segment of rho0, N = 1 (the neutral
 solvent S of one segment is the reference chain; the ions do not feel it), l_B = E/(4 pi N^2 C),
-mu = 2/(q (E/N) sigma), C = Nbar^(1/2).
+mu = 2/(q (E/N) sigma), C = Nbar^(1/2). With zeta_n = 0 the solvent has no field (docs/theory/
+ComplexLangevinSimulation.md, Section 6).
 
 Result (60000 steps, about 6 min on one CPU core): the CL-FTS profile agrees with an exact Monte Carlo
 simulation of the same lattice model (ions on the grid sites, smeared Coulomb pair potential of the
@@ -58,7 +59,7 @@ params = {
     "platform": "cpu-mkl",
     "nx": nx, "lx": lx, "bc": ["reflecting"] * 6,        # closed box
     "chain_model": "discrete", "ds": 1.0,
-    "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 1.0,
+    "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 0.0,   # the solvent has no field
     "polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "S", "length": 1.0}]}],
     "smearing": {"type": "gaussian", "a_int": {"S": a}},
     "electrostatics": {"charges": {"S": 0.0}, "coupling": E, "n_segments": N, "fixed_charge": fixed.ravel(),

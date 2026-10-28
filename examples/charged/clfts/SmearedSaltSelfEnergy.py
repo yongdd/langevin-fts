@@ -14,7 +14,8 @@ CL-FTS records beta mu_s = ln(N c_s) - ln Q_s of every point ion (chemical_poten
 dH files), so mu_ex = -<ln Q_s>.
 
 The neutral solvent S of one segment is the reference chain (N = 1); the ions do not feel it and
-take no volume. Code units: lengths in R0, c per segment of rho0, l_B = E/(4 pi N^2 Nbar^(1/2)),
+take no volume. With zeta_n = 0 the solvent has no field (docs/theory/ComplexLangevinSimulation.md,
+Section 6). Code units: lengths in R0, c per segment of rho0, l_B = E/(4 pi N^2 Nbar^(1/2)),
 kappa^2 = E sum_s z_s^2 c_s/N. Here a = dx = 0.05, kappa = 5 (a kappa = 0.25), l_B/a = 1.07 and
 l_B kappa = 0.27 with 32 Na+ and 32 Cl- in a periodic box of 24^3 cells, (1.2 R0)^3.
 
@@ -51,7 +52,7 @@ params = {
     "platform": "cpu-mkl",
     "nx": nx, "lx": lx,
     "chain_model": "discrete", "ds": 1.0 / n_segments,
-    "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 1.0,
+    "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 0.0,   # the solvent has no field
     "polymers": [{"volume_fraction": 1.0, "blocks": [{"type": "S", "length": 1.0}]}],
     "smearing": {"type": "gaussian", "a_int": {"S": a}},
     "electrostatics": {"charges": {"S": 0.0}, "coupling": coupling, "n_segments": n_segments,

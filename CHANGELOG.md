@@ -68,6 +68,11 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   points, which differs from the pressure at fixed grid spacing when the smearing is not
   resolved; comparisons with BioFTS (with the corrections of its issue 1, which removes the
   time-step dependence the structure-function comparison reported) and polycomp.
+- Documentation: a system of point ions alone takes a neutral solvent of one segment as the
+  reference chain, with `zeta_n: 0` so that it has no field (2026-10-29). With ζN > 0 the
+  field of the solvent made CL-FTS diverge below about 0.01 solvent molecules per grid cell;
+  `CounterionsBetweenPlates.py` and `SmearedSaltSelfEnergy.py` use ζN = 0, which leaves ψ
+  and the ions bit for bit unchanged.
 - Examples of charged systems (2026-10-28): `examples/charged/scft/ChargedDiblockLamella.py` relaxes
   the period of a charged diblock lamella with point counterions over a range of added salt,
   `examples/charged/scft/PolyelectrolyteBrush.py` solves a charged brush grafted to a charged wall of a
@@ -355,6 +360,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Fixed
 
+- The propagator statistics printed `reduction = -nan %` when the chains need no propagator
+  steps, as with discrete chains of one segment only; they print 0 % (2026-10-29).
 - `CudaCommon.h` includes `<cuda_runtime.h>` itself (2026-10-27). Host-compiled sources
   reached the CUDA runtime API only through Thrust, whose CUDA 12.9 headers no longer
   include it outside nvcc, so the Python module failed to compile with CUDA 12.9.

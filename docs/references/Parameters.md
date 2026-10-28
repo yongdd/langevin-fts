@@ -367,7 +367,7 @@ WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value | `100.0` |
+| `zeta_n` | float | Compressibility parameter; complex Langevin needs a finite value. Give 0 to a neutral solvent of one segment that only serves as the reference chain of point ions: it then has no field ([CL-FTS theory, Section 6](../theory/ComplexLangevinSimulation.md#6-charged-systems)) | `100.0` |
 | `dynamic_stabilization` | float | Dynamical stabilization constant αds (Willis & Matsen, *J. Chem. Phys.* **2024**, 161, 244903): adds $`i\,\alpha_{ds}\,\mathrm{Im}[W_-]`$ to the exchange-field force to suppress runaway solutions. `alpha_ds` is accepted as an alias. Willis & Matsen used 0.001 at $`\bar{N} = 10^6`$–$`10^7`$ and 0.01–0.02 at $`\bar{N} = 10^5`$; 0.1 already biased their results | `0.0` |
 | `smearing` | dict | (Optional) Finite-range interactions, see [Smearing](#smearing); recommended for CL-FTS stability. CL-FTS also accepts one Gaussian length per monomer type | none |
 | `electrostatics` | dict | (Optional) Smeared Coulomb interactions, see [Electrostatics](#electrostatics) | none |
