@@ -260,16 +260,9 @@ class Smearing:
             raise NotImplementedError("The stress of per-type smearing lengths is not implemented.")
 
         # <φ (D*w)> = (1/n²) Σ_k conj(φ(k)) D(k) w(k) for a real, even multiplier D
-        # (with the orthonormal transforms of wall axes: (1/n) Σ_k conj(φ(k)) D(k) w(k))
         correlation = 0.0
         for w, phi in zip(fields, concentrations):
-            if self.periodic:
-                w_k = np.fft.fftn(np.reshape(w, self.nx))
-                phi_k = np.fft.fftn(np.reshape(phi, self.nx))
-            else:
-                w_k = self._forward(np.reshape(w, self.nx)) * np.sqrt(self.n_grid)
-                phi_k = self._forward(np.reshape(phi, self.nx)) * np.sqrt(self.n_grid)
-            correlation = correlation + np.real(np.conj(phi_k) * w_k)
+            correlation = correlation + np.real(np.conj(self.coefficients(phi)) * self.coefficients(w))
         correlation = np.ravel(correlation) / self.n_grid ** 2
 
         # dΓ/d(k²)
@@ -284,11 +277,11 @@ class Smearing:
             dgamma_dk_sq = np.divide(dgamma_dk, 2 * k, out=np.zeros_like(k), where=k > 0)
 
         weight = dgamma_dk_sq * correlation
-        for slot, dk_sq in self._lattice_derivatives_k_sq().items():
+        for slot, dk_sq in self.lattice_derivatives_k_sq().items():
             result[slot] = np.sum(weight * dk_sq)
         return result
 
-    def _lattice_derivatives_k_sq(self):
+    def lattice_derivatives_k_sq(self):
         """∂(k²)/∂θ on the grid for each lattice parameter, keyed by its stress slot.
 
         k² = 4π² mᵀ g⁻¹ m with g_ab = L_a L_b cos θ_ab gives
@@ -426,6 +419,14 @@ class Smearing:
             self._multipliers[key] = transform.set_multiplier(
                 values[tuple(slice(0, n) for n in transform.coefficient_shape)])
         return transform.apply([(self._multipliers[key], np.reshape(field, -1))])
+
+    def coefficients(self, field):
+        """Coefficients of a real field at the wavenumbers of k_sq, normalized like numpy.fft.fftn:
+        <a b> = (1/n²) Σ_k conj(a(k)) b(k). On wall axes they are the orthonormal cosine series
+        times √n."""
+        if self.periodic:
+            return np.fft.fftn(np.reshape(field, self.nx))
+        return self._forward(np.reshape(field, self.nx)) * np.sqrt(self.n_grid)
 
     def _forward(self, field):
         """Orthonormal transform of each axis: FFT (periodic) or DCT-II (walls)."""

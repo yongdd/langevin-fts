@@ -9,8 +9,9 @@ This document describes the mathematical formulation of polymer field theory use
 3. [Compressible Model](#3-compressible-model)
 4. [Smeared Interactions](#4-smeared-interactions)
 5. [Electrostatic Interactions](#5-electrostatic-interactions)
-6. [Implementation](#6-implementation)
-7. [References](#7-references)
+6. [Grand-Canonical Species](#6-grand-canonical-species)
+7. [Implementation](#7-implementation)
+8. [References](#8-references)
 
 ---
 
@@ -233,7 +234,7 @@ O = \begin{pmatrix} 1 & 1 \\ -1 & 1 \end{pmatrix}
 \begin{pmatrix} W_A(\mathbf{r}) \\ W_B(\mathbf{r}) \end{pmatrix} = O \begin{pmatrix} \Omega_-(\mathbf{r}) \\ \Omega_+(\mathbf{r}) \end{pmatrix}, \quad \begin{pmatrix} \Phi_-(\mathbf{r}) \\ \Phi_+(\mathbf{r}) \end{pmatrix} = O^T \begin{pmatrix} \phi_A(\mathbf{r}) \\ \phi_B(\mathbf{r}) \end{pmatrix}
 ```
 
-so that $`\Phi_- = \phi_A - \phi_B`$ and $`\Phi_+ = \phi_A + \phi_B`$, consistent with $`\Phi_i = \sum_j O_{ji} \phi_j`$ in Section 6.1 and with the incompressibility condition $`\delta H / \delta \Omega_+ \propto \Phi_+ - 1`$.
+so that $`\Phi_- = \phi_A - \phi_B`$ and $`\Phi_+ = \phi_A + \phi_B`$, consistent with $`\Phi_i = \sum_j O_{ji} \phi_j`$ in Section 7.1 and with the incompressibility condition $`\delta H / \delta \Omega_+ \propto \Phi_+ - 1`$.
 
 ---
 
@@ -324,7 +325,7 @@ Smearing also enters the structure functions, whose recorded values are divided 
 
 ## 5. Electrostatic Interactions
 
-Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment and count in the total density like the other species. The charges add a Coulomb interaction to the interactions of Sections 2 and 3. `electrostatics.py` implements it; only CL-FTS samples the electrostatic potential ([CL-FTS, Section 6](ComplexLangevinSimulation.md#6-charged-systems)).
+Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment, which count in the total density like the other species, or point ions without volume (Section 5.5). The charges add a Coulomb interaction to the interactions of Sections 2 and 3. `electrostatics.py` implements it; CL-FTS samples the electrostatic potential ([CL-FTS, Section 6](ComplexLangevinSimulation.md#6-charged-systems)), and SCFT takes its saddle point ([SCFT, Section 2.5](SelfConsistentFieldTheory.md#25-charged-systems)).
 
 ### 5.1 Coulomb Interaction
 
@@ -352,7 +353,7 @@ E = 4\pi l_B \rho_0 N R_0^2 = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}
 
 The second form uses $`\rho_0 R_0^3 = N C = N \bar{N}^{1/2}`$, which follows from $`R_0 = b N^{1/2}`$ and $`\bar{N} = b^6 \rho_0^2 N`$. The factor $`N^2`$ comes from the valences per segment. A volume $`R_0^3`$ holds the charge $`N \bar{N}^{1/2} c`$, whose Coulomb energy $`l_B (N \bar{N}^{1/2} c)^2 / R_0`$, shared by the $`\bar{N}^{1/2}`$ chains in that volume, is of order $`E c^2`$ per chain.
 
-`bjerrum_length` takes $`N = 1/\Delta s`$ and therefore requires discrete chains. For continuous chains, $`\Delta s`$ is only a contour step, and `coupling` gives $`E`$ with the physical $`N`$.
+`bjerrum_length` takes $`N = 1/\Delta s`$ for discrete chains. For continuous chains, $`\Delta s`$ is only a contour step: `n_segments` gives the physical $`N`$, or `coupling` gives $`E`$ directly.
 
 ### 5.3 Electrostatic Potential
 
@@ -363,6 +364,10 @@ A Hubbard-Stratonovich transformation decouples the interaction with an electros
 ```
 
 The saddle point is the Poisson equation $`-\nabla^2 \psi = E c`$. The uniform mode of $`\psi`$ is zero, because the system is electroneutral.
+
+**Fixed charges.** A fixed charge density $`c_f(\mathbf{r})`$ (`fixed_charge`, charges per segment of $`\rho_0`$), for example of charged surfaces or particles, has no partition function through which it could couple to $`\psi`$; it adds $`\langle \psi \, c_f \rangle`$ to $`\beta H/(C V/R_0^3)`$, so that $`c`$ in $`\delta H/\delta \psi`$ includes $`c_f`$. Its mean counts in the electroneutrality.
+
+**Closed boxes.** In a box with walls on every side the transforms are cosine series, which diagonalize $`\nabla^2`$ with no normal derivative at the walls: $`\psi`$ then describes a box with no field through its walls (insulating walls without image charges). The uniform mode is the $`m = 0`$ term of the series.
 
 ### 5.4 Screened Coulomb Interaction
 
@@ -376,11 +381,63 @@ The saddle point is the screened Poisson equation $`(\kappa^2 - \nabla^2) \psi =
 
 In Debye-Hückel theory $`1/\kappa`$ is the Debye length of the background electrolyte alone, $`\kappa^2 = 4\pi l_B \sum_s z_s^2 c_s`$ over its ion species with number concentrations $`c_s`$ (in units of $`R_0`$: $`(\kappa R_0)^2 = 4\pi (l_B/R_0) \sum_s z_s^2 c_s R_0^3`$). It is not the screening length of the system: the explicit ions, molecules in `polymers`, screen in addition through the fluctuations of $`\psi`$, so the total screening length is shorter. The background enters only through its linear response, so the correlations among its ions, their volume and the nonlinear response of multivalent ions are left out; ions for which these matter belong in `polymers`.
 
+### 5.5 Point Ions
+
+Point ions (`ions`) have a charge but no volume: they take no part in $`\chi`$, in the incompressibility constraint or in the compressibility term. Ion species $`s`$ with valence $`z_s`$, Gaussian smearing function $`\Gamma_s`$ and concentration $`c_s`$ (ions per segment of $`\rho_0`$) feels the smeared potential $`z_s\,(\Gamma_s * \psi)/N`$: $`\psi`$ is a field per reference chain, so a segment feels $`z_i \psi / N`$, and an ion is charged like a segment. With
+
+```math
+Q_s = \frac{1}{V} \int e^{-z_s (\Gamma_s * \psi)(\mathbf{r})/N} \, d\mathbf{r}, \qquad c_s(\mathbf{r}) = c_s \, \frac{e^{-z_s (\Gamma_s * \psi)(\mathbf{r})/N}}{Q_s}
+```
+
+the $`N c_s C V/R_0^3`$ ions add to the effective Hamiltonian and to the charge density
+
+```math
+\frac{\beta H_{ion}}{C V / R_0^3} = -\sum_s N c_s \ln Q_s, \qquad c(\mathbf{r}) \;\to\; c(\mathbf{r}) + \sum_s z_s \, (\Gamma_s * c_s)(\mathbf{r})
+```
+
+so that $`\delta H/\delta \psi`$ of Section 5.3 keeps its form with the total charge density. The chemical potential of an ion, in the convention of the chains ($`\beta\mu_p = \ln(\bar\phi_p/\alpha_p) - \ln Q_p`$ with $`\bar\phi_s/\alpha_s = N c_s`$), is
+
+```math
+\beta \mu_s = \ln(N c_s) - \ln Q_s
+```
+
+In the linear response of a homogeneous state the ions screen with $`\sum_s z_s^2 c_s \Gamma_s(k)^2/N`$, which adds to $`(k^2 + \kappa^2)/E`$ (Debye-Hückel). The counterions that neutralize the polymers are added to one ion species (`counterion`). The concentrations of the given ions are those of the added salt.
+
 ---
 
-## 6. Implementation
+## 6. Grand-Canonical Species
 
-### 6.1 SymmetricPolymerTheory Class
+CL-FTS can fix the chemical potential of a species instead of its amount (`chemical_potential` of a polymer or of a point ion). For polymer $`p`$, the sum over the number of chains $`n_p`$ with the weight $`e^{\beta\mu_p n_p}`$ replaces the factor $`(V Q_p)^{n_p}/n_p!`$ of the canonical partition function by $`\exp(e^{\beta\mu_p} \, C V Q_p/R_0^3)`$, so that in the effective Hamiltonian
+
+```math
+-\frac{\bar\phi_p}{\alpha_p} \ln Q_p \;\to\; -e^{\beta\mu_p} Q_p, \qquad \frac{n_p}{C V/R_0^3} = e^{\beta\mu_p} Q_p, \qquad \phi_p(\mathbf{r}) = e^{\beta\mu_p} \int_0^{\alpha_p} q(\mathbf{r}, s) \, q^\dagger(\mathbf{r}, s) \, ds
+```
+
+per $`C V/R_0^3`$ reference chains. $`\beta\mu_p`$ is in the convention of the canonical operator, $`\beta\mu_p = \ln(\bar\phi_p/\alpha_p) - \ln Q_p`$, which leaves out the constant $`\ln(\rho_0/N)`$ common to all species. On the same fields the two ensembles give the same concentrations where $`e^{\beta\mu_p} = \bar\phi_p/(\alpha_p Q_p)`$. In a reservoir of the species alone without fields, $`Q_p = 1`$ and $`e^{\beta\mu_p}`$ is its number of chains per reference chain. The volume fractions of the canonical polymers sum to at most 1; the grand-canonical chains take the rest on average, through the pressure field.
+
+A point ion (Section 5.5) with the chemical potential $`\beta\mu_s`$ has, in the same way,
+
+```math
+-N c_s \ln Q_s \;\to\; -e^{\beta\mu_s} Q_s, \qquad c_s(\mathbf{r}) = \frac{e^{\beta\mu_s}}{N} \, e^{-z_s (\Gamma_s * \psi)(\mathbf{r})/N}
+```
+
+with $`e^{\beta\mu_s} Q_s`$ ions per reference chain, and $`e^{\beta\mu_s}/N`$ is the concentration of a reservoir at $`\psi = 0`$.
+
+**Electroneutrality.** In a closed system without screening the uniform mode $`\psi_0`$ of $`\psi`$ is zero, and the input must be neutral (Section 5.3). A charged grand-canonical species changes the charge of the system, so $`\psi_0`$ is integrated like the other modes. Its integral restricts the sum over the numbers of particles to neutral states. It has no Gaussian term, and its normalization does not depend on the volume. In the mean-field limit $`\psi_0`$ is the Donnan potential at which the average charge vanishes. A change of the chemical potentials of all species by their charge times $`\lambda`$ ($`z_s \lambda`$ for an ion, $`N \sum_i z_i \alpha_{p,i} \lambda`$ for a chain with the length $`\alpha_{p,i}`$ of type $`i`$) is absorbed by the shift $`\psi_0 \to \psi_0 + N\lambda`$, so only neutral combinations of chemical potentials are physical, as in a reservoir of neutral salt. With screening $`\psi_0`$ fluctuates in any case.
+
+**Example.** A canonical polyelectrolyte with the charge $`z_A`$ per A segment and the overall A fraction $`\bar\phi_A`$ in a monovalent salt with $`\beta\mu_\pm = \ln(N c_0)`$ (a reservoir of concentration $`c_0`$) has, at the homogeneous saddle point, $`c_\pm = c_0 x^{\pm 1}`$ with $`x = e^{-\psi_0/N}`$ and
+
+```math
+z_A \bar\phi_A + c_0 \left(x - \frac{1}{x}\right) = 0, \qquad x = \frac{-z_A \bar\phi_A/c_0 + \sqrt{(z_A \bar\phi_A/c_0)^2 + 4}}{2}
+```
+
+the Donnan equilibrium; `TestClftsGrandCanonical` checks that CL-FTS reaches it in the mean-field limit.
+
+---
+
+## 7. Implementation
+
+### 7.1 SymmetricPolymerTheory Class
 
 The `polymerfts.SymmetricPolymerTheory` class computes the coefficients for the effective Hamiltonian:
 
@@ -396,7 +453,7 @@ The `polymerfts.SymmetricPolymerTheory` class computes the coefficients for the 
 
 where $`\Phi_i(\mathbf{r}) = \sum_j O_{ji} \phi_j(\mathbf{r})`$.
 
-### 6.2 Usage Example
+### 7.2 Usage Example
 
 ```python
 import numpy as np
@@ -427,11 +484,11 @@ H = mpt.compute_hamiltonian(molecules, omega, total_partitions, cb, include_cons
 # Compute functional derivatives
 h_deriv = mpt.compute_func_deriv(omega, phi, field_indices)
 
-# dH/dχN at fixed auxiliary fields (Section 6.5); phi: {monomer_type: concentration}
+# dH/dχN at fixed auxiliary fields (Section 7.5); phi: {monomer_type: concentration}
 dH = mpt.compute_h_deriv_chin(w_aux=omega, phi=phi)
 ```
 
-### 6.3 Sign Convention for Imaginary Fields
+### 7.3 Sign Convention for Imaginary Fields
 
 In the implementation, there is a negative sign in front of the functional derivative with respect to imaginary fields. This is because we find the minimum for real fields and maximum for imaginary fields:
 
@@ -441,7 +498,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 # h_deriv[1] = -δH/δΩ_+ (imaginary field, maximize)
 ```
 
-### 6.4 Key Attributes
+### 7.4 Key Attributes
 
 | Attribute | Description |
 |-----------|-------------|
@@ -453,7 +510,7 @@ h_deriv = mpt.compute_func_deriv(omega, phi, [0, 1])
 | `aux_fields_real_idx` | Indices of real auxiliary fields |
 | `aux_fields_imag_idx` | Indices of imaginary auxiliary fields |
 
-### 6.5 Derivative with Respect to χN
+### 7.5 Derivative with Respect to χN
 
 `compute_h_deriv_chin(w_aux=w_aux, phi=phi)` returns $`\partial (\beta H / (C V / R_0^3)) / \partial \chi_{ab} N`$ at fixed auxiliary fields $`\Omega`$, the integration variables. Averaged over the real fields with the imaginary fields at their saddle point (L-FTS), it is the derivative of the free energy of that approximation, because $`\partial H / \partial \Omega_I = 0`$ at the saddle point of the imaginary fields $`\Omega_I`$; with every field fluctuating (CL-FTS) it is the derivative of the full free energy; at a saddle point of all fields it equals $`\langle \phi_a \phi_b \rangle`$. The $`\chi`$-dependent normalization of the Hubbard-Stratonovich transformation is a constant independent of the fields and is not included. `phi` holds the concentrations of the fields (smeared, when smearing is used); it may be omitted for AB systems at $`\chi N \neq 0`$. The derivatives use the $`\chi N`$ the object was built with; the older call `compute_h_deriv_chin(chi_n, w_aux, phi)` still works and checks that `chi_n` equals it.
 
@@ -495,7 +552,7 @@ is added, and the columns of $`O K`$ of the dropped fields are left out of the r
 
 ---
 
-## 7. References
+## 8. References
 
 1. Arora, A., Morse, D. C., Bates, F. S. & Dorfman, K. D. "Accelerating self-consistent field theory of block polymers in a variable unit cell." *J. Chem. Phys.* **146**, 244902 (2017).
 

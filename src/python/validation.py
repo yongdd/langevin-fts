@@ -121,13 +121,19 @@ def validate_system_params(params: Dict[str, Any]) -> None:
         raise ValidationError("'polymers' must be a non-empty list")
     total_volume_fraction = 0.0
     for i, polymer in enumerate(polymers):
-        if not isinstance(polymer, dict) or "volume_fraction" not in polymer or "blocks" not in polymer:
-            raise ValidationError(f"polymers[{i}] must be a dict with 'volume_fraction' and 'blocks'")
-        vf = polymer["volume_fraction"]
-        _finite_number(vf, f"polymers[{i}].volume_fraction", nonnegative=True)
-        if vf > 1:
-            raise ValidationError(f"polymers[{i}]['volume_fraction'] must be in [0, 1], got {vf}")
-        total_volume_fraction += vf
+        if not isinstance(polymer, dict) or "blocks" not in polymer or \
+                ("volume_fraction" in polymer) == ("chemical_potential" in polymer):
+            raise ValidationError(f"polymers[{i}] must be a dict with 'volume_fraction' and 'blocks' (or, in "
+                                  "CL-FTS, 'chemical_potential' in place of 'volume_fraction')")
+        if "chemical_potential" in polymer:
+            # Grand canonical: the chemical potential fixes the number of chains (CL-FTS checks the rest)
+            _finite_number(polymer["chemical_potential"], f"polymers[{i}].chemical_potential")
+        else:
+            vf = polymer["volume_fraction"]
+            _finite_number(vf, f"polymers[{i}].volume_fraction", nonnegative=True)
+            if vf > 1:
+                raise ValidationError(f"polymers[{i}]['volume_fraction'] must be in [0, 1], got {vf}")
+            total_volume_fraction += vf
         if not isinstance(polymer["blocks"], list) or len(polymer["blocks"]) == 0:
             raise ValidationError(f"polymers[{i}]['blocks'] must be a non-empty list")
         for j, block in enumerate(polymer["blocks"]):
@@ -146,7 +152,11 @@ def validate_system_params(params: Dict[str, Any]) -> None:
                     if monomer not in segment_lengths:
                         raise ValidationError(f"Unknown monomer '{monomer}' in '{name}.monomer_fractions'")
                     _finite_number(fraction, name + ".monomer_fractions." + monomer, nonnegative=True)
-    if abs(total_volume_fraction - 1.0) > 1e-10:
+    if any("chemical_potential" in polymer for polymer in polymers):
+        if total_volume_fraction > 1.0 + 1e-10:
+            raise ValidationError(f"Sum of the volume fractions of the canonical polymers must not exceed 1.0, "
+                                  f"got {total_volume_fraction}")
+    elif abs(total_volume_fraction - 1.0) > 1e-10:
         raise ValidationError(f"Sum of volume fractions must be 1.0, got {total_volume_fraction}")
 
     if "platform" in params and params["platform"] not in ("auto", "cuda", "cpu-fftw", "cpu-mkl"):
@@ -218,8 +228,20 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
     figure_dir = params.get("polymer_figure_dir")
     if figure_dir is not None and not isinstance(figure_dir, (str, PathLike)):
         raise ValidationError(f"'polymer_figure_dir' must be a directory path or None, got {figure_dir!r}")
-    if params.get("electrostatics") is not None:
-        raise ValidationError("'electrostatics' is supported in CL-FTS only")
+    electrostatics = params.get("electrostatics")
+    if electrostatics is not None:
+        # The mean field of the Coulomb interaction (ψ from the Poisson equation); SCFT has no N̄
+        if isinstance(electrostatics, dict) and "bjerrum_length" in electrostatics:
+            raise ValidationError("SCFT has no N̄ for 'electrostatics.bjerrum_length': give 'coupling' "
+                                  "(E = 4 pi l_B rho0 N R0^2)")
+        if isinstance(electrostatics, dict) and "psi_dt_scaling" in electrostatics:
+            raise ValidationError("'electrostatics.psi_dt_scaling' is a CL-FTS option")
+        validate_electrostatics(params)
+        if not electrostatics["coupling"] > 0:
+            raise ValidationError("SCFT needs a positive 'electrostatics.coupling'; leave out 'electrostatics' "
+                                  "for uncharged chains")
+    _reject_grand_canonical(params, "SCFT")
+    _reject_mask(params, "SCFT")
     if params.get("stress_interval", 1) != "adaptive":
         _integer(params.get("stress_interval", 1), "stress_interval")
     optimizer = params["optimizer"]
@@ -258,6 +280,14 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
     _integer(params.get("verbose_level"), "verbose_level", minimum=0)
     if params["verbose_level"] > 2:
         raise ValidationError("'verbose_level' must be 0, 1 or 2")
+    _reject_mask(params, "CL-FTS" if complex_fields else "L-FTS")
+    if not complex_fields:
+        _reject_grand_canonical(params, "L-FTS")
+    else:
+        for i, polymer in enumerate(params["polymers"]):
+            if "chemical_potential" in polymer and (polymer.get("initial_conditions") or _has_random_copolymer(
+                    {"polymers": [polymer]})):
+                raise ValidationError(f"polymers[{i}]: grand-canonical polymers cannot be grafted or random copolymers")
     if not complex_fields:
         saddle = params.get("saddle")
         if not isinstance(saddle, dict):
@@ -329,12 +359,26 @@ def _has_random_copolymer(params):
                for polymer in params.get("polymers", []) for block in polymer.get("blocks", []))
 
 
+def _reject_grand_canonical(params: Dict[str, Any], method: str) -> None:
+    if any("chemical_potential" in polymer for polymer in params["polymers"]):
+        raise ValidationError(f"Grand-canonical polymers ('chemical_potential') are supported in CL-FTS only, "
+                              f"not in {method}")
+
+
+def _reject_mask(params: Dict[str, Any], method: str) -> None:
+    # Impenetrable regions exist in the propagator solver only; the simulation loops do not mask their fields
+    if params.get("mask") is not None:
+        raise ValidationError(f"{method} does not take a 'mask': impenetrable regions are available through "
+                              "PropagatorSolver(mask=...) only")
+
+
 def validate_electrostatics(params: Dict[str, Any]) -> None:
     """Charges, coupling and electroneutrality of the CL-FTS 'electrostatics' input."""
     electrostatics = params["electrostatics"]
     if not isinstance(electrostatics, dict):
         raise ValidationError("'electrostatics' must be a dict or None")
-    unknown = set(electrostatics) - {"charges", "bjerrum_length", "coupling", "psi_dt_scaling", "screening_length"}
+    unknown = set(electrostatics) - {"charges", "bjerrum_length", "coupling", "psi_dt_scaling", "screening_length",
+                                     "ions", "counterion", "n_segments", "fixed_charge"}
     if unknown:
         raise ValidationError(f"'electrostatics' has unknown keys: {sorted(unknown)}")
     charges = electrostatics.get("charges")
@@ -351,15 +395,51 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
     for key in ("bjerrum_length", "coupling"):
         if key in electrostatics:
             _finite_number(electrostatics[key], "electrostatics." + key, nonnegative=True)
-    # E = 4π (l_B/R₀) N² N̄^(1/2) needs the number of segments N. Discrete chains have N = 1/ds;
-    # ds of continuous chains is a contour step, so E would change under contour refinement
-    if "bjerrum_length" in electrostatics:
-        if str(params["chain_model"]).lower() != "discrete":
-            raise ValidationError("'electrostatics.bjerrum_length' needs discrete chains (N = 1/ds); "
-                                  "give 'coupling' (E = 4 pi l_B rho0 N R0^2) for continuous chains")
+    # E = 4π (l_B/R₀) N² N̄^(1/2) and the point ions need the number of segments N of the reference
+    # chain. Discrete chains have N = 1/ds; ds of continuous chains is a contour step, so N is given
+    ions = electrostatics.get("ions") or {}
+    if "n_segments" in electrostatics:
+        _finite_number(electrostatics["n_segments"], "electrostatics.n_segments", positive=True)
+    if str(params["chain_model"]).lower() == "discrete":
         n_segments = 1.0 / params["ds"]
-        if abs(n_segments - round(n_segments)) > 1e-9:
-            raise ValidationError("'electrostatics.bjerrum_length' needs an integer 1/ds; give 'coupling' instead")
+        if "n_segments" in electrostatics and abs(electrostatics["n_segments"] - n_segments) > 1e-9 * n_segments:
+            raise ValidationError(f"'electrostatics.n_segments' of discrete chains is 1/ds = {n_segments:g}")
+        if ("bjerrum_length" in electrostatics or ions) and abs(n_segments - round(n_segments)) > 1e-9:
+            raise ValidationError("'electrostatics.bjerrum_length' and 'ions' need an integer 1/ds; give 'coupling' "
+                                  "and no point ions instead")
+    elif "n_segments" not in electrostatics:
+        if "bjerrum_length" in electrostatics:
+            raise ValidationError("'electrostatics.bjerrum_length' needs discrete chains (N = 1/ds) or the number of "
+                                  "segments N of the reference chain, 'electrostatics.n_segments'; or give 'coupling' "
+                                  "(E = 4 pi l_B rho0 N R0^2)")
+        if ions:
+            raise ValidationError("'electrostatics.ions' need the number of segments N of the reference chain: give "
+                                  "'electrostatics.n_segments' for continuous chains")
+    # Point ions: no volume, no chi, only their smeared charge
+    if not isinstance(ions, dict):
+        raise ValidationError("'electrostatics.ions' must be a dict "
+                              "{ion name: {valence, concentration, smearing_length}}")
+    for name, ion in ions.items():
+        if not isinstance(name, str) or name in params["segment_lengths"]:
+            raise ValidationError(f"Ion name {name!r} must be a string that is not a monomer type")
+        keys = set(ion) if isinstance(ion, dict) else set()
+        allowed = {"valence", "concentration", "chemical_potential", "smearing_length"}
+        if not isinstance(ion, dict) or keys - allowed or not {"valence", "smearing_length"} <= keys or \
+                ("concentration" in ion) == ("chemical_potential" in ion):
+            raise ValidationError(f"'electrostatics.ions.{name}' needs 'valence', 'smearing_length' and one of "
+                                  "'concentration' and 'chemical_potential' (grand canonical)")
+        _finite_number(ion["valence"], f"electrostatics.ions.{name}.valence")
+        if ion["valence"] == 0:
+            raise ValidationError(f"'electrostatics.ions.{name}.valence' must not be zero")
+        if "concentration" in ion:
+            _finite_number(ion["concentration"], f"electrostatics.ions.{name}.concentration", nonnegative=True)
+        else:
+            _finite_number(ion["chemical_potential"], f"electrostatics.ions.{name}.chemical_potential")
+        _finite_number(ion["smearing_length"], f"electrostatics.ions.{name}.smearing_length", positive=True)
+    counterion = electrostatics.get("counterion", "")
+    if counterion not in ("", None) and (counterion not in ions or "concentration" not in ions[counterion]):
+        raise ValidationError(f"'electrostatics.counterion' {counterion!r} is not one of the canonical 'ions' "
+                              "(with a concentration)")
     _finite_number(electrostatics.get("psi_dt_scaling", 1.0), "electrostatics.psi_dt_scaling", positive=True)
     if electrostatics.get("screening_length") is not None:
         _finite_number(electrostatics["screening_length"], "electrostatics.screening_length", positive=True)
@@ -374,18 +454,164 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
         if point_charges:
             raise ValidationError(f"'electrostatics' needs a positive smearing length 'a_int' for the charged "
                                   f"types {point_charges}; a_int = 0 leaves point charges")
-    if any(str(b).lower() != "periodic" for b in params.get("bc") or []):
-        raise ValidationError("'electrostatics' supports periodic boxes only")
+    # Periodic boxes, or closed boxes with walls on every side (ψ then has no normal derivative there)
+    sides = [str(b).lower() == "periodic" for b in params.get("bc") or []]
+    if any(sides) and not all(sides):
+        raise ValidationError("'electrostatics' needs a periodic box or walls on every side, not both")
+    if electrostatics.get("fixed_charge") is not None:
+        fixed = np.asarray(electrostatics["fixed_charge"])
+        if fixed.size != int(np.prod(params["nx"])) or not np.all(np.isfinite(fixed)) or np.iscomplexobj(fixed):
+            raise ValidationError("'electrostatics.fixed_charge' needs one real, finite charge density per grid point")
     if _has_random_copolymer(params):
         raise ValidationError("'electrostatics' does not support random copolymers")
-    # Electroneutrality: Σ_i z_i φ_i = 0 with the overall segment fraction φ_i of each type. An implicit
-    # electrolyte (screening_length) screens a net charge, so a screened system need not be neutral
+    # Electroneutrality: Σ_i z_i φ_i + Σ_s z_s c_s = 0 with the overall segment fraction φ_i of each type
+    # and the point ions, counterions included. An implicit electrolyte (screening_length) screens a net
+    # charge, so a screened system need not be neutral; with charged grand-canonical species the uniform
+    # mode of ψ neutralizes the system
+    concentrations = point_ion_concentrations(params)
     if electrostatics.get("screening_length") is not None:
         return
-    total = 0.0
+    if open_charges(params):
+        # The Donnan potential neutralizes the canonical charge only with grand-canonical
+        # species of the opposite sign (of both signs for a neutral canonical part)
+        canonical = net_polymer_charge(params) + sum(ions[name]["valence"] * c for name, c in concentrations.items())
+        signs = {np.sign(ion["valence"]) for ion in ions.values() if "chemical_potential" in ion}
+        for polymer in params["polymers"]:
+            if "chemical_potential" in polymer and _chain_charge(polymer, charges) != 0.0:
+                signs.add(np.sign(_chain_charge(polymer, charges)))
+        needed = {1.0, -1.0} if abs(canonical) <= 1e-14 else {-np.sign(canonical)}
+        if not needed <= signs:
+            raise ValidationError(f"The grand-canonical species cannot neutralize the system (canonical net charge "
+                                  f"{canonical:.3e}): without screening they need charges of "
+                                  + ("both signs" if len(needed) == 2 else "the opposite sign"))
+        return
+    total = net_polymer_charge(params) + sum(ions[name]["valence"] * c for name, c in concentrations.items())
+    if abs(total) > 1e-10:
+        raise ValidationError(f"The system is not electroneutral: sum of z_i phi_i = {total:.3e}"
+                              + ("; add point ions ('electrostatics.ions') as counterions" if not ions else ""))
+
+
+def _chain_charge(polymer: Dict[str, Any], charges: Dict[str, float]) -> float:
+    """Net charge of a chain per segment of the reference chain, Σ_blocks z_i α_i (zero within round-off)."""
+    charge = sum(charges.get(block["type"], 0.0) * block["length"] for block in polymer["blocks"])
+    scale = sum(abs(charges.get(block["type"], 0.0)) * block["length"] for block in polymer["blocks"])
+    return 0.0 if abs(charge) <= 1e-12 * scale else charge
+
+
+def open_charges(params: Dict[str, Any]) -> bool:
+    """True if a grand-canonical species (polymer or point ion) carries a net charge."""
+    electrostatics = params["electrostatics"]
+    charges = electrostatics["charges"]
+    if any("chemical_potential" in ion for ion in (electrostatics.get("ions") or {}).values()):
+        return True
+    # The uniform mode of ψ does not change the weight of a chain without net charge
+    return any("chemical_potential" in polymer and _chain_charge(polymer, charges) != 0.0
+               for polymer in params["polymers"])
+
+
+def net_polymer_charge(params: Dict[str, Any]) -> float:
+    """Σ_i z_i φ_i of the canonical polymers and the mean fixed charge density, the net charge per
+    segment of the reference density without the point ions."""
+    charges = params["electrostatics"]["charges"]
+    fixed = params["electrostatics"].get("fixed_charge")
+    total = 0.0 if fixed is None else float(np.mean(fixed))
     for polymer in params["polymers"]:
+        if "chemical_potential" in polymer:
+            continue
         length = sum(block["length"] for block in polymer["blocks"])
         for block in polymer["blocks"]:
             total += charges.get(block["type"], 0.0) * polymer["volume_fraction"] * block["length"] / length
-    if abs(total) > 1e-10:
-        raise ValidationError(f"The system is not electroneutral: sum of z_i phi_i = {total:.3e}")
+    return total
+
+
+def point_ion_concentrations(params: Dict[str, Any]) -> Dict[str, float]:
+    """Concentration of each canonical point ion (per segment of the reference density), counterions included.
+
+    The given concentrations are added salt; grand-canonical ions (chemical_potential) have none.
+    The counterion species, 'electrostatics.counterion' or the only canonical ion species whose
+    valence has the opposite sign of the net charge, receives the concentration that neutralizes
+    the canonical polymers and the given ions; 'counterion': None adds none.
+    """
+    electrostatics = params["electrostatics"]
+    ions = {name: ion for name, ion in (electrostatics.get("ions") or {}).items() if "concentration" in ion}
+    concentrations = {name: float(ion["concentration"]) for name, ion in ions.items()}
+    total = net_polymer_charge(params) + sum(ions[name]["valence"] * c for name, c in concentrations.items())
+    counterion = electrostatics.get("counterion", "")
+    if not ions or counterion is None or abs(total) <= 1e-14:
+        return concentrations
+    if counterion == "":
+        candidates = [name for name, ion in ions.items() if ion["valence"] * total < 0]
+        if len(candidates) != 1:
+            raise ValidationError(f"The net charge {total:.3e} has {len(candidates)} ion species of opposite sign; "
+                                  "name the counterion with 'electrostatics.counterion' (None: no counterions)")
+        counterion = candidates[0]
+    added = -total / ions[counterion]["valence"]
+    if added < 0:
+        raise ValidationError(f"The counterion {counterion!r} has the sign of the net charge {total:.3e}")
+    concentrations[counterion] += added
+    return concentrations
+
+
+def validate_gibbs_params(params: Dict[str, Any]) -> None:
+    """The `gibbs_ensemble` section of a Gibbs-ensemble CL-FTS input (gibbs_ensemble.py)."""
+    gibbs = params.get("gibbs_ensemble")
+    if not isinstance(gibbs, dict):
+        raise ValidationError("Missing required dict: 'gibbs_ensemble'")
+    unknown = set(gibbs) - {"boxes", "cycles", "cycle_steps", "exchange_rate", "skip_steps"}
+    if unknown:
+        raise ValidationError(f"'gibbs_ensemble' has unknown keys: {sorted(unknown)}")
+    _integer(gibbs.get("cycles"), "gibbs_ensemble.cycles", minimum=1)
+    _integer(gibbs.get("cycle_steps"), "gibbs_ensemble.cycle_steps", minimum=1)
+    _finite_number(gibbs.get("exchange_rate", 0.2), "gibbs_ensemble.exchange_rate", positive=True)
+    _integer(gibbs.get("skip_steps", 0), "gibbs_ensemble.skip_steps", minimum=0)
+    if gibbs.get("skip_steps", 0) >= gibbs["cycle_steps"]:
+        raise ValidationError("'gibbs_ensemble.skip_steps' must be smaller than 'cycle_steps'")
+    recording = params.get("recording")
+    if not isinstance(recording, dict) or "dir" not in recording:
+        raise ValidationError("The Gibbs ensemble needs 'recording.dir' for its boxes and history")
+    _integer(recording.get("sample_interval", 1), "recording.sample_interval")
+    if gibbs["cycle_steps"] % recording.get("sample_interval", 1) != 0:
+        raise ValidationError("'gibbs_ensemble.cycle_steps' must be a multiple of 'recording.sample_interval'")
+    if any(str(b).lower() != "periodic" for b in params.get("bc") or []):
+        raise ValidationError("The Gibbs ensemble needs periodic boxes (the osmotic pressure)")
+    polymers = params.get("polymers") or []
+    for i, polymer in enumerate(polymers):
+        if "chemical_potential" in polymer or polymer.get("initial_conditions"):
+            raise ValidationError(f"polymers[{i}]: the Gibbs ensemble exchanges free canonical chains; grand-canonical "
+                                  "and grafted polymers are not supported")
+    electrostatics = params.get("electrostatics") or {}
+    if electrostatics.get("fixed_charge") is not None:
+        raise ValidationError("The Gibbs ensemble does not support 'electrostatics.fixed_charge' "
+                              "(its boxes change size)")
+    canonical_ions = [name for name, ion in (electrostatics.get("ions") or {}).items()
+                      if isinstance(ion, dict) and "concentration" in ion]
+    if canonical_ions and str(params.get("chain_model")).lower() != "discrete" and "n_segments" not in electrostatics:
+        raise ValidationError("'electrostatics.ions' need the number of segments N of the reference chain: give "
+                              "'electrostatics.n_segments' (continuous chains)")
+    boxes = gibbs.get("boxes")
+    if not isinstance(boxes, list) or len(boxes) != 2:
+        raise ValidationError("'gibbs_ensemble.boxes' must be a list of two dicts")
+    for b, box in enumerate(boxes):
+        name = f"gibbs_ensemble.boxes[{b}]"
+        if not isinstance(box, dict) or set(box) - {"lx", "volume_fractions", "ion_concentrations"} or \
+                not {"lx", "volume_fractions"} <= set(box):
+            raise ValidationError(f"'{name}' must be a dict with 'lx', 'volume_fractions' and optionally "
+                                  "'ion_concentrations'")
+        if not isinstance(box["lx"], (list, tuple)) or len(box["lx"]) != len(params["nx"]):
+            raise ValidationError(f"'{name}.lx' needs one length per dimension of 'nx'")
+        for length in box["lx"]:
+            _finite_number(length, name + ".lx", positive=True)
+        fractions = box["volume_fractions"]
+        if not isinstance(fractions, (list, tuple)) or len(fractions) != len(polymers):
+            raise ValidationError(f"'{name}.volume_fractions' needs one value per polymer")
+        for value in fractions:
+            _finite_number(value, name + ".volume_fractions", nonnegative=True)
+        if abs(sum(fractions) - 1.0) > 1e-10:
+            raise ValidationError(f"'{name}.volume_fractions' must sum to 1, got {sum(fractions)}")
+        concentrations = box.get("ion_concentrations")
+        if concentrations is not None:
+            if not isinstance(concentrations, dict) or set(concentrations) != set(canonical_ions):
+                raise ValidationError(f"'{name}.ion_concentrations' needs the concentration of every canonical point "
+                                      f"ion {canonical_ions}")
+            for ion, value in concentrations.items():
+                _finite_number(value, f"{name}.ion_concentrations.{ion}", nonnegative=True)

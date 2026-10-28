@@ -21,7 +21,7 @@ def coexistence_quantities(state, reference_polymer=0):
     and Psi = free_energy_absolute - sum_p g_p phi_p. Psi is the grand potential
     in the pressure convention beta mu_r = 0. Pure endpoints have infinite exchange potentials
     and cannot be used here. This conversion is for incompressible periodic
-    bulk systems with free chains.
+    bulk systems with free, uncharged chains (no electrostatics).
     """
     if not _value(state, "converged", False):
         raise ValueError("Phase coexistence requires a converged CE solution.")
@@ -30,6 +30,9 @@ def coexistence_quantities(state, reference_polymer=0):
         raise ValueError("Bulk coexistence currently requires the incompressible model.")
     if params.get("bc") is not None and any(str(bc).lower() != "periodic" for bc in params["bc"]):
         raise ValueError("Bulk coexistence requires periodic boundary conditions.")
+    if params.get("electrostatics") is not None:
+        # Point ions and the gauge of ψ would need exchange potentials of neutral combinations
+        raise ValueError("Bulk coexistence is not available with 'electrostatics'.")
     mu = _value(state, "chemical_potentials")
     if mu is None:
         raise ValueError("Chemical potentials are unavailable for this CE state (e.g. grafted chains).")

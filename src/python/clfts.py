@@ -27,7 +27,8 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 from .electrostatics import Electrostatics
 from .propagator_solver import PropagatorSolver
-from .validation import normalize_params, validate_lfts_params, ValidationError, parse_chi_n
+from .validation import (normalize_params, validate_lfts_params, ValidationError, parse_chi_n, point_ion_concentrations,
+                         open_charges)
 from .utils import (
     process_polymer_blocks,
     process_random_copolymer,
@@ -161,9 +162,15 @@ class CLFTS:
             aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
             field_type="complex",
         )
+        # Grand-canonical polymers (chemical_potential βμ_p) get the volume fraction 0: their chains,
+        # e^(βμ_p) Q_p per reference chain, come from get_concentration_gce (compute_concentrations)
         for polymer in self.polymers:
-            self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
+            self.prop_solver.add_polymer(polymer.get("volume_fraction", 0.0), polymer["blocks_input"],
                                          polymer.get("initial_conditions", None))
+        self.polymer_chemical_potentials = np.array([polymer.get("chemical_potential", np.nan) for polymer in self.polymers])
+        self.fugacities = np.where(np.isnan(self.polymer_chemical_potentials), 0.0, np.exp(self.polymer_chemical_potentials))
+        self.grand_canonical = [p for p, polymer in enumerate(self.polymers) if "chemical_potential" in polymer]
+        self.canonical_fraction = sum(polymer.get("volume_fraction", 0.0) for polymer in self.polymers)
         self.prop_solver.display_platform_info()
 
         # (C++ class) Computation box; molecules, optimizer and propagator computation
@@ -266,19 +273,33 @@ class CLFTS:
         # charged types as z_i ψ, fluctuates next to the auxiliary fields (electrostatics.py)
         self.electrostatics = None
         if params.get("electrostatics", None) is not None:
+            # Segments N of the reference chain: 1/ds of discrete chains, given for continuous chains
+            n_segments = (round(1.0 / params["ds"]) if params["chain_model"].lower() == "discrete"
+                          else params["electrostatics"].get("n_segments"))
             self.electrostatics = Electrostatics(params["electrostatics"], self.monomer_types, self.smearing,
-                                                 round(1.0 / params["ds"]), self.langevin, self.random_bg.jumped(),
-                                                 fourier=self.prop_solver.fourier)
+                                                 n_segments, self.langevin, self.random_bg.jumped(),
+                                                 fourier=self.prop_solver.fourier,
+                                                 ion_concentrations=point_ion_concentrations(params),
+                                                 open_charges=open_charges(params))
             print("Electrostatics: charges", self.electrostatics.charges,
                   "coupling E = %g, psi_dt_scaling = %g" % (self.electrostatics.coupling, self.electrostatics.psi_dt_scaling))
+            for ion in self.electrostatics.ions:
+                amount = ("chemical potential %g (grand canonical)" % ion["chemical_potential"] if ion["concentration"] is None
+                          else "concentration %g (with counterions)" % ion["concentration"])
+                print("Point ion %s: valence %g, %s, smearing length %g"
+                      % (ion["name"], ion["valence"], amount, ion["smearing_length"]))
+        for p in self.grand_canonical:
+            print("Polymer %d: grand canonical, chemical potential %g" % (p, self.polymer_chemical_potentials[p]))
 
         # Structure functions: composition modes with a zero eigenvalue carry no auxiliary field,
         # but ψ measures the charge direction z, <((k² + κ²)/E) ψ(k) φ_j(-k)> = Σ_i z_i <Γ_i φ_i φ_j>.
         # Its part outside the eigenvectors of the auxiliary fields, u = P_0 z (P_0: projector onto
         # the zero-eigenvalue modes), completes the estimator (docs/theory/StructureFunctionEstimators.md,
         # Section 5).
+        # The estimators with ψ need a periodic box: with walls ψ lives in the cosine basis, while the
+        # structure functions are Fourier transforms
         self._psi_probe = None
-        if self.electrostatics is not None and self.electrostatics.coupling > 0:
+        if self.electrostatics is not None and self.electrostatics.coupling > 0 and self._periodic_box:
             kept = [k for k in range(M) if not np.isclose(self.mpt.eigenvalues[k], 0.0)]
             projector = np.eye(M) - sum(np.outer(self.mpt.matrix_a[:, k], self.mpt.matrix_a[:, k]) for k in kept) / M
             u = projector @ np.array([self.electrostatics.charges[name] for name in self.monomer_types])
@@ -290,6 +311,11 @@ class CLFTS:
         # recording.pressure the osmotic pressure (pressure())
         chains = [self.prop_solver.get_polymer(p) for p in range(self.prop_solver.get_n_polymer_types())]
         self.chain_densities = np.array([chain.get_volume_fraction() / chain.get_alpha() for chain in chains])
+        # One chemical potential per polymer, then one per point ion; with grand-canonical species the
+        # number of chains or ions per reference chain of every species is recorded too
+        self.n_chemical_potentials = len(self.chain_densities) + (len(self.electrostatics.ions) if self.electrostatics else 0)
+        self.record_number_densities = bool(self.grand_canonical) or (
+            self.electrostatics is not None and any(ion["concentration"] is None for ion in self.electrostatics.ions))
         self.record_chemical_potentials = not any(polymer.get("initial_conditions") for polymer in self.polymers)
         self.record_pressure = bool(self.recording.get("pressure", False))
         if self.record_pressure:
@@ -324,6 +350,9 @@ class CLFTS:
                                                 noise_direction=self._integrated_noise_direction(),
                                                 fourier=self.prop_solver.fourier)
         self.run_status = {"status": "initialized", "last_completed_step": 0}
+        # run() draws the chain architectures into the recording directory; a driver that runs the
+        # same chains again (gibbs_ensemble.py) sets this to False after the first run
+        self.draw_architectures = True
 
     def _fft_fields(self, fields):
         """fftn of each field (n_fields, n_grid) on the grid: with the platform FFT
@@ -359,7 +388,9 @@ class CLFTS:
         With ε = 1e-6 the error O(ε²) is about 1e-12 and the rounding error of J below 1e-7 of its
         size, even on large grids. The
         homogeneous state is w = 0 with ψ = 0: a uniform shift of the fields does not change
-        the concentrations of canonical chains. Dynamical stabilization is not part of J.
+        the concentrations of canonical chains. Grand-canonical chains have the density
+        e^(βμ_p) α_p there, not that of the homogeneous saddle point; J only sets the linear
+        part that ETD integrates exactly. Dynamical stabilization is not part of J.
         """
         M, n_grid, nx = len(self.monomer_types), self.prop_solver.n_grid, self.prop_solver.nx
         es = self.electrostatics
@@ -452,10 +483,18 @@ class CLFTS:
                 phi[monomer_type] += phi[random_polymer_name] * fraction
         elapsed_time["phi"] = time.time() - time_phi_start
 
-        # Material conservation: mean(sum phi) must stay 1 (a numerical blow-up shows up here first)
-        mass_error = self.prop_solver.mean(sum(phi[m] for m in self.monomer_types) - 1.0)
+        # Material conservation of the canonical chains: mean(sum phi) stays at their total volume
+        # fraction, 1 without grand-canonical chains (a numerical blow-up shows up here first)
+        mass_error = self.prop_solver.mean(sum(phi[m] for m in self.monomer_types) - self.canonical_fraction)
         if not abs(mass_error) <= 5e-8:
-            raise ValidationError(f"Material conservation failed: mean(sum(phi) - 1) = {mass_error:.3e}")
+            raise ValidationError("Material conservation failed: mean(sum(phi)) differs from the total volume "
+                                  f"fraction of the canonical chains by {mass_error:.3e}")
+
+        # Grand-canonical chains: e^(βμ_p) times their unnormalized segment densities
+        for p in self.grand_canonical:
+            for monomer_type in self.monomer_types:
+                phi[monomer_type] = phi[monomer_type] + self.prop_solver.get_concentration_gce(
+                    self.fugacities[p], p, monomer_type)
 
         # Partition consistency check (forward vs backward propagators), once per run
         if not getattr(self, "_partition_checked", False):
@@ -505,37 +544,62 @@ class CLFTS:
         the chains gives ln(n_p/V), so ∂ln Z/∂n_p yields this operator; its average is the
         chemical potential per chain in the convention of SCFT.compute_chemical_potentials,
         which it equals at the saddle point. Its real part does not depend on the branch of
-        the logarithm. A species without chains has -inf.
+        the logarithm. A species without chains has -inf. The point ions follow the polymers,
+        βμ_s = ln(N c_s) - ln Q_s (Electrostatics.ion_chemical_potentials).
         """
         with np.errstate(divide="ignore"):
             ideal = np.log(self.chain_densities)
-        return ideal - np.log(np.asarray(total_partitions, dtype=np.complex128))
+        values = ideal - np.log(np.asarray(total_partitions, dtype=np.complex128))
+        values[self.grand_canonical] = self.polymer_chemical_potentials[self.grand_canonical]
+        if self.electrostatics is not None and self.electrostatics.ions:
+            values = np.append(values, self.electrostatics.ion_chemical_potentials())
+        return values
+
+    def number_densities(self, total_partitions):
+        """Chains (or ions) per reference chain of each species, n_p/n_ref: φ_p/α_p of canonical
+        polymers, e^(βμ_p) Q_p of grand-canonical ones, then the point ions (complex operators)."""
+        values = np.asarray(self.chain_densities, dtype=np.complex128).copy()
+        values[self.grand_canonical] = self.fugacities[self.grand_canonical] * np.asarray(total_partitions)[self.grand_canonical]
+        if self.electrostatics is not None and self.electrostatics.ions:
+            values = np.append(values, self.electrostatics.ion_number_densities())
+        return values
+
+    def grand_canonical_hamiltonian(self, total_partitions):
+        """-Σ_p e^(βμ_p) Q_p of the grand-canonical chains, per reference chain (complex)."""
+        return -complex(np.sum(self.fugacities * np.asarray(total_partitions, dtype=np.complex128)))
 
     def pressure(self, w_aux, phi):
         """Osmotic pressure operator βΠ R₀³/C of the auxiliary fields w_aux (complex).
 
         The propagators of the solver must be those of w_aux, as after compute_concentrations,
-        and phi are its concentrations. βΠ = ∂ln Z/∂V at fixed numbers of chains, with the
-        grid values of the fields held fixed while the box is dilated in its shape
-        (k² ∝ V^(-2/d)). The terms, per C/R₀³ = ρ₀/N:
-        - the ideal gas of the chains, Σ_p φ_p/α_p;
-        - the conformations, -(1/d) Σ_a L_a ∂h/∂L_a with h = -Σ_p (φ_p/α_p) ln Q_p (the solver
-          stress, at fixed smeared fields);
+        and phi are its concentrations. βΠ = ∂ln Z/∂V at fixed numbers of canonical chains and
+        ions and fixed chemical potentials of grand-canonical species, with the grid values of
+        the fields held fixed while the box is dilated in its shape (k² ∝ V^(-2/d)). The terms,
+        per C/R₀³ = ρ₀/N:
+        - the ideal gas of the chains, Σ_p n_p/n_ref: φ_p/α_p of canonical polymers and
+          e^(βμ_p) Q_p of grand-canonical ones (from their term -e^(βμ_p) Q_p of H);
+        - the conformations, -(1/d) Σ_a L_a ∂h/∂L_a with h = -Σ_p (φ_p/α_p) ln Q_p - Σ_p e^(βμ_p) Q_p
+          over the canonical and the grand-canonical polymers (the solver stress, at fixed
+          smeared fields);
         - the smearing functions, which follow the box: -Σ_i <φ_i ((∂Γ_i/∂ln V) * (w_i + z_i ψ))>;
         - the field terms of H, which scale with V: -(Σ_i <h2_i Ω_i² + h1_i Ω_i> + h_const);
         - the Gaussian normalization of each auxiliary field, n_grid/2 per C V/R₀³ chains, which
           removes the grid-dependent part of the field term;
-        - ψ: its terms of H and its normalization (Electrostatics.pressure).
+        - ψ and the point ions: their terms of H and the normalization of ψ (Electrostatics.pressure).
         At the homogeneous saddle point this is the Flory-Huggins osmotic pressure
         Σ_p φ_p/α_p + φᵀXφ/2 + (ζN/2)((Σφ)² - 1) as C → ∞, plus E q²/(2κ²) for a screened system
         with the net charge q = Σ_i z_i φ_i per segment (ψ₀ = E q/κ² there).
         """
         M, dim, es = len(self.monomer_types), self.prop_solver.dim, self.electrostatics
         n_chains = np.sqrt(self.langevin["nbar"]) * self.prop_solver.get_volume()   # C V/R₀³
-        value = complex(np.sum(self.chain_densities))
+        total_partitions = [self.prop_solver.get_partition_function(p) for p in range(len(self.polymers))]
+        value = complex(np.sum(self.number_densities(total_partitions)[:len(self.polymers)]))
 
         self.prop_solver.compute_stress()
-        stress, lx = self.prop_solver.get_stress(), self.prop_solver.get_lx()
+        stress, lx = np.asarray(self.prop_solver.get_stress()), self.prop_solver.get_lx()
+        if self.grand_canonical:
+            # h = -Σ_p e^(βμ_p) Q_p of the grand-canonical chains: dh/dθ = -Σ_p e^(βμ_p) dQ_p/dθ
+            stress = stress + np.asarray(self.prop_solver.get_stress_gce(self.fugacities))
         value -= sum(lx[a] * stress[a] for a in range(dim)) / dim
 
         if self.smearing.enabled:
@@ -666,7 +730,7 @@ class CLFTS:
         )
 
     def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, initial_psi=None,
-            _restart_data=None):
+            psi_noise_prev=None, _restart_data=None):
         """Run complex Langevin dynamics and return a status dict; errors are persisted and raised."""
         first_step = 1 if start_langevin_step is None else start_langevin_step
         if isinstance(first_step, (bool, np.bool_)) or not isinstance(first_step, (int, np.integer)) or first_step < 1:
@@ -679,6 +743,12 @@ class CLFTS:
             # Without Coulomb coupling ψ does not move, so a nonzero ψ would be a fixed potential
             if self.electrostatics.coupling <= 0 and np.any(np.asarray(initial_psi) != 0):
                 raise ValidationError("initial_psi must be zero without Coulomb coupling (coupling E = 0)")
+        if psi_noise_prev is not None:
+            if initial_psi is None:
+                raise ValidationError("psi_noise_prev needs initial_psi")
+            if np.size(psi_noise_prev) != self.prop_solver.n_grid or not np.all(np.isfinite(psi_noise_prev)) \
+                    or np.iscomplexobj(psi_noise_prev):
+                raise ValidationError("psi_noise_prev must hold one real, finite value per grid point")
         self.run_status = {"status": "running", "last_completed_step": first_step - 1,
                            "requested_last_step": self.langevin["max_step"]}
         self.metadata["initial_fields_hash" if _restart_data is None else "restart_fields_hash"] = fields_hash(initial_fields)
@@ -695,7 +765,7 @@ class CLFTS:
             if _restart_data is None:
                 restore_extensions(self)
             self._run(initial_fields, normal_noise_prev, start_langevin_step, initial_psi=initial_psi,
-                      _restart_data=_restart_data)
+                      psi_noise_prev=psi_noise_prev, _restart_data=_restart_data)
             self.run_status["status"] = "completed"
         except (KeyboardInterrupt, SystemExit):
             self.run_status.update(status="interrupted", reason="Run interrupted")
@@ -708,7 +778,7 @@ class CLFTS:
         return dict(self.run_status)
 
     def _run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None, *, initial_psi=None,
-             _restart_data=None):
+             psi_noise_prev=None, _restart_data=None):
         """Run the Complex Langevin FTS simulation.
 
         Parameters
@@ -724,6 +794,9 @@ class CLFTS:
             Initial electrostatic potential (with `electrostatics`), e.g. psi_real + 1j psi_imag
             of a fields file; zero if omitted. A continuation by hand does not restore the
             random-number streams; continue_run() continues a checkpoint exactly.
+        psi_noise_prev : numpy.ndarray, optional
+            Previous noise of ψ (psi_noise_prev of a fields file) for the Leimkuhler-Matthews
+            step, with initial_psi; zero if omitted.
         """
         print("---------- Run ----------")
 
@@ -739,7 +812,8 @@ class CLFTS:
 
         # Simulation data directory, with the drawings of the chain architectures (polymer_<id>.png)
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
-        draw_polymer_architectures(self.polymers, self.ds, self.segment_lengths, directory=self.recording["dir"])
+        if self.draw_architectures:
+            draw_polymer_architectures(self.polymers, self.ds, self.segment_lengths, directory=self.recording["dir"])
 
         # Reshape initial fields (convert to complex if needed)
         w = np.array([np.reshape(initial_fields[m], self.prop_solver.n_grid).astype(np.complex128)
@@ -764,8 +838,9 @@ class CLFTS:
                                   "at zero and relaxes again", RuntimeWarning)
                 self.electrostatics.psi = np.zeros_like(self.electrostatics.psi)
 
-            # Without a checkpoint ψ starts without previous noise, like the auxiliary fields
-            self.electrostatics.previous_noise = np.zeros(self.prop_solver.n_grid)
+            # Without a checkpoint ψ starts with the given previous noise or none, like the auxiliary fields
+            self.electrostatics.previous_noise = (np.zeros(self.prop_solver.n_grid) if psi_noise_prev is None
+                                                  else np.asarray(psi_noise_prev, dtype=np.float64).reshape(-1).copy())
 
         # Dictionary to record history of H and dH/dchi_n
         H_history = []
@@ -781,9 +856,11 @@ class CLFTS:
         dH_history = {}
         for key in self.chi_n:
             dH_history[key] = []
-        # Chemical potentials (one row of all species per sample) and osmotic pressure
+        # Chemical potentials (one row of all species per sample), osmotic pressure and, with
+        # grand-canonical species, the numbers of chains and ions
         chemical_potential_history = []
         pressure_history = []
+        number_density_history = []
 
         # Arrays for structure function (use full FFT for complex fields)
         sf_average = {}  # <u(k) phi(-k)>
@@ -798,7 +875,7 @@ class CLFTS:
         # M + w D of least variance (docs/theory/StructureFunctionEstimators.md, Section 6)
         recorded = dict(sf_average)
         charge_sums = None
-        if self.electrostatics is not None and self.electrostatics.coupling > 0:
+        if self.electrostatics is not None and self.electrostatics.coupling > 0 and self._periodic_box:
             charge_sums = {key: np.zeros(self.prop_solver.nx, dtype=np.complex128)
                            for key in self.electrostatics.CHARGE_SUMS}
             recorded.update(charge_sums)
@@ -808,7 +885,8 @@ class CLFTS:
             drift_step_history=drift_step_history, n_fields=M,
             psi_drift_step_history=psi_drift_step_history if self.electrostatics is not None else None,
             chemical_potential_history=chemical_potential_history if self.record_chemical_potentials else None,
-            pressure_history=pressure_history if self.record_pressure else None, n_polymers=len(self.chain_densities))
+            pressure_history=pressure_history if self.record_pressure else None, n_polymers=self.n_chemical_potentials,
+            number_density_history=number_density_history if self.record_number_densities else None)
 
         # Create an empty array for field update algorithm
         # (a checkpoint loaded with squeeze_me drops the leading axis when M == 1)
@@ -943,6 +1021,8 @@ class CLFTS:
                                                       include_const_term=True, phi=phi_for_force)
             if self.electrostatics is not None:
                 hamiltonian += self.electrostatics.hamiltonian()
+            if self.grand_canonical:
+                hamiltonian += self.grand_canonical_hamiltonian(total_partitions)
             if not np.isfinite(hamiltonian):
                 raise ValidationError(f"Non-finite Hamiltonian at step {langevin_step}")
             self.run_status["last_completed_step"] = langevin_step
@@ -975,6 +1055,8 @@ class CLFTS:
                     dH_history[key].append(dH[key])
                 if self.record_chemical_potentials:
                     chemical_potential_history.append(self.chemical_potentials(total_partitions))
+                if self.record_number_densities:
+                    number_density_history.append(self.number_densities(total_partitions))
                 if self.record_pressure:
                     pressure_history.append(self.pressure(w_aux, phi))
 
@@ -995,9 +1077,14 @@ class CLFTS:
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1] + "_imag"] = np.imag(dH_array)
                 if self.record_chemical_potentials:
                     mu_array = np.reshape(np.array(chemical_potential_history, dtype=np.complex128),
-                                          (-1, len(self.chain_densities)))
+                                          (-1, self.n_chemical_potentials))
                     mdic["chemical_potential_history_real"] = np.real(mu_array)
                     mdic["chemical_potential_history_imag"] = np.imag(mu_array)
+                if self.record_number_densities:
+                    density_array = np.reshape(np.array(number_density_history, dtype=np.complex128),
+                                               (-1, self.n_chemical_potentials))
+                    mdic["number_density_history_real"] = np.real(density_array)
+                    mdic["number_density_history_imag"] = np.imag(density_array)
                 if self.record_pressure:
                     pressure_array = np.array(pressure_history, dtype=np.complex128)
                     mdic["pressure_history_real"] = np.real(pressure_array)
@@ -1015,6 +1102,7 @@ class CLFTS:
                 drift_step_start = langevin_step + 1
                 chemical_potential_history = []
                 pressure_history = []
+                number_density_history = []
                 for key in self.chi_n:
                     dH_history[key] = []
 
@@ -1042,6 +1130,11 @@ class CLFTS:
                 if self._psi_probe is not None:
                     es = self.electrostatics
                     probe = es.psi_k * es.screened_k_sq / es.coupling / self.prop_solver.n_grid
+                    # ψ measures the charge of the point ions and the fixed charge as well: remove them
+                    if es.ions:
+                        probe -= np.reshape(self._fft_fields(es.ion_charge())[0], probe.shape) / self.prop_solver.n_grid
+                    if es.fixed_charge is not None:
+                        probe -= np.reshape(self._fft_fields(es.fixed_charge)[0], probe.shape) / self.prop_solver.n_grid
                     # k = 0 is not a structure function in the canonical ensemble; with screening
                     # κ²ψ(0)/E would carry a net charge there
                     probe[(0,) * len(self.prop_solver.nx)] = 0.0
@@ -1059,9 +1152,16 @@ class CLFTS:
                     norm = self.prop_solver.get_volume() * np.sqrt(self.langevin["nbar"])
                     psi_k = es.psi_k / n_grid
                     psi_mk = es.psi_minus_k() / n_grid
-                    # c(-k) = Σ_i z_i Γ_i(k) φ_i(-k) from the φ_i(-k) above (Γ_i is even in k)
+                    # c(-k) = Σ_i z_i Γ_i(k) φ_i(-k) from the φ_i(-k) above (Γ_i is even in k), and the
+                    # smeared charge of the point ions
                     charge_mk = sum(z * self.smearing.kernel(name) * phi_fourier[name]
                                     for name, z in es.charges.items() if z != 0.0)
+                    if es.ions:
+                        ion_mk = np.conj(self._fft_fields(np.conj(es.ion_charge()))[0]) / n_grid
+                        charge_mk = charge_mk + np.reshape(ion_mk, np.shape(psi_k))
+                    if es.fixed_charge is not None:
+                        fixed_mk = np.conj(self._fft_fields(es.fixed_charge)[0]) / n_grid
+                        charge_mk = charge_mk + np.reshape(fixed_mk, np.shape(psi_k))
                     rate = es.screened_k_sq / es.coupling
                     with np.errstate(divide="ignore", invalid="ignore"):
                         mixed = rate * norm * psi_k * charge_mk
@@ -1154,6 +1254,8 @@ class CLFTS:
                     self._recording_state["chemical_potential_history"] = chemical_potential_history
                 if self.record_pressure:
                     self._recording_state["pressure_history"] = pressure_history
+                if self.record_number_densities:
+                    self._recording_state["number_density_history"] = number_density_history
                 w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % langevin_step),

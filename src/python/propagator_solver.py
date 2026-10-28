@@ -513,6 +513,16 @@ class PropagatorSolver:
         """
         return self._computed().get_total_concentration(monomer_type)
 
+    def get_concentration_gce(self, fugacity: float, polymer: int, monomer_type: str) -> NDArray[np.floating]:
+        """Concentration of one monomer type from one polymer in the grand-canonical ensemble.
+
+        fugacity = exp(βμ_p) in the convention βμ_p = ln(φ_p/α_p) - ln Q_p, so the chains number
+        fugacity Q_p per reference chain; the result is fugacity times the unnormalized segment
+        density (independent of the volume fraction given to add_polymer). Must be called after
+        compute_concentrations().
+        """
+        return self._computed().get_total_concentration_gce(fugacity, polymer, monomer_type)
+
     def get_grid_points(self) -> Tuple[NDArray[np.floating], ...]:
         """Get the Cartesian coordinates of the grid points.
 
@@ -871,6 +881,12 @@ class PropagatorSolver:
             2D: [dH/dL1, dH/dL2, dH/d(gamma), 0, 0, 0]; 1D: only index 0.
         """
         return self._computed().get_stress()
+
+    def get_stress_gce(self, fugacities: List[float]) -> List[float]:
+        """Lattice-parameter derivatives -Σ_p z_p dQ_p/dθ of the grand-canonical term -Σ_p z_p Q_p of H,
+        with the chains weighted by the fugacities z_p (get_stress gives the derivatives of
+        -Σ_p (φ_p/α_p) ln Q_p). Must be called after compute_stress()."""
+        return self._computed().get_stress_gce([float(z) for z in fugacities])
 
     def update_laplacian_operator(self) -> None:
         """Update the Laplacian operator after changing box dimensions.

@@ -10,7 +10,7 @@ This document provides a complete reference for all simulation parameters.
 4. [Platform](#platform)
 5. [SCFT Parameters](#scft-parameters)
 6. [L-FTS Parameters](#l-fts-parameters)
-7. [CL-FTS Parameters](#cl-fts-parameters)
+7. [CL-FTS Parameters](#cl-fts-parameters) (with the [Gibbs ensemble](#gibbs-ensemble))
 8. [Advanced Options](#advanced-options)
 9. [Example Configurations](#example-configurations)
 
@@ -43,6 +43,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 - Mixing periodic and non-periodic directions (e.g., periodic in x/y, reflecting in z) requires `"numerical_method": "cn-adi2"`, which is available for **continuous chains only**. Discrete chains cannot mix periodic and non-periodic directions.
 - Stress computation (and therefore `relax_cell`) supports periodic, reflecting, and absorbing boundary conditions (pseudo-spectral methods, real fields).
 - Reflecting or absorbing walls need an orthogonal cell (all angles 90°), and a `space_group` needs periodic boundaries in every direction; both combinations are rejected.
+- Impenetrable regions (a `mask`) are available through `PropagatorSolver(mask=...)` only; `SCFT`, `LFTS` and `CLFTS` reject a `mask` parameter.
 
 **Example (reflecting in z, periodic in x/y — requires `"numerical_method": "cn-adi2"`):**
 ```python
@@ -81,6 +82,7 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 | Key | Type | Description |
 |-----|------|-------------|
 | `volume_fraction` | float | Volume fraction in system |
+| `chemical_potential` | float | (CL-FTS) In place of `volume_fraction`: a grand-canonical species with the chemical potential $`\beta\mu_p`$ per chain, in the convention $`\beta\mu_p = \ln(\phi_p/\alpha_p) - \ln Q_p`$ of the recorded chemical potentials; the number of chains per reference chain is $`e^{\beta\mu_p} Q_p`$. Not for grafted chains or random copolymers |
 | `blocks` | list | Block specifications |
 | `initial_conditions` | dict | (Optional) Custom propagator initial conditions per node, e.g. `{0: "G"}` maps node 0 to the initial condition labeled `"G"` in `q_init` (used for grafted chains). Labels may contain letters, digits and underscores only. Only SCFT takes `q_init`: L-FTS and CL-FTS reject grafted chains |
 
@@ -100,6 +102,8 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
     ]
 }]
 ```
+
+The volume fractions sum to 1. With grand-canonical polymers (`chemical_potential`) those of the canonical polymers sum to at most 1, and the grand-canonical chains fill the rest on average ([model](../theory/PolymerFieldTheory.md#6-grand-canonical-species)).
 
 **Random copolymer:** a polymer with a single block that has a `"monomer_fractions"` dictionary, e.g. `{"type": "R", "length": 1.0, "monomer_fractions": {"A": 0.5, "B": 0.5}}`, is a random copolymer of the listed monomer types. `"type"` is a new name that is not in `segment_lengths`, the fractions must sum to 1, and the chain uses the field $`\sum_i f_i w_i`$ and the segment length $`(\sum_i f_i b_i^2)^{1/2}`$; its concentration is split among the monomer types by the fractions (see `examples/lfts/MixtureBlockRandom.py`).
 
@@ -252,6 +256,10 @@ Without `crystal_system`, a 2D cell with `angles` is classified from γ: 120° �
 
 `space_group` and `smearing` are described under [Advanced Options](#advanced-options).
 
+### Electrostatics (Mean Field)
+
+SCFT accepts `electrostatics` as described under [Electrostatics](#electrostatics) and solves the Poisson equation for the electrostatic potential $`\psi`$ together with the fields ([theory](../theory/SelfConsistentFieldTheory.md#25-charged-systems)). It needs `coupling` ($`E`$; SCFT has no $`\bar N`$ for `bjerrum_length`), takes no `psi_dt_scaling`, one smearing length for all monomer types and no `space_group`; box relaxation needs a periodic box. Point ions may be canonical or grand canonical; grand-canonical polymers are not available. `run(..., initial_psi=...)` takes an initial $`\psi`$, by default the uniform potential of the homogeneous state. The results hold `psi` and `ion_chemical_potentials` (also in `save_results`).
+
 ---
 
 ## L-FTS Parameters
@@ -300,7 +308,7 @@ The optional `"resample"` policy reproduces the earlier noise-selection behavior
 | `statistics_save_interval` | int | Save the collected histories and averaged structure functions, then reset the accumulators, every N Langevin steps |
 | `pressure` | bool | (CL-FTS, optional) Also record the osmotic pressure at every sample; needs a periodic box and free chains. Default `False` |
 
-All intervals are positive integer counts of Langevin steps. Structure functions are normalized by the actual sample count, including when `statistics_save_interval` is not a multiple of `sample_interval`. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS. CL-FTS also records `drift_max_step_history`, the maximum of every step for each auxiliary field (one column per field), and with electrostatics `psi_drift_max_step_history`; checkpoints keep the steps since the last statistics file. See [ComplexLangevinSimulation.md](../theory/ComplexLangevinSimulation.md#3-correct-convergence) for their use. At every sample CL-FTS records the chemical potentials βμ_p of all species (`chemical_potential_history_real`/`_imag`, one row per sample) and, with `pressure`, the osmotic pressure βΠR₀³/C (`pressure_history_real`/`_imag`) ([CL-FTS theory, Section 7](../theory/ComplexLangevinSimulation.md#7-chemical-potential-and-osmotic-pressure)). Custom callbacks use their own `interval` independently of these built-in measurements.
+All intervals are positive integer counts of Langevin steps. Structure functions are normalized by the actual sample count, including when `statistics_save_interval` is not a multiple of `sample_interval`. Measurement files include `sample_count` and a JSON string `simulation_metadata_json`. Hamiltonian files also record `drift_max_history`: the maximum absolute scaled force used for each sampled transition, including dynamical stabilization in CL-FTS. CL-FTS also records `drift_max_step_history`, the maximum of every step for each auxiliary field (one column per field), and with electrostatics `psi_drift_max_step_history`; checkpoints keep the steps since the last statistics file. See [ComplexLangevinSimulation.md](../theory/ComplexLangevinSimulation.md#3-correct-convergence) for their use. At every sample CL-FTS records the chemical potentials βμ_p of all species (`chemical_potential_history_real`/`_imag`, one row per sample), with `pressure` the osmotic pressure βΠR₀³/C (`pressure_history_real`/`_imag`) and, with grand-canonical species, the numbers of chains and ions per reference chain of all species (`number_density_history_real`/`_imag`, the columns of the chemical potentials) ([CL-FTS theory, Section 7](../theory/ComplexLangevinSimulation.md#7-chemical-potential-and-osmotic-pressure)). Custom callbacks use their own `interval` independently of these built-in measurements.
 
 Field checkpoints use format version 2 and are replaced atomically. They store the full PCG64 state, previous noise, auxiliary fields, concentrations, pending measurement sums/histories, WTMD state, and custom integrator/callback settings and states. Version-1 files continue with default LM and no callbacks. `continue_run(path)` validates the effective physical and numerical settings before restoring the RNG. The output directory, checkpoint interval, maximum final step, verbosity and backend may change; sampling periods, model, integrator settings, named callbacks and WTMD bias settings must match. On a different backend only numerical/statistical equivalence is expected. Old unversioned files require `continue_run(path, allow_legacy=True)` and emit a warning because compatibility and pending measurements cannot be verified.
 
@@ -366,28 +374,62 @@ WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange
 
 ### Electrostatics
 
-Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$, or the screened kernel $`E/(k^2 + \kappa^2)`$ with `screening_length` ([model](../theory/PolymerFieldTheory.md#5-electrostatic-interactions)). CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([sampling](../theory/ComplexLangevinSimulation.md#6-charged-systems)). Small ions are molecules of one segment and take volume like the other species.
+CL-FTS samples the electrostatic potential; SCFT takes its saddle point ([Electrostatics (Mean Field)](#electrostatics-mean-field)). Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$, or the screened kernel $`E/(k^2 + \kappa^2)`$ with `screening_length` ([model](../theory/PolymerFieldTheory.md#5-electrostatic-interactions)). CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([sampling](../theory/ComplexLangevinSimulation.md#6-charged-systems)). Small ions are either molecules of one segment in `polymers`, which take volume like the other species, or point ions (`ions`), which have no volume and no $`\chi`$ ([model](../theory/PolymerFieldTheory.md#55-point-ions)).
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `charges` | dict | Valence per segment of each charged monomer type, `{"A": -0.2, "Na": 1.0}`; other types are neutral | required |
-| `bjerrum_length` | float | Bjerrum length $`l_B`$ in units of $`R_0`$; the coupling is $`E = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}`$ with $`N = 1/\Delta s`$ (an integer). Discrete chains only: $`\Delta s`$ of continuous chains is a contour step, not the number of segments | — |
-| `coupling` | float | The coupling $`E = 4\pi l_B \rho_0 N R_0^2`$ directly, with the physical $`N`$; required for continuous chains. Give exactly one of `bjerrum_length` and `coupling` | — |
-| `psi_dt_scaling` | float | Mobility of $`\psi`$ relative to the auxiliary fields | `1.0` |
+| `bjerrum_length` | float | (CL-FTS) Bjerrum length $`l_B`$ in units of $`R_0`$; the coupling is $`E = 4\pi (l_B/R_0) N^2 \bar{N}^{1/2}`$ with the number of segments $`N`$ of the reference chain (`n_segments`) | — |
+| `coupling` | float | The coupling $`E = 4\pi l_B \rho_0 N R_0^2`$ directly, with the physical $`N`$. Give exactly one of `bjerrum_length` and `coupling` | — |
+| `n_segments` | float | Number of segments $`N`$ of the reference chain. Discrete chains have $`N = 1/\Delta s`$ (an integer) and need not give it; continuous chains, whose $`\Delta s`$ is a contour step, need it for `bjerrum_length` and `ions` | $`1/\Delta s`$ (discrete) |
+| `ions` | dict | (Optional) Point ions, `{"Na": {"valence": 1, "concentration": 0.02, "smearing_length": 0.1}, ...}`: valence, concentration of added salt in ions per segment of the reference density $`\rho_0`$, and Gaussian smearing length in units of $`R_0`$ (positive). In place of `concentration`, `chemical_potential` $`\beta\mu_s`$ makes the species grand canonical, in the convention $`\beta\mu_s = \ln(N c_s) - \ln Q_s`$. Names must differ from the monomer types | none |
+| `counterion` | str or None | The canonical point ion that neutralizes the canonical polymers and the given canonical ions: its concentration grows by the net charge divided by its valence. Default: the only canonical ion species whose valence has the opposite sign of the net charge (an error if there are several). `None` adds no counterions | automatic |
+| `psi_dt_scaling` | float | (CL-FTS) Mobility of $`\psi`$ relative to the auxiliary fields | `1.0` |
+| `fixed_charge` | array | (Optional) Fixed charge density $`c_f(\mathbf{r})`$ in charges per segment of the reference density, one value per grid point (as `nx`), for example charged surfaces or particles. It adds to the charge density as given (not smeared) and to the electroneutrality through its mean | none |
 | `screening_length` | float | (Optional) Screening length $`1/\kappa`$ in units of $`R_0`$ of a background electrolyte that is not simulated explicitly: the kernel becomes $`E/(k^2 + \kappa^2)`$. It is the Debye length of the background alone; explicit ions screen in addition ([model](../theory/PolymerFieldTheory.md#54-screened-coulomb-interaction)). Omit it for unscreened charges | none |
 
 **Requirements:**
-- Without `screening_length` the system must be electroneutral: $`\sum_i z_i \phi_i = 0`$ with the overall segment fraction $`\phi_i`$ of each type (to $`10^{-10}`$). The counterion fraction therefore follows from the polymer charge. With `screening_length` the background electrolyte screens a net charge.
+- Without `screening_length` the system must be electroneutral: $`\sum_i z_i \phi_i + \sum_s z_s c_s = 0`$ with the overall segment fraction $`\phi_i`$ of each type and the point-ion concentrations $`c_s`$, counterions included (to $`10^{-10}`$), plus the mean of `fixed_charge`. With counterions in `polymers`, their fraction follows from the polymer charge; point ions take it automatically (`counterion`). With `screening_length` the background electrolyte screens a net charge. A charged grand-canonical species (polymer or point ion) also lifts the condition: the uniform mode of $`\psi`$ then evolves as the Donnan potential that makes the system neutral ([model](../theory/PolymerFieldTheory.md#6-grand-canonical-species)).
 - `smearing` must be given; with per-type Gaussian lengths $`a_i`$ (Born radii) each type has its own $`\Gamma_i(k)`$. Charged types need a positive Gaussian length, since $`a_i = 0`$ leaves point charges.
-- Periodic boxes only; no random copolymers.
+- A periodic box, or a closed box with walls on every side (`bc` reflecting or absorbing; not both kinds of axes). With walls the transforms are cosine series, so $`\psi`$ has no normal derivative at the walls; the charge structure function, the osmotic pressure and the `etd` integrator need a periodic box. No random copolymers.
 - `zeta_n` is finite, as always in CL-FTS.
 
 ```python
 params["smearing"] = {"type": "gaussian", "a_int": {"A": 0.1, "B": 0.1, "C": 0.15}}
 params["electrostatics"] = {"charges": {"A": 0.2, "C": -1.0}, "bjerrum_length": 0.01}
+
+# The same polymers in a salt of point ions: Cl- also neutralizes the charge of A
+params["electrostatics"] = {"charges": {"A": 0.2}, "bjerrum_length": 0.01,
+                            "ions": {"Na": {"valence": 1, "concentration": 0.02, "smearing_length": 0.1},
+                                     "Cl": {"valence": -1, "concentration": 0.02, "smearing_length": 0.1}}}
 ```
 
-The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file; without it $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
+Grand-canonical salt in contact with a reservoir, for example a polyelectrolyte gel, takes chemical potentials instead of concentrations; the Donnan potential $`\psi_0`$ adjusts the numbers of ions:
+
+```python
+mu = np.log(N * 0.02)   # c = 0.02 per segment in the reservoir (psi = 0)
+params["electrostatics"] = {"charges": {"A": 0.2}, "bjerrum_length": 0.01,
+                            "ions": {"Na": {"valence": 1, "chemical_potential": mu, "smearing_length": 0.1},
+                                     "Cl": {"valence": -1, "chemical_potential": mu, "smearing_length": 0.1}}}
+```
+
+The point ions add one chemical potential each to `chemical_potential_history`, after the polymers.
+
+### Gibbs Ensemble
+
+`GibbsEnsemble(params, random_seed=None)` runs two CL-FTS boxes that exchange chains, point ions and volume toward coexisting phases ([theory](../theory/ComplexLangevinSimulation.md#8-gibbs-ensemble)). `params` is a CL-FTS input with the section `gibbs_ensemble`; the volume fractions of `polymers` and the top-level `lx` are not used, and `langevin.max_step` and the recording intervals other than `sample_interval` are set by the cycles. The boxes write into `recording.dir`/`box0` and `box1`, and `gibbs_history.json` holds every cycle. `run(initial_fields=None, initial_psi=None)` (one dict for both boxes or a list of two) starts from the boxes of the input and replaces an earlier `gibbs_history.json`; `continue_run()` continues it. Both return `summary()`, the averages of the second half of the cycles.
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `boxes` | list | Two dicts with `lx` (the lengths at the starting composition), `volume_fractions` (one per polymer, summing to 1) and optionally `ion_concentrations` of the canonical point ions (by default those of `electrostatics` with the counterions of the box) | required |
+| `cycles` | int | Number of exchanges | required |
+| `cycle_steps` | int | Langevin steps of each box per exchange, a multiple of `recording.sample_interval` | required |
+| `exchange_rate` | float | Rate $`r`$ of the exchange | `0.2` |
+| `skip_steps` | int | Steps at the start of each cycle left out of the averages (smaller than `cycle_steps`) | `0` |
+
+The polymers must be canonical free chains and the boxes periodic, and every polymer and canonical point ion needs a positive amount in both boxes (leave ions that are absent out of `electrostatics.ions`). Without screening, charged boxes with only canonical point ions must be neutral; charged grand-canonical point ions keep their chemical potential in both boxes and set the Donnan potential of each box, which then need not be neutral by itself. `random_seed` is a non-negative integer.
+
+The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file, and the previous noise of its Leimkuhler-Matthews step through `psi_noise_prev` (zero if omitted); without `initial_psi` $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly. [ChargedDiblock.py](../../examples/clfts/ChargedDiblock.py) is a complete script.
 
 ---
 

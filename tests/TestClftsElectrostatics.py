@@ -20,7 +20,8 @@
 4. Restart: a run continued from a checkpoint with pending measurements reproduces
    the uninterrupted run bit for bit, including psi and its noise stream.
 5. Input checks: electroneutrality, monomer types, coupling, smearing, boundaries,
-   random copolymers and the methods other than CL-FTS.
+   random copolymers, L-FTS, and the CL-FTS option psi_dt_scaling in SCFT (whose mean-field
+   electrostatics TestScftElectrostatics checks).
 6. Screening (screening_length): the force of psi, (lap - kappa^2) psi/E + c, is the derivative
    of H also along the uniform mode; the stationary variance of every mode, the uniform one
    included, is that of exp(-H); a screened system may carry a net charge, and its uniform
@@ -403,8 +404,13 @@ def input_checks(root):
     expect_validation_error(changed(lambda p: p["electrostatics"].update(psi_dt_scale=0.2)), "unknown keys")
     expect_validation_error(changed(lambda p: p.pop("smearing")), "needs 'smearing'")
     expect_validation_error(changed(lambda p: p["smearing"]["a_int"].update(C=0.0)), "positive smearing length")
-    expect_validation_error(changed(lambda p: p.update(bc=["reflecting"] * 4)), "periodic boxes only")
+    # Closed boxes are accepted (TestConfinedElectrostatics); a box that mixes walls and periodic axes is not
+    expect_validation_error(changed(lambda p: p.update(bc=["reflecting"] * 2 + ["periodic"] * 2)), "not both")
     expect_validation_error(changed(lambda p: p["smearing"]["a_int"].pop("C")), "one length for each monomer type")
+
+    def random_copolymer(p):
+        p["polymers"][0]["blocks"][1] = {"type": "R", "length": 0.5, "monomer_fractions": {"A": 0.5, "B": 0.5}}
+    expect_validation_error(changed(random_copolymer), "does not support random copolymers")
 
     def bjerrum(chain_model, ds):
         def change(p):
@@ -425,7 +431,7 @@ def input_checks(root):
     expect_validation_error(lfts(True), "CL-FTS only")
     scft = parameters(root / "inputs")
     scft.update(optimizer={"name": "am"}, relax_cell=False)
-    expect_validation_error(lambda: SCFT(scft), "CL-FTS only")
+    expect_validation_error(lambda: SCFT(scft), "CL-FTS option")
 
     # The coupling of bjerrum_length: E = 4 pi (l_B/R0) N^2 Nbar^(1/2)
     params = parameters(root / "inputs")

@@ -43,6 +43,68 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- Electrostatics in closed boxes and fixed charges (2026-10-28): `electrostatics` accepts
+  boxes with walls on every side, where ψ lives in the cosine series (no normal derivative at
+  the walls), in CL-FTS and SCFT, and `electrostatics.fixed_charge`, a fixed charge density on
+  the grid that adds <ψ c_f> to H, c_f to the charge density and its mean to the
+  electroneutrality and the counterions. With walls the charge structure function is not
+  recorded, the structure functions lack the ψ completion, and the SCFT stress uses the cosine
+  modes of ψ and of the ions. SCFT takes a fixed charge in the axis order of `nx` with
+  `axis_ordering`, like the initial fields. `TestConfinedElectrostatics` checks the
+  Poisson-Boltzmann limit between charged layers against an independent solution, the forces,
+  restarts, the stress and pressure with fixed charges in a periodic box, the SCFT stress in a
+  closed box against dF/dL and charged chains grafted to a wall. `SCFT`, `LFTS` and `CLFTS` reject a `mask` parameter, which they
+  ignored before: masks remain a `PropagatorSolver` option.
+- Gibbs-ensemble CL-FTS (`GibbsEnsemble`, 2026-10-28): two CL-FTS boxes exchange chains,
+  canonical point ions and volume at fixed totals until the exchange potentials
+  βμ_p - α_p βΠR₀³/C (βμ_s for ions) agree; with charges, no screening and only canonical ions
+  only neutral combinations move, while charged grand-canonical ions give each box its Donnan
+  potential and every species moves. Every species needs a positive amount in both boxes.
+  Each cycle continues the boxes from their fields files (fields, ψ and the previous noises)
+  with the uniform modes moved to the homogeneous saddle point of the new composition; `run()`
+  starts from the input boxes and `continue_run()` continues an interrupted run from
+  `gibbs_history.json`. CLFTS gains `draw_architectures` and `run(psi_noise_prev=...)`.
+  `TestGibbsEnsemble` checks, in the mean-field limit, the Flory-Huggins binodal of a blend,
+  the coexistence of charged chains with canonical ions (neutral combinations) and with
+  grand-canonical salt (Donnan potentials) against independent solutions, the input checks and
+  bitwise restarts; `examples/clfts/GibbsEnsemble.py` runs a blend.
+- Mean-field electrostatics in SCFT (2026-10-28): SCFT accepts `electrostatics` (with
+  `coupling`), point ions and grand-canonical ions, and iterates the electrostatic potential ψ
+  with the fields. The residual of ψ is the Newton step of the linearized Poisson equation with
+  the charge response of the homogeneous state, which keeps the iteration stable for large E.
+  The free energy adds -(1/2E)<ψ(k² + κ²)ψ> and the ions, the homogeneous reference the
+  electrostatic energy of the homogeneous state (Donnan potential or screened net charge), and
+  the stress the Coulomb kernel and the ion smearing. `SCFT.compute_stress(w, phi)` gives the
+  lattice derivatives at fixed fields, `run(initial_psi=...)` an initial ψ, and the results
+  `psi` and `ion_chemical_potentials`; canonical ions enter `grand_potential` with
+  -N c_s βμ_s. The coupling must be positive, and `coexistence_quantities()` rejects results
+  with electrostatics. `TestScftElectrostatics` checks the neutral reduction, the
+  strong-screening limit (χ_eff), the stress against dF/dL, the homogeneous states, the
+  equivalence of canonical and grand-canonical ions, a fixed charge with `axis_ordering` and
+  the platforms.
+- CL-FTS grand-canonical species (2026-10-28): a polymer with `chemical_potential` in place of
+  `volume_fraction`, or a point ion with `chemical_potential` in place of `concentration`, has a
+  fixed chemical potential βμ (in the convention of the recorded chemical potentials) instead
+  of a fixed amount. Its term of H is -e^(βμ) Q per reference chain, its concentration
+  e^(βμ) times the unnormalized density of the chains or ions, and the volume fractions of the
+  canonical polymers sum to at most 1. A charged grand-canonical species makes the uniform
+  mode of ψ evolve as the Donnan potential, so its input need not be electroneutral (a
+  polyampholyte without net charge does not). The
+  osmotic pressure includes their ideal gas e^(βμ) Q and conformations, and
+  `number_density_history` records the numbers of chains and ions of all species.
+  `TestClftsGrandCanonical` checks the agreement of the ensembles on the same fields, the
+  forces, the Donnan and Flory-Huggins mean-field limit with LM and etd, the pressure against
+  -dH/dV at fixed chemical potentials and restarts.
+- CL-FTS point ions (`electrostatics.ions`, 2026-10-28): ions with a valence, a Gaussian smearing
+  length and a concentration per segment of the reference density, without volume and without
+  χ. An ion feels z_s (Γ_s * ψ)/N like a segment, H gains -N c_s ln Q_s and the charge density
+  the smeared ion charge. The counterions that neutralize the polymers are added to one ion
+  species (`counterion`, automatic when unambiguous). The ions add their chemical potentials
+  (after the polymers), their ideal gas and smearing dilation to the osmotic pressure, and their
+  charge to the charge structure function. `electrostatics.n_segments` gives the number of
+  segments of the reference chain, which continuous chains need for point ions and now also
+  for `bjerrum_length`. `TestClftsPointIons` checks the forces, the linear response, the
+  pressure against -dH/dV, restarts and the Debye-Hückel statistics of ψ.
 - Fourier transforms of whole fields, `PropagatorSolver.fourier` (2026-10-27): the same
   interface on CPU (FFTW, MKL) and CUDA (cuFFT) for `forward`/`backward` transforms and for
   Fourier multipliers, `apply([(M, fields), ...])` = backward(Σ M(k) · forward(fields)) with

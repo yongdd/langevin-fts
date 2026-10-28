@@ -124,6 +124,32 @@ At convergence with $`\phi_A = \phi_B \approx 0.5`$ and $`\xi \approx 0`$:
 
 using the implemented normalization $`\boldsymbol{\Omega} = O^T \mathbf{w} / M`$ with $`M = 2`$ (see [PolymerFieldTheory.md](PolymerFieldTheory.md)).
 
+### 2.5 Charged Systems
+
+With `electrostatics` ([Polymer Field Theory, Section 5](PolymerFieldTheory.md#5-electrostatic-interactions)) SCFT takes the saddle point of the Hamiltonian that CL-FTS samples. The electrostatic potential $`\psi`$ is real there, the charged types feel $`w_i + z_i \psi`$, and the free energy per reference chain is
+
+```math
+\frac{\beta F}{C V/R_0^3} = F_{\mathrm{chains}}[w_i + z_i \psi] - \frac{1}{2E} \left\langle \psi \, (\kappa^2 - \nabla^2) \, \psi \right\rangle + \sum_s F_s
+```
+
+with the free energy $`F_{\mathrm{chains}}`$ of Section 2 in the fields the chains feel, the coupling $`\langle \psi c_f \rangle`$ of a fixed charge density (`fixed_charge`, left out of the formula above), and the point ions $`F_s = N c_s (\ln(N c_s) - 1) - N c_s \ln Q_s`$ (canonical) or $`-e^{\beta\mu_s} Q_s`$ (grand canonical). $`F`$ is stationary in $`w`$ and $`\psi`$ at the saddle point, where $`\psi`$ solves the (screened) Poisson equation $`(k^2 + \kappa^2)\psi/E = c`$ with the smeared charge density $`c`$ of the chains and the ions; at the saddle point $`-\langle \psi (\kappa^2 - \nabla^2) \psi \rangle/(2E) = -\langle \psi c \rangle/2`$.
+
+**Residual of ψ.** $`\psi`$ is iterated with the fields, after them in the optimizer vector. Its residual is the Newton step of the linearized Poisson equation,
+
+```math
+R_\psi(\mathbf{k}) = \frac{c(\mathbf{k}) - (k^2 + \kappa^2) \psi(\mathbf{k})/E}{(k^2 + \kappa^2)/E + D(\mathbf{k})}
+```
+
+where $`D(\mathbf{k}) = -\partial c(\mathbf{k})/\partial \psi(\mathbf{k})`$ is the response of the charges in the homogeneous state, measured before the iteration by central differences of a kick of $`\psi`$ at one grid point divided by the transform of the kick (two computations of the propagators). In a closed box the modes are those of the cosine series. Without the division the residual would be stiff where $`E/k^2`$ is large. The uniform mode of $`\psi`$ is zero in a neutral canonical system without screening; with screening or charged grand-canonical ions it is iterated, and it starts at the homogeneous $`\psi_0`$. $`\psi_0`$ shifts with the chemical potentials of the ions (the Donnan potential), so the error of Section 3.3 adds $`\int R_\psi^2`$ to the numerator and $`\int (\psi - \langle\psi\rangle)^2`$ to the denominator.
+
+**Homogeneous reference.** $`\psi_0`$ solves $`\kappa^2 \psi_0/E = q(\psi_0)`$, with the net charge $`q`$ per segment of the polymers, the canonical ions and the grand-canonical ions $`e^{\beta\mu_s} e^{-z_s \psi_0/N}/N`$ ($`\psi_0 = 0`$ in a neutral canonical system without screening). The homogeneous free energy adds $`-\kappa^2 \psi_0^2/(2E) + \psi_0 q_p + \sum_s F_s(\psi_0)`$ to the Flory-Huggins value, where $`q_p`$ is the charge of the polymers and the fixed charge; the canonical ions enter through $`F_s`$, whose $`-N c_s \ln Q_s = z_s c_s \psi_0`$. For a screened net charge $`q`$ of canonical species this is $`E q^2/(2\kappa^2)`$ plus the ideal terms of the ions.
+
+**Stress.** At fixed $`w`$ and $`\psi`$ the box enters the propagators, the smearing of the fields $`w_i + z_i \psi`$, the Coulomb kernel, $`-(1/2E) \sum_{\mathbf{k}} (\partial k^2/\partial \theta) \vert\psi(\mathbf{k})\vert^2/n^2`$, and the smearing of the ions, $`\langle c_s \, z_s ((\partial \Gamma_s/\partial \theta) * \psi) \rangle`$ (`SCFT.compute_stress`). In a closed box the sums run over the cosine modes.
+
+**Limitations.** Periodic boxes or closed boxes with walls on every side (box relaxation: periodic boxes), one smearing length for all monomer types, no space group, and `coupling` in place of `bjerrum_length` (SCFT has no $`\bar N`$). Grand-canonical polymers are not available in SCFT. `TestConfinedElectrostatics` checks $`\psi`$ in a closed box against the Poisson-Boltzmann solution between charged layers and the stress with a fixed charge against $`dF/dL`$.
+
+**Tests.** `TestScftElectrostatics` checks that zero valences reproduce SCFT without charges; that under strong screening the free energy and the relaxed period of a lamella approach those of the neutral diblock with $`\chi_{\mathrm{eff}} N = \chi N - E (z_A - z_B)^2/(2\kappa^2)`$ as $`1/\kappa^2`$, with the Richardson extrapolation within $`10^{-5}`$; that the stress equals the derivative of the free energy with respect to the box length (canonical ions unscreened, grand-canonical ions screened); the Donnan potential and the screened homogeneous state; that grand-canonical ions with the chemical potentials of a canonical lamella reach the same state with the free energy $`F - \sum_s N c_s \mu_s`$; and the agreement of the platforms.
+
 ---
 
 ## 3. Iterative Methods

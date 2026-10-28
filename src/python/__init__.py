@@ -45,6 +45,7 @@ from .integrators import LeimkuhlerMatthews, EulerMaruyama
 from .scft import SCFT
 from .lfts import LFTS
 from .clfts import CLFTS
+from .gibbs_ensemble import GibbsEnsemble
 from .wtmd import WTMD
 from .validation import ValidationError, SaddlePointError
 from .scft import SCFTResult, IterationInfo

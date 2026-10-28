@@ -134,7 +134,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
 ENDFOREACH()
 
 SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation TestExtensions TestPropagatorAnalytic TestConvergenceOrderLite TestSamplingStatistics
-    TestStructureFunctionRPA TestChargedStructureFunctionRPA TestStructureFunctionRecords TestClftsElectrostatics TestClftsEtd TestClftsThermodynamics
+    TestStructureFunctionRPA TestChargedStructureFunctionRPA TestStructureFunctionRecords TestClftsElectrostatics TestClftsPointIons TestClftsGrandCanonical TestScftElectrostatics TestGibbsEnsemble TestConfinedElectrostatics TestClftsEtd TestClftsThermodynamics
     TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
     TestCnAdiLongLines TestCrysFFTCellChange

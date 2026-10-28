@@ -11,7 +11,8 @@ This document describes complex Langevin field-theoretic simulation (CL-FTS), wh
 5. [Using the CLFTS Class](#5-using-the-clfts-class)
 6. [Charged Systems](#6-charged-systems)
 7. [Chemical Potential and Osmotic Pressure](#7-chemical-potential-and-osmotic-pressure)
-8. [References](#8-references)
+8. [Gibbs Ensemble](#8-gibbs-ensemble)
+9. [References](#9-references)
 
 ---
 
@@ -23,7 +24,7 @@ CL-FTS drops the partial saddle-point approximation: every auxiliary field fluct
 
 ## 2. Complex Langevin Equations
 
-As in [PolymerFieldTheory.md](PolymerFieldTheory.md#63-sign-convention-for-imaginary-fields), $`H`$ is minimized with respect to the real fields and maximized with respect to the imaginary fields at the saddle point; for AB, $`\Omega_-`$ is real and $`\Omega_+`$ imaginary. An imaginary field is integrated along the imaginary axis, $`\Omega_j = i w_j`$ with real $`w_j`$. Written for $`\Omega_j`$, the real Langevin step of $`w_j`$ reverses the sign of the force and makes the noise imaginary:
+As in [PolymerFieldTheory.md](PolymerFieldTheory.md#73-sign-convention-for-imaginary-fields), $`H`$ is minimized with respect to the real fields and maximized with respect to the imaginary fields at the saddle point; for AB, $`\Omega_-`$ is real and $`\Omega_+`$ imaginary. An imaginary field is integrated along the imaginary axis, $`\Omega_j = i w_j`$ with real $`w_j`$. Written for $`\Omega_j`$, the real Langevin step of $`w_j`$ reverses the sign of the force and makes the noise imaginary:
 
 ```math
 \Omega_i(\mathbf{r}, \tau + \delta\tau) = \Omega_i(\mathbf{r}, \tau) - \lambda_i \frac{\delta H}{\delta \Omega_i} \delta\tau N + \sigma_i \mathcal{N}_i(\mathbf{r}, \tau) \qquad \text{(real fields)}
@@ -41,7 +42,7 @@ LM ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leim
 
 LM steps diverge when the time step exceeds about twice the inverse of the fastest relaxation rate of the fields. The `etd` integrator removes this limit for the linear response of the homogeneous state: it integrates that part of the forces exactly and keeps the rest explicit (exponential time differencing, Reference 7).
 
-**Linear response.** Write the update of Section 2 as $`\Omega_i \to \Omega_i - \lambda_i F_i \, \delta\tau N + n_i \sigma \mathcal{N}_i`$, with $`F_i = \pm\delta H/\delta\Omega_i`$ and the noise direction $`n_i`$ (1 for real fields, $`i`$ for imaginary fields). Before the run, `CLFTS` measures the Jacobian $`J_{ij}(\mathbf{k}) = \partial \hat F_i(\mathbf{k}) / \partial \hat\Omega_j(\mathbf{k})`$ at the homogeneous state $`\Omega = 0`$ (a uniform shift of the fields does not change the concentrations of canonical chains).
+**Linear response.** Write the update of Section 2 as $`\Omega_i \to \Omega_i - \lambda_i F_i \, \delta\tau N + n_i \sigma \mathcal{N}_i`$, with $`F_i = \pm\delta H/\delta\Omega_i`$ and the noise direction $`n_i`$ (1 for real fields, $`i`$ for imaginary fields). Before the run, `CLFTS` measures the Jacobian $`J_{ij}(\mathbf{k}) = \partial \hat F_i(\mathbf{k}) / \partial \hat\Omega_j(\mathbf{k})`$ at the homogeneous state $`\Omega = 0`$ (a uniform shift of the fields does not change the concentrations of canonical chains; grand-canonical chains have the density $`e^{\beta\mu_p}\alpha_p`$ there rather than that of the saddle point, which changes only the linear part that the step integrates exactly).
 - A kick $`i\epsilon`$ at one grid point of field $`j`$ has the Fourier amplitude $`i\epsilon`$ at every wavevector. In a homogeneous periodic box the concentrations do not couple different wavevectors at linear order, so the imaginary part of the change of the forces, divided by $`\epsilon`$, gives the column $`j`$ of $`J(\mathbf{k})`$ at all $`\mathbf{k}`$ from one computation of the concentrations (a complex-step derivative, Reference 8, with an error of order $`\epsilon^2`$).
 - The forces of the unkicked state are subtracted. Transforms of real data, for example FFTs of sizes with large prime factors, leave imaginary rounding errors of order $`10^{-15}`$, which a division by $`\epsilon`$ alone would amplify. With $`\epsilon = 10^{-6}`$ the error of $`J`$ stays below about $`10^{-7}`$ of its size.
 - $`J`$ contains the quadratic terms of $`H`$, the response of the chains of any architecture and the smearing, all as the solver computes them, but not the dynamical stabilization of Section 4. With `electrostatics`, $`\psi`$ is one more field, with the force $`-\delta H/\delta\psi`$ (Section 6).
@@ -148,7 +149,7 @@ Two remedies are available:
 \frac{\beta H_{el}}{C V / R_0^3} = \frac{1}{2 E V} \int \psi \, (\nabla^2 - \kappa^2) \, \psi \, d\mathbf{r}, \qquad \frac{\delta H}{\delta \psi} = \frac{(\nabla^2 - \kappa^2) \psi}{E} + c
 ```
 
-CL-FTS samples $`\psi`$ together with the auxiliary fields and stores it on the rotated contour, like the other imaginary-type fields. Without screening the uniform mode of $`\psi`$ is zero and the system must be electroneutral. With screening the uniform mode fluctuates, and the explicit species may carry a net charge.
+CL-FTS samples $`\psi`$ together with the auxiliary fields and stores it on the rotated contour, like the other imaginary-type fields. Without screening the uniform mode of $`\psi`$ is zero and the system must be electroneutral. With screening the uniform mode fluctuates, and the explicit species may carry a net charge. A charged grand-canonical species also makes the uniform mode fluctuate: it then is the Donnan potential that keeps the system neutral on average ([Polymer Field Theory, Section 6](PolymerFieldTheory.md#6-grand-canonical-species)).
 
 **Update of ψ.** $`\psi`$ moves like an imaginary field (Section 2) with the mobility $`s`$ (`psi_dt_scaling`). Its linear part $`(\nabla^2 - \kappa^2) \psi / E`$ relaxes at the rate $`\gamma_k = s (k^2 + \kappa^2)/E`$, which is stiff at large $`k`$. This part is therefore integrated exactly for each wavevector, by exponential time differencing. Like the Leimkuhler-Matthews integrator of the auxiliary fields ([Langevin dynamics, Section 2.4](LangevinFieldTheoreticSimulation.md#24-leimkuhler-matthews-method)), $`\psi`$ takes the mean of the current and the previous noise. It follows the noise scheme the integrator declares (`averaged_noise`, see [Extensions](../internals/Extensions.md#langevin-integrators)): averaged with the Leimkuhler-Matthews integrator, fresh with the Euler integrator. A custom integrator must declare it, even one that declares `linear_response` and so receives $`\psi`$ (below):
 
@@ -161,7 +162,7 @@ In this step:
 - $`\hat\xi_{\mathbf{k}}`$ is the Fourier transform of real Gaussian noise with the standard deviation $`\sigma`$ of [Langevin dynamics, Section 2.2](LangevinFieldTheoreticSimulation.md#22-discretized-equation-per-chain-unit), drawn from a separate random-number stream, the jumped stream of the auxiliary fields (`PCG64.jumped()`). The noise of the auxiliary fields is therefore the same as without charges, and runs with neighboring seeds do not share a stream. $`\hat\xi'_{\mathbf{k}}`$ is the noise of the previous step (zero at the first step); checkpoints store it as `psi_noise_prev`.
 - $`\hat c_{\mathbf{k}}`$ is the charge density of the state before the step, as for the forces of the auxiliary fields.
 - The step is the Leimkuhler-Matthews step of $`\psi`$ with the time step $`(1 - a_k)/\gamma_k < \delta\tau N`$ of each mode, so it is stable for any $`\delta\tau`$. As $`\gamma_k \to 0`$ it becomes the Leimkuhler-Matthews step with mobility $`s`$.
-- Without screening the uniform mode is set to zero after the step.
+- Without screening the uniform mode is set to zero after the step, unless a charged species is grand canonical. The uniform mode then takes the step with $`\gamma_0 = 0`$ and relaxes only through the charge of the grand-canonical species, slowly where they are dilute; `psi_dt_scaling` speeds it up.
 
 The Leimkuhler-Matthews step samples a Gaussian distribution exactly for any stable time step and any mobilities. For Gaussian fluctuations, the statistics of $`\psi`$ and of the auxiliary fields therefore do not depend on $`\delta\tau`$, although the charge density is explicit.
 
@@ -173,7 +174,7 @@ With the Euler integrator, $`\psi`$ takes fresh noise, $`i \sqrt{(1 - a_k^2)/(2 
 
 Before the Leimkuhler-Matthews noise was introduced, this was the step of every integrator. In the polyampholyte of `TestChargedStructureFunctionRPA` ($`E = 300`$, $`\delta\tau N = 1`$) it put the charge structure functions from $`\psi`$ about 2 % above the RPA; with the averaged noise they agree within 0.5 % ([Structure Function Estimators, Section 6](StructureFunctionEstimators.md#6-charge-structure-function)).
 
-**With the `etd` integrator.** The integrator of Section 2.1 advances $`\psi`$ together with the auxiliary fields, as the last field with the force $`-\delta H/\delta\psi`$, its mobility $`s`$ and its noise stream. Its Jacobian then contains the screening of $`\psi`$ by the charges and the coupling of $`\psi`$ to the auxiliary fields, which the step above keeps explicit, so the Gaussian statistics of all fields are exact for any time step. Without screening the uniform mode of $`\psi`$ is set to zero after each step.
+**With the `etd` integrator.** The integrator of Section 2.1 advances $`\psi`$ together with the auxiliary fields, as the last field with the force $`-\delta H/\delta\psi`$, its mobility $`s`$ and its noise stream. Its Jacobian then contains the screening of $`\psi`$ by the charges and the coupling of $`\psi`$ to the auxiliary fields, which the step above keeps explicit, so the Gaussian statistics of all fields are exact for any time step. Without screening the uniform mode of $`\psi`$ is set to zero after each step, unless a charged species is grand canonical.
 
 **Observables.**
 - **H:** the recorded $`H`$ includes $`H_{el}`$.
@@ -194,7 +195,9 @@ Before the Leimkuhler-Matthews noise was introduced, this was the step of every 
 
 **Checked range.** The tests compare with the RPA where fluctuations are weak. The comparison with BioFTS ([Structure Function Estimators, Section 7](StructureFunctionEstimators.md#7-validation)) extends to a polyampholyte whose structure function lies up to 28 % above the RPA. BioFTS also uses complex Langevin dynamics, so this agreement checks the implementation, not the convergence of the method (Section 3). Strong electrostatic coupling has not been validated. In the small model of Section 3.2, whose averages can be summed exactly, CL-FTS agrees with the exact averages up to $`E = 10`$ with weak excluded volume and differs at $`E \ge 25`$; at $`E = 100`$ and $`\zeta N = 4`$ the counterion density is about 3 % off, and a smaller time step and other integrators do not remove the difference. At strong coupling, compare with an independent reference where one exists and inspect the tails of `drift_max_step_history` and `psi_drift_max_step_history` (Section 3.1).
 
-**Limitations.** The implementation supports periodic boxes only and no random copolymers. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
+**Closed boxes and fixed charges.** In a box with walls on every side the transforms of $`\psi`$ are the cosine series of `PropagatorSolver.fourier`, which diagonalize $`(k^2 + \kappa^2)/E`$ with no normal derivative of $`\psi`$ at the walls; the step above then integrates each cosine mode exactly, and $`H_{el}`$ is half the grid mean of $`\psi`$ times the backward series of $`-(k^2 + \kappa^2)\psi(\mathbf{k})/E`$. The estimators with $`\psi`$ and the charge structure function need a periodic box, as do the osmotic pressure and `etd`. A fixed charge density $`c_f`$ adds $`\langle \psi c_f \rangle`$ to $`H`$ and $`c_f`$ to $`c`$; held at its grid values when the box dilates, it adds $`-\langle \psi c_f \rangle`$ to the osmotic pressure. `TestConfinedElectrostatics` checks the forces against finite differences of $`H`$ in a closed box with a fixed charge and point ions, that the mean-field limit reaches the Poisson-Boltzmann solution between charged layers (solved independently with `scipy.fft.dct`), bitwise restarts in the closed box, and the pressure with a fixed charge in a periodic box.
+
+**Limitations.** No random copolymers, no box that mixes periodic and wall axes, and no impenetrable regions: the simulation classes reject a `mask`. L-FTS keeps imaginary-type fields at their saddle point, so it does not have this fluctuating $`\psi`$.
 
 ---
 
@@ -202,23 +205,25 @@ Before the Leimkuhler-Matthews noise was introduced, this was the step of every 
 
 The canonical partition function holds the ideal terms $`\prod_p (V Q_p)^{n_p}/n_p!`$ of the chains and the Gaussian integrals over the fields, normalized by the same integrals without the chains (the Hubbard-Stratonovich transformation). Derivatives of $`\ln Z`$ give operators whose averages over the complex Langevin samples are the chemical potentials and the osmotic pressure. They are recorded with $`H`$ at every sample (`sample_interval`) in the `dH` files: the chemical potentials always, the pressure with `recording.pressure`.
 
+**Grand-canonical species.** With `chemical_potential` in place of the amount of a polymer or a point ion, its term of $`H`$ is $`-e^{\beta\mu} Q`$ per reference chain ([Polymer Field Theory, Section 6](PolymerFieldTheory.md#6-grand-canonical-species)). The numbers of chains and ions then fluctuate: `number_density_history_real` and `_imag` hold, in the columns of the chemical potentials, the number per reference chain of every species, $`\bar\phi_p/\alpha_p`$ or $`N c_s`$ of canonical species and the operator $`e^{\beta\mu} Q`$ of grand-canonical ones. Their averages give the composition in equilibrium with a reservoir of the given chemical potentials. Material conservation is checked for the canonical chains.
+
 **Chemical potential.** $`H`$ depends on the number of chains $`n_p`$ only through $`-n_p \ln Q_p`$, so
 
 ```math
 \beta\mu_p = \ln\frac{\bar\phi_p}{\alpha_p} - \ln Q_p
 ```
 
-per chain, in the convention of `SCFT.compute_chemical_potentials` ([Phase Equilibrium](PhaseEquilibrium.md#restoring-chemical-potentials)), which leaves out the constant $`\ln(\rho_0/N)`$ common to all species; at the saddle point the operator equals the SCFT value. `chemical_potential_history_real` and `_imag` hold one row of all species per sample. The average of the real part is the chemical potential; it does not depend on the branch of the complex logarithm. A species without chains has $`-\infty`$. Without screening $`\psi`$ has no uniform mode, so for charged species only electroneutral combinations of chemical potentials are physical.
+per chain, in the convention of `SCFT.compute_chemical_potentials` ([Phase Equilibrium](PhaseEquilibrium.md#restoring-chemical-potentials)), which leaves out the constant $`\ln(\rho_0/N)`$ common to all species; at the saddle point the operator equals the SCFT value. `chemical_potential_history_real` and `_imag` hold one row of all species per sample. The average of the real part is the chemical potential; it does not depend on the branch of the complex logarithm. A species without chains has $`-\infty`$. Point ions follow the polymers with $`\beta\mu_s = \ln(N c_s) - \ln Q_s`$ ([Polymer Field Theory, Section 5.5](PolymerFieldTheory.md#55-point-ions)). Without screening $`\psi`$ has no uniform mode, so for charged species only electroneutral combinations of chemical potentials are physical. A grand-canonical species records its given chemical potential.
 
-**Osmotic pressure.** $`\beta\Pi = \partial \ln Z / \partial V`$ at fixed $`n_p`$ is evaluated with the grid values of the fields held fixed while the box is dilated in its shape, so every wavevector scales as $`k^2 \propto V^{-2/d}`$. Per $`C/R_0^3 = \rho_0/N`$:
+**Osmotic pressure.** $`\beta\Pi = \partial \ln Z / \partial V`$ at fixed $`n_p`$ (at fixed $`\mu`$ for grand-canonical species) is evaluated with the grid values of the fields held fixed while the box is dilated in its shape, so every wavevector scales as $`k^2 \propto V^{-2/d}`$. Per $`C/R_0^3 = \rho_0/N`$:
 
 ```math
 \frac{\beta\Pi R_0^3}{C} = \sum_p \frac{\bar\phi_p}{\alpha_p} - \frac{1}{d} \sum_a L_a \frac{\partial h}{\partial L_a} - \sum_i \left\langle \phi_i \left( \frac{\partial \Gamma_i}{\partial \ln V} * (w_i + z_i \psi) \right) \right\rangle - h_\Omega + \frac{n_\Omega \, n_g}{2 C V / R_0^3} + \Pi_\psi
 ```
 
 The terms are:
-- the ideal gas of the chains;
-- the conformations of the chains, from the stress of the solver: $`h = -\sum_p (\bar\phi_p/\alpha_p) \ln Q_p`$ at fixed smeared fields;
+- the ideal gas of the chains; a grand-canonical polymer contributes $`e^{\beta\mu_p} Q_p`$, from its term of $`H`$, in place of $`\bar\phi_p/\alpha_p`$;
+- the conformations of the chains, from the stress of the solver: $`h = -\sum_p (\bar\phi_p/\alpha_p) \ln Q_p`$ at fixed smeared fields, with $`-e^{\beta\mu_p} Q_p`$ for grand-canonical polymers;
 - the smearing functions, which follow the box, with $`\partial\Gamma/\partial \ln V = -(2/d) \, k^2 \, d\Gamma/dk^2`$ and the unsmeared concentrations $`\phi_i`$;
 - the field part of $`H`$ per reference chain, $`h_\Omega = \sum_i \langle h_{2,i} \Omega_i^2 + h_{1,i} \Omega_i \rangle + h_{\mathrm{const}}`$ (the quadratic, linear and constant terms of [Polymer Field Theory, Section 3.2](PolymerFieldTheory.md#32-effective-hamiltonian)), which scales with $`V`$;
 - the normalization of the Gaussian integral over each of the $`n_\Omega`$ auxiliary fields with a nonzero eigenvalue on $`n_g`$ grid points: it cancels the grid-dependent part of $`h_\Omega`$, which is $`n_g/(2 C V/R_0^3)`$ per field without chains;
@@ -227,6 +232,8 @@ The terms are:
 ```math
 \Pi_\psi = -\left[\left(1 - \frac{2}{d}\right) H_k + H_\kappa\right] + \frac{1}{2 C V/R_0^3} \sum_{k^2 + \kappa^2 > 0} \left(1 - \frac{2}{d} \frac{k^2}{k^2 + \kappa^2}\right)
 ```
+
+- point ions: their ideal gas $`\sum_s N c_s`$ ($`e^{\beta\mu_s} Q_s`$ if grand canonical) and the dilation of their smearing functions, $`-\sum_s \langle c_s(\mathbf{r}) \, ((\partial \Gamma_s/\partial \ln V) * z_s \psi) \rangle`$, as for the monomer types; they have no conformations.
 
 At the homogeneous saddle point the operator is the Flory-Huggins osmotic pressure $`\sum_p \bar\phi_p/\alpha_p + \bar{\boldsymbol\phi}^T X \bar{\boldsymbol\phi}/2 + (\zeta N/2)\big((\sum_i \bar\phi_i)^2 - 1\big)`$ as $`C \to \infty`$. A screened system with the net charge $`q = \sum_i z_i \bar\phi_i`$ per segment has $`\psi_0 = E q/\kappa^2`$ there and adds the mean-field Yukawa energy $`E q^2/(2\kappa^2)`$.
 
@@ -237,7 +244,7 @@ At the homogeneous saddle point the operator is the Flory-Huggins osmotic pressu
 **Restarts.** Checkpoints hold the pending samples. A checkpoint without them, written by an earlier version or by a run without `recording.pressure`, gives NaN for those samples in the next file.
 
 **Tests.** `TestClftsThermodynamics` checks:
-- for random complex fields on a 3D grid with discrete chains, that the pressure operator without the ideal term and the normalizations equals $`-\partial H/\partial V`$ at fixed grid values and numbers of chains to $`10^{-8}`$: without smearing, with Gaussian and sigmoidal smearing, and with smeared charges with and without screening;
+- for random complex fields on a 3D grid with discrete chains, that the pressure operator without the ideal term and the normalizations equals $`-\partial H/\partial V`$ at fixed grid values and numbers of chains to $`10^{-8}`$: without smearing, with Gaussian and sigmoidal smearing, and with smeared charges with and without screening (`TestClftsPointIons` adds point ions at fixed numbers of ions, `TestClftsGrandCanonical` a grand-canonical homopolymer and ions at fixed chemical potentials);
 - the Flory-Huggins chemical potentials and pressure at the homogeneous saddle point;
 - that the records equal the operators recomputed from the saved state, and that continued runs reproduce them bit for bit.
 
@@ -262,7 +269,33 @@ The errors are standard errors of eight block means. The normalization terms are
 
 ---
 
-## 8. References
+## 8. Gibbs Ensemble
+
+`GibbsEnsemble` (`gibbs_ensemble.py`) finds coexisting phases with two CL-FTS boxes, one per phase, that exchange chains, point ions and volume at fixed totals (Reference 9). Each box keeps the reference density on average, so its volume follows from its chains, $`V_b = \sum_p \alpha_p n_p^b`$, with the numbers of chains $`n_p^b`$ and of ions $`n_s^b = N c_s^b V_b`$ in units of $`C/R_0^3`$ per unit volume. A chain of species $`p`$ that moves from box II to box I takes its volume along, and the free energy changes by $`\tilde\mu_p^I - \tilde\mu_p^{II}`$ with the exchange potential
+
+```math
+\tilde\mu_p = \beta\mu_p - \alpha_p \frac{\beta\Pi R_0^3}{C}, \qquad \tilde\mu_s = \beta\mu_s
+```
+
+for a point ion, which has no volume. Both are the averages of the real parts of the operators of Section 7 over one cycle of Langevin steps of each box. After the cycle the amounts move down the difference:
+
+```math
+\Delta n^I = -r \, M_P \left(\tilde\mu^I - \tilde\mu^{II}\right), \qquad \Delta n^{II} = -\Delta n^I, \qquad M = \mathrm{diag}\!\left(\frac{n^I n^{II}}{n^I + n^{II}}\right)
+```
+
+with the rate $`r`$ (`exchange_rate`). For ideal species $`M`$ makes the step relative to the amounts and the relaxation rate of every species $`r`$; a step moves at most half of the smaller amount of a species. Without charges $`M_P = M`$. With charged species, no screening and only canonical ions each box stays neutral: $`M_P = M - M\mathbf{z}\mathbf{z}^T M/(\mathbf{z}^T M \mathbf{z})`$ with the charges $`\mathbf{z}`$ of the species (the valence of an ion, $`N \sum_i z_i \alpha_{p,i}`$ of a chain) moves only neutral combinations, and the arbitrary uniform potential of each box drops out of the step. Grand-canonical point ions have the same chemical potential in both boxes and are not exchanged, so the boxes are in contact with one salt reservoir. If they are charged, the uniform potential of each box is its Donnan potential against the reservoir ([Polymer Field Theory, Section 6](PolymerFieldTheory.md#6-grand-canonical-species)); then $`M_P = M`$, every species moves on its own and the canonical charge of a box may change. At coexistence the exchange potentials agree (in every neutral combination when only those move); the pressures need not agree, since each box is held at the reference density. Every species needs a positive amount in both boxes, since a species absent from a box could not enter it.
+
+**Cycles.** Each cycle builds both boxes from the input with their volume fractions, ion concentrations and box lengths, which scale with $`V_b^{1/d}`$ at the same grid. A box continues from the fields, $`\psi`$ and the previous noises of the Leimkuhler-Matthews step (of the auxiliary fields and of $`\psi`$) at the end of its previous cycle (its fields file), with a random seed of its own for each cycle, and the step numbers continue. In canonical CL-FTS the uniform mode of the pressure field relaxes only at the rate $`2/(\chi N + 2\zeta N)`$ per unit time, and it shifts the chemical potentials and the pressure. The uniform modes of the fields therefore move with the homogeneous saddle point, $`w_i = \sum_j \chi_{ij} N \bar\phi_j`$ and the homogeneous $`\psi_0`$, when the composition changes, and a box without initial fields starts at its homogeneous saddle point. `skip_steps` leaves the first steps of each cycle out of the averages. The console line of each cycle shows the largest difference of the exchange potentials (in a neutral system without its component along $`\mathbf{z}`$, the gauge). `gibbs_history.json` holds the settings and every cycle, and `continue_run()` continues an interrupted run from it and the fields files as the uninterrupted run would. `summary()` averages the second half of the cycles.
+
+**Use.** The averages of each cycle carry statistical errors, so the amounts fluctuate about coexistence with an amplitude that grows with $`r`$ and falls with the length of the cycles; average them over many cycles and check that the result does not depend on $`r`$ and `cycle_steps`. Near a critical point the relaxation slows down, since the free energy changes little along the composition difference. The boxes must be large enough to hold a homogeneous phase; a box that phase separates, or forms a microphase, does not represent one phase. [GibbsEnsemble.py](../../examples/clfts/GibbsEnsemble.py) runs a binary blend.
+
+**Limitations.** Canonical free chains only (no grand-canonical or grafted polymers), periodic boxes with the grid of the input, and the reference density in every box, which is exact as $`\zeta N \to \infty`$. Grand-canonical point ions are allowed.
+
+**Tests.** `TestGibbsEnsemble` checks, in the mean-field limit ($`\bar N = 10^{28}`$), that a symmetric blend at $`\chi N = 3`$ reaches the Flory-Huggins binodal within $`2 \times 10^{-6}`$; that for charged chains with counterions and salt as canonical point ions, started at the coexistence of the Flory-Huggins free energy with ideal ions solved independently, the exchange potentials of the boxes agree in every neutral combination within $`10^{-6}`$, and that from distant boxes the boxes stay neutral and approach it; that charged chains with grand-canonical salt reach the Donnan coexistence of the same free energy, solved independently with the Donnan potentials of the boxes, where every exchange potential agrees within $`10^{-6}`$; the input checks; and that a run continued by `continue_run()` reproduces the uninterrupted one bit for bit.
+
+---
+
+## 9. References
 
 1. Ganesan, V. & Fredrickson, G. H. "Field-theoretic polymer simulations." *Europhys. Lett.* **55**, 814 (2001).
 
@@ -279,3 +312,5 @@ The errors are standard errors of eight block means. The normalization terms are
 7. Cox, S. M. & Matthews, P. C. "Exponential time differencing for stiff systems." *J. Comput. Phys.* **176**, 430 (2002).
 
 8. Squire, W. & Trapp, G. "Using complex variables to estimate derivatives of real functions." *SIAM Rev.* **40**, 110 (1998).
+
+9. Riggleman, R. A. & Fredrickson, G. H. "Field-theoretic simulations in the Gibbs ensemble." *J. Chem. Phys.* **132**, 024104 (2010).

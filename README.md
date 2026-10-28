@@ -11,7 +11,9 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 - Continuous and discrete chain models
 - Dynamic-programming reuse of equivalent propagators in branched polymers and mixtures
 - SCFT unit-cell relaxation for orthogonal and non-orthogonal cells, and space-group symmetry (beta)
-- Well-tempered metadynamics (L-FTS) and charged polymers with smeared Coulomb interactions (CL-FTS)
+- Well-tempered metadynamics (L-FTS) and charged polymers with smeared Coulomb interactions, point ions and
+  grand-canonical species (CL-FTS; mean field in SCFT)
+- Gibbs-ensemble CL-FTS for coexisting phases
 - CPU (MKL, FFTW) and GPU (NVIDIA CUDA) platforms
 
 For details, see [Features.md](docs/getting-started/Features.md).

@@ -152,11 +152,13 @@ makes the estimator of Section 3 give $`(P + \mathbf{u}\mathbf{u}^T/\mathbf{u}\c
 
 **When nothing changes.** If $`\mathbf{u} = 0`$, the charges lie along modes that already have fields, and the estimator is unchanged. This is the case without charges, with $`E = 0`$, and when every mode has a field. At $`\mathbf{k} = 0`$ the term with $`\tilde\psi`$ is left out: this mode is not a structure function in the canonical ensemble, and with screening $`\kappa^2 \tilde\psi(0)/E`$ would carry a net charge.
 
-**In polymerfts.** CL-FTS applies the completion when it has electrostatics and $`\mathbf{u} \neq 0`$ (`CLFTS._psi_probe`). The completion follows from the identity of Section 2 and was derived for polymerfts; it is not taken from a publication.
+**Point ions and fixed charges.** $`\psi`$ couples to the charge of the point ions and to a fixed charge density $`c_f`$ as well (Section 2 holds for the total charge density). The completion removes their charge $`\sum_s z_s \Gamma_s \tilde c_s + \tilde c_f`$ from $`(k^2/E)\,\tilde\psi`$ before it subtracts $`\sum_l z_l \tilde\mu_l`$, and the charge structure function of Section 6 is that of the total charge, ions and fixed charge included.
+
+**In polymerfts.** CL-FTS applies the completion when it has electrostatics and $`\mathbf{u} \neq 0`$ in a periodic box (`CLFTS._psi_probe`). In a closed box the structure functions are recorded without it, so along $`\mathbf{u}`$ they lack the charged zero-eigenvalue part, and the charge structure function is not recorded. The completion follows from the identity of Section 2 and was derived for polymerfts; it is not taken from a publication.
 
 ## 6. Charge Structure Function
 
-The structure function of the smeared charge density follows from the recorded $`S_{ij}`$, or directly from $`\psi`$ by the identity of Section 2 with $`\tilde c = \sum_l z_l \Gamma_l \tilde\phi_l`$:
+The structure function of the smeared charge density follows from the recorded $`S_{ij}`$, or directly from $`\psi`$ by the identity of Section 2 with $`\tilde c = \sum_l z_l \Gamma_l \tilde\phi_l`$ (plus $`\sum_s z_s \Gamma_s \tilde c_s`$ of the point ions, whose charge is then included):
 
 ```math
 \sum_{ij} z_i \Gamma_i \, S_{ij} \, \Gamma_j z_j = V \sqrt{\bar{N}} \left\langle \frac{k^2}{E} \tilde\psi(\mathbf{k}) \, \tilde c(-\mathbf{k}) \right\rangle

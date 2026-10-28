@@ -19,9 +19,9 @@
 
 | Type | Description |
 |------|-------------|
-| **SCFT** | Mean-field equilibrium with Anderson mixing, stress-based box optimization, and space groups. |
+| **SCFT** | Mean-field equilibrium with Anderson mixing, stress-based box optimization, space groups, and the mean field of smeared Coulomb interactions with point ions and fixed charges in periodic or closed boxes (Poisson equation, Donnan potential). |
 | **L-FTS** | Langevin dynamics (Leimkuhler-Matthews) with structure function calculations and Well-Tempered Metadynamics (WTMD). |
-| **CL-FTS** (beta) | Complex Langevin with dynamical stabilization, smeared Coulomb interactions, optionally screened by a background electrolyte (charged polymers and counterions, periodic boxes), an exponential-time-differencing integrator with the exact linear response, and chemical potential and osmotic pressure operators. |
+| **CL-FTS** (beta) | Complex Langevin with dynamical stabilization, smeared Coulomb interactions, optionally screened by a background electrolyte (charged polymers, point ions with automatic counterions, fixed charges, periodic or closed boxes), grand-canonical polymers and ions (Donnan potential), an exponential-time-differencing integrator with the exact linear response, chemical potential and osmotic pressure operators, and a Gibbs-ensemble driver for coexisting phases. |
 
 ---
 

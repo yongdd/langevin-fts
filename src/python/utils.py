@@ -257,9 +257,12 @@ def checkpoint_data(sim):
         # CL-FTS: the chemical potentials (one row of all species per sample) and the pressure
         if "chemical_potential_history" in state:
             data["record_chemical_potential_history"] = np.reshape(
-                np.asarray(state["chemical_potential_history"], dtype=np.complex128), (-1, len(sim.chain_densities)))
+                np.asarray(state["chemical_potential_history"], dtype=np.complex128), (-1, sim.n_chemical_potentials))
         if "pressure_history" in state:
             data["record_pressure_history"] = np.asarray(state["pressure_history"], dtype=np.complex128)
+        if "number_density_history" in state:
+            data["record_number_density_history"] = np.reshape(
+                np.asarray(state["number_density_history"], dtype=np.complex128), (-1, sim.n_chemical_potentials))
         data["record_sample_count"] = state["sample_count"]
         for key, values in state["dH_history"].items():
             data[_measurement_key("dH", key)] = np.asarray(values)
@@ -379,8 +382,9 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
         # Pending chemical potentials and pressures (absent in checkpoints of earlier versions or
         # of runs without them; continue_run then records NaN for those samples, which later
         # checkpoints keep). A species without chains has the chemical potential -inf
-        for key, per_sample in (("record_chemical_potential_history", len(getattr(sim, "chain_densities", []))),
-                                ("record_pressure_history", 1)):
+        for key, per_sample in (("record_chemical_potential_history", getattr(sim, "n_chemical_potentials", 0)),
+                                ("record_pressure_history", 1),
+                                ("record_number_density_history", getattr(sim, "n_chemical_potentials", 0))):
             if key in data:
                 values = np.atleast_1d(np.asarray(data[key]))
                 if np.size(values) != count * per_sample or np.any(np.isposinf(np.real(values))):
@@ -416,7 +420,8 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
             if (np.size(psi_drift) != count or np.iscomplexobj(psi_drift) or not np.all(np.isfinite(psi_drift))
                     or np.any(psi_drift < 0)):
                 raise ValidationError("Invalid checkpoint measurement 'record_psi_drift_history'")
-            if electrostatics.coupling > 0:
+            # The charge structure function (with Coulomb coupling in a periodic box)
+            if electrostatics.coupling > 0 and electrostatics.periodic:
                 for key in electrostatics.CHARGE_SUMS:
                     name = _measurement_key("sf", key)
                     if (name not in data or np.size(data[name]) != int(np.prod(sim.prop_solver.nx))
@@ -461,7 +466,8 @@ def validate_checkpoint(sim, data, *, allow_legacy=False):
 
 def restore_recording_state(data, H_history, dH_history, sf_average, drift_history=None, *, psi_drift_history=None,
                             drift_step_history=None, n_fields=1, psi_drift_step_history=None,
-                            chemical_potential_history=None, pressure_history=None, n_polymers=1):
+                            chemical_potential_history=None, pressure_history=None, n_polymers=1,
+                            number_density_history=None):
     """Restore pending samples without MATLAB's squeeze changing their shape."""
     if data is None or "record_sample_count" not in data:
         return 0
@@ -473,6 +479,12 @@ def restore_recording_state(data, H_history, dH_history, sf_average, drift_histo
         else:
             values = np.full((count, n_polymers), np.nan + 0j)
         chemical_potential_history.extend(values)
+    if number_density_history is not None:
+        if "record_number_density_history" in data:
+            values = np.reshape(np.asarray(data["record_number_density_history"], dtype=np.complex128), (-1, n_polymers))
+        else:
+            values = np.full((count, n_polymers), np.nan + 0j)
+        number_density_history.extend(values)
     if pressure_history is not None:
         if "record_pressure_history" in data:
             values = np.atleast_1d(np.asarray(data["record_pressure_history"], dtype=np.complex128))
