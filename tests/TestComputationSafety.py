@@ -189,6 +189,9 @@ def test_angles_and_grafting(platform):
         cb = fac.create_computation_box(nx, [3.0]*len(nx))
         rejects(lambda: cb.set_lattice_parameters([3.0]*len(nx), angles))
         assert cb.is_orthogonal()
+    # An impossible cell given by gamma alone is reported with all three angles
+    rejects(lambda: fac.create_computation_box([8, 8], [2.0, 2.0], [179.99999999]),
+            "(alpha=90.000000, beta=90.000000, gamma=180.000000)")
     for graft in ({7: "G"}, {1: "G"}):
         mol = fac.create_molecules_information("continuous", 0.05, {"A": 1.0})
         rejects(lambda: mol.add_polymer(1.0, [["A", 0.5, 0, 1], ["A", 0.5, 1, 2]], graft))
@@ -326,6 +329,9 @@ def test_native_guards(platform, reduced):
     mixed = fac.create_computation_box(nx=[8]*3, lx=[3.0]*3, bc=["periodic"]*2 + ["reflecting"]*4)
     rejects(lambda: fac.create_propagator_computation(mixed, mol, opt, "rqm4"), "cannot mix periodic")
     fac.create_propagator_computation(mixed, mol, opt, "cn-adi2")
+
+    # The schedule's polymer indices address arrays sized from the molecules: they must be the same object
+    rejects(lambda: fac.create_propagator_computation(cb, molecules(fac), opt, "rqm4"), "another Molecules")
 
     # A cn-adi2 computation keeps its box orthogonal while it exists
     box = fac.create_computation_box(nx=[8]*3, lx=[3.0]*3, bc=["periodic"]*6)

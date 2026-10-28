@@ -137,8 +137,14 @@ def test_complex_into_real(platform):
                               chain_model="continuous", platform=platform)
     solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
     w = np.random.default_rng(3).normal(0.0, 5.0, 64)
+    sg_solver = PropagatorSolver(nx=[8, 8, 8], lx=[2.0, 2.0, 2.0], ds=0.1, bond_lengths={"A": 1.0},
+                                 bc=["periodic"] * 6, chain_model="continuous", platform=platform,
+                                 space_group=_core.SpaceGroup([8, 8, 8], "Im-3m", 529))
+    reduced = sg_solver.to_reduced_basis(np.ones(512))
     for call in (lambda: solver.compute_propagators({"A": w + 1j * w}), lambda: solver.mean(w + 1j * w),
-                 lambda: solver.integral(w + 0j), lambda: solver.inner_product(w, w + 1j * w)):
+                 lambda: solver.integral(w + 0j), lambda: solver.inner_product(w, w + 1j * w),
+                 lambda: solver.zero_mean(w + 1j * w),
+                 lambda: sg_solver.to_reduced_basis(np.ones(512) + 1j), lambda: sg_solver.from_reduced_basis(reduced + 1j)):
         try:
             call()
         except ValueError as exc:

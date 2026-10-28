@@ -286,7 +286,7 @@ class CLFTS:
                 self._psi_probe = u / (u @ u)
 
         # Thermodynamic operators, recorded with H: the chemical potential of each species,
-        # βμ_p = ln(φ_p/α_p) - ln Q_p per chain (not with grafted chains), and with
+        # βμ_p = ln(φ_p/α_p) - ln Q_p per chain (validation rejects grafted chains), and with
         # recording.pressure the osmotic pressure (pressure())
         chains = [self.prop_solver.get_polymer(p) for p in range(self.prop_solver.get_n_polymer_types())]
         self.chain_densities = np.array([chain.get_volume_fraction() / chain.get_alpha() for chain in chains])

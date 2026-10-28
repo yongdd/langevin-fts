@@ -179,7 +179,7 @@ The self-consistency error is defined as:
 
 The constant 1 in the denominator prevents divergence when the field magnitudes are small.
 
-Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `relax_cell=True`, the Euclidean norm of the stress components (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test.
+Iteration terminates when $`\epsilon < \text{tolerance}`$ (typically $`10^{-7}`$ to $`10^{-9}`$). With `relax_cell=True`, the Euclidean norm of the stress along the relaxed lattice parameters (the derivatives with respect to the box lengths and, when angles are optimized, the angles) is added to $`\epsilon`$ before this test. The $`n`$ lengths tied by the crystal system (a = b or a = b = c) contribute one component, the sum of their derivatives divided by $`\sqrt{n}`$ (§4.2).
 
 ---
 
@@ -214,6 +214,7 @@ where $`\eta`$ is the `stress_scale` parameter. At equilibrium, all stress compo
 - Angle changes are limited to 5° per iteration
 - Stress can be computed adaptively (`stress_interval: "adaptive"`) or at fixed intervals (default: 1)
 - Crystal system constraints (orthorhombic, tetragonal, cubic, hexagonal, monoclinic, triclinic) are automatically enforced
+- Lengths tied by the crystal system move together along the mean of their derivatives, so the relaxation and its convergence test reach the optimum of the tied cell. A structure without the symmetry of the tie (for example a = b of `"Tetragonal"` without a space group) can have tied lengths whose derivatives are nonzero and opposite at that optimum; no cell of that crystal system is then free of stress, and SCFT prints a warning that names a crystal system with free lengths
 - Stress computation supports periodic, reflecting, and absorbing boundary conditions with pseudo-spectral methods (real fields); the real-space CN-ADI2 solver does not support stress. `relax_cell=True` therefore requires a pseudo-spectral method; with non-periodic boundaries only box lengths are optimized (angles stay at 90°).
 
 See [StressTensor.md](StressTensor.md) for detailed stress calculation.

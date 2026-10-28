@@ -241,6 +241,26 @@ def main():
     ok &= expect_error(LFTS, params, "LFTS without saddle")
     params = base_params(); del params["optimizer"]
     ok &= expect_error(SCFT, params, "SCFT without optimizer")
+    # SCFT numeric options with which the iteration cannot converge
+    for change, what in ((lambda p: p.update(tolerance=float("nan")), "NaN tolerance"),
+                         (lambda p: p.update(tolerance=0.0), "zero tolerance"),
+                         (lambda p: p.update(stress_scale=float("nan")), "NaN stress_scale"),
+                         (lambda p: p["optimizer"].update(mix_min=float("nan")), "NaN optimizer.mix_min"),
+                         (lambda p: p["optimizer"].update(max_hist=2.5), "non-integer optimizer.max_hist"),
+                         (lambda p: p["optimizer"].update(name="adam"), "unknown optimizer")):
+        params = base_params(); change(params)
+        ok &= expect_error(SCFT, params, what)
+    # L-FTS and CL-FTS take no q_init: grafted chains are rejected at construction
+    for cls in (LFTS, CLFTS):
+        params = lfts_params(); params["polymers"][0]["initial_conditions"] = {0: "G"}
+        try:
+            build(cls, params)
+            print(f"FAILED: {cls.__name__} accepted a grafted chain")
+            ok = False
+        except ValidationError as exc:
+            if "free chains" not in str(exc):
+                print(f"FAILED: {cls.__name__} rejected a grafted chain with another error: {exc}")
+                ok = False
 
     # ---- solver options: defaults and explicit values reach the propagator solver
     calc = build(SCFT, base_params())

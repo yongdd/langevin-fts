@@ -751,6 +751,7 @@ class PropagatorSolver:
         field : numpy.ndarray
             Field to modify.
         """
+        self._check_real(field)
         self._initialize_solver()
         if self._space_group is None:
             self._computation_box.zero_mean(field)
@@ -899,6 +900,7 @@ class PropagatorSolver:
             raise RuntimeError(
                 "Space group not set. Pass space_group= to PropagatorSolver()."
             )
+        self._check_real(field)
         field_2d = np.reshape(field, (1, -1))
         return self._space_group.to_reduced_basis(field_2d)[0]
 
@@ -919,6 +921,7 @@ class PropagatorSolver:
             raise RuntimeError(
                 "Space group not set. Pass space_group= to PropagatorSolver()."
             )
+        self._check_real(field_reduced)
         field_2d = np.reshape(field_reduced, (1, -1))
         return self._space_group.from_reduced_basis(field_2d)[0]
 

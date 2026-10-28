@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SCFT options: angle relaxation, axis_ordering and the field-residual projector.
+SCFT options: angle relaxation, axis_ordering, the field-residual projector and tied lengths.
 
 1. Angle relaxation (Oblique2D): hexagonal cylinders started from gamma = 100 deg
    relax to gamma = 120 deg with a = b. The angles enter the optimizer in radians,
@@ -44,6 +44,14 @@ SCFT options: angle relaxation, axis_ordering and the field-residual projector.
    and leave the global NumPy random state unchanged. Until 2026-10 every constructor
    overwrote polymer_<id>.png in the current directory, and the extra colors came from
    np.random.rand.
+7. Tied lengths: "Tetragonal" relaxes a = b along the sum of their stresses, and the
+   convergence test measures that sum. Cylinders at (0, 0) and (0.5, 0.5) have the
+   a <-> b symmetry: the run converges with equal stresses and no warning. Cylinders at
+   (0, 0) and (0, 0.5) do not: at the optimum of the tied cell dF/da = -dF/db = 0.024,
+   the run converges and warns that the structure does not satisfy a = b (a run
+   stopped at max_iter before convergence does not warn). Until
+   2026-10 the test took the norm of the separate stresses, so this run ended at
+   max_iter unconverged.
 """
 
 import os
@@ -281,6 +289,38 @@ def test_polymer_figures():
           "extra monomer colors are fixed and leave the global NumPy random state unchanged")
 
 
+def test_tied_lengths():
+    x = np.arange(24) / 24
+    X, Y = np.meshgrid(x, x, indexing="ij")
+    for centers, symmetric in (([(0.0, 0.0), (0.5, 0.5)], True), ([(0.0, 0.0), (0.0, 0.5)], False)):
+        wells = sum(np.exp(-(((X - x0 + 0.5) % 1 - 0.5) ** 2 + ((Y - y0 + 0.5) % 1 - 0.5) ** 2) / (2 * 0.08 ** 2))
+                    for x0, y0 in centers)
+        w_a = np.repeat(-5.0 * wells[:, :, None], 2, axis=2).ravel()
+        params = base([24, 24, 2], [3.4, 3.4, 1.0], {"A,B": 20.0}, [("A", 0.3), ("B", 0.7)], True)
+        params["crystal_system"] = "Tetragonal"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = scft.SCFT(params=params).run(initial_fields={"A": w_a, "B": -w_a}, return_result=True)
+        stress, lx = np.array(result.stress), result.lx
+        warned = "does not satisfy the a = b condition" in out.getvalue() and "'Orthorhombic'" in out.getvalue()
+        tied = result.converged and lx[0] == lx[1] and abs(stress[0] + stress[1]) < 1e-8
+        if symmetric:
+            check(tied and abs(stress[0] - stress[1]) < 1e-8 and not warned,
+                  f"Tetragonal, symmetric cylinders: converged in {result.iterations} iterations, "
+                  f"stresses {stress[0]:.1e} {stress[1]:.1e}, no warning")
+        else:
+            check(tied and abs(stress[0] - stress[1]) > 1e-2 and warned,
+                  f"Tetragonal, cylinders without a <-> b symmetry: converged in {result.iterations} iterations, "
+                  f"stresses {stress[0]:.4f} {stress[1]:.4f}, warning printed")
+            # Before convergence the tied stresses are not at the tied optimum: no warning
+            params["max_iter"] = 50
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                early = scft.SCFT(params=params).run(initial_fields={"A": w_a, "B": -w_a}, return_result=True)
+            check(not early.converged and "does not satisfy" not in out.getvalue(),
+                  "Tetragonal, cylinders without a <-> b symmetry, stopped at max_iter = 50: no warning")
+
+
 def main():
     test_angle_relaxation()
     test_axis_ordering()
@@ -288,6 +328,7 @@ def main():
     test_field_residual()
     test_singular_chi()
     test_polymer_figures()
+    test_tied_lengths()
     print(f"\n{n_pass} passed, {n_fail} failed")
     sys.exit(0 if n_fail == 0 else 1)
 

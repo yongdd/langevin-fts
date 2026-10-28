@@ -63,6 +63,12 @@ PropagatorComputation<T>::PropagatorComputation(
         throw_with_line_number("ComputationBox<double>* cb is a null pointer");
     if (molecules == nullptr)
         throw_with_line_number("Molecules *molecules is a null pointer");
+    if (propagator_computation_optimizer == nullptr)
+        throw_with_line_number("PropagatorComputationOptimizer *propagator_computation_optimizer is a null pointer");
+    // The polymer indices of the schedule address arrays sized from molecules
+    if (!propagator_computation_optimizer->is_built_from(molecules))
+        throw_with_line_number("The propagator computation optimizer was built from another Molecules object. "
+                               "Build it from the Molecules passed to this computation.");
 
     this->cb = cb;
     this->molecules = molecules;

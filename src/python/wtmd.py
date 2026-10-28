@@ -4,10 +4,12 @@ This module implements well-tempered metadynamics to enhance sampling
 in Langevin field-theoretic simulations of block copolymers.
 
 This implementation follows deep-langevin-fts, except for the half-spectrum weight
-of the last kz plane when nz is odd (see WTMD.__init__).
+of the last kz plane when nz is odd (see WTMD.__init__) and the deposition of the
+hills (see WTMD.update_statistics).
 """
 
 import numpy as np
+import scipy.signal
 
 from .utils import atomic_savemat
 from .validation import ValidationError
@@ -16,8 +18,8 @@ from .validation import ValidationError
 class WTMD:
     """Well-Tempered Metadynamics for enhanced sampling in L-FTS.
 
-    This implementation matches deep-langevin-fts up to the odd-nz weight (see the
-    module docstring). With `fourier`, the PropagatorSolver.fourier of the simulation
+    This implementation matches deep-langevin-fts up to the odd-nz weight and the
+    deposition of the hills (see the module docstring). With `fourier`, the PropagatorSolver.fourier of the simulation
     (real fields, periodic box), the order parameter and its derivative are transformed
     on the platform (on the GPU with CUDA) instead of with numpy.fft, in the same rfftn
     layout.
@@ -97,8 +99,14 @@ class WTMD:
         if I1 is not None:
             self.I1 = {key: np.array(value, dtype=np.float64) / self.CV for key, value in I1.items()}
 
+        # The hills are Gaussians cut at 8σ, where they fall below 1e-13 of their peak. The
+        # histogram of the samples extends by this margin (pad bins) on both sides of the
+        # range, so that samples just outside the range deposit their tails inside it.
+        self.pad = int(np.ceil(8.0 * self.sigma_psi / self.dpsi))
         self.psi_range = np.linspace(self.psi_min, self.psi_max, num=self.bins, endpoint=False)
-        self.psi_range_hist = np.linspace(self.psi_min - self.dpsi / 2, self.psi_max - self.dpsi / 2, num=self.bins + 1, endpoint=True)
+        self.psi_range_hist = np.linspace(self.psi_min - (self.pad + 0.5) * self.dpsi,
+                                          self.psi_max + (self.pad - 0.5) * self.dpsi,
+                                          num=self.bins + 2 * self.pad + 1, endpoint=True)
 
         # Store order parameters for updating U and U_hat
         self.order_parameter_history = []
@@ -132,10 +140,10 @@ class WTMD:
             mag_k = np.reshape(np.sqrt(k_sq), [nx[0], nx[1], nx[2] // 2 + 1])
         self.fk = 1.0 / (1.0 + np.exp(12.0 * (mag_k - kc) / kc))
 
-        # Compute fourier transform of gaussian functions
-        X = self.dpsi * np.concatenate([np.arange((self.bins + 1) // 2), np.arange(self.bins // 2) - self.bins // 2]) / self.sigma_psi
-        self.u_kernel = np.fft.rfft(np.exp(-0.5 * X**2))
-        self.up_kernel = np.fft.rfft(-X / self.sigma_psi * np.exp(-0.5 * X**2))
+        # Gaussian hill and its derivative at the offsets X = (Ψ - Ψ_sample)/σ of the bins
+        X = self.dpsi * np.arange(-self.pad, self.pad + 1) / self.sigma_psi
+        self.u_kernel = np.exp(-0.5 * X**2)
+        self.up_kernel = -X / self.sigma_psi * np.exp(-0.5 * X**2)
 
     # Compute order parameter Ψ
     def compute_order_parameter(self, langevin_step, w_aux):
@@ -179,25 +187,25 @@ class WTMD:
 
     def update_statistics(self):
 
-        # Compute histogram
-        hist, bin_edges = np.histogram(self.order_parameter_history, bins=self.psi_range_hist, density=True)
-        hist_k = np.fft.rfft(hist)
-        bin_mids = bin_edges[1:] - self.dpsi / 2
+        # Histogram of the samples on the extended bins, divided by the number of all samples:
+        # every sample deposits a hill of the same weight, and samples beyond the margin none
+        n_samples = len(self.order_parameter_history)
+        counts, _ = np.histogram(self.order_parameter_history, bins=self.psi_range_hist)
+        hist = counts / (n_samples * self.dpsi)
 
+        # The hills are summed by linear convolution; mode "valid" keeps the bins of the range
         dI1 = {}
         for key in self.dH_history:
             hist_dH_, _ = np.histogram(self.order_parameter_history,
                                        weights=self.dH_history[key],
-                                       bins=self.psi_range_hist, density=False)
-            hist_dH_ /= len(self.order_parameter_history)
-            hist_dH_k = np.fft.rfft(hist_dH_)
-            dI1[key] = np.fft.irfft(hist_dH_k * self.u_kernel, self.bins)
+                                       bins=self.psi_range_hist)
+            dI1[key] = scipy.signal.fftconvolve(hist_dH_ / n_samples, self.u_kernel, mode="valid")
 
         # Compute dU(Ψ), dU'(Ψ)
         amplitude = np.exp(-self.CV * self.u / self.dT) / self.CV
-        gaussian = np.fft.irfft(hist_k * self.u_kernel, self.bins) * self.dpsi
+        gaussian = scipy.signal.fftconvolve(hist, self.u_kernel, mode="valid") * self.dpsi
         du = amplitude * gaussian
-        dup = amplitude * np.fft.irfft(hist_k * self.up_kernel, self.bins) * self.dpsi - self.CV * self.up / self.dT * du
+        dup = amplitude * scipy.signal.fftconvolve(hist, self.up_kernel, mode="valid") * self.dpsi - self.CV * self.up / self.dT * du
 
         print("np.max(np.abs(amplitude)):%8.5e" % (np.max(np.abs(amplitude))))
         print("np.max(np.abs(gaussian)):%8.5e" % (np.max(np.abs(gaussian))))

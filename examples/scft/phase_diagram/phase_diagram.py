@@ -424,8 +424,10 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
     def newton_root(func, lo, hi, xtol):
         """Root of func, which returns a value and its derivative, in [lo, hi] where
         it changes sign. The first step starts from the end closer to the root, whose
-        value and derivative are already known; a step that leaves the bracket
-        bisects it. Converged Newton steps give the root; a bracket that bisection
+        value and derivative are already known; a Newton step that leaves the bracket,
+        or is longer than half the step before last (it cycles, as across an
+        inflection), bisects it instead, as rtsafe. Converged Newton steps give the
+        root; a bracket that bisection
         closes to xtol gives, as brentq, its end with the smaller |func|, an evaluated
         point, so that a root at the end of a phase lies where that phase is missing."""
         g_lo, dg_lo = func(lo)
@@ -435,15 +437,17 @@ def run(base_params, set_point, phases, x_grid, y_grid, x_tol, y_tol,
         if (g_lo < 0.0) == (g_hi < 0.0):
             raise ValueError("f(a) and f(b) must have different signs")   # as brentq
         t, g, dg = (lo, g_lo, dg_lo) if abs(g_lo) < abs(g_hi) else (hi, g_hi, dg_hi)
+        step, step_before = hi - lo, hi - lo
         for _ in range(50):
             t_new = t - g/dg if dg else None
-            if t_new is not None and lo < t_new < hi:
+            if t_new is not None and lo < t_new < hi and abs(t_new - t) <= 0.5*abs(step_before):
                 if abs(t_new - t) < xtol:
                     return t_new
             else:
                 if hi - lo < xtol:
                     return lo if abs(g_lo) <= abs(g_hi) else hi
                 t_new = 0.5*(lo + hi)
+            step_before, step = step, t_new - t
             t = t_new
             g, dg = func(t)
             if (g < 0.0) == (g_lo < 0.0):

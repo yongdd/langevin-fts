@@ -274,9 +274,10 @@ Lattice selection follows SCFT: a space group's crystal system takes precedence
 over `crystal_system`. An explicit `--lattice` override is checked against the
 actual geometry. Flexible skewed 3D inputs without an explicit crystal system
 require this choice so that angle constraints are not silently changed.
-Flexible skewed 2D cells with explicit `crystal_system="Orthorhombic"` keep gamma
-fixed in polymerfts and are rejected by default; use a fixed cell or explicitly
-choose a PSCF lattice and its corresponding relaxation constraints.
+Flexible skewed 2D cells with explicit `crystal_system="Orthorhombic"` are rejected
+by default, as polymerfts SCFT rejects them: with `relax_cell`, Orthorhombic needs
+90-degree angles. Use a fixed cell or explicitly choose a PSCF lattice and its
+corresponding relaxation constraints.
 
 Grid values are transferred without interpolation. Polymerfts normally samples
 at cell centers and PSCF at nodes, so assigning the same values changes the

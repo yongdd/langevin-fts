@@ -209,8 +209,9 @@ def model_parameters(model):
     for monomer in monomers:
         row(monomer, "name segment_length", "Monomer")
         name = monomer["name"]
-        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,15}", name):
-            raise ValueError("Monomer names must start with a letter and contain up to 16 letters, digits or underscores.")
+        # The library takes letters and underscores only (Polymer.cpp)
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z_]{0,15}", name):
+            raise ValueError("Monomer names must start with a letter and contain up to 16 letters or underscores.")
         if name in segments:
             raise ValueError(f"Duplicate monomer name: {name}.")
         segments[name] = number(monomer["segment_length"], f"Segment length {name}")

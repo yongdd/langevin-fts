@@ -327,9 +327,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         double vol_factor = 1.0 - cos_a*cos_a - cos_b*cos_b - cos_g*cos_g + 2.0*cos_a*cos_b*cos_g;
         if (vol_factor <= 0.0)
             throw_with_line_number("Invalid lattice angles: they do not form a valid unit cell. "
-                                   "The combination (alpha=" + std::to_string(angles[0]) +
-                                   ", beta=" + std::to_string(angles[1]) +
-                                   ", gamma=" + std::to_string(angles[2]) + ") degrees is geometrically impossible.");
+                                   "The combination (alpha=" + std::to_string(full_angles[0]) +
+                                   ", beta=" + std::to_string(full_angles[1]) +
+                                   ", gamma=" + std::to_string(full_angles[2]) + ") degrees is geometrically impossible.");
 
         // Grid interval
         for(int d=0; d<DIM; d++)

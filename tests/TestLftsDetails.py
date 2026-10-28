@@ -17,6 +17,12 @@ L-FTS details that change recorded results.
    pinned to whatever the first solve left, here 7.49993 instead of 7.5), and
    the recorded H belongs to the returned fields (a consistency check that also
    held before).
+5. WTMD hills: every sample deposits a hill of the same weight. Samples beyond
+   the Ψ range deposit nothing, I1/I0 is dH/dχN also when half of the samples
+   lie outside, the hills do not wrap around the Ψ axis, and a sample just
+   outside the range deposits its tail inside. Until 2026-10 the histogram was
+   divided by the samples inside the range (NaN when there were none, I1/I0 =
+   1.25 instead of 2.5 here) and convolved circularly (a hill at 1.99 reached Ψ = 0).
 """
 
 import os
@@ -158,6 +164,32 @@ def test_wtmd_cell():
           "WTMD: the given I1 arrays are left unchanged")
 
 
+def test_wtmd_hills():
+    def update(psis):
+        wt = quiet(WTMD, [4, 4, 4], [1.0, 1.0, 1.0], 10000, np.array([-12.0, 200.0]), [0],
+                   sigma_psi=0.05, psi_min=0.0, psi_max=2.0, dpsi=1e-3)
+        for psi in psis:
+            wt.store_order_parameter(psi, {"A,B": 2.5})
+        quiet(wt.update_statistics)
+        return wt
+
+    wt = update(np.full(20, 5.0))
+    check(np.array_equal(wt.u, np.zeros(wt.bins)) and np.array_equal(wt.I0, np.zeros(wt.bins)),
+          "WTMD: samples beyond the Psi range deposit nothing")
+    wt = update(np.concatenate([np.full(20, 1.0), np.full(20, 5.0)]))
+    inside = wt.I0 > 1e-3 * wt.I0.max()
+    ratio = wt.I1["A,B"][inside] / wt.I0[inside]
+    check(np.allclose(ratio, 2.5, rtol=1e-12, atol=0) and abs(wt.I0.max() - 0.5) < 1e-12,
+          f"WTMD: half of the samples outside the range: I1/I0 = {ratio.min():.12f}, peak of I0 {wt.I0.max():.12f} (0.5)")
+    wt = update(np.full(20, 1.99))
+    check(np.max(np.abs(wt.u[:200])) < 1e-12 * np.max(wt.u),
+          f"WTMD: a hill at 1.99 does not wrap around to Psi = 0 ({np.max(np.abs(wt.u[:200])) / np.max(wt.u):.1e})")
+    wt = update(np.full(20, 2.02))
+    tail = np.exp(-0.5 * ((wt.psi_range[-1] - 2.02) / 0.05) ** 2)
+    check(abs(wt.I0[-1] - tail) < 1e-9 * tail,
+          f"WTMD: a sample at 2.02 deposits its tail inside the range [0, 2) (I0 {wt.I0[-1]:.9f}, Gaussian {tail:.9f})")
+
+
 class FailingLFTS(LFTS):
     """LFTS whose saddle-point solve reports failure on chosen calls."""
     fail_calls = ()
@@ -262,6 +294,7 @@ def main():
     try:
         test_wtmd_restart(root)
         test_wtmd_cell()
+        test_wtmd_hills()
         test_saddle_failure(root)
         test_compressible_mean(root)
         test_lr_walls(root)

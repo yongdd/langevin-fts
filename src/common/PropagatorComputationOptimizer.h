@@ -53,6 +53,9 @@ private:
     // Pointer to contour length mapping for converting length_index to n_segment
     const ContourLengthMapping* contour_length_mapping;
 
+    // The Molecules this schedule was built from; its polymer indices size the computation's arrays
+    const Molecules* molecules;
+
     // set{key: (polymer id, key_left, key_right) (assert(key_left <= key_right))}
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
@@ -90,6 +93,7 @@ public:
 
     // Get information of computation propagators and blocks
     bool use_aggregation() const;
+    bool is_built_from(const Molecules* molecules) const;
     int get_n_computation_propagator_codes() const;
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& get_computation_propagators(); 
     ComputationEdge& get_computation_propagator(std::string key);

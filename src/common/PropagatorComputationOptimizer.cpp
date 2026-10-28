@@ -91,6 +91,7 @@ PropagatorComputationOptimizer::PropagatorComputationOptimizer(Molecules* molecu
 
     // Store pointer to the mapping for converting length_index to n_segment
     this->contour_length_mapping = &molecules->get_contour_length_mapping();
+    this->molecules = molecules;
 
     this->aggregate_propagator_computation = aggregate_propagator_computation;
     this->model_name = molecules->get_model_name();
@@ -260,6 +261,12 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
 bool PropagatorComputationOptimizer::use_aggregation() const
 {
     return aggregate_propagator_computation;
+}
+
+/** @brief Check whether the schedule was built from this Molecules object. */
+bool PropagatorComputationOptimizer::is_built_from(const Molecules* molecules) const
+{
+    return this->molecules == molecules;
 }
 
 /**

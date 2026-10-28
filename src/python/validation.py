@@ -222,6 +222,14 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
         raise ValidationError("'electrostatics' is supported in CL-FTS only")
     if params.get("stress_interval", 1) != "adaptive":
         _integer(params.get("stress_interval", 1), "stress_interval")
+    optimizer = params["optimizer"]
+    if not isinstance(optimizer, dict) or optimizer.get("name") != "am":
+        raise ValidationError("optimizer.name must be 'am' (Anderson mixing)")
+    _integer(optimizer.get("max_hist"), "optimizer.max_hist", minimum=0)
+    for key in ("start_error", "mix_min", "mix_init"):
+        _finite_number(optimizer.get(key), "optimizer." + key, nonnegative=True)
+    _finite_number(params.get("tolerance", 1e-8), "tolerance", positive=True)
+    _finite_number(params.get("stress_scale", 1), "stress_scale", positive=True)
     smearing = params.get("smearing")
     if isinstance(smearing, dict) and isinstance(smearing.get("a_int"), dict):
         raise ValidationError("Per-type 'smearing.a_int' is supported in CL-FTS only")
@@ -266,6 +274,11 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
             _integer(compressor.get("max_hist"), "compressor.max_hist", minimum=0)
             for key in ("start_error", "mix_min", "mix_init"):
                 _finite_number(compressor.get(key), "compressor." + key, nonnegative=True)
+    # The propagators of grafted chains start from q_init, which only SCFT.run takes
+    for i, polymer in enumerate(params["polymers"]):
+        if polymer.get("initial_conditions"):
+            raise ValidationError(f"polymers[{i}]: L-FTS and CL-FTS need free chains; grafted chains "
+                                  "(initial_conditions) need q_init, which only SCFT takes")
     if "dynamic_stabilization" in params:
         _finite_number(params["dynamic_stabilization"], "dynamic_stabilization", nonnegative=True)
     smearing = params.get("smearing")

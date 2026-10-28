@@ -1069,7 +1069,17 @@ class SCFT:
         angle_stress_map = {0: 5, 1: 4, 2: 3} if dim == 3 else {2: 2}
         angle_stress_indices = [angle_stress_map[i] for i in self.angles_reduced_indices if i in angle_stress_map]
         stress_array = None
-        stress_indices = list(range(dim)) + angle_stress_indices
+
+        # Lengths tied by the crystal system (a = b, or a = b = c) move together, along the sum
+        # of their stresses. A tied group counts towards the error as that sum divided by
+        # sqrt(group size), the norm of its stresses when they are equal; free lengths and the
+        # optimized angles count as they are. Whether each stress vanishes is checked at the end.
+        tied_groups = [[i for i in range(dim) if self.lx_full_indices[i] == j]
+                       for j in range(len(self.lx_reduced_indices))]
+
+        def stress_error(stress):
+            lengths = [np.sum(stress[group]) / np.sqrt(len(group)) for group in tied_groups]
+            return np.linalg.norm(lengths + list(stress[angle_stress_indices]))
 
         def current_stress(w, phi):
             self.prop_solver.compute_stress()
@@ -1170,14 +1180,13 @@ class SCFT:
                 stress_is_current = (iter == 1) or (iter % stress_interval == 0) or iter == self.max_iter
                 if stress_is_current:
                     stress_array = current_stress(w, phi)
-                # The stress components being optimized (box lengths of the existing
-                # dimensions and, if active, the angles) count towards the error
-                error_level += np.linalg.norm(stress_array[stress_indices])
+                # The stress along the optimized lattice parameters counts towards the error
+                error_level += stress_error(stress_array)
                 # A cached stress can guide updates, but cannot certify convergence.
                 if not stress_is_current and error_level < self.tolerance:
                     stress_array = current_stress(w, phi)
                     stress_is_current = True
-                    error_level = field_error_level + np.linalg.norm(stress_array[stress_indices])
+                    error_level = field_error_level + stress_error(stress_array)
 
             # Print this iteration
             print("%8d %12.3E " % (iter, mass_error), end=" [ ")
@@ -1209,7 +1218,7 @@ class SCFT:
                 if callback_result is False:
                     if self.relax_cell and not stress_is_current:
                         stress_array = current_stress(w, phi)
-                        error_level = field_error_level + np.linalg.norm(stress_array[stress_indices])
+                        error_level = field_error_level + stress_error(stress_array)
                     print(f"Iteration stopped by callback at iteration {iter}")
                     break
 
@@ -1235,6 +1244,19 @@ class SCFT:
                 self._pin_field_means(w, None)
 
             # Irreducible grid remains valid without extra symmetrization.
+
+        # The tied lengths relax only along the sum of their stresses. Without a space group the
+        # structure need not have the symmetry of the tie, and then the stresses of the tied lengths
+        # do not vanish separately at the converged tied cell: there is no stress-free cell with
+        # this crystal system.
+        if self.relax_cell and self.sg is None and stress_array is not None and error_level < self.tolerance:
+            unequal = [stress_array[group] - np.mean(stress_array[group]) for group in tied_groups if len(group) > 1]
+            if unequal and np.linalg.norm(np.concatenate(unequal)) >= self.tolerance:
+                tie = "a = b = c" if self.crystal_system == "Cubic" else "a = b"
+                free_system = {"Hexagonal": "Triclinic", "Hexagonal2D": "Oblique2D"}.get(self.crystal_system, "Orthorhombic")
+                print(f"Warning: the box-length stresses {stress_array[:dim]} do not vanish separately. The "
+                      f"structure does not satisfy the {tie} condition of crystal_system '{self.crystal_system}'; "
+                      f"relax it with crystal_system '{free_system}' to find a cell where every stress vanishes.")
 
         # The propagators of the last evaluated fields: Q must be positive for log Q in the free energy
         check_partition_functions(self.prop_solver, f"the end of the SCFT iteration ({iter} iterations)")

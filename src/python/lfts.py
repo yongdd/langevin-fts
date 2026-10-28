@@ -983,7 +983,7 @@ class LFTS:
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
             self.run_status["last_completed_step"] = langevin_step
 
-            # WTMD: store order parameter and update statistics (same as deep-langevin-fts)
+            # WTMD: store order parameter and update statistics (wtmd.py)
             if self.wtmd is not None:
                 # Store the order parameter with dH/dχN of the same fields (the fields
                 # before the update, at which psi and the bias were computed)

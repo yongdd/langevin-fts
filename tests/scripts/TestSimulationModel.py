@@ -129,6 +129,26 @@ def test_lr_symmetric_chi(tmp_path, monkeypatch):
     assert calls["params"]["compressor"]["name"] == "lr"
 
 
+@pytest.mark.parametrize("suffix, valid", (("1", False), ("_x", True)))
+def test_monomer_names_letters_only(suffix, valid):
+    """The library takes letters and underscores in monomer names: a digit is rejected at export."""
+    form = values()
+    model = form["model"]
+    for monomer in model["monomers"]:
+        monomer["name"] += suffix
+    for polymer in model["polymers"]:
+        for block in polymer["blocks"]:
+            block["type"] += suffix
+    for pair in model["interactions"]:
+        pair["a"] += suffix
+        pair["b"] += suffix
+    if valid:
+        BUILDER["build_script"](form)
+    else:
+        with pytest.raises(ValueError, match="letters or underscores"):
+            BUILDER["build_script"](form)
+
+
 def test_structured_model_http_save(tmp_path):
     server = BUILDER["create_server"](0, tmp_path)
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
