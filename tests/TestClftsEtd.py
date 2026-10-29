@@ -15,7 +15,8 @@
    fields, psi included, for a charged diblock with counterions (with and without screening)
    and for a diblock on a 67-point grid, whose FFTs leave imaginary rounding errors; continuous
    chains with unequal segment lengths, whose measured Jacobian is asymmetric by the contour
-   error, run with its symmetric part.
+   error, run with its symmetric part, and a far too coarse contour step is rejected with and
+   without charges.
 3. Runs: a continued run reproduces the uninterrupted one bit for bit (fields, psi, noise
    streams, measurements); psi keeps a zero uniform mode without screening; with zero
    valences psi has the Gaussian statistics of exp(-H) in a run at a time step beyond the LM
@@ -254,6 +255,20 @@ def jacobian(root):
     assert 1e-5 < asymmetry < 1e-3, f"asymmetry of the measured Jacobian {asymmetry:.1e}"
     assert np.max(np.abs(K_symmetric - 0.5 * (K + np.swapaxes(K, 0, 1)))) < 1e-14 * np.max(np.abs(K)), \
         "symmetric part of the Jacobian"
+
+    # A far too coarse contour step (relative asymmetry 3.5e-2 of the auxiliary block) is rejected
+    # with charges too: the large diagonal of the jointly advanced psi does not dilute the measure
+    coarse = parameters(root / "coarse")
+    coarse.update(nx=[16, 16], lx=[2.0, 2.0], chain_model="continuous", ds=1 / 4, chi_n={"A,B": 8.0},
+                  zeta_n=20.0, segment_lengths={"A": 1.0, "B": 2.5}, smearing={"type": "gaussian", "a_int": 0.1},
+                  polymers=[{"volume_fraction": 1.0, "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]}])
+    for electrostatics in (None, {"charges": {"A": 0.1, "B": -0.1}, "coupling": 100.0}):
+        coarse["electrostatics"] = electrostatics
+        expect_validation_error(lambda: CLFTS(coarse, random_seed=5), "not symmetric")
+    # With one moving auxiliary field (chi N = 0) only the coupling to psi can show the asymmetry; it is
+    # measured on the charge response of psi, not on the analytic (k^2 + kappa^2)/E of its diagonal
+    coarse.update(chi_n={}, electrostatics={"charges": {"A": 1.0, "B": -1.0}, "coupling": 100.0})
+    expect_validation_error(lambda: CLFTS(coarse, random_seed=5), "not symmetric")
 
 
 def runs(root):

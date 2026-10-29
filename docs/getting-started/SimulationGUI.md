@@ -60,7 +60,8 @@ match and open the URL that this run prints (each run prints a new token).
    computational platform. Fractions such as `1/100` are accepted. Enable
    **Reduce memory usage** only when memory is insufficient: it slows down the
    simulation. **Numerical method** keeps the parameter name `numerical_method`.
-   CN-ADI2 supports real fields in orthogonal cells and is unavailable for CL-FTS.
+   CN-ADI2 supports real fields in orthogonal cells and is unavailable for CL-FTS;
+   it computes no stress, so SCFT with CN-ADI2 needs a fixed cell.
 3. In **Box**, set the dimension, cell shape, grid and lengths. Drag the cell
    preview or use the arrow keys to rotate it.
 4. In **Molecules**, add monomers, polymers, blocks and interaction rows. Choose

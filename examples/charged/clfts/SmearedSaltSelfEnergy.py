@@ -49,7 +49,7 @@ n_ions = 32              # Ions of each sign in the box: N c C V = n_ions fixes 
 C = n_ions / (n_segments * c_salt * np.prod(lx))
 
 params = {
-    "platform": "cpu-mkl",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "nx": nx, "lx": lx,
     "chain_model": "discrete", "ds": 1.0 / n_segments,
     "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 0.0,   # the solvent has no field

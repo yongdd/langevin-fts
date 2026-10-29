@@ -96,7 +96,7 @@ params = {
     # Gaussian smearing with the bead size of the paper
     "smearing": {"type": "gaussian", "a_int": a / r},
 
-    "platform":"cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level":1,      # 1 : Print at each langevin step.
 }
 

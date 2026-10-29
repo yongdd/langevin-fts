@@ -70,18 +70,20 @@ def test_space_group_determines_crystal_system():
     assert "crystal_system" not in params
 
 
-def test_cn_adi_cannot_relax_initially_orthogonal_triclinic_angles():
+@pytest.mark.parametrize("shape", ("orthorhombic", "triclinic"))
+def test_cn_adi_cannot_relax_cells(shape):
+    # The real-space method computes no stress, also in orthogonal boxes
     form = MODEL["values"]()
-    form["model"]["box"]["shape"] = "triclinic"
-    form["numerical_method"] = "cn-adi2"
-    with pytest.raises(ValueError, match="relax triclinic angles"):
+    form["model"]["box"]["shape"] = shape
+    form.update(numerical_method="cn-adi2", relax_cell=True)
+    with pytest.raises(ValueError, match="computes no stress"):
         BUILDER["build_script"](form)
 
 
 @pytest.mark.parametrize("mode", ("SCFT", "L-FTS"))
 def test_cn_adi_remains_available_for_real_orthogonal_fields(mode):
     form = MODEL["values"]()
-    form.update(mode=mode, numerical_method="cn-adi2")
+    form.update(mode=mode, numerical_method="cn-adi2", relax_cell=False)
     assert parameters(form)["numerical_method"] == "cn-adi2"
 
 

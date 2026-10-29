@@ -398,6 +398,9 @@ def build_script(values):
         params.update(relax_cell=bool(values["relax_cell"]), stress_interval=1,
                       optimizer=mixing, max_iter=num("max_iter", integer=True),
                       tolerance=num("tolerance"))
+        # Box relaxation needs the stress, which the real-space method does not compute
+        if method == "cn-adi2" and params["relax_cell"]:
+            raise ValueError("CN-ADI2 computes no stress. Disable cell relaxation or choose a pseudo-spectral method.")
         if values.get("space_group", "none") != "none":
             apply_space_group(params, values["space_group"], params["relax_cell"])
         elif structured is not None:
@@ -407,8 +410,6 @@ def build_script(values):
             # A space group determines its own crystal system. Otherwise preserve
             # the cell constraints selected in the editor during SCFT relaxation.
             params["crystal_system"] = (shape.title() if len(nx) == 3 else "Orthorhombic")
-            if method == "cn-adi2" and shape == "triclinic" and params["relax_cell"]:
-                raise ValueError("CN-ADI2 requires orthogonal cells. Choose a pseudo-spectral method to relax triclinic angles.")
     else:
         params.update(
             langevin=dict(max_step=num("max_step", integer=True), dt=num("dt"), nbar=num("nbar")),

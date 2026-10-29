@@ -269,9 +269,9 @@ translation requires the grid to be divisible by 4).
 
 | Method | Description |
 |--------|-------------|
-| `to_reduced_basis(fields)` | Convert full fields to irreducible representation |
-| `from_reduced_basis(reduced)` | Reconstruct full fields from reduced |
-| `symmetrize(fields)` | Average fields over the classes of the active basis: the full space-group orbits on the irreducible basis, only the physical-basis classes once a physical basis is enabled |
+| `to_reduced_basis(fields)` | Convert full fields to the active reduced basis: the irreducible orbits, or the physical sub-grid once a physical basis is enabled |
+| `from_reduced_basis(reduced)` | Reconstruct full fields from the active reduced basis |
+| `symmetrize(fields)` | Average full-grid fields over the full space-group orbits, whichever basis is active |
 | `symmetrize_reduced_basis(reduced)` | Average a reduced-basis field in place over the full space-group orbits (a physical basis can hold several representatives of one orbit) |
 | `reduced_to_irreducible(reduced)` | Map a reduced-basis (physical sub-grid) field to the irreducible-orbit representation |
 | `irreducible_to_reduced(irreducible)` | Map an irreducible-orbit field back to the reduced (physical) basis |

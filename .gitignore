@@ -40,8 +40,8 @@ examples/**/lfts/Test*
 examples/**/scft/*.m
 examples/**/scft/Test*
 examples/**/scft/plot*.*
-examples/**/scft/*.json
-examples/**/phases/*.json
+examples/**/*.json
+examples/**/*.npz
 examples/temp*
 examples/test*
 devel/test*

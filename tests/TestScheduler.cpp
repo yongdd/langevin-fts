@@ -12,6 +12,9 @@
 #include <iostream>
 #include <cmath>
 #include <numbers>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
@@ -62,6 +65,59 @@ int main()
 
         sc.display(propagator_computation_optimizer.get_computation_propagators());
 
+        // The entries of the schedule run one after the other and the jobs of an entry in parallel.
+        // Every propagator must be advanced through all its segments once, in order, at most once per
+        // entry, and start only after an earlier entry has computed the segments of its dependencies
+        // that its initial condition needs; an entry holds at most one job per stream
+        auto propagators = propagator_computation_optimizer.get_computation_propagators();
+        bool ok = true;
+        auto fail = [&ok](const std::string& message) { std::cout << "FAILED: " << message << std::endl; ok = false; };
+        for (int n_streams = 1; n_streams <= 4; ++n_streams)
+        {
+            Scheduler scheduler(propagators, n_streams);
+            const auto& schedule = scheduler.get_schedule();
+            std::map<std::string, int> first_entry, last_entry, reached;
+            std::map<std::string, std::vector<std::pair<int, int>>> progress;   // (entry, segments computed)
+            for (int e = 0; e < static_cast<int>(schedule.size()); ++e)
+            {
+                if (static_cast<int>(schedule[e].size()) > n_streams)
+                    fail("entry " + std::to_string(e) + " holds more jobs than streams");
+                for (const auto& [key, from, to] : schedule[e])
+                {
+                    if (first_entry.find(key) == first_entry.end())
+                    {
+                        if (from != 0)
+                            fail(key + " starts at segment " + std::to_string(from));
+                        first_entry[key] = e;
+                    }
+                    else if (last_entry[key] >= e || from != reached[key])
+                        fail(key + " is not advanced in order in entry " + std::to_string(e));
+                    last_entry[key] = e;
+                    reached[key] = to;
+                    progress[key].emplace_back(e, to);
+                }
+            }
+            for (const auto& [key, edge] : propagators)
+            {
+                if (first_entry.find(key) == first_entry.end() || reached[key] != edge.max_n_segment)
+                {
+                    fail(key + " is not computed through its " + std::to_string(edge.max_n_segment) + " segments");
+                    continue;
+                }
+                for (const auto& [dep_key, dep_n_segment, dep_n_repeated] : edge.deps)
+                {
+                    int done = -1;
+                    for (const auto& [e, to] : progress[dep_key])
+                        if (to >= dep_n_segment) { done = e; break; }
+                    if (done < 0 || done >= first_entry[key])
+                        fail(key + " starts before segment " + std::to_string(dep_n_segment) + " of " + dep_key
+                             + " is computed (" + std::to_string(n_streams) + " streams)");
+                }
+            }
+        }
+        if (!ok)
+            return 1;
+        std::cout << "Schedules with 1 to 4 streams respect the dependencies" << std::endl;
         return 0;
     }
     catch(std::exception& exc)

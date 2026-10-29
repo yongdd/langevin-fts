@@ -446,15 +446,23 @@ class CLFTS:
         the measured K is symmetric only to O(ds²) (rk2 and rqm4 alike), notably where the
         segment lengths differ; the linear response takes its symmetric part. A relative
         asymmetry above 1e-2 among the fields that move means a far too coarse contour step or
-        a wrong measurement.
+        a wrong measurement. The diagonal (k² + κ²)/E of a jointly advanced ψ can exceed the
+        auxiliary entries by orders of magnitude, so the auxiliary block is measured on its own
+        scale and the coupling of ψ to it on the geometric mean of the auxiliary scale and the
+        measured charge response of ψ (its diagonal without the analytic (k² + κ²)/E).
         """
-        m = jacobian.shape[0]
+        m, M = jacobian.shape[0], len(self.monomer_types)
         direction = self._integrated_noise_direction()
         ratio = (direction[None, :] / direction[:, None]).reshape((m, m) + (1,) * (jacobian.ndim - 2))
         K = jacobian * ratio
-        moving = self._integrated_mobility() > 0
-        K_moving = K[np.ix_(moving, moving)]
-        asymmetry = np.max(np.abs(K_moving - np.swapaxes(K_moving, 0, 1))) / max(np.max(np.abs(K_moving)), 1e-300)
+        aux = np.flatnonzero(self._integrated_mobility()[:M] > 0)
+        K_aux = K[np.ix_(aux, aux)]
+        aux_scale = max(np.max(np.abs(K_aux)), 1e-300) if aux.size else 1e-300
+        asymmetry = np.max(np.abs(K_aux - np.swapaxes(K_aux, 0, 1))) / aux_scale if aux.size else 0.0
+        if self._joint_psi and aux.size:
+            es = self.electrostatics
+            psi_scale = max(np.max(np.abs(K[M, M] - es.screened_k_sq / es.coupling)), 1e-300)
+            asymmetry = max(asymmetry, np.max(np.abs(K[aux, M] - K[M, aux])) / np.sqrt(aux_scale * psi_scale))
         if asymmetry > 1e-2:
             raise ValidationError(f"The Jacobian of the forces is not symmetric (relative asymmetry {asymmetry:.1e}); "
                                   "with continuous chains use a smaller ds")

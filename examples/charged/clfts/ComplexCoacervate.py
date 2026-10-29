@@ -72,7 +72,7 @@ params = {
     "zeta_n": zeta_n,
     "smearing": {"type": "gaussian", "a_int": a_smear},
     "electrostatics": {"charges": {"P": 1.0, "M": -1.0}, "coupling": coupling},
-    "platform": "cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level": 0,
 }
 print("polymerfts parameters: C = nbar^1/2 = %.3f, zeta_N = %.4f, E = %.6g, L = %.5f R0, N = %d" %

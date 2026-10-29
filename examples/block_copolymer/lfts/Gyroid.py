@@ -28,7 +28,7 @@ params = {
 
     "chi_n": {"A,B": 18.35},     # Bare interaction parameter, Flory-Huggins params * N_Ref
 
-    "platform": "cuda",          # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
+    "platform": "auto",          # Platform: "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
 
     "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # Volume fraction of polymer chain

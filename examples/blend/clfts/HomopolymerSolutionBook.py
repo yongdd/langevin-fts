@@ -76,7 +76,7 @@ params = {
     # Gaussian smearing a = 0.1 Rg (the range of the excluded-volume repulsion)
     "smearing":{"type":"gaussian", "a_int":0.1*rg},
 
-    "platform":"cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level":0,
 }
 

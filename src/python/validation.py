@@ -249,6 +249,15 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
     """Validate the SCFT options before constructing numerical objects."""
     params = normalize_params(params)
     validate_system_params(params)
+    group = params.get("space_group")
+    if group is not None:
+        if not isinstance(group, dict) or not isinstance(group.get("symbol"), str) or not group["symbol"]:
+            raise ValidationError("'space_group' needs a dict with the Hermann-Mauguin 'symbol' (and optionally "
+                                  "'hall_number'), e.g. {'symbol': 'Ia-3d'}")
+        hall = group.get("hall_number")
+        if hall is not None and (isinstance(hall, (bool, np.bool_)) or not isinstance(hall, (int, np.integer))
+                                 or not 1 <= hall <= 530):
+            raise ValidationError(f"'space_group.hall_number' must be an integer from 1 to 530, got {hall!r}")
     for key in ("optimizer", "relax_cell"):
         if key not in params:
             raise ValidationError(f"Missing required parameter for SCFT: '{key}'")

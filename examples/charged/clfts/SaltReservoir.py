@@ -88,7 +88,7 @@ params = {
         "psi_dt_scaling": 10.0,
     },
 
-    "platform":"cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level":1,      # 1 : Print at each langevin step.
 }
 

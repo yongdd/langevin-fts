@@ -355,7 +355,7 @@ class SCFT:
 
         # Create space group object early (before PropagatorSolver) if specified
         if params.get("space_group", None) is not None:
-            if "hall_number" in params["space_group"]:
+            if params["space_group"].get("hall_number") is not None:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["hall_number"])
             else:
                 self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
@@ -368,9 +368,12 @@ class SCFT:
                 alpha, beta, gamma = angles if angles is not None else (90.0, 90.0, 90.0)
             except Exception:
                 alpha, beta, gamma = 90.0, 90.0, 90.0
-            tol = 1e-8
-            is_orthogonal = (abs(alpha - 90.0) < tol and abs(beta - 90.0) < tol and abs(gamma - 90.0) < tol)
-            z_axis_orthogonal = (abs(alpha - 90.0) < tol and abs(beta - 90.0) < tol)
+            # The test of the native box and solvers (1e-10 rad): a looser one could enable a
+            # basis whose CrysFFT the solver then refuses
+            def right_angle(angle):
+                return abs(angle * (np.pi / 180.0) - np.pi / 2.0) < 1e-10
+            is_orthogonal = right_angle(alpha) and right_angle(beta) and right_angle(gamma)
+            z_axis_orthogonal = right_angle(alpha) and right_angle(beta)
 
             if is_orthogonal:
                 # Fall back down the basis hierarchy when a basis is not
@@ -430,6 +433,11 @@ class SCFT:
             angles=angles,
             aggregate_propagator_computation=params.get("aggregate_propagator_computation", True),
         )
+        # Box relaxation needs the stress, which the real-space method (cn-adi2) does not compute
+        if (params["relax_cell"]
+                and PropagatorSolver.numerical_methods()[self.prop_solver.numerical_method]["solver_type"] != "pseudospectral"):
+            raise ValidationError(f"'relax_cell' needs a pseudo-spectral method; '{self.prop_solver.numerical_method}' "
+                                  "computes no stress")
         for polymer in self.polymers:
             self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"],
                                          polymer.get("initial_conditions", None))

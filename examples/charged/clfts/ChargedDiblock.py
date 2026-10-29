@@ -85,7 +85,7 @@ params = {
         "psi_dt_scaling": 1.0,  # mobility of psi relative to the auxiliary fields
     },
 
-    "platform":"cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level":1,      # 1 : Print at each langevin step.
 }
 

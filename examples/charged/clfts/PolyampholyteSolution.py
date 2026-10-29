@@ -98,7 +98,7 @@ params = {
     # Coulomb interaction: E = 4 pi l_B rho0 N R0^2 = 4 pi (l_B/b) (rho b^3) N^2
     "electrostatics":{"charges":{"E":-1.0, "K":1.0}, "coupling":4 * np.pi * l_b * rho * N ** 2},
 
-    "platform":"cuda",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "verbose_level":0,
 }
 

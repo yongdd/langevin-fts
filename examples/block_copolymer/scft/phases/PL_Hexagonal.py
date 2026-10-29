@@ -39,8 +39,9 @@ f = 0.4       # A-fraction of major BCP chain, f
 params = {
     # HPL with Hexagonal crystal system and P6_3/mmc space group
     # Axis ordering: [a, b, c] - gamma=120 deg between a and b (axes 0,1)
-    # IMPORTANT: Grid must be divisible by 6 for P6_3/mmc compatibility
-    "nx": [48, 48, 72],             # Simulation grid numbers [a, b, c] - divisible by 6
+    # Grid: nx[0] = nx[1]; the 6_3 screw of P6_3/mmc translates by c/2, so nz must be even, and
+    # a multiple of 4 enables the faster z-mirror basis
+    "nx": [48, 48, 72],             # Simulation grid numbers [a, b, c]
     "lx": [1.96, 1.96, 2.98],       # Box size [a, b, c] with a=b (near equilibrium)
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: gamma=120 (between a,b)
 

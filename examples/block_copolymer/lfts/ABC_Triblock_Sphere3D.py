@@ -31,7 +31,7 @@ params = {
               "A,C":chin*1.75,
               "B,C":chin},
 
-    "platform": "cuda",       # Platform: "cuda", "cpu-mkl", or "cpu-fftw"
+    "platform": "auto",       # Platform: "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
 
     "polymers":[{      # Polymer species
         "volume_fraction":1.0,  # volume fraction of polymer chain

@@ -56,7 +56,7 @@ fixed = np.zeros(nx)
 fixed[..., 0] = fixed[..., -1] = -sigma / (lz / nz)
 
 params = {
-    "platform": "cpu-mkl",
+    "platform": "auto",        # "auto" (CUDA for 2D/3D if available), "cuda", "cpu-mkl" or "cpu-fftw"
     "nx": nx, "lx": lx, "bc": ["reflecting"] * 6,        # closed box
     "chain_model": "discrete", "ds": 1.0,
     "segment_lengths": {"S": 1.0}, "chi_n": {}, "zeta_n": 0.0,   # the solvent has no field

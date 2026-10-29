@@ -9,6 +9,8 @@ and ValidationError for invalid input.
 
 import sys
 import copy
+import os
+import tempfile
 import io
 import contextlib
 import numpy as np
@@ -287,6 +289,24 @@ def main():
         print("FAILED: SCFT space group")
         ok = False
 
+    # ---- hall_number None means no Hall number (the symbol alone)
+    params = base_params(); params["space_group"] = {"symbol": "Im-3m", "hall_number": None}
+    if build(SCFT, params).sg.get_hall_number() != 529:
+        print("FAILED: space_group with hall_number None")
+        ok = False
+
+    # ---- malformed space_group inputs raise ValidationError
+    for group, what in (({"hall_number": 529}, "space_group without a symbol"), ("Im-3m", "space_group as a string"),
+                        ({"symbol": "Im-3m", "hall_number": 529.0}, "a float hall_number"),
+                        ({"symbol": "Im-3m", "hall_number": True}, "a boolean hall_number"),
+                        ({"symbol": "Im-3m", "hall_number": 531}, "hall_number 531")):
+        params = base_params(); params["space_group"] = group
+        ok &= expect_error(SCFT, params, what)
+
+    # ---- box relaxation needs the stress, which the real-space method does not compute
+    params = base_params(); params.update(numerical_method="cn-adi2", relax_cell=True)
+    ok &= expect_error(SCFT, params, "relax_cell with cn-adi2")
+
     # ---- the cell must match the crystal system of the space group
     params = base_params(); params["space_group"] = {"symbol": "Im-3m"}; params["lx"] = [4.0, 4.0, 3.0]
     ok &= expect_error(SCFT, params, "cubic space group with unequal box lengths")
@@ -464,4 +484,13 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # The L-FTS and CL-FTS runs record into the relative directory "data"; keep it out of the
+    # directory the test is started from
+    previous = os.getcwd()
+    with tempfile.TemporaryDirectory() as directory:
+        os.chdir(directory)
+        try:
+            status = main()
+        finally:
+            os.chdir(previous)   # Windows cannot remove the current directory
+    sys.exit(status)
