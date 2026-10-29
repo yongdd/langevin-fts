@@ -60,7 +60,8 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   docs/internals/NumericalValidation.md lists the papers and codes (PSCF, BioFTS, polycomp)
   that polymerfts reproduces, and docs/internals/ExampleValidation.md gives the compared numbers, including
   exact Monte Carlo checks of the CL-FTS of point ions and the results that are not reproduced
-  (the phase diagram of Lee et al., the dense branch of Danielsen et al.).
+  (the phase diagram of Lee et al.; the converged dense branch of Danielsen et al., 3.4–5 %
+  below the paper, a difference that the paper's contour step Δs = 0.01 mostly explains).
 - Documentation: a closed box is the boundary to a medium of vanishing dielectric constant, so
   ions are repelled by images of the same sign (it read "insulating walls without image
   charges"); the checked range of charged CL-FTS (counterions between plates up to Ξ ≈ 0.6,

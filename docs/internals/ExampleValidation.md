@@ -1,6 +1,6 @@
 # Validation of the Examples
 
-What the tests and validation runs check for the examples under [`examples/`](../../examples/README.md), with the compared numbers and figures, and what has not been checked. `TestExamples` builds every example (inputs, input checks and construction) but does not run it. [Numerical Validation](NumericalValidation.md#comparison-with-published-results-and-other-codes) lists the papers and codes that polymerfts reproduces, and its section [Open differences and limits](NumericalValidation.md#open-differences-and-limits) collects what these comparisons leave open. The full references of the papers are listed in the [examples index](../../examples/README.md#references).
+What the tests and validation runs check for the examples under [`examples/`](../../examples/README.md), with the compared numbers and figures, and what has not been checked. `TestExamples` builds every example (inputs, input checks and construction) but does not run it. [Numerical Validation](NumericalValidation.md#comparison-with-published-results-and-other-codes) lists the papers and codes that polymerfts reproduces, and its section [Differences and limits](NumericalValidation.md#differences-and-limits) collects the differences from published results and their causes. The full references of the papers are listed in the [examples index](../../examples/README.md#references).
 
 Each example lists under these labels:
 - **Checked**: what a test or a validation run compared with a reference, and the result.
@@ -8,6 +8,27 @@ Each example lists under these labels:
 - **Not reproduced**: what was compared but differs from the reference.
 - **Not reproducible**: what needs a model feature that the code does not have.
 - **Limits found**: limits of the method that the comparisons showed.
+
+## Summary
+
+| Example | Compared with | Result |
+|---|---|---|
+| `block_copolymer/clfts/SoftBeadDiblockMelt.py` | CL-FTS of Lequieu 2024; exact Monte Carlo of a Gaussian-core fluid | Agrees: chemical potentials within 0.003–0.02 kT, pressures within about one standard error; the excess pressure of the polyampholyte lies 2 % of its fluctuation correction below (not confirmed) |
+| `blend/scft/MixtureBlockRandom.py`, `blend/lfts/MixtureBlockRandom.py` | Flory-Huggins (homogeneous states) | Checked; the ordered blend not checked |
+| `blend/scft/CanonicalCoexistence.py` | Common tangent of the Flory-Huggins free energy | Checked |
+| `blend/clfts/GibbsEnsemble.py` | Flory-Huggins binodal; canonical CL-FTS at N̄ = 10⁴ | Agrees: 0.92928 in the mean-field limit, 0.91497 ± 0.0001 against 0.91497 ± 0.00013 at N̄ = 10⁴ |
+| `blend/clfts/HomopolymerSolutionBook.py` | Fredrickson and Delaney 2023 | Agrees within the reading precision (0.1–0.2 %) |
+| `charged/scft/ChargedDiblockLamella.py` | Strong-screening limit, grid convergence | Checked; the unscreened lamellae not compared |
+| `charged/scft/PolyelectrolyteBrush.py` | Independent Poisson-Boltzmann solution, Δx and Δs convergence | Checked; brush theory not compared |
+| `charged/scft/CounterionsBetweenPlates.py` | Poisson-Boltzmann of Netz 2001 | Agrees: profile within 10⁻³, pressure within 3×10⁻⁵ |
+| `charged/clfts/CounterionsBetweenPlates.py` | Netz's loop expansion, exact lattice Monte Carlo | Agrees up to Ξ ≈ 0.6; wrong at Ξ ≥ 0.85 (limit of CL-FTS) |
+| `charged/clfts/SmearedSaltSelfEnergy.py` | One-loop theory, exact Monte Carlo | Agrees: 0.1 % at weak coupling, Monte Carlo up to l_Bκ = 4.8 |
+| `charged/clfts/ChargedDiblock.py` | RPA at N̄ = 10⁶ | Checked at weak fluctuations; the example's regime not checked |
+| `charged/clfts/SaltReservoir.py` | Donnan equilibrium, one-loop theory | Agrees: the one-loop theory predicts the shift of the ions to 0.5 % |
+| `charged/clfts/ComplexCoacervate.py` | Lee et al. 2008; Danielsen et al. 2019 | Structure factors agree; the phase diagram of Lee's Fig. 6 not reproduced (explained); Danielsen's converged binodal lies 3.4–5 % below the paper; with the paper's contour step the gap closes at E = 4000 and shrinks to 2 % at E = 2000 (explained) |
+| `charged/clfts/PolyampholyteSolution.py` | McCarty et al. 2019 | Chemical potentials, pressures and the binodal agree; the density structure function lies 3–8 % below (undecided); two state points inside the two-phase region differ (explained) |
+
+The sections below give the details.
 
 ## Block copolymers
 
@@ -149,7 +170,7 @@ System of `TestChargedStructureFunctionRPA`: discrete AB diblocks with N = 20, f
 
   The RPA gives u0 S_nn = 0.860 at every E; the rise of S_nn at low k and the depression of S_cc below the RPA are fluctuation effects that both codes show.
   - Not reproduced: the phase diagram of Fig. 6 (E = 14400, N = 384). The CL-FTS chemical potentials and pressures give the dense binodal at C = 17.3 ± 0.1 for B = 1, close to the one-loop binodal on the same lattice (17.7) and to the paper's one-loop line (18.4); the paper's superheating and supercooling points (C ≈ 10.7 and 8.6) lie at about half of it. In a box of (4R_g)³ these are limits of metastability, not the binodal: a slab imposed by hand at B = 0.8 dissolves within 20 steps, and phase-separated states diverge at δτN = 1 or carry heavy drift tails at 0.2. The binodal of this lattice model also depends strongly on the grid spacing (one loop at B = 1: C = 10.6 to 24.2 for Δx = R_g/4 to R_g/16), and its pressure has to be taken at fixed grid spacing ([CL-FTS theory, Section 7](../theory/ComplexLangevinSimulation.md#7-chemical-potential-and-osmotic-pressure)).
-  - Not reproduced: the dense branch of the block-polyampholyte binodals of Danielsen et al. (*Proc. Natl. Acad. Sci. USA* **2019**, 116, 8224, Fig. 1, A50C50, B = 1) lies 4 % below the paper's CL-FTS (C = 1.249 ± 0.021 against 1.307 at E = 2000, 1.939 ± 0.013 against 2.010 at E = 4000), while the one-loop theory reproduces the paper's RPA lines; a smaller time step does not change it, and the effect of the box size is not resolved.
+  - Not reproduced with converged contour integration: the dense branch of the block-polyampholyte binodals of Danielsen et al. (*Proc. Natl. Acad. Sci. USA* **2019**, 116, 8224, Fig. 1, A50C50, B = 1). With the virial pressure, `rqm4`, a box of 4 R_g on 32³ points and δτN = 1 it lies at C = 1.241 ± 0.003 for E = 2000 and 1.942 ± 0.004 for E = 4000, including the pressure of the dilute branch (about 0.004 at E = 2000), 5 % and 3.4 % below the paper's 1.31 and 2.01; the continuum one-loop binodals (1.328 and 2.029) match the paper's RPA lines. A box of 6 R_g shifts it by −0.015 ± 0.005 and 0.000 ± 0.006; 24³ and 48³ points, δτN = 0.25 to 2 and Δs = 0.005 shift it by less than 0.017. The chemical potentials satisfy Gibbs-Duhem with the pressures, the Schwinger-Dyson terms average to zero and the drift has no tail. The paper integrated the contour by second-order operator splitting at Δs = 0.01 (its SI, Section 2). With `rk2` at that step the binodal is 1.284 ± 0.007 and 2.025 ± 0.011, which closes the gap at E = 4000 and leaves 2 % at E = 2000, about the scatter of the paper's markers: the `rk2` pressure is 0.05 to 0.07 lower on the same states, an error of order Δs² that is large here because one contour step (0.1 R₀) is longer than the smearing length (0.082 R₀) ([CL-FTS theory, Section 7](../theory/ComplexLangevinSimulation.md#7-chemical-potential-and-osmotic-pressure)).
 
 - **`clfts/PolyampholyteSolution.py`**
   - Checked (validation runs with this model, the reference density set to the bead density of each box): sequences sv10–sv30 of McCarty et al. (discrete chains N = 50, v = 0.0068 b³, smearing a = b/√6, box L = 34 a) at l_B = 0.033 b and 0.195 b. The results agree with the paper's CL-FTS:

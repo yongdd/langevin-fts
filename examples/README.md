@@ -13,7 +13,7 @@ Example scripts, grouped first by physical system and then by simulation method:
 | [Charged systems](#charged-systems-charged) | `charged/scft/` | — | `charged/clfts/` |
 | [Tools](#tools-tools) | `tools/` (transforms and extension APIs) | | |
 
-What the tests and validation runs check for each example, with the compared numbers and figures, is in [Validation of the Examples](../docs/internals/ExampleValidation.md). [Numerical Validation](../docs/internals/NumericalValidation.md) covers the validation of the library as a whole: the regression tests, the published results and other codes that polymerfts reproduces, and the open differences.
+What the tests and validation runs check for each example, with the compared numbers and figures, is in [Validation of the Examples](../docs/internals/ExampleValidation.md). [Numerical Validation](../docs/internals/NumericalValidation.md) covers the validation of the library as a whole: the regression tests, the published results and other codes that polymerfts reproduces, and the differences from them.
 
 ## Block copolymers (`block_copolymer/`)
 
