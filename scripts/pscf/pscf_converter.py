@@ -725,6 +725,9 @@ def script_params(text, data, names):
     count = param_scalar(mixture, "nMonomer", integer=True, minimum=1)
     if count != len(names):
         raise ValueError("PSCF nMonomer does not match the initial fields.")
+    if count < 2:
+        raise ValueError("Runnable incompressible SCFT scripts require at least two monomer types; "
+                         "use field-only import for a single-monomer PSCF result.")
     if any(any(c not in string.ascii_letters + "_" for c in name) for name in names):
         raise ValueError("Runnable script monomer names require ASCII letters and underscores only; provide compatible --monomers names.")
     segments = vector([real(x) for x in param_value(mixture, "monomers", "[")], "monomers")

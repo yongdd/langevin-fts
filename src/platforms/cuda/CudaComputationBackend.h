@@ -57,7 +57,11 @@ private:
     CudaPinnedBuffer<T> h_block_stress[MAX_STREAMS];                 ///< Stress: pinned host copy of d_block_stress
     cudaEvent_t kernel_done[MAX_STREAMS];           ///< Stress: kernel stream reached this point
     cudaEvent_t copy_done[MAX_STREAMS];             ///< Stress: copy stream reached this point
-    CudaDeviceBuffer<CuDeviceData<T>> d_sum;        ///< Scratch of sum_to_host()
+    CudaDeviceBuffer<CuDeviceData<T>> d_sum;        ///< Serial statistics/sum_to_host scratch
+    CudaDeviceBuffer<CuDeviceData<T>> d_partition_sum; ///< Absolute partition-integrand reduction
+    CudaPinnedBuffer<T> h_partition_sum;
+    CudaDeviceBuffer<unsigned char> d_partition_temp;
+    size_t partition_temp_bytes = 0;
 
     /// Discrete chains with a space group: exp(-w ds) in the reduced basis
     std::map<std::string, CudaDeviceBuffer<CuDeviceData<T>>> d_exp_dw_reduced;
@@ -118,6 +122,8 @@ public:
 
     T inner_product(BackendArray<T>* a, BackendArray<T>* b) override;
     T inner_product_inverse_weight(BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* w) override;
+    double absolute_inner_product(BackendArray<T>* a, BackendArray<T>* b,
+                                  BackendArray<T>* divisor = nullptr) override;
     void add_segment_products(int stream, BackendArray<T>* phi, const std::vector<SegmentPair<T>>& pairs) override;
     void normalize_concentration(int stream, BackendArray<T>* phi, T norm, BackendArray<T>* divisor) override;
     void prepare_stress() override;

@@ -7,6 +7,8 @@ interactions by convolving fields with a smearing function in Fourier space.
 import numpy as np
 import scipy.fft
 
+from ._core import _periodic_metric
+
 
 class Smearing:
     """Smearing function for finite-range interactions.
@@ -163,6 +165,7 @@ class Smearing:
         """
         self.lx = list(lx)
         self._multipliers = {}   # Γ changes with the box
+        self._metric_moments = None
         if angles is None:
             angles = [90.0, 90.0, 90.0]
         elif len(angles) == 1:
@@ -204,12 +207,9 @@ class Smearing:
             self.k_sq = sum(k ** 2 for k in k_grids)
         else:
             # |k|^2 = 4π² mᵀ g⁻¹ m with the alias representative that minimizes the form
-            # (first Brillouin zone), the same choice as the propagator solvers (Pseudo.cpp)
-            k_sq = None
-            for m in self._alias_representatives():
-                k_sq_m = 4 * np.pi ** 2 * np.einsum("ij,in,jn->n", self._metric_inv, m, m)
-                k_sq = k_sq_m if k_sq is None else np.minimum(k_sq, k_sq_m)
-            self.k_sq = np.reshape(k_sq, self.nx)
+            # (first Brillouin zone). Use the exact metric-bounded search of the propagators:
+            # an anisotropic grid can need aliases several periods from the centered mode.
+            self.k_sq, _ = _periodic_metric(self.nx, self._metric_inv)
         self.k_mag = np.sqrt(self.k_sq)
 
         if self.per_species:
@@ -224,12 +224,6 @@ class Smearing:
             k_int, dk_int = self.params["k_int"], self.params["dk_int"]
             c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
             self.fourier = c0 * (1 - np.tanh((self.k_mag - k_int) / dk_int))
-
-    def _alias_representatives(self):
-        """Yield the alias representatives m + N·t, t in {-1, 0, 1} per axis with more than one point."""
-        shifts = [(-1, 0, 1) if n > 1 else (0,) for n in self.nx]
-        for t in np.array(np.meshgrid(*shifts, indexing="ij")).reshape(self.dim, -1).T:
-            yield self._m + (t * np.array(self.nx))[:, None]
 
     def stress(self, fields, concentrations):
         """Lattice derivatives of H through the smearing kernel Γ(k).
@@ -307,19 +301,16 @@ class Smearing:
                     derivatives[slot] = np.zeros(self.n_grid)
             return derivatives
 
-        k_sq = np.ravel(self.k_sq)
-        derivatives = {slot: np.zeros(self.n_grid) for slot in list(range(self.dim)) + list(angle_slots.values())}
-        n_tied = np.zeros(self.n_grid)
-        for m in self._alias_representatives():
-            u = self._metric_inv @ m
-            tied = np.flatnonzero(np.isclose(4 * np.pi ** 2 * np.sum(m * u, axis=0), k_sq, rtol=1e-10, atol=1e-12))
-            n_tied[tied] += 1
-            u = u[:, tied]
-            for a in range(self.dim):
-                derivatives[a][tied] += -8 * np.pi ** 2 * u[a] * np.sum((self._cos[a] * L)[:, None] * u, axis=0)
-            for (a, b), slot in angle_slots.items():
-                derivatives[slot][tied] += 8 * np.pi ** 2 * u[a] * u[b] * L[a] * L[b] * self._sin[a, b]
-        return {slot: d / n_tied for slot, d in derivatives.items()}
+        if self._metric_moments is None:
+            _, moments = _periodic_metric(self.nx, self._metric_inv, with_moments=True)
+            self._metric_moments = moments.reshape(self.dim, self.dim, self.n_grid)
+        # <u_a u_b>, u = g^-1 m, averaged over all aliases tied for the exact minimum.
+        moments = self._metric_moments
+        derivatives = {a: -8 * np.pi ** 2 * np.sum((self._cos[a] * L)[:, None] * moments[a], axis=0)
+                       for a in range(self.dim)}
+        for (a, b), slot in angle_slots.items():
+            derivatives[slot] = 8 * np.pi ** 2 * moments[a, b] * L[a] * L[b] * self._sin[a, b]
+        return derivatives
 
     def dilation(self, field, name=None):
         """(∂Γ/∂ln V) * field for a uniform dilation of the box at fixed grid values.

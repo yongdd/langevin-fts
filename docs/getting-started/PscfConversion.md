@@ -239,6 +239,7 @@ The converter rejects the following rather than producing a partial script:
 | Partially flexible cells; flexible 2D square/rhombic or 3D rhombohedral cells | Their relaxation constraints cannot be represented by this translation; fixed cells are supported |
 | Cells with a volume below 0.1 abc, e.g. an oblique cell with γ under 5.74° | polymerfts rejects such nearly flat cells ([Parameters](../references/Parameters.md#lattice-angles-non-orthogonal)); convert the reduced (Niggli) cell of the lattice. Field import and export keep them |
 | Bead chains, solvents, grand-canonical `mu`, nonunit `vMonomer` | The translator supports the continuous incompressible canonical polymer model only |
+| A single monomer type (`nMonomer 1`) | Incompressible polymerfts SCFT requires at least two monomer types; field-only import remains available |
 | External potentials, masks, environments, FTS settings and other unrecognized blocks or labels | These require model-specific implementation |
 | Iterator controls such as `errorType`, `verbose`, `lambda`, `useLambdaRamp`, `r`; other implementation-specific options | No direct setting translation is implemented; remove them only after reviewing how the solver settings should change |
 

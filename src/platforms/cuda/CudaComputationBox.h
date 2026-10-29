@@ -135,6 +135,17 @@ public:
      */
     void set_space_group(SpaceGroup* sg) override;
 
+    /// Device quadrature weights and their common multiplier. These are the
+    /// same weights used by integral_device(), including masks and orbit counts.
+    const double* device_integration_weights() const
+    {
+        return this->space_group_ != nullptr ? d_basis_weights_.get() : d_dv.get();
+    }
+    double integration_weight_scale() const
+    {
+        return this->space_group_ != nullptr ? this->volume / this->total_grid : 1.0;
+    }
+
     /// @name Device-Side Operations
     /// @{
 

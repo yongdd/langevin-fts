@@ -376,6 +376,35 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Fixed
 
+- Numerical and Python API corrections (2026-10-30):
+  - Contour lengths are compared at relative roundoff precision and never merged across
+    different segment counts. Polymer construction and contour mapping share the rounding
+    rule; aggregation looks up stored segment-count/step-index pairs. Accepted roundoff in
+    discrete block lengths is normalized to the global step; SCFT and L-FTS use these
+    native lengths for composition means and chemical-potential field shifts. Charge
+    validation, counterion concentrations and Gibbs ensemble amounts, charges and exchange
+    potentials use the same native canonicalizer. Gibbs histories record their effective
+    block lengths; older histories with materially different input lengths require a fresh
+    run, while ordinary legacy histories remain compatible.
+  - Oblique-cell smearing and WTMD use the native exact minimal-alias search, including
+    tied-alias derivatives for smearing stress. An anisotropic grid could previously give
+    an asymmetric kernel and a CL-FTS force inconsistent with its Hamiltonian.
+  - Species with zero canonical amount skip canonical division by Q and log(Q). Grand-canonical
+    contour checks normalize by the integral of the absolute integrand, so cancellation near
+    zero Q does not amplify roundoff. Zero Q remains regular for concentrations, stress,
+    the Hamiltonian and imposed chemical potentials; absent canonical polymers have chemical
+    potential minus infinity.
+  - PropagatorSolver field integrals use the active basis by default and accept an explicit
+    `basis="irreducible"`; equal-sized physical and irreducible arrays are no longer confused.
+  - WTMD handles individual zero Fourier coefficients for exponents at least one, including
+    noninteger exponents, and adds no force when the bias derivative is zero.
+  - Dictionary conversion of monomer fields preserves imaginary components. Stateful custom
+    linear-response integrators capture their initial state after preparing the response.
+  - Structure-function plots weight the rFFT modes by Hermitian multiplicity and files by
+    their actual sample counts. Runnable PSCF import rejects a single monomer type before
+    writing a bundle; field-only conversion remains available.
+  - The new smearing, WTMD and grand-canonical regression tests fail when a CUDA build cannot
+    run their CUDA cases because no device is visible.
 - The propagator statistics printed `reduction = -nan %` when the chains need no propagator
   steps, as with discrete chains of one segment only; they print 0 % (2026-10-29).
 - The drift summary at the end of a CL-FTS run labelled an auxiliary field that is left out at

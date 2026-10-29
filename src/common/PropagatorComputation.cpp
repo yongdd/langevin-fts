@@ -170,6 +170,8 @@ std::vector<T> PropagatorComputation<T>::get_stress()
 
     for(int p=0; p<n_polymer_types; p++){
         Polymer& pc = this->molecules->get_polymer(p);
+        if (pc.get_volume_fraction() == 0.0)
+            continue;
         for(int d=0; d<N_STRESS; d++){
             stress[d] += (this->dq_dl[p][d] * pc.get_volume_fraction() /
                  pc.get_alpha()) / this->single_polymer_partitions[p];
@@ -207,6 +209,8 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
         stress[d] = 0.0;
 
     for(int p=0; p<n_polymer_types; p++){
+        if (fugacities[p] == 0.0)
+            continue;
         for(int d=0; d<N_STRESS; d++){
             stress[d] += static_cast<T>(fugacities[p]) * this->dq_dl[p][d];
         }

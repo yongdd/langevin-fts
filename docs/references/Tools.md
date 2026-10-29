@@ -48,6 +48,12 @@ jupyter notebook /path/to/scripts/analysis/plot_2d_density.ipynb
 | `plot_structure_function.ipynb` | Python | Same functionality as Jupyter notebook |
 
 Reads structure function data from L-FTS simulations and computes spherically-averaged S(k) by grouping Fourier modes with equal |k|².
+The real-FFT half spectrum is weighted by the number of full-spectrum modes it represents:
+twice for interior planes, once for the zero and even-grid Nyquist planes. Each file's mean
+is also weighted by its saved `sample_count`, so unequal measurement windows contribute
+their actual numbers of samples. Zero-sample windows are skipped. If every selected file
+predates `sample_count`, files receive equal weight for compatibility; mixing files with
+and without counts is rejected because their relative sample weights are unknown.
 
 **Usage:**
 ```matlab

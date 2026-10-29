@@ -482,9 +482,13 @@ class PropagatorSolver:
     def partition_errors(self) -> List[float]:
         """Relative partition function error of each polymer.
 
-        Q = ∫ q(r,s) q†(r,N-s) dr must be the same at every contour point; the error
-        is the largest relative deviation (infinite for a non-finite or zero Q).
-        Nothing is printed.
+        Q must be the same at every contour point. For a positive canonical
+        weight, deviations are normalized by the largest magnitude of the
+        reference and contour partitions; Q = 0 is invalid. With zero canonical
+        weight (grand-canonical species), the scale is the largest integral of
+        the absolute contour integrand, so cancellation at Q = 0 is regular.
+        The discrete-chain integrand includes its inverse Boltzmann weight.
+        Non-finite partitions or scales give an infinite error. Nothing is printed.
         """
         return list(self._computed().compute_partition_errors())
 
@@ -664,13 +668,16 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.get_volume()
 
-    def integral(self, field: NDArray[np.floating]) -> float:
+    def integral(self, field: NDArray[np.floating], *, basis: str = "active") -> float:
         """Compute the volume integral of a field.
 
         Parameters
         ----------
         field : numpy.ndarray
             Field to integrate.
+        basis : {"active", "irreducible"}
+            Input representation. The default is the active reduced basis used
+            by get_concentration() and to_reduced_basis().
 
         Returns
         -------
@@ -679,16 +686,19 @@ class PropagatorSolver:
         """
         self._initialize_solver()
         self._check_real(field)
-        field_use = self._maybe_to_reduced(field)
+        field_use = self._to_active_basis(field, basis)
         return self._computation_box.integral(field_use)
 
-    def mean(self, field: NDArray[np.floating]) -> float:
+    def mean(self, field: NDArray[np.floating], *, basis: str = "active") -> float:
         """Compute the spatial average (mean) of a field.
 
         Parameters
         ----------
         field : numpy.ndarray
             Field to average.
+        basis : {"active", "irreducible"}
+            Input representation, as for integral(). Equal array sizes do not
+            imply equal ordering of the two bases.
 
         Returns
         -------
@@ -697,13 +707,15 @@ class PropagatorSolver:
         """
         self._initialize_solver()
         self._check_real(field)
-        field_use = self._maybe_to_reduced(field)
+        field_use = self._to_active_basis(field, basis)
         return self._computation_box.mean(field_use)
 
     def inner_product(
         self,
         field1: NDArray[np.floating],
-        field2: NDArray[np.floating]
+        field2: NDArray[np.floating],
+        *,
+        basis: str = "active"
     ) -> float:
         """Compute the inner product of two fields.
 
@@ -713,6 +725,8 @@ class PropagatorSolver:
             First field.
         field2 : numpy.ndarray
             Second field.
+        basis : {"active", "irreducible"}
+            Representation of both inputs, as for integral().
 
         Returns
         -------
@@ -721,15 +735,17 @@ class PropagatorSolver:
         """
         self._initialize_solver()
         self._check_real(field1, field2)
-        field1_use = self._maybe_to_reduced(field1)
-        field2_use = self._maybe_to_reduced(field2)
+        field1_use = self._to_active_basis(field1, basis)
+        field2_use = self._to_active_basis(field2, basis)
         return self._computation_box.inner_product(field1_use, field2_use)
 
     def multi_inner_product(
         self,
         n_fields: int,
         fields1: NDArray[np.floating],
-        fields2: NDArray[np.floating]
+        fields2: NDArray[np.floating],
+        *,
+        basis: str = "active"
     ) -> float:
         """Compute the inner product of multiple field pairs.
 
@@ -741,6 +757,8 @@ class PropagatorSolver:
             First set of fields (n_fields * n_grid).
         fields2 : numpy.ndarray
             Second set of fields (n_fields * n_grid).
+        basis : {"active", "irreducible"}
+            Representation of both inputs, as for integral().
 
         Returns
         -------
@@ -749,11 +767,11 @@ class PropagatorSolver:
         """
         self._initialize_solver()
         self._check_real(fields1, fields2)
-        fields1_use = self._maybe_to_reduced_multi(n_fields, fields1)
-        fields2_use = self._maybe_to_reduced_multi(n_fields, fields2)
+        fields1_use = self._to_active_basis_multi(n_fields, fields1, basis)
+        fields2_use = self._to_active_basis_multi(n_fields, fields2, basis)
         return self._computation_box.multi_inner_product(n_fields, fields1_use, fields2_use)
 
-    def zero_mean(self, field: NDArray[np.floating]) -> None:
+    def zero_mean(self, field: NDArray[np.floating], *, basis: str = "active") -> None:
         """Subtract the spatial mean from a field in-place.
 
         With a mask the mean over the accessible volume is subtracted (at every
@@ -763,31 +781,28 @@ class PropagatorSolver:
         ----------
         field : numpy.ndarray
             Field to modify.
+        basis : {"active", "irreducible"}
+            Input representation, as for integral().
         """
         self._check_real(field)
         self._initialize_solver()
-        if self._space_group is None:
+        field_reduced = self._to_active_basis(field, basis)
+        if field_reduced is field:
             self._computation_box.zero_mean(field)
             return
 
-        n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if self._physical_basis_active() and field.size == n_irreducible:
-            # Compute mean in reduced basis, apply shift in irreducible basis. As in
-            # ComputationBox.zero_mean, a mask makes it the mean over the accessible volume
-            field_reduced = self._space_group.irreducible_to_reduced(field)
-            mean_val = self._computation_box.mean(field_reduced)
-            if self.mask is not None:
-                mean_val *= self._computation_box.get_volume() / self._computation_box.get_accessible_volume()
-            field -= mean_val
-        else:
-            self._computation_box.zero_mean(field)
+        # Compute in the active basis and shift the caller's irreducible array.
+        # As in ComputationBox.zero_mean, normalize over accessible volume.
+        mean_val = self._computation_box.mean(field_reduced)
+        if self.mask is not None:
+            mean_val *= self._computation_box.get_volume() / self._computation_box.get_accessible_volume()
+        field -= mean_val
 
     def _physical_basis_active(self) -> bool:
         """True when a physical basis (m3, Pmmm or z-mirror) is enabled.
 
-        The reduced basis then differs from the irreducible basis in ordering even
-        when the two have the same size (mmm orthorhombic groups with the m3
-        basis), so the conversion must never be skipped on a size comparison.
+        It may differ from the irreducible basis in ordering even when their
+        sizes agree. Callers therefore specify the representation explicitly.
         """
         return self._space_group is not None and self._space_group.physical_basis_name() != "irreducible"
 
@@ -797,26 +812,26 @@ class PropagatorSolver:
             raise ValueError('This solver has real fields: got a complex array. Complex fields need a '
                              'solver created with field_type="complex".')
 
-    def _maybe_to_reduced(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
-        """Convert irreducible-basis field to reduced basis when physical basis is active."""
-        if self._space_group is None:
-            return field
-        n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if self._physical_basis_active() and field.size == n_irreducible:
+    def _to_active_basis(self, field: NDArray[np.floating], basis: str) -> NDArray[np.floating]:
+        """Convert only an explicitly declared irreducible input."""
+        if basis not in ("active", "irreducible"):
+            raise ValueError("basis must be 'active' or 'irreducible'")
+        if basis == "irreducible" and self._physical_basis_active():
             return self._space_group.irreducible_to_reduced(field)
         return field
 
-    def _maybe_to_reduced_multi(
+    def _to_active_basis_multi(
         self,
         n_fields: int,
-        fields: NDArray[np.floating]
+        fields: NDArray[np.floating],
+        basis: str
     ) -> NDArray[np.floating]:
         """Convert multiple irreducible-basis fields to reduced basis if needed."""
-        if self._space_group is None:
-            return fields
-        n_reduced = self._space_group.get_n_reduced_basis()
-        n_irreducible = self._space_group.get_n_reduced_basis_full()
-        if self._physical_basis_active() and fields.size == n_fields * n_irreducible:
+        if basis not in ("active", "irreducible"):
+            raise ValueError("basis must be 'active' or 'irreducible'")
+        if basis == "irreducible" and self._physical_basis_active():
+            n_reduced = self._space_group.get_n_reduced_basis()
+            n_irreducible = self._space_group.get_n_reduced_basis_full()
             reshaped = fields.reshape((n_fields, n_irreducible))
             reduced = self._space_group.irreducible_to_reduced(reshaped)
             return reduced.reshape((n_fields * n_reduced,))

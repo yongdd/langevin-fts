@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <algorithm>
 #include <memory>
 #include <complex>
 
@@ -141,8 +142,28 @@ T ComputationCommon<T>::concentration_norm(const std::tuple<int, std::string, st
     const int p = std::get<0>(block_key);
     const auto& block = this->propagator_computation_optimizer->get_computation_block(block_key);
     Polymer& pc = this->molecules->get_polymer(p);
+    if (pc.get_volume_fraction() == 0.0)
+        return T(0.0);
     return (contour_step(std::get<2>(block_key))*pc.get_volume_fraction()/pc.get_alpha()*block.n_repeated)
            /this->single_polymer_partitions[p];
+}
+
+template <typename T>
+std::vector<double> ComputationCommon<T>::partition_errors_from_contours(
+    const std::vector<std::vector<T>>& values,
+    const std::vector<std::vector<double>>& absolute_integrals) const
+{
+    std::vector<double> errors;
+    errors.reserve(this->single_polymer_partitions.size());
+    for (size_t p = 0; p < this->single_polymer_partitions.size(); ++p)
+    {
+        if (this->molecules->get_polymer(static_cast<int>(p)).get_volume_fraction() == 0.0)
+            errors.push_back(absolute_integrand_partition_error(values[p], this->single_polymer_partitions[p],
+                                                               absolute_integrals[p]));
+        else
+            errors.push_back(relative_partition_error(values[p], this->single_polymer_partitions[p]));
+    }
+    return errors;
 }
 
 template <typename T>
@@ -331,8 +352,11 @@ void ComputationCommon<T>::get_total_concentration(std::string monomer_type, T* 
             const int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
+                const T norm = concentration_norm(key);
+                if (norm == T(0.0))
+                    continue;
                 arrays.push_back(phi_b);
-                weights.push_back(concentration_norm(key));
+                weights.push_back(norm);
             }
         }
         for (int s = 0; s < this->molecules->get_n_solvent_types(); s++)
@@ -372,8 +396,11 @@ void ComputationCommon<T>::get_total_concentration(int p, std::string monomer_ty
             const int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             if (std::get<0>(key) == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
+                const T norm = concentration_norm(key);
+                if (norm == T(0.0))
+                    continue;
                 arrays.push_back(phi_b);
-                weights.push_back(concentration_norm(key));
+                weights.push_back(norm);
             }
         }
         backend->sum_to_host(phi, arrays, weights);
@@ -447,8 +474,13 @@ void ComputationCommon<T>::get_block_concentration(int p, T* phi)
             auto block_it = phi_block.find(block_key);
             if (block_it == phi_block.end())
                 throw_with_line_number("Block (" + std::to_string(p) + ", " + key_left + ", " + key_right + ") is not in phi_block.");
-            backend->copy_to_host(&phi[b*N], block_it->second);
             const T norm = concentration_norm(block_key);
+            if (norm == T(0.0))
+            {
+                std::fill_n(&phi[b*N], N, T(0.0));
+                continue;
+            }
+            backend->copy_to_host(&phi[b*N], block_it->second);
             for (int i = 0; i < N; i++)
                 phi[b*N + i] *= norm;
 

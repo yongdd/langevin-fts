@@ -194,6 +194,67 @@ def check_method_registry():
                     platform=platform, field_type="complex"), ValueError)
 
 
+class ResponseScaledEuler:
+    """A stateful custom method whose persistent scale comes from linear response."""
+    name = "test-response-scaled-euler"
+    settings = {"version": 1}
+    linear_response = True
+    averaged_noise = False
+
+    def __init__(self):
+        self.response_scale = None
+        self.steps = 0
+
+    def set_linear_response(self, jacobian, *, dt, mobility, noise_direction, fourier):
+        self.response_scale = 1.0 / (1.0 + dt * float(np.max(np.abs(jacobian))))
+
+    def state_dict(self):
+        assert self.response_scale is not None, "State was captured before preparing the response"
+        return {"response_scale": self.response_scale, "steps": self.steps}
+
+    def load_state_dict(self, state):
+        scale, steps = state["response_scale"], state["steps"]
+        if scale is not None and (not np.isfinite(scale) or scale <= 0):
+            raise ValueError("Invalid response scale")
+        if type(steps) is not int or steps < 0:
+            raise ValueError("Invalid step count")
+        self.response_scale, self.steps = scale, steps
+
+    def step(self, fields, force, *, dt, mobility, noise, previous_noise,
+             noise_direction, evaluate_force):
+        assert self.response_scale is not None, "Prepared response was lost before the first step"
+        effective = self.response_scale * mobility[:, None]
+        self.steps += 1
+        return fields - dt * effective * force + np.sqrt(effective) * noise_direction[:, None] * noise
+
+
+def check_prepared_method_state(root):
+    def create(name, steps, seed):
+        params = parameters(root / name, steps)
+        params["langevin"]["dt"] = 0.001
+        original = ResponseScaledEuler()
+        sim = CLFTS(params, random_seed=seed, integrator=original)
+        sim.draw_architectures = False
+        assert original.response_scale is None   # preparation belongs to the simulation's copy
+        assert sim.integrator.response_scale is not None
+        return sim
+
+    full = create("prepared-full", 4, 11)
+    assert full.run(fields())["status"] == "completed"
+    first = create("prepared-first", 2, 11)
+    first.run(fields())
+    continued = create("prepared-next", 4, 99)
+    continued.continue_run(root / "prepared-first" / "fields_000002.mat")
+    assert full.integrator.state_dict() == continued.integrator.state_dict()
+    assert full.integrator.steps == 4
+    assert full.random_bg.state == continued.random_bg.state
+    compare_fields(loadmat(root / "prepared-full" / "fields_000004.mat"),
+                   loadmat(root / "prepared-next" / "fields_000004.mat"))
+    # A new run resets evolving state but retains the prepared response.
+    full.run(fields())
+    assert full.integrator.steps == 4
+
+
 def main():
     check_stochastic_moments()
     if not any(p.startswith("cpu") for p in PlatformSelector.avail_platforms()):
@@ -205,6 +266,7 @@ def main():
             with contextlib.redirect_stdout(io.StringIO()):
                 check_observers_and_restart(Path(directory))
                 check_method_registry()
+                check_prepared_method_state(Path(directory))
         finally:
             os.chdir(previous)
     if cuda_part_missing():

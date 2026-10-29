@@ -73,6 +73,28 @@ def _integer(value, name, minimum=1):
         raise ValidationError(f"'{name}' must be an integer >= {minimum}, got {value!r}")
 
 
+def polymer_block_lengths(params: Dict[str, Any], polymer: Dict[str, Any]) -> tuple:
+    """Effective contour lengths in input block order, without changing input metadata.
+
+    Continuous chains retain their lengths. Discrete chains use the same native
+    acceptance and snapping to integer multiples of ds as Molecules.add_polymer.
+    """
+    if str(params["chain_model"]).lower() != "discrete":
+        return tuple(block["length"] for block in polymer["blocks"])
+    from . import _core
+
+    lengths = []
+    for j, block in enumerate(polymer["blocks"]):
+        try:
+            lengths.append(_core._discrete_contour_length(block["length"], params["ds"]))
+        except (RuntimeError, TypeError, ValueError) as exc:
+            index = next((i for i, candidate in enumerate(params.get("polymers", ()))
+                          if candidate is polymer), None)
+            path = f"polymers[{index}]." if index is not None else ""
+            raise ValidationError(f"'{path}blocks[{j}].length': {exc}") from exc
+    return tuple(lengths)
+
+
 def validate_system_params(params: Dict[str, Any]) -> None:
     """Check the parameters shared by SCFT, L-FTS and CL-FTS.
 
@@ -291,6 +313,10 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
         _finite_number(optimizer.get(key), "optimizer." + key, nonnegative=True)
     _finite_number(params.get("tolerance", 1e-8), "tolerance", positive=True)
     _finite_number(params.get("stress_scale", 1), "stress_scale", positive=True)
+    # Preserve the ordering of option checks, while rejecting invalid discrete
+    # lengths before any solver is constructed (including uncharged systems).
+    for polymer in params["polymers"]:
+        polymer_block_lengths(params, polymer)
 
 
 def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> None:
@@ -362,11 +388,15 @@ def validate_lfts_params(params: Dict[str, Any], *, complex_fields=False) -> Non
             _integer(wtmd.get(key, 1000 if key == "update_freq" else 100000), "wtmd." + key)
         for key, default in (("ell", 4), ("kc", 6.02), ("delta_t", 5.0), ("sigma_psi", 0.16), ("dpsi", 1e-3)):
             _finite_number(wtmd.get(key, default), "wtmd." + key, positive=True)
+        if wtmd.get("ell", 4) < 1:
+            raise ValidationError("wtmd.ell must be at least 1")
         lo, hi = wtmd.get("psi_min", 0.0), wtmd.get("psi_max", 10.0)
         _finite_number(lo, "wtmd.psi_min")
         _finite_number(hi, "wtmd.psi_max")
         if hi <= lo or (hi - lo) / wtmd.get("dpsi", 1e-3) < 2:
             raise ValidationError("WTMD range must contain at least two bins")
+    for polymer in params["polymers"]:
+        polymer_block_lengths(params, polymer)
 
 
 def _has_random_copolymer(params):
@@ -492,8 +522,10 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
         canonical = net_polymer_charge(params) + sum(ions[name]["valence"] * c for name, c in concentrations.items())
         signs = {np.sign(ion["valence"]) for ion in ions.values() if "chemical_potential" in ion}
         for polymer in params["polymers"]:
-            if "chemical_potential" in polymer and _chain_charge(polymer, charges) != 0.0:
-                signs.add(np.sign(_chain_charge(polymer, charges)))
+            if "chemical_potential" in polymer:
+                charge = _chain_charge(params, polymer, charges)
+                if charge != 0.0:
+                    signs.add(np.sign(charge))
         needed = {1.0, -1.0} if abs(canonical) <= 1e-14 else {-np.sign(canonical)}
         if not needed <= signs:
             raise ValidationError(f"The grand-canonical species cannot neutralize the system (canonical net charge "
@@ -506,10 +538,11 @@ def validate_electrostatics(params: Dict[str, Any]) -> None:
                               + ("; add point ions ('electrostatics.ions') as counterions" if not ions else ""))
 
 
-def _chain_charge(polymer: Dict[str, Any], charges: Dict[str, float]) -> float:
+def _chain_charge(params: Dict[str, Any], polymer: Dict[str, Any], charges: Dict[str, float]) -> float:
     """Net charge of a chain per segment of the reference chain, Σ_blocks z_i α_i (zero within round-off)."""
-    charge = sum(charges.get(block["type"], 0.0) * block["length"] for block in polymer["blocks"])
-    scale = sum(abs(charges.get(block["type"], 0.0)) * block["length"] for block in polymer["blocks"])
+    lengths = polymer_block_lengths(params, polymer)
+    charge = sum(charges.get(block["type"], 0.0) * length for block, length in zip(polymer["blocks"], lengths))
+    scale = sum(abs(charges.get(block["type"], 0.0)) * length for block, length in zip(polymer["blocks"], lengths))
     return 0.0 if abs(charge) <= 1e-12 * scale else charge
 
 
@@ -520,7 +553,7 @@ def open_charges(params: Dict[str, Any]) -> bool:
     if any("chemical_potential" in ion for ion in (electrostatics.get("ions") or {}).values()):
         return True
     # The uniform mode of ψ does not change the weight of a chain without net charge
-    return any("chemical_potential" in polymer and _chain_charge(polymer, charges) != 0.0
+    return any("chemical_potential" in polymer and _chain_charge(params, polymer, charges) != 0.0
                for polymer in params["polymers"])
 
 
@@ -533,9 +566,10 @@ def net_polymer_charge(params: Dict[str, Any]) -> float:
     for polymer in params["polymers"]:
         if "chemical_potential" in polymer:
             continue
-        length = sum(block["length"] for block in polymer["blocks"])
-        for block in polymer["blocks"]:
-            total += charges.get(block["type"], 0.0) * polymer["volume_fraction"] * block["length"] / length
+        lengths = polymer_block_lengths(params, polymer)
+        alpha = sum(lengths)
+        for block, length in zip(polymer["blocks"], lengths):
+            total += charges.get(block["type"], 0.0) * polymer["volume_fraction"] * length / alpha
     return total
 
 

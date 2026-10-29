@@ -19,6 +19,7 @@ SET(BASIC_TESTS
     TestInputChecks
     TestMoleculesValidation
     TestPartitionGuard
+    TestPartitionIntegrand
     TestDriftStepHistory
     # Platform & utilities
     TestConsoleEncoding
@@ -29,6 +30,12 @@ SET(BASIC_TESTS
     TestPropagatorCodeReduction
     TestCompareBranchKey
     TestContourLengthMapping
+    TestContourPrecision
+    TestDiscreteComposition
+    TestGceZeroPartition
+    TestPhysicalBasisOperators
+    TestSmearingAliases
+    TestWtmdZeroModes
 
     # CPU FFT (all types)
     TestCpuFFT1D
@@ -138,6 +145,7 @@ SET_PROPERTY(TEST TestParameterNames TestFtsReliability TestCheckpointValidation
     TestLftsRun TestLftsDetails TestSpaceGroupPlatformEquivalence TestObliqueZStress TestScftObliqueSpaceGroups
     TestStressNonPeriodic TestStressNonPeriodicRK2 TestStressAliasTies
     TestCnAdiLongLines TestCrysFFTCellChange
+    TestContourPrecision TestDiscreteComposition TestGceZeroPartition TestPhysicalBasisOperators TestSmearingAliases TestWtmdZeroModes
     APPEND PROPERTY LABELS numerical)
 
 # Generate files named "Test*.cpp"
@@ -173,6 +181,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
     SET_TEST_LABELS(${TEST_NAME})
     SET_TEST_DLL_PATH(${TEST_NAME})
 ENDFOREACH()
+
+SET_PROPERTY(TEST TestPartitionIntegrand APPEND PROPERTY LABELS numerical)
 
 # Benchmark executables (not added to ctest)
 FILE(GLOB BENCHMARK_LIST "Benchmark*.cpp")

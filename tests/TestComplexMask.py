@@ -75,9 +75,9 @@ def main():
             solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
         f = sg.symmetrize(3.0 + np.random.default_rng(9).normal(size=(1, 16 ** 3)))
         f = np.ascontiguousarray(sg.reduced_to_irreducible(sg.to_reduced_basis(f))).reshape(-1)
-        solver.zero_mean(f)
-        if not abs(solver.mean(f)) < 1e-12:
-            print(f"FAILED: zero_mean with a mask and a space group leaves the mean {solver.mean(f)} "
+        solver.zero_mean(f, basis="irreducible")
+        if not abs(solver.mean(f, basis="irreducible")) < 1e-12:
+            print(f"FAILED: zero_mean with a mask and a space group leaves the mean {solver.mean(f, basis='irreducible')} "
                   f"(physical basis {physical})")
             ok = False
 

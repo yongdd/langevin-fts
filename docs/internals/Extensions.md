@@ -153,6 +153,9 @@ contain finite JSON values; convert NumPy arrays to lists and reconstruct them
 explicitly. Loaders must validate values before accepting them. A fresh `run`
 restores the extension states captured at construction; use `continue_run` for
 continuation. `from_file` accepts the same extension keyword arguments.
+For a linear-response integrator the initial state is captured after its copy
+has received `set_linear_response`, so prepared response values included in
+`state_dict` survive the first run and subsequent fresh runs.
 
 ## Restart and validation
 

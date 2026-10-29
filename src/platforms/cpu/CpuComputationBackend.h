@@ -37,6 +37,7 @@ private:
     std::unique_ptr<CpuSolver<T>> solver;
     int n_streams;
     int n_basis;
+    std::vector<T> absolute_product;  ///< Reused partition-diagnostic integrand
 
     /// Discrete chains with a space group: exp(-w ds) in the reduced basis
     std::map<std::string, std::vector<T>> exp_dw_reduced;
@@ -96,6 +97,8 @@ public:
 
     T inner_product(BackendArray<T>* a, BackendArray<T>* b) override;
     T inner_product_inverse_weight(BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* w) override;
+    double absolute_inner_product(BackendArray<T>* a, BackendArray<T>* b,
+                                  BackendArray<T>* divisor = nullptr) override;
     void add_segment_products(int stream, BackendArray<T>* phi, const std::vector<SegmentPair<T>>& pairs) override;
     void normalize_concentration(int stream, BackendArray<T>* phi, T norm, BackendArray<T>* divisor) override;
     std::array<T, 6> block_stress(int stream, const std::vector<SegmentPair<T>>& pairs,

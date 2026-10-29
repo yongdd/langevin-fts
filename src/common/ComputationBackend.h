@@ -187,6 +187,12 @@ public:
     /// ∫ a b / w dr over the grid.
     virtual T inner_product_inverse_weight(BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* w) = 0;
 
+    /// Integral of |a b / divisor| with the same volume/orbit weights as the
+    /// partition integral; omit divisor for continuous chains. This scale does
+    /// not vanish solely because a complex partition cancels to zero.
+    virtual double absolute_inner_product(BackendArray<T>* a, BackendArray<T>* b,
+                                          BackendArray<T>* divisor = nullptr) = 0;
+
     /// Concentration of a block, accumulated: phi += Σ_i weight_i q_1,i q_2,i.
     virtual void add_segment_products(int stream, BackendArray<T>* phi,
                                       const std::vector<SegmentPair<T>>& pairs) = 0;

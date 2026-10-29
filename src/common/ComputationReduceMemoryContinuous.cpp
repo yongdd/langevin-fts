@@ -281,6 +281,7 @@ std::vector<double> ComputationReduceMemoryContinuous<T>::compute_partition_erro
     // Q must be the same at every segment of every block
     const int n_polymer_types = this->molecules->get_n_polymer_types();
     std::vector<std::vector<T>> total_partitions(n_polymer_types);
+    std::vector<std::vector<double>> absolute_integrals(n_polymer_types);
 
     for (const auto& [key, phi] : this->phi_block)
     {
@@ -294,10 +295,17 @@ std::vector<double> ComputationReduceMemoryContinuous<T>::compute_partition_erro
                 T total_partition = this->backend->inner_product(q, q_dagger)*(block.n_repeated/this->cb->get_volume());
                 total_partition /= n_propagators;
                 total_partitions[p].push_back(total_partition);
+                if (this->molecules->get_polymer(p).get_volume_fraction() == 0.0)
+                {
+                    double integral = this->backend->absolute_inner_product(q, q_dagger)
+                                      *(block.n_repeated/this->cb->get_volume());
+                    integral /= n_propagators;
+                    absolute_integrals[p].push_back(integral);
+                }
             });
     }
 
-    return relative_partition_errors(total_partitions, this->single_polymer_partitions);
+    return this->partition_errors_from_contours(total_partitions, absolute_integrals);
 }
 
 // Explicit template instantiation

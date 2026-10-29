@@ -20,6 +20,8 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <array>
+#include <limits>
 
 #include "Molecules.h"
 #include "ContourLengthMapping.h"
@@ -304,6 +306,118 @@ int main()
         }
 
         std::cout << "Test 5 PASSED" << std::endl << std::endl;
+
+        // Distinct segment counts must never share a length, even with an
+        // explicitly loose comparison tolerance near a rounding boundary.
+        ContourLengthMapping boundary(0.01, 1e-10);
+        const double lower = 0.495 - 2e-11;
+        const double upper = 0.495 + 2e-11;
+        boundary.add_block(lower);
+        boundary.add_block(upper);
+        boundary.finalize();
+        if (boundary.get_n_unique_lengths() != 2 || boundary.get_n_segment(lower) != 49 ||
+            boundary.get_n_segment(upper) != 50 ||
+            boundary.get_length_index(lower) == boundary.get_length_index(upper))
+        {
+            std::cout << "FAILED: lengths with different segment counts were merged" << std::endl;
+            return -1;
+        }
+
+        // A fixed absolute tolerance for local ds loses significant contour
+        // length after hundreds of steps, and breaks inverse aggregation lookups.
+        ContourLengthMapping precise(0.001);
+        for (double length : {0.1, 0.4, 0.50000004})
+            precise.add_block(length);
+        precise.finalize();
+        if (precise.get_n_unique_ds() != 2 || precise.get_ds_index(0.4) == precise.get_ds_index(0.50000004))
+        {
+            std::cout << "FAILED: distinct local contour steps were merged" << std::endl;
+            return -1;
+        }
+        for (double length : {0.1, 0.4, 0.50000004})
+            if (precise.get_length_index_from_n_segment(precise.get_n_segment(length), precise.get_ds_index(length))
+                != precise.get_length_index(length))
+            {
+                std::cout << "FAILED: segment-count / ds-index inverse lookup" << std::endl;
+                return -1;
+            }
+
+        // Positive short blocks are not the zero-length aggregation sentinel.
+        ContourLengthMapping short_block(1e-11);
+        short_block.add_block(5e-11);
+        short_block.finalize();
+        if (short_block.get_length_index(5e-11) == 0 || short_block.get_n_segment(5e-11) != 5)
+        {
+            std::cout << "FAILED: a positive short contour was treated as zero" << std::endl;
+            return -1;
+        }
+
+        Molecules discrete("discrete", 0.01, bond_lengths);
+        discrete.add_polymer(1.0, {{"A", 0.5, 0, 1}, {"B", 0.5 + 4e-10, 1, 2}});
+        discrete.finalize_contour_length_mapping();
+        if (discrete.get_contour_length_mapping().get_n_unique_ds() != 1 ||
+            discrete.get_polymer(0).get_alpha() != 1.0)
+        {
+            std::cout << "FAILED: accepted discrete roundoff changed the global contour step" << std::endl;
+            return -1;
+        }
+
+        // The shared scalar canonicalizer and molecule construction must choose
+        // exactly the same lengths, including tiny steps and half-integer snaps.
+        double accepted_upper = 0.5 + 1e-9;
+        while (accepted_upper - 0.5 > 1e-9)
+            accepted_upper = std::nextafter(accepted_upper, 0.5);
+        double accepted_lower = 0.5 - 1e-9;
+        while (0.5 - accepted_lower > 1e-9)
+            accepted_lower = std::nextafter(accepted_lower, 0.5);
+        const std::vector<std::array<double, 3>> accepted_discrete = {
+            {0.5 + 4e-10, 0.01, 0.5},
+            {0.5 - 4e-10, 0.01, 0.5},
+            {accepted_upper, 0.01, 0.5},
+            {accepted_lower, 0.01, 0.5},
+            {1.0009e-6, 1e-6, 1e-6},
+            {0.25e-9, 1e-9, 1e-9},
+            {1.5e-9 - 5e-19, 1e-9, 2e-9},
+            {1.5e-9 - 2e-18, 1e-9, 1e-9},
+        };
+        for (const auto& [length, step, expected] : accepted_discrete)
+        {
+            const double canonical = ContourLengthMapping::discrete_contour_length(length, step);
+            Molecules molecule("discrete", step, bond_lengths);
+            molecule.add_polymer(1.0, {{"A", length, 0, 1}});
+            if (canonical != expected || molecule.get_polymer(0).get_alpha() != canonical ||
+                molecule.get_polymer(0).get_blocks()[0].contour_length != canonical)
+            {
+                std::cout << "FAILED: discrete canonicalizer differs from molecule length" << std::endl;
+                return -1;
+            }
+        }
+
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const double inf = std::numeric_limits<double>::infinity();
+        const std::vector<std::array<double, 2>> rejected_discrete = {
+            {std::nextafter(accepted_upper, inf), 0.01},
+            {std::nextafter(accepted_lower, 0.0), 0.01},
+            {0.495, 0.01}, {0.0, 0.01}, {-0.1, 0.01}, {nan, 0.01}, {inf, 0.01},
+            {0.5, 0.0}, {0.5, -0.01}, {0.5, nan}, {0.5, inf}, {1.0, 1e-12},
+        };
+        for (const auto& [length, step] : rejected_discrete)
+        {
+            bool scalar_rejected = false, molecule_rejected = false;
+            try { ContourLengthMapping::discrete_contour_length(length, step); }
+            catch (const std::exception&) { scalar_rejected = true; }
+            try
+            {
+                Molecules molecule("discrete", step, bond_lengths);
+                molecule.add_polymer(1.0, {{"A", length, 0, 1}});
+            }
+            catch (const std::exception&) { molecule_rejected = true; }
+            if (!scalar_rejected || !molecule_rejected)
+            {
+                std::cout << "FAILED: invalid discrete length accepted by one construction path" << std::endl;
+                return -1;
+            }
+        }
 
         // =====================================================
         std::cout << "=== All tests PASSED ===" << std::endl;

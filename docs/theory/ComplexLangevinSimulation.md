@@ -90,6 +90,18 @@ Near a simple zero of a partition function the drift grows as the inverse distan
 
 **Partition ratios.** A canonical single-site species, a discrete chain of one segment (a solvent or counterions) or a point ion, has $`Q_s = \langle e^{-u_s} \rangle`$, the grid mean of the Boltzmann weight of its one site, and its term $`-n_s \ln Q_s`$ of $`H`$ has a pole where $`Q_s = 0`$. There the force $`n_s e^{-u_s}/Q_s`$ of the species grows without bound. `partition_ratio_step_history` records at every step the ratio $`\vert Q_s \vert / \langle \vert e^{-u_s} \vert \rangle`$ of each such species, with the columns named by `partition_ratio_species_json`. The ratio is 1 for real fields and approaches 0 as the complex weights cancel in the mean. The end of a run prints the smallest ratio and the fractions of steps below 0.1 and 0.01, and `drift_tail.py` summarizes the records. Grand-canonical species enter $`H`$ as $`-e^{\beta\mu} Q_s`$, without a pole, and are not recorded.
 
+**Contour consistency near a zero partition.** Every contour pairing must give the
+same polymer partition function. For a positive canonical amount, the error is
+relative to the largest magnitude of the contour and reference partitions, and
+zero reference $`Q_p`$ is invalid. For a grand-canonical polymer (zero canonical
+weight), the error is relative to the largest integral of the absolute contour
+integrand. This includes the discrete-chain inverse Boltzmann weight and the
+same quadrature and aggregation factors. Complex cancellation can then give
+$`Q_p = 0`$ or leave a roundoff residual without causing a false failure.
+Nonfinite values still fail. Grand-canonical polymer chemical potentials are the
+imposed values, evaluated without taking $`\ln Q_p`$; an absent canonical polymer
+has chemical potential $`-\infty`$.
+
 **Checks that do not show correctness.** Imaginary parts of real observables that average to zero, and Schwinger-Dyson identities (Section 7) that hold within the errors, are necessary but not sufficient. In the one-pole model of Reference 10 at $`\beta = 1.6`$ (`tests/scripts/TestDriftTail.py`), complex Langevin dynamics misses $`\mathrm{Re}\langle z^2 \rangle`$ by 438 standard errors in a long run (8000 walkers), while $`\mathrm{Im}\langle z^2 \rangle = -0.0007 \pm 0.0015`$; in this model the imaginary part vanishes by the symmetry $`z \to -\bar z`$ of the dynamics, correct or not. In the shorter run of the test (1000 walkers, 57 standard errors off), the Schwinger-Dyson identities of $`z`$ and $`z^2`$, $`\langle K \rangle = 0`$ and $`\langle 2 + 2 z K \rangle = 0`$ with the drift $`K`$, hold within 1.7 standard errors.
 
 ### 3.2 Test Against Exact Averages

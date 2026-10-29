@@ -11,8 +11,9 @@ hills (see WTMD.update_statistics).
 import numpy as np
 import scipy.signal
 
+from ._core import _periodic_metric
 from .utils import atomic_savemat
-from .validation import ValidationError
+from .validation import ValidationError, _finite_number
 
 
 class WTMD:
@@ -38,6 +39,9 @@ class WTMD:
                  recording_period=100000,
                  u=None, up=None, I0=None, I1=None, angles=None, fourier=None):
 
+        _finite_number(l, "wtmd.ell", positive=True)
+        if l < 1:
+            raise ValidationError("wtmd.ell must be at least 1")
         self.l = l
         self.kc = kc
         self.sigma_psi = sigma_psi
@@ -129,15 +133,9 @@ class WTMD:
             mag_k = np.sqrt(space_kx**2 + space_ky**2 + space_kz**2)
         else:
             # |k|^2 = 4π² mᵀ g⁻¹ m with the alias representative that minimizes the form,
-            # as the propagator solvers choose it (r2c layout: last axis m3 = 0 ... N3/2)
-            m = np.array(np.meshgrid(np.fft.fftfreq(nx[0]) * nx[0], np.fft.fftfreq(nx[1]) * nx[1],
-                                     np.arange(nx[2] // 2 + 1), indexing="ij")).reshape(3, -1)
-            k_sq = None
-            for t in np.array(np.meshgrid(*[(-1, 0, 1)] * 3, indexing="ij")).reshape(3, -1).T:
-                mt = m + (t * np.array(nx))[:, None]
-                k_sq_t = 4 * np.pi**2 * np.einsum("ij,in,jn->n", self._metric_inv, mt, mt)
-                k_sq = k_sq_t if k_sq is None else np.minimum(k_sq, k_sq_t)
-            mag_k = np.reshape(np.sqrt(k_sq), [nx[0], nx[1], nx[2] // 2 + 1])
+            # from the same exact search as Smearing and the propagator solvers.
+            k_sq, _ = _periodic_metric(nx, self._metric_inv)
+            mag_k = np.sqrt(k_sq[:, :, :nx[2] // 2 + 1])
         self.fk = 1.0 / (1.0 + np.exp(12.0 * (mag_k - kc) / kc))
 
         # Gaussian hill and its derivative at the offsets X = (Ψ - Ψ_sample)/σ of the bins
@@ -167,12 +165,19 @@ class WTMD:
 
         # Calculate current value of U'(Ψ) using linear interpolation
         up_hat = np.interp(psi, self.psi_range, self.up)
+        if up_hat == 0.0:
+            print("\t[WTMD] Ψ:%8.5f, bias:0 (U'=0)" % psi)
+            return
         if psi == 0.0:
             # Ψ = 0 only for a zero exchange field, where dΨ/dw (0/0) has no direction: no bias
             dpsi_dwr = np.zeros(self.M)
         else:
             # Calculate derivative of order parameter with respect to w_aux_k
-            dpsi_dwk = np.power(np.absolute(self.w_aux_k), self.l - 2.0) * np.power(psi, 1.0 - self.l) * self.w_aux_k * self.fk
+            magnitude = np.absolute(self.w_aux_k)
+            direction = np.divide(self.w_aux_k, magnitude, out=np.zeros_like(self.w_aux_k), where=magnitude > 0)
+            # |w_k|^(ell-1) times its phase stays finite at a zero coefficient. The
+            # derivative is zero there for ell>1; ell=1 uses the zero subgradient.
+            dpsi_dwk = np.power(magnitude, self.l - 1.0) * direction * np.power(psi, 1.0 - self.l) * self.fk
             # Calculate derivative of order parameter with respect to w
             if self._fourier is not None:
                 dpsi_dwr = self._fourier.backward(dpsi_dwk) * np.power(self.M, 2.0 - self.l) / self.V

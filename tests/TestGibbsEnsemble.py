@@ -35,7 +35,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from scipy.io import loadmat
 from scipy.optimize import brentq, fsolve
-from polymerfts import GibbsEnsemble, PlatformSelector, ValidationError
+from polymerfts import CLFTS, GibbsEnsemble, PlatformSelector, ValidationError
+from cuda_part import cuda_part_missing
 
 N, CHI = 20, 3.0
 
@@ -238,6 +239,16 @@ def restart(root):
     c = json.loads((root / "part" / "gibbs_history.json").read_text())["cycles"]
     assert c == a, "a second run() differs from the first"
 
+    # Old histories without contour metadata remain valid when the supplied lengths
+    # already equal the native chain lengths.
+    path = root / "part" / "gibbs_history.json"
+    legacy = json.loads(path.read_text())
+    legacy["settings"].pop("effective_block_lengths")
+    path.write_text(json.dumps(legacy))
+    restored = make(root / "part", 6)
+    quiet(restored.continue_run)
+    assert restored.history["cycles"] == a, "ordinary legacy history was changed"
+
     # The amounts and chemical potentials follow the order of the point ions, which a continuation
     # must keep, grand-canonical ones included
     ions = dict(salt(), K={"valence": 1.0, "chemical_potential": np.log(N * 0.005), "smearing_length": 0.1})
@@ -251,6 +262,96 @@ def restart(root):
     expect_validation_error(lambda: charged(2, salt()).continue_run(), "input differs")
 
 
+def snapped_parameters(directory, cycles, platform):
+    """A native-accepted one-bead input offset that is significant relative to ds."""
+    return {"nx": [4], "lx": [2.0], "chain_model": "discrete", "ds": 1e-6,
+            "segment_lengths": {"A": 1.0, "B": 1.0}, "chi_n": {"A,B": 2.0}, "zeta_n": 100.0,
+            "polymers": [{"volume_fraction": 0.5, "blocks": [{"type": "A", "length": 1.0009e-6}]},
+                         {"volume_fraction": 0.5, "blocks": [{"type": "B", "length": 2e-6}]}],
+            "platform": platform, "verbose_level": 0,
+            "langevin": {"nbar": 1e28, "dt": 0.01, "max_step": 1},
+            "recording": {"dir": str(directory), "checkpoint_interval": 1,
+                          "sample_interval": 1, "statistics_save_interval": 1},
+            "gibbs_ensemble": {"boxes": [{"lx": [2.0], "volume_fractions": [0.7, 0.3]},
+                                         {"lx": [2.0], "volume_fractions": [0.3, 0.7]}],
+                               "cycles": cycles, "cycle_steps": 1, "exchange_rate": 1e-8}}
+
+
+def snapped_lengths(root, platform):
+    """Gibbs amounts and pressure work use the same bead lengths as the native chains."""
+    def make(directory, cycles):
+        params = snapped_parameters(directory, cycles, platform)
+        gibbs = quiet(lambda: GibbsEnsemble(params, random_seed=31))
+        assert params["polymers"][0]["blocks"][0]["length"] == 1.0009e-6
+        assert gibbs.params["polymers"][0]["blocks"][0]["length"] == 1.0009e-6
+        return gibbs
+
+    full = make(root / "snapped_full", 2)
+    native = quiet(lambda: CLFTS(full.box_params(0, full.amounts[0], 0), random_seed=31))
+    native_alphas = np.array([native.prop_solver.get_polymer(p).get_alpha() for p in range(2)])
+    np.testing.assert_array_equal(native_alphas, [1e-6, 2e-6])
+    np.testing.assert_array_equal(full.alphas, native_alphas)
+    quiet(full.run)
+    for cycle in full.history["cycles"]:
+        for b, box in enumerate(cycle["boxes"]):
+            counts = np.asarray(box["volume_fractions"]) * box["volume"] / native_alphas
+            np.testing.assert_allclose(cycle["amounts_before"][b], counts, rtol=2e-14, atol=0)
+            expected_exchange = np.asarray(box["chemical_potentials"]) - native_alphas * box["pressure"]
+            np.testing.assert_allclose(box["exchange_potentials"], expected_exchange, rtol=0, atol=2e-14)
+
+    part = make(root / "snapped_part", 1)
+    quiet(part.run)
+    part = make(root / "snapped_part", 2)
+    quiet(part.continue_run)
+    assert part.history["cycles"] == full.history["cycles"], "snapped-length continuation differs"
+    for box in ("box0", "box1"):
+        a = loadmat(root / "snapped_full" / box / "fields_000002.mat", squeeze_me=True)
+        b = loadmat(root / "snapped_part" / box / "fields_000002.mat", squeeze_me=True)
+        keys = [key for key in a if key.startswith("w_")]
+        assert keys and all(np.array_equal(a[key], b[key]) for key in keys), box
+    # The input hash must still distinguish two supplied lengths that snap to the same bead count.
+    changed = snapped_parameters(root / "snapped_part", 3, platform)
+    changed["polymers"][0]["blocks"][0]["length"] = 1.0008e-6
+    expect_validation_error(lambda: GibbsEnsemble(changed, random_seed=31).continue_run(), "input differs")
+
+    # The physical meaning of amounts in a materially unsnapped old history cannot
+    # be changed silently. New metadata must also agree with the current native model.
+    path = root / "snapped_part" / "gibbs_history.json"
+    stored = json.loads(path.read_text())
+    assert stored["settings"]["effective_block_lengths"] == [[1e-6], [2e-6]]
+    stored["settings"]["effective_block_lengths"] = [[1.0009e-6], [2e-6]]
+    path.write_text(json.dumps(stored))
+    expect_validation_error(lambda: make(root / "snapped_part", 3).continue_run(), "effective contour lengths differ")
+    stored["settings"].pop("effective_block_lengths")
+    path.write_text(json.dumps(stored))
+    expect_validation_error(lambda: make(root / "snapped_part", 3).continue_run(), "used different contour lengths")
+
+
+def snapped_charges(root, platform):
+    """One A bead in an AB chain has one charge, independent of its accepted input offset."""
+    params = snapped_parameters(root / "snapped_charged", 2, platform)
+    params["polymers"][0]["blocks"].append({"type": "B", "length": 2e-6})
+    params["smearing"] = {"type": "gaussian", "a_int": 0.1}
+    params["electrostatics"] = {"charges": {"A": 1.0}, "coupling": 100.0, "ions": salt()}
+    gibbs = quiet(lambda: GibbsEnsemble(params, random_seed=31))
+    expected_charges = np.array([1.0, 0.0, 1.0, -1.0])
+    np.testing.assert_array_equal(gibbs.charges, expected_charges)
+    assert gibbs.neutral
+    for b, box in enumerate(params["gibbs_ensemble"]["boxes"]):
+        box_params = gibbs.box_params(b, gibbs.amounts[b], 0)
+        w, psi = gibbs._homogeneous_fields(box_params)
+        fraction_a = box["volume_fractions"][0] / 3.0
+        np.testing.assert_allclose(w, [2.0 * (1 - fraction_a), 2.0 * fraction_a], rtol=0, atol=2e-14)
+        assert psi == 0.0
+        np.testing.assert_allclose(box_params["electrostatics"]["ions"]["Cl"]["concentration"],
+                                   0.01 + fraction_a, rtol=0, atol=2e-14)
+    quiet(gibbs.run)
+    for cycle in gibbs.history["cycles"]:
+        for key in ("amounts_before", "amounts_after"):
+            amounts = np.asarray(cycle[key])
+            np.testing.assert_allclose(amounts @ expected_charges, 0.0, rtol=0, atol=2e-9)
+
+
 def main():
     if not any(p.startswith("cpu") for p in PlatformSelector.avail_platforms()):
         return 77
@@ -260,7 +361,11 @@ def main():
                             ("Donnan coexistence", donnan), ("restart", restart)):
             check(root)
             print(f"[PASS] {name}")
-    return 0
+        for platform in PlatformSelector.avail_platforms():
+            for name, check in (("snapped chain lengths", snapped_lengths), ("snapped chain charges", snapped_charges)):
+                check(root / platform, platform)
+                print(f"[PASS] {platform}: {name}")
+    return int(cuda_part_missing())
 
 
 if __name__ == "__main__":

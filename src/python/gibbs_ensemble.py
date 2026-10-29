@@ -54,7 +54,7 @@ from .clfts import CLFTS
 from .electrostatics import homogeneous_potential, point_ions
 from .utils import json_ready, input_hash
 from .validation import (ValidationError, normalize_params, open_charges, parse_chi_n, point_ion_concentrations,
-                         validate_gibbs_params, validate_lfts_params)
+                         polymer_block_lengths, validate_gibbs_params, validate_lfts_params)
 
 
 def cell_volume(lx, angles=None):
@@ -108,7 +108,8 @@ class GibbsEnsemble:
         self.angles = params.get("angles")
 
         # Species that move between the boxes: the polymers, then the canonical point ions
-        self.alphas = np.array([sum(block["length"] for block in polymer["blocks"]) for polymer in params["polymers"]])
+        self.block_lengths = tuple(polymer_block_lengths(params, polymer) for polymer in params["polymers"])
+        self.alphas = np.array([sum(lengths) for lengths in self.block_lengths])
         n_polymers = len(self.alphas)
         es = params.get("electrostatics")
         ions = (es.get("ions") or {}) if es is not None else {}
@@ -123,8 +124,9 @@ class GibbsEnsemble:
         # Charge of a chain, N Σ_i z_i (length of type i), in the units of the ion valences
         n_segments = (round(1.0 / params["ds"]) if str(params["chain_model"]).lower() == "discrete"
                       else (es or {}).get("n_segments", 1.0))
-        chain_charges = [n_segments * sum(charges.get(block["type"], 0.0) * block["length"] for block in polymer["blocks"])
-                         for polymer in params["polymers"]]
+        chain_charges = [n_segments * sum(charges.get(block["type"], 0.0) * length
+                                         for block, length in zip(polymer["blocks"], lengths))
+                         for polymer, lengths in zip(params["polymers"], self.block_lengths)]
         self.charges = np.array(chain_charges + [float(ions[name]["valence"]) for name in self.ion_names])
         # Charged grand-canonical ions fix the uniform potential of each box (Donnan): then all species move
         self.neutral = (es is not None and es.get("screening_length") is None and not open_charges(params)
@@ -171,7 +173,8 @@ class GibbsEnsemble:
         # The amounts and the chemical potentials of the history follow the order of the point ions;
         # the hash of the input does not see that order
         return {"input_hash": input_hash(json_ready(template)), "gibbs_ensemble": json_ready(gibbs),
-                "random_seed": self.random_seed, "ion_names": self.point_ion_names}
+                "random_seed": self.random_seed, "ion_names": self.point_ion_names,
+                "effective_block_lengths": [list(lengths) for lengths in self.block_lengths]}
 
     def box_params(self, b, amounts, cycle):
         """CL-FTS input of box b with the given amounts for the given cycle."""
@@ -202,11 +205,12 @@ class GibbsEnsemble:
         types = sorted(params["segment_lengths"])
         fractions = np.zeros(len(types))
         for polymer in params["polymers"]:
-            length = sum(block["length"] for block in polymer["blocks"])
-            for block in polymer["blocks"]:
+            lengths = polymer_block_lengths(params, polymer)
+            length = sum(lengths)
+            for block, block_length in zip(polymer["blocks"], lengths):
                 shares = block.get("monomer_fractions", {block["type"]: 1.0})
                 for monomer, share in shares.items():
-                    fractions[types.index(monomer)] += polymer["volume_fraction"] * block["length"] / length * share
+                    fractions[types.index(monomer)] += polymer["volume_fraction"] * block_length / length * share
         chi_n = parse_chi_n(params["chi_n"], params["segment_lengths"])
         matrix = np.zeros((len(types), len(types)))
         for key, value in chi_n.items():
@@ -264,6 +268,9 @@ class GibbsEnsemble:
         stored = dict(self.history["settings"])
         self.random_seed = int(stored["random_seed"])
         current = json.loads(json.dumps(json_ready(self.settings())))
+        legacy_lengths = "effective_block_lengths" not in stored
+        stored_lengths = stored.pop("effective_block_lengths", None)
+        effective_lengths = current.pop("effective_block_lengths")
         # Histories of earlier versions do not store the order of the ions
         ion_names = current.pop("ion_names")
         stored_names = stored.pop("ion_names", ion_names)
@@ -272,6 +279,25 @@ class GibbsEnsemble:
                                   "Gibbs-ensemble history; its amounts and chemical potentials follow that order")
         if stored != current or stored_names != ion_names:
             raise ValidationError("The input differs from that of the Gibbs-ensemble history (only 'cycles' may change)")
+        # Before effective lengths were recorded, amounts and charge/composition weights
+        # used the supplied lengths. Reinterpreting those amounts after a material snap
+        # would change the physical volumes or charges; ordinary roundoff is harmless.
+        if legacy_lengths:
+            stored_lengths = [[block["length"] for block in polymer["blocks"]] for polymer in self.params["polymers"]]
+        try:
+            compatible = len(stored_lengths) == len(effective_lengths) and all(
+                np.shape(saved) == np.shape(actual)
+                and np.allclose(saved, actual, rtol=256 * np.finfo(float).eps, atol=0)
+                for saved, actual in zip(stored_lengths, effective_lengths))
+        except (TypeError, ValueError):
+            compatible = False
+        if not compatible:
+            if legacy_lengths:
+                raise ValidationError("This Gibbs-ensemble history used different contour lengths before discrete "
+                                      "block snapping was applied to its amounts and charges; start a fresh run().")
+            raise ValidationError("The effective contour lengths differ from those of the Gibbs-ensemble history; "
+                                  "start a fresh run().")
+        self.history["settings"]["effective_block_lengths"] = effective_lengths
         if self.history["cycles"]:
             self.amounts = np.array(self.history["cycles"][-1]["amounts_after"], dtype=np.float64)
         return self._run_cycles(len(self.history["cycles"]), [None, None], [None, None])

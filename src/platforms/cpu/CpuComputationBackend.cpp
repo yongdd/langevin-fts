@@ -279,6 +279,22 @@ T CpuComputationBackend<T>::inner_product_inverse_weight(BackendArray<T>* a, Bac
 }
 
 template <typename T>
+double CpuComputationBackend<T>::absolute_inner_product(
+    BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* divisor)
+{
+    if (absolute_product.empty())
+        absolute_product.resize(n_basis);
+    for (int i = 0; i < n_basis; ++i)
+    {
+        T product = raw(a)[i] * raw(b)[i];
+        if (divisor != nullptr)
+            product /= raw(divisor)[i];
+        absolute_product[i] = std::abs(product);
+    }
+    return std::real(cb->integral(absolute_product.data()));
+}
+
+template <typename T>
 void CpuComputationBackend<T>::add_segment_products(
     int, BackendArray<T>* phi, const std::vector<SegmentPair<T>>& pairs)
 {

@@ -901,15 +901,16 @@ class SCFT:
     def mean_concentrations(self):
         """Volume-averaged concentration of each monomer type from the chain compositions.
 
-        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b),
-        which is what the C++ normalization of the concentrations gives.
+        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b).
+        Use the native block lengths, including accepted discrete lengths snapped
+        to integer multiples of ds, to match the concentration normalization.
         """
         phi_mean = np.zeros(len(self.monomer_types))
-        for p, polymer in enumerate(self.polymers):
-            alpha = self.prop_solver.get_polymer(p).get_alpha()
-            for block in polymer["blocks"]:
-                weight = polymer["volume_fraction"] * block["length"] / alpha
-                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+        for p in range(self.prop_solver.get_n_polymer_types()):
+            chain = self.prop_solver.get_polymer(p)
+            for block in chain.get_blocks():
+                weight = chain.get_volume_fraction() * block.contour_length / chain.get_alpha()
+                fractions = self.random_fraction.get(block.monomer_type, {block.monomer_type: 1.0})
                 for monomer_type, fraction in fractions.items():
                     phi_mean[self.monomer_types.index(monomer_type)] += weight * fraction
         return phi_mean
@@ -927,10 +928,10 @@ class SCFT:
         M = len(self.monomer_types)
         if self.zeta_n is not None:
             for i in range(M):
-                w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i])
+                w[i] += chi_phi_mean[i] + xi - self.prop_solver.mean(w[i], basis="irreducible")
         else:
             for i in range(M):
-                w[i] -= self.prop_solver.mean(w[i])
+                w[i] -= self.prop_solver.mean(w[i], basis="irreducible")
 
     def compute_chemical_potentials(self, w=None, partition_functions=None):
         """Restore the saddle-point field means and return beta mu per chain.
@@ -953,20 +954,20 @@ class SCFT:
             target += self.zeta_n * (np.sum(phi_mean) - 1.0)
         # A field on the full grid (SCFTResult.w with a space group): the mean of its grid points
         means = [float(np.mean(field)) if self.sg is not None and np.size(field) == self.prop_solver.total_grid
-                 else self.prop_solver.mean(field) for field in w]
+                 else self.prop_solver.mean(field, basis="irreducible") for field in w]
         shift = target - np.array(means)
         mu = []
-        for p, polymer in enumerate(self.polymers):
+        for p in range(self.prop_solver.get_n_polymer_types()):
             chain = self.prop_solver.get_polymer(p)
             concentration = chain.get_volume_fraction() / chain.get_alpha()
             if concentration == 0.0:
                 mu.append(float("-inf"))
                 continue
             field_shift = 0.0
-            for block in polymer["blocks"]:
-                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+            for block in chain.get_blocks():
+                fractions = self.random_fraction.get(block.monomer_type, {block.monomer_type: 1.0})
                 for monomer, fraction in fractions.items():
-                    field_shift += block["length"] * fraction * shift[self.monomer_types.index(monomer)]
+                    field_shift += block.contour_length * fraction * shift[self.monomer_types.index(monomer)]
             mu.append(float(np.log(concentration) - np.log(partition_functions[p]) + field_shift))
         return mu
 
@@ -1287,10 +1288,10 @@ class SCFT:
             for i in range(M):
                 for j in range(i+1, M):
                     if self.matrix_chi[i, j] != 0.0:
-                        energy_total += self.matrix_chi[i, j]*self.prop_solver.mean(phi_array[i]*phi_array[j])
-                energy_total -= self.prop_solver.mean(w[i]*phi_array[i])
+                        energy_total += self.matrix_chi[i, j]*self.prop_solver.mean(phi_array[i]*phi_array[j], basis="irreducible")
+                energy_total -= self.prop_solver.mean(w[i]*phi_array[i], basis="irreducible")
             if self.zeta_n is not None:
-                energy_total += 0.5*self.zeta_n*self.prop_solver.mean((np.sum(phi_array, axis=0) - 1.0)**2)
+                energy_total += 0.5*self.zeta_n*self.prop_solver.mean((np.sum(phi_array, axis=0) - 1.0)**2, basis="irreducible")
             if es is not None:
                 energy_total += es.free_energy(self.psi)
             # Keep the reported iteration energy relative to the homogeneous state.
@@ -1316,7 +1317,7 @@ class SCFT:
 
             # Keep the level of functional derivatives
             for i in range(M):
-                w_diff[i] -= self.prop_solver.mean(w_diff[i])
+                w_diff[i] -= self.prop_solver.mean(w_diff[i], basis="irreducible")
 
             # ψ: the Newton step of the Poisson equation with the charges of the chains and ions
             if es is not None:
@@ -1328,17 +1329,17 @@ class SCFT:
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(M):
-                error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i])
-                error_normal += self.prop_solver.inner_product(w[i], w[i])
+                error_level += self.prop_solver.inner_product(w_diff[i], w_diff[i], basis="irreducible")
+                error_normal += self.prop_solver.inner_product(w[i], w[i], basis="irreducible")
             if es is not None:
                 # The uniform ψ₀ (Donnan potential) shifts with the chemical potentials of the
                 # ions, so the scale of ψ is that of its variation
-                psi_variation = self.psi - self.prop_solver.mean(self.psi)
-                error_level += self.prop_solver.inner_product(psi_diff, psi_diff)
-                error_normal += self.prop_solver.inner_product(psi_variation, psi_variation)
+                psi_variation = self.psi - self.prop_solver.mean(self.psi, basis="irreducible")
+                error_level += self.prop_solver.inner_product(psi_diff, psi_diff, basis="irreducible")
+                error_normal += self.prop_solver.inner_product(psi_variation, psi_variation, basis="irreducible")
             error_level = np.sqrt(error_level/error_normal)
             field_error_level = error_level
-            mass_error = self.prop_solver.mean(phi_diff)
+            mass_error = self.prop_solver.mean(phi_diff, basis="irreducible")
 
             if self.relax_cell:
                 # The stress costs ~30 % of an iteration: compute it every stress_interval
@@ -1414,8 +1415,8 @@ class SCFT:
             # Normalize field means
             if self.zeta_n is not None:
                 # mean(φ_i) = f_i exactly by chain normalization, so the target is constant
-                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i]) for i in range(M)])
-                xi = 0.0 if self.zeta_n is None else self.zeta_n * (self.prop_solver.mean(phi_total) - 1.0)
+                chi_phi_mean = np.array([self.prop_solver.mean((self.matrix_chi @ phi_array)[i], basis="irreducible") for i in range(M)])
+                xi = 0.0 if self.zeta_n is None else self.zeta_n * (self.prop_solver.mean(phi_total, basis="irreducible") - 1.0)
                 self._pin_field_means(w, chi_phi_mean, xi)
             else:
                 self._pin_field_means(w, None)

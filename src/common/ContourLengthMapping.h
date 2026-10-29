@@ -44,6 +44,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <limits>
 
 /**
  * @class ContourLengthMapping
@@ -86,8 +87,8 @@ private:
     /**
      * @brief Tolerance for floating-point comparison (machine precision).
      *
-     * Two values are considered equal if |a - b| < tolerance.
-     * Default: 1e-10
+     * Relative tolerance: |a - b| <= tolerance * max(|a|, |b|).
+     * The default covers roundoff in equivalent contour-length expressions.
      */
     double tolerance;
 
@@ -130,9 +131,12 @@ private:
      *
      * @param a First value
      * @param b Second value
-     * @return true if |a - b| < tolerance
+     * @return true when the relative difference is within tolerance
      */
     bool is_equal(double a, double b) const;
+
+    /// Nearly equal lengths may share a key only if their segment counts agree.
+    bool is_same_length(double a, double b) const;
 
     /**
      * @brief Find index of value in sorted vector, or -1 if not found.
@@ -148,15 +152,22 @@ public:
      * @brief Construct a ContourLengthMapping.
      *
      * @param global_ds  Global contour step size (target Δs)
-     * @param tolerance  Tolerance for floating-point comparison (default: 1e-10)
+     * @param tolerance  Relative tolerance for floating-point comparison
      */
-    ContourLengthMapping(double global_ds, double tolerance = 1e-10);
+    ContourLengthMapping(double global_ds, double tolerance = 256.0 * std::numeric_limits<double>::epsilon());
 
     /// Default constructor (creates uninitialized mapping).
     ContourLengthMapping();
 
     /// Destructor.
     ~ContourLengthMapping() {}
+
+    /// Segment count shared by Polymer and the contour mapping, including half-integer rounding.
+    static int segment_count(double contour_length, double ds);
+
+    /// Canonical discrete length N*ds, with the model's absolute 1e-9 acceptance
+    /// for input roundoff. Shared by native construction and Python consumers.
+    static double discrete_contour_length(double contour_length, double ds);
 
     /**
      * @brief Register a block's contour length.
@@ -245,8 +256,8 @@ public:
     /**
      * @brief Get length_index from n_segment and ds_index.
      *
-     * Computes contour_length = n_segment * local_ds, then returns the
-     * corresponding length_index. Used for continuous chain aggregation
+     * Looks up the stored (n_segment, ds_index) pair without reconstructing a
+     * floating-point contour length. Used for continuous chain aggregation
      * where we need to convert (n_segment, ds_index) to length_index.
      *
      * @param n_segment Number of segments

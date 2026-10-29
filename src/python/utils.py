@@ -607,7 +607,7 @@ class PartitionRatioSummary:
 
 
 # Small extension mechanics; the physical order of calls stays in each run loop.
-def initialize_extensions(sim, integrator, callbacks):
+def initialize_extensions(sim, integrator, callbacks, *, capture_initial_state=True):
     from .integrators import make_integrator
     sim.integrator = make_integrator(integrator)
     if callbacks is not None and not isinstance(callbacks, dict):
@@ -627,8 +627,10 @@ def initialize_extensions(sim, integrator, callbacks):
         load = callable(getattr(obj, "load_state_dict", None))
         if save != load:
             raise ValidationError("Extensions must implement both state_dict and load_state_dict, or neither")
-    # Fail at construction, rather than at the first scheduled checkpoint.
-    sim._initial_extension_state = copy.deepcopy(extension_state(sim))
+    # CLFTS captures after preparing any linear response. Other simulations
+    # finish setup here and validate state before the first scheduled checkpoint.
+    if capture_initial_state:
+        sim._initial_extension_state = copy.deepcopy(extension_state(sim))
     sim.metadata["extensions"] = extension_settings(sim)
 
 

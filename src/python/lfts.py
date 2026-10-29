@@ -1250,15 +1250,16 @@ class LFTS:
     def mean_concentrations(self):
         """Volume-averaged concentration of each monomer type from the chain compositions.
 
-        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b),
-        which is what the C++ normalization of the concentrations gives.
+        mean(phi_i) = sum_p (f_p / alpha_p) sum_{blocks b of p} length_b * (fraction of i in b).
+        Use the native block lengths, including accepted discrete lengths snapped
+        to integer multiples of ds, to match the concentration normalization.
         """
         phi_mean = np.zeros(len(self.monomer_types))
-        for p, polymer in enumerate(self.polymers):
-            alpha = self.prop_solver.get_polymer(p).get_alpha()
-            for block in polymer["blocks"]:
-                weight = polymer["volume_fraction"] * block["length"] / alpha
-                fractions = self.random_fraction.get(block["type"], {block["type"]: 1.0})
+        for p in range(self.prop_solver.get_n_polymer_types()):
+            chain = self.prop_solver.get_polymer(p)
+            for block in chain.get_blocks():
+                weight = chain.get_volume_fraction() * block.contour_length / chain.get_alpha()
+                fractions = self.random_fraction.get(block.monomer_type, {block.monomer_type: 1.0})
                 for monomer_type, fraction in fractions.items():
                     phi_mean[self.monomer_types.index(monomer_type)] += weight * fraction
         return phi_mean

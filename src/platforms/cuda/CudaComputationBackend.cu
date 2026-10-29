@@ -14,6 +14,7 @@
 #include "CudaSolverPseudoDiscrete.h"
 #include "CudaSolverPseudoRK2.h"
 #include "CudaSolverPseudoRQM4.h"
+#include "CudaTypeDispatch.h"
 
 namespace {
 
@@ -29,6 +30,36 @@ CuDeviceData<T> to_device_scalar(T value)
 
 /// Segment pairs added to a concentration in one launch (passed as kernel parameters)
 constexpr int MAX_PAIRS_PER_LAUNCH = 32;
+
+__global__ void ker_absolute_partition_product(
+    double* out, const double* a, const double* b, const double* divisor,
+    const double* weights, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n)
+    {
+        double product = a[i] * b[i];
+        if (divisor != nullptr)
+            product /= divisor[i];
+        out[i] = fabs(product) * weights[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_absolute_partition_product(
+    cuDoubleComplex* out, const cuDoubleComplex* a, const cuDoubleComplex* b,
+    const cuDoubleComplex* divisor, const double* weights, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < n)
+    {
+        cuDoubleComplex product = cuCmul(a[i], b[i]);
+        if (divisor != nullptr)
+            product = cuCdiv(product, divisor[i]);
+        out[i] = make_cuDoubleComplex(cuCabs(product) * weights[i], 0.0);
+        i += blockDim.x * gridDim.x;
+    }
+}
 
 template <typename TD>
 struct SegmentProducts
@@ -209,6 +240,9 @@ void CudaComputationBackend<T>::release()
     d_reduced_basis_indices.release();
     d_full_to_reduced_map.release();
     d_sum.release();
+    d_partition_sum.release();
+    h_partition_sum.release();
+    d_partition_temp.release();
     d_exp_dw_reduced.clear();
 
     for (int i = 0; i < MAX_STREAMS; i++)
@@ -514,6 +548,46 @@ template <typename T>
 T CudaComputationBackend<T>::inner_product_inverse_weight(BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* w)
 {
     return cb->inner_product_inverse_weight_device(raw(a), raw(b), raw(w));
+}
+
+template <typename T>
+double CudaComputationBackend<T>::absolute_inner_product(
+    BackendArray<T>* a, BackendArray<T>* b, BackendArray<T>* divisor)
+{
+    const cudaStream_t stream = streams[0][0];
+    // Canonical-only computations never need this diagnostic workspace.
+    if (d_partition_sum.get() == nullptr)
+    {
+        CudaDeviceBuffer<CuDeviceData<T>> output(1);
+        CudaPinnedBuffer<T> host_output(1);
+        size_t bytes = 0;
+        CUDA_CHECK(cuda_reduce_sum(nullptr, bytes, d_sum.get(), output.get(), n_basis, stream));
+        CudaDeviceBuffer<unsigned char> temporary(bytes);
+        d_partition_sum = std::move(output);
+        h_partition_sum = std::move(host_output);
+        d_partition_temp = std::move(temporary);
+        partition_temp_bytes = bytes;
+    }
+    // Statistics follow all producers, including checkpoint copies. Reuse the
+    // existing events and scratch; no allocation or default-stream copy occurs.
+    for (int s = 0; s < n_streams; ++s)
+    {
+        CUDA_CHECK(cudaEventRecord(kernel_done[s], streams[s][0]));
+        CUDA_CHECK(cudaEventRecord(copy_done[s], streams[s][1]));
+        CUDA_CHECK(cudaStreamWaitEvent(stream, kernel_done[s], 0));
+        CUDA_CHECK(cudaStreamWaitEvent(stream, copy_done[s], 0));
+    }
+    const int threads = CudaCommon::get_instance().get_n_threads();
+    ker_absolute_partition_product<<<grid_blocks(n_basis, threads), threads, 0, stream>>>(
+        d_sum.get(), raw(a), raw(b), divisor == nullptr ? nullptr : raw(divisor),
+        cb->device_integration_weights(), n_basis);
+    CUDA_CHECK_LAUNCH();
+    CUDA_CHECK(cuda_reduce_sum(d_partition_temp.get(), partition_temp_bytes, d_sum.get(),
+                               d_partition_sum.get(), n_basis, stream));
+    CUDA_CHECK(cudaMemcpyAsync(h_partition_sum.get(), d_partition_sum.get(), sizeof(T),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    return std::real(h_partition_sum[0]) * cb->integration_weight_scale();
 }
 
 template <typename T>

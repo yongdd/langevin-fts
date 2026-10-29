@@ -117,6 +117,12 @@ protected:
     /// norm = ds · volume fraction / alpha · n_repeated / Q.
     T concentration_norm(const std::tuple<int, std::string, std::string>& block_key) const;
 
+    /// Compare canonical Q relatively and zero-weight species on the scale of
+    /// their absolute contour integrands (which need not cancel when Q does).
+    std::vector<double> partition_errors_from_contours(
+        const std::vector<std::vector<T>>& values,
+        const std::vector<std::vector<double>>& absolute_integrals) const;
+
     /// Stress of a block: the sum over its segments times the contour step ds.
     void scale_by_contour_step(std::array<T, 6>& stress, const std::string& key_right) const;
 

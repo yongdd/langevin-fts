@@ -134,6 +134,21 @@ def test_missing_write_commands_produces_default_snapshot(tmp_path, monkeypatch)
     assert 'platform' not in calls['params']
 
 
+def test_single_monomer_rejected_only_for_runnable_import(tmp_path):
+    param = (PARAM.replace('nMonomer 2 monomers[ 1.0 1.2 ]', 'nMonomer 1 monomers[ 1.0 ]')
+             .replace('nBlock 2 blocks[ 0 0.4 1 0.6 ]', 'nBlock 1 blocks[ 0 1.0 ]')
+             .replace('chi( 0 1 20 )', 'chi( )'))
+    source, fields = source_files(tmp_path, param=param)
+    omega = source / 'in/omega'
+    omega.unlink()
+    TOOL['write_rgrid'](omega, [2, 3, 4], 'orthorhombic', [3., 4., 5.], fields[:1])
+    with pytest.raises(ValueError, match='at least two monomer types'):
+        TOOL['import_script'](source / 'param', source / 'command', tmp_path / 'job')
+    assert not (tmp_path / 'job').exists()
+    output = TOOL['import_files'](omega, tmp_path / 'fields.mat')
+    np.testing.assert_array_equal(loadmat(output)['w_A'].ravel(), fields[0].ravel())
+
+
 @pytest.mark.parametrize('command', (
     'READ_W_BASIS omega ITERATE FINISH', 'READ_W_RGRID in/omega COMPUTE FINISH',
     'READ_W_RGRID in/omega ITERATE SWEEP FINISH',

@@ -45,6 +45,7 @@ from .utils import (
     write_run_status,
     fields_hash,
     initialize_extensions,
+    extension_state,
     restore_extensions,
     notify_callbacks,
     DriftTailSummary,
@@ -360,7 +361,8 @@ class CLFTS:
             self.partition_ratio_species += [f"ion {ion['name']}" for ion in self.electrostatics.ions
                                              if ion["concentration"] is not None]
         self.metadata = simulation_metadata(self, random_seed)
-        initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks)
+        initialize_extensions(self, integrator if integrator is not None else self.langevin.get("integrator", "lm"), callbacks,
+                              capture_initial_state=False)
         # ψ takes the noise scheme the integrator declares (electrostatics.py): the average of
         # two noises like Leimkuhler-Matthews, or fresh noise like Euler
         if self.electrostatics is not None:
@@ -385,6 +387,9 @@ class CLFTS:
                                                 mobility=self._integrated_mobility(),
                                                 noise_direction=self._integrated_noise_direction(),
                                                 fourier=self.prop_solver.fourier)
+        # A stateful method may save its prepared response. A fresh run must
+        # restore the completed setup, not the state before preparation.
+        self._initial_extension_state = copy.deepcopy(extension_state(self))
         self.run_status = {"status": "initialized", "last_completed_step": 0}
         # run() draws the chain architectures into the recording directory; a driver that runs the
         # same chains again (gibbs_ensemble.py) sets this to False after the first run
@@ -612,12 +617,16 @@ class CLFTS:
         the chains gives ln(n_p/V), so ∂ln Z/∂n_p yields this operator; its average is the
         chemical potential per chain in the convention of SCFT.compute_chemical_potentials,
         which it equals at the saddle point. Its real part does not depend on the branch of
-        the logarithm. A species without chains has -inf. The point ions follow the polymers,
+        the logarithm. An absent canonical species has -inf; grand-canonical species have
+        their imposed chemical potentials, including at Q_p = 0. The point ions follow the polymers,
         βμ_s = ln(N c_s) - ln Q_s (Electrostatics.ion_chemical_potentials).
         """
-        with np.errstate(divide="ignore"):
-            ideal = np.log(self.chain_densities)
-        values = ideal - np.log(np.asarray(total_partitions, dtype=np.complex128))
+        values = np.full(self.chain_densities.shape, -np.inf, dtype=np.complex128)
+        occupied_canonical = self.chain_densities > 0
+        occupied_canonical[self.grand_canonical] = False
+        partitions = np.asarray(total_partitions, dtype=np.complex128)
+        values[occupied_canonical] = (np.log(self.chain_densities[occupied_canonical])
+                                      - np.log(partitions[occupied_canonical]))
         values[self.grand_canonical] = self.polymer_chemical_potentials[self.grand_canonical]
         if self.electrostatics is not None and self.electrostatics.ions:
             values = np.append(values, self.electrostatics.ion_chemical_potentials())

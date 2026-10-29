@@ -196,13 +196,8 @@ class SymmetricPolymerTheory:
             Auxiliary potential fields, shape (M, total_grid).
         """
         if isinstance(w, dict):
-            # Make an array of w
-            M = len(self.monomer_types)
-            total_grid = len(w[next(iter(w))])
-            w_temp = np.zeros((M, total_grid))
-            for count, type in enumerate(self.monomer_types):
-                w_temp[count,:] = w[type]
-
+            # Preserve complex fields and promote mixed dtypes as for ndarray input.
+            w_temp = np.stack([w[name] for name in self.monomer_types])
             return np.matmul(self.matrix_a_inv, w_temp)
         else:
             return np.matmul(self.matrix_a_inv, w)
@@ -416,9 +411,12 @@ class SymmetricPolymerTheory:
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
         for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
+            polymer = molecules.get_polymer(p)
+            fraction = polymer.get_volume_fraction()
+            # Grand-canonical chains have no canonical amount. Their -z Q term
+            # is regular even at Q=0; do not evaluate the unused log(Q).
+            if fraction != 0.0:
+                hamiltonian_partition -= fraction / polymer.get_alpha() * np.log(total_partitions[p])
 
         if include_const_term:
             reference = self.h_const

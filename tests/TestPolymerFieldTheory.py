@@ -43,6 +43,7 @@ the rows of w_aux of dropped fields, which no simulation updates.
 import io
 import sys
 import contextlib
+import warnings
 
 import numpy as np
 from polymerfts.polymer_field_theory import SymmetricPolymerTheory
@@ -211,6 +212,25 @@ def test_singular_hamiltonian():
 
 def main():
     rng = np.random.default_rng(1)
+    # Public dictionary and ndarray conversions must agree, including complex
+    # CL fields and a dictionary whose insertion order differs from monomer order.
+    with contextlib.redirect_stdout(io.StringIO()):
+        conversion_model = SymmetricPolymerTheory(["A", "B", "C"],
+                                                  {"A,B": 10.0, "A,C": 30.0, "B,C": 20.0}, 100.0)
+    conversion_rng = np.random.default_rng(713)
+    for complex_fields in (False, True):
+        aux = conversion_rng.normal(0.0, 5.0, (3, 11))
+        if complex_fields:
+            aux = aux + 1j * conversion_rng.normal(0.0, 5.0, aux.shape)
+        dictionary = conversion_model.to_monomer_fields_dict(aux)
+        dictionary = dict(reversed(list(dictionary.items())))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            restored = conversion_model.to_aux_fields(dictionary)
+        np.testing.assert_allclose(restored, aux, rtol=1e-14, atol=1e-14)
+        np.testing.assert_array_equal(restored, conversion_model.to_aux_fields(
+            np.stack([dictionary[name] for name in conversion_model.monomer_types])))
+        assert np.iscomplexobj(restored) == complex_fields
     cases = [
         ("AB", ["A", "B"], {"A,B": 15.0}),
         ("ABC equal", ["A", "B", "C"], {"A,B": 15.0, "A,C": 15.0, "B,C": 15.0}),

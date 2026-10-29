@@ -93,6 +93,12 @@ Note: FFT/DCT/DST apply to pseudo-spectral methods (RQM4, RK2). CN-ADI2 implemen
 - `"u"`: End vertex (optional for linear chains)
 - `"monomer_fractions"`: (Optional) Random copolymer, see below
 
+Discrete block lengths must be integer multiples of `ds`. Lengths within the absolute
+acceptance tolerance of `1e-9` are snapped to the selected multiple. Composition means,
+electroneutrality checks, counterion concentrations, thermodynamic corrections and Gibbs
+ensemble amounts all use these same native block lengths. The original input lengths
+remain in the saved parameters.
+
 ```python
 "polymers": [{
     "volume_fraction": 1.0,
@@ -338,7 +344,7 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `ell` | int | $`\ell`$-norm for order parameter | `4` |
+| `ell` | float | Finite norm exponent $`\ell \geq 1`$; noninteger values are supported | `4` |
 | `kc` | float | Cutoff wavenumber | `6.02` |
 | `delta_t` | float | Well-tempering factor $`\Delta T/T`$ | `5.0` |
 | `sigma_psi` | float | Gaussian width $`\sigma_\Psi`$ | `0.16` |
@@ -349,6 +355,10 @@ For `"am"` and `"lram"`, the keys `max_hist`, `start_error`, `mix_min`, and `mix
 | `recording_period` | int | Data recording frequency | `100000` |
 
 WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange) field, that is a negative value among the `Eigenvalues` the constructor prints (of the projected interaction matrix, see [Polymer Field Theory](../theory/PolymerFieldTheory.md#2-incompressible-model); for two monomer types, a positive `chi_n`).
+
+At a zero Fourier coefficient the order-parameter derivative is zero for `ell > 1`;
+`ell = 1` uses the zero subgradient. Exponents below one are rejected because their
+derivative diverges at zero coefficients. A zero bias derivative adds no force.
 
 ### Other L-FTS Options
 
@@ -441,6 +451,13 @@ params["electrostatics"] = {"charges": {"P": 1.0, "M": -1.0}, "coupling": 1e5}
 | `skip_steps` | int | Steps at the start of each cycle left out of the averages (smaller than `cycle_steps`) | `0` |
 
 The polymers must be canonical free chains and the boxes periodic, and every polymer and canonical point ion needs a positive amount in both boxes (leave ions that are absent out of `electrostatics.ions`). Without screening, charged boxes with only canonical point ions must be neutral; charged grand-canonical point ions keep their chemical potential in both boxes and set the Donnan potential of each box, which then need not be neutral by itself. `random_seed` is a non-negative integer.
+
+Gibbs histories record the effective block lengths used for their chain amounts and
+exchange potentials. Older histories without this information remain compatible when
+their input lengths already agree with the native lengths within floating-point roundoff.
+An older history with materially different discrete lengths needs a fresh run: reusing
+its amounts with the corrected lengths would change the box volumes and can change the
+charge balance.
 
 The checkpoints store $`\psi`$ and its random-number stream, and a continuation must use the same electrostatic settings. A run continued by hand with `run(..., start_langevin_step=...)` takes $`\psi`$ through `initial_psi`, for example `psi_real + 1j * psi_imag` of a fields file, and the previous noise of its Leimkuhler-Matthews step through `psi_noise_prev` (zero if omitted); without `initial_psi` $`\psi`$ restarts at zero with a warning. Such a run does not restore the random-number streams; `continue_run()` continues a checkpoint exactly (with `cpu-fftw` in a new process up to rounding, see [Recording](#recording)). [ChargedDiblock.py](../../examples/charged/clfts/ChargedDiblock.py) is a complete script.
 

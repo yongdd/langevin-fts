@@ -21,6 +21,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <cassert>
 
@@ -51,7 +52,7 @@ ContourLengthMapping::ContourLengthMapping(double global_ds, double tolerance)
  * @brief Default constructor.
  */
 ContourLengthMapping::ContourLengthMapping()
-    : global_ds(0.0), tolerance(1e-10), is_finalized(false)
+    : global_ds(0.0), tolerance(256.0 * std::numeric_limits<double>::epsilon()), is_finalized(false)
 {
 }
 
@@ -60,7 +61,42 @@ ContourLengthMapping::ContourLengthMapping()
  */
 bool ContourLengthMapping::is_equal(double a, double b) const
 {
-    return std::abs(a - b) < tolerance;
+    return a == b || std::abs(a - b) <= tolerance * std::max(std::abs(a), std::abs(b));
+}
+
+int ContourLengthMapping::segment_count(double contour_length, double ds)
+{
+    if (!(contour_length > 0.0 && std::isfinite(contour_length) && ds > 0.0 && std::isfinite(ds)))
+        throw_with_line_number("Contour length and contour step must be positive and finite.");
+    double ratio = contour_length / ds;
+    // Keep the established rounding convention, shared with Polymer.
+    const double rounded_to_half = std::round(ratio * 2.0) / 2.0;
+    if (std::abs(ratio - rounded_to_half) < 1e-9)
+        ratio = rounded_to_half;
+    if (!std::isfinite(ratio) || ratio > static_cast<double>(std::numeric_limits<int>::max()))
+        throw_with_line_number("The block contour length requires more segments than supported.");
+    return std::max(1, static_cast<int>(std::lround(ratio)));
+}
+
+double ContourLengthMapping::discrete_contour_length(double contour_length, double ds)
+{
+    const int n_segment = segment_count(contour_length, ds);
+    const double expected_length = n_segment * ds;
+    if (std::abs(contour_length - expected_length) > 1e-9)
+    {
+        throw_with_line_number(
+            "For discrete chain model, block contour_length (" +
+            std::to_string(contour_length) +
+            ") must be an integer multiple of ds (" +
+            std::to_string(ds) + "). " +
+            "Closest valid value: " + std::to_string(expected_length));
+    }
+    return expected_length;
+}
+
+bool ContourLengthMapping::is_same_length(double a, double b) const
+{
+    return is_equal(a, b) && segment_count(a, global_ds) == segment_count(b, global_ds);
 }
 
 /**
@@ -75,27 +111,19 @@ int ContourLengthMapping::find_index(const std::vector<double>& vec, double valu
     if (vec.empty())
         return -1;
 
-    // Binary search for approximate position
-    auto it = std::lower_bound(vec.begin(), vec.end(), value - tolerance);
-
-    // Check nearby elements
-    for (auto check = it; check != vec.end() && *check <= value + tolerance; ++check)
-    {
-        if (is_equal(*check, value))
-        {
-            return static_cast<int>(check - vec.begin());
-        }
-    }
-
-    // Check element before (in case of floating-point edge cases)
+    // The sorted representative immediately below a registered value is its
+    // deduplicated length. The next entry also covers roundoff in a lookup.
+    auto it = std::lower_bound(vec.begin(), vec.end(), value);
+    if (it != vec.end() && *it == value)
+        return static_cast<int>(it - vec.begin());
     if (it != vec.begin())
     {
-        --it;
-        if (is_equal(*it, value))
-        {
-            return static_cast<int>(it - vec.begin());
-        }
+        const auto previous = std::prev(it);
+        if (is_same_length(*previous, value))
+            return static_cast<int>(previous - vec.begin());
     }
+    if (it != vec.end() && is_same_length(*it, value))
+        return static_cast<int>(it - vec.begin());
 
     return -1;
 }
@@ -147,7 +175,7 @@ void ContourLengthMapping::finalize()
     unique_lengths.clear();
     for (double len : pending_lengths)
     {
-        if (unique_lengths.empty() || !is_equal(len, unique_lengths.back()))
+        if (unique_lengths.empty() || !is_same_length(len, unique_lengths.back()))
         {
             unique_lengths.push_back(len);
         }
@@ -161,22 +189,7 @@ void ContourLengthMapping::finalize()
     {
         double len = unique_lengths[i];
 
-        // Robust rounding that handles floating-point errors near 0.5 boundaries.
-        // If the ratio is very close to a half-integer (e.g., 3.4999999999 or 3.5000000001),
-        // snap it to the nearest 0.5 before rounding to ensure consistent results.
-        double ratio = len / global_ds;
-        double rounded_to_half = std::round(ratio * 2.0) / 2.0;
-        if (std::abs(ratio - rounded_to_half) < 1e-9)
-        {
-            ratio = rounded_to_half;
-        }
-        int n_seg = static_cast<int>(std::lround(ratio));
-
-        // Ensure at least 1 segment
-        if (n_seg < 1)
-        {
-            n_seg = 1;
-        }
+        const int n_seg = segment_count(len, global_ds);
 
         length_to_n_segment[i] = n_seg;
         double local_ds = len / static_cast<double>(n_seg);
@@ -230,7 +243,7 @@ int ContourLengthMapping::get_length_index(double contour_length) const
 
     // Special case: contour_length=0 maps to length_index=0
     // This is used for continuous chain aggregation slicing
-    if (is_equal(contour_length, 0.0))
+    if (contour_length == 0.0)
     {
         return 0;
     }
@@ -278,7 +291,7 @@ int ContourLengthMapping::get_n_segment(double contour_length) const
     }
 
     // Special case: contour_length=0 has n_segment=0 (aggregation slicing)
-    if (is_equal(contour_length, 0.0))
+    if (contour_length == 0.0)
     {
         return 0;
     }
@@ -364,7 +377,7 @@ double ContourLengthMapping::get_ds_from_index(int index) const
 /**
  * @brief Get length_index from n_segment and ds_index.
  *
- * Computes contour_length = n_segment * local_ds, then returns length_index.
+ * Looks up the stored integer pair, avoiding accumulated roundoff in n*ds.
  */
 int ContourLengthMapping::get_length_index_from_n_segment(int n_segment, int ds_index) const
 {
@@ -379,9 +392,12 @@ int ContourLengthMapping::get_length_index_from_n_segment(int n_segment, int ds_
         return 0;
     }
 
-    double local_ds = get_ds_from_index(ds_index);
-    double contour_length = n_segment * local_ds;
-    return get_length_index(contour_length);
+    get_ds_from_index(ds_index);  // validate the index
+    for (size_t i = 0; i < unique_lengths.size(); ++i)
+        if (length_to_n_segment[i] == n_segment && length_to_ds_index[i] == ds_index)
+            return static_cast<int>(i) + 1;
+    throw_with_line_number("No contour length has " + std::to_string(n_segment) +
+        " segments with ds index " + std::to_string(ds_index) + ".");
 }
 
 /**

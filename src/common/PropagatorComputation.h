@@ -397,11 +397,14 @@ public:
     /**
      * @brief Relative partition function error of each polymer.
      *
-     * Q = ∫ q(r,s) q†(r,N-s) dr is the same at every contour point s of every
-     * block; the error is the largest relative deviation from the Q used to
-     * normalize the concentrations (infinite when Q or a value is not finite,
-     * or Q is zero). Every polymer is evaluated and nothing is printed; the
-     * caller decides how to report the errors.
+     * Every contour pairing must give the same Q. For positive canonical
+     * volume fraction, normalize deviations by the largest magnitude of the
+     * reference and contour partitions; zero reference Q is invalid. For zero
+     * canonical weight, normalize by the largest integral of the absolute
+     * contour integrand, including the discrete inverse Boltzmann weight and
+     * the same volume, mask and aggregation factors. This permits cancellation
+     * at Q = 0 without amplifying roundoff. Non-finite partitions or scales give
+     * infinite error. Every polymer is evaluated and nothing is printed.
      *
      * @return One error per polymer type
      *

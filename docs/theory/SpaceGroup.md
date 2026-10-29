@@ -278,6 +278,14 @@ translation requires the grid to be divisible by 4).
 
 The conversions accept one field (1-D) or several (`(n_fields, n_in)`) and keep that layout: a 1-D input gives a 1-D output, a 2-D input an `(n_fields, n_out)` array; `symmetrize` returns the shape of its input and `symmetrize_reduced_basis` works in place (C-contiguous float64 array).
 
+`PropagatorSolver.integral`, `mean`, `inner_product`, `multi_inner_product` and
+`zero_mean` take fields in the active reduced basis by default, matching
+`get_concentration()` and `to_reduced_basis()`. Pass `basis="irreducible"` for
+irreducible-orbit arrays; SCFT uses this explicitly for its working fields.
+The two representations can have the same size and different ordering, so size
+alone does not identify the basis. With no space group, both names refer to the
+full grid. A mask is included in the integration weights in either representation.
+
 ## Accessor Methods
 
 Metadata is exposed through getter methods (not attributes):
