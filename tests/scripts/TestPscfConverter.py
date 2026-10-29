@@ -192,6 +192,22 @@ def test_hall_number_range(hall, message):
         TOOL['choose_lattice'](p)
 
 
+@pytest.mark.parametrize('group, outcome', (
+    ({'symbol': 'Ia-3d'}, 'cubic'),                         # one Hall setting: the symbol suffices
+    ({'symbol': 'P2/m'}, 'several Hall settings'),         # 57, 58, 59: the unique axis is ambiguous
+    ({'symbol': 'P2/m', 'hall_number': 5}, 'not of P2/m'),  # Hall 5 is P2, not P2/m
+))
+def test_space_group_symbol_and_hall_number(group, outcome):
+    pytest.importorskip('spglib')
+    p = params()
+    p.update(space_group=group, lx=[3., 3., 3.])
+    if outcome == 'cubic':
+        assert TOOL['choose_lattice'](p)[0] == 'cubic'
+    else:
+        with pytest.raises(ValueError, match=outcome):
+            TOOL['choose_lattice'](p)
+
+
 def test_invalid_space_group_symbol_has_a_clear_error():
     p = params()
     p['space_group'] = {'symbol': 123}

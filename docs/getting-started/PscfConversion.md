@@ -71,7 +71,9 @@ The parameter dictionary must include `nx`, `lx`, `ds`, `chain_model`,
 Monomer identifiers must be nonempty and contain no whitespace.
 The canonical names `polymers`, `relax_cell`, `stress_scale` and
 `space_group.hall_number` are supported alongside the legacy input aliases.
-Supplying both an alias and its canonical name is an error.
+Supplying both an alias and its canonical name is an error. As in SCFT, a space-group
+symbol with several Hall settings (for example `P2/m`) needs `space_group.hall_number`,
+which must be a setting of that symbol.
 
 A Python parameter file can also be used with `--fields`. The converter reads a
 module-level `params` dictionary and simple numerical expressions such as

@@ -3615,14 +3615,15 @@ static void check_transform_length(CudaTransformType type, int N, const char* ax
     throw std::runtime_error(msg);
 }
 
-// Shared memory the 1D kernels of a transform stage one line in (see execute())
+// Shared memory the 1D kernels of a transform stage one line in (see execute()): the DCT-2
+// post-op reads N values and the DCT-3 post-op N + 2; only the DCT-1 pre-op sums by halving
+// and needs a power of two
 static size_t shared_bytes_1d(CudaTransformType type, int N)
 {
-    const size_t nThread = static_cast<size_t>(pow2roundup(N));
     switch (type) {
         case CUDA_DCT_1: return sizeof(double) * pow2roundup((N - 1) / 2);
-        case CUDA_DCT_2: return sizeof(double) * nThread;
-        case CUDA_DCT_3: return sizeof(double) * (nThread + 2);
+        case CUDA_DCT_2: return sizeof(double) * N;
+        case CUDA_DCT_3: return sizeof(double) * (N + 2);
         case CUDA_DST_1: return sizeof(double) * (N + 1);
         case CUDA_DST_2: return sizeof(double) * N;
         case CUDA_DST_3: return sizeof(double) * (N + 2);
@@ -3816,7 +3817,7 @@ void CudaRealTransform1D::execute(double* d_data)
             kernel_dct2_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, d_x1_, N_);
             CUDA_CHECK_LAUNCH();
             CUFFT_CHECK(cufftExecZ2D(plan_, reinterpret_cast<cufftDoubleComplex*>(d_x1_.get()), d_work_));
-            kernel_dct2_postOp<<<1, std::min(nThread, 256), sizeof(double) * nThread, stream_>>>(
+            kernel_dct2_postOp<<<1, std::min(nThread, 256), shared_bytes_1d(type_, N_), stream_>>>(
                 d_work_, N_, dct2_sin_, dct2_cos_);
             CUDA_CHECK_LAUNCH();
             CUDA_CHECK(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
@@ -3826,7 +3827,7 @@ void CudaRealTransform1D::execute(double* d_data)
             kernel_dct3_preOp<<<1, std::min(nThread, 256), 0, stream_>>>(d_data, N_, dct3_sin_, dct3_cos_);
             CUDA_CHECK_LAUNCH();
             CUFFT_CHECK(cufftExecD2Z(plan_, d_data, reinterpret_cast<cufftDoubleComplex*>(d_work_.get())));
-            kernel_dct3_postOp<<<1, std::min(nThread, 256), sizeof(double) * (nThread + 2), stream_>>>(d_work_, N_);
+            kernel_dct3_postOp<<<1, std::min(nThread, 256), shared_bytes_1d(type_, N_), stream_>>>(d_work_, N_);
             CUDA_CHECK_LAUNCH();
             CUDA_CHECK(cudaMemcpyAsync(d_data, d_work_, sizeof(double) * N_, cudaMemcpyDeviceToDevice, stream_));
             break;

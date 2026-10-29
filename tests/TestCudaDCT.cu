@@ -1156,6 +1156,17 @@ bool test_odd_length_rejected()
     try { CudaDCT t(16, CUDA_DCT_1); }   // 16 points = odd logical N: unsupported
     catch (const std::exception&) { threw = true; }
     if (!threw) { printf("  1D DCT-1 with 16 points was NOT rejected\n"); ok = false; }
+    // The 1D DCT-2/3 stage N and N + 2 values in the 48 KB of shared memory of a block: 6144 and
+    // 6142 points fit, one more does not and must be refused
+    try { CudaDCT f(6144, CUDA_DCT_2); CudaDCT g(6142, CUDA_DCT_3); }
+    catch (const std::exception& e) { printf("  a 1D length within shared memory was rejected: %s\n", e.what()); ok = false; }
+    for (auto [N, type] : {std::pair{6145, CUDA_DCT_2}, std::pair{6143, CUDA_DCT_3}})
+    {
+        threw = false;
+        try { CudaDCT t(N, type); }
+        catch (const std::exception&) { threw = true; }
+        if (!threw) { printf("  1D DCT of %d points beyond shared memory was NOT rejected\n", N); ok = false; }
+    }
     printf("  %s\n\n", ok ? "PASSED!" : "FAILED!");
     return ok;
 }
@@ -1179,6 +1190,8 @@ int main()
     all_passed &= test_dct2_1d(64);
     all_passed &= test_dct2_1d(15);    // odd length: slot N/2 is an ordinary pair
     all_passed &= test_dct2_1d(31);
+    all_passed &= test_dct2_1d(5001);  // beyond 4096: the shared memory holds N values, not 2^ceil(log2 N)
+    all_passed &= test_dct2_1d(6144);
 
     // Test 1D DCT-3
     std::cout << "--- 1D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
@@ -1186,6 +1199,8 @@ int main()
     all_passed &= test_dct3_1d(32);
     all_passed &= test_dct3_1d(64);
     all_passed &= test_dct3_1d(15);
+    all_passed &= test_dct3_1d(5001);
+    all_passed &= test_dct3_1d(6142);
 
     // Test 1D DCT-4
     std::cout << "--- 1D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";

@@ -143,19 +143,28 @@ def choose_lattice(params, override=None):
         except ImportError:
             raise ValueError("Space-group inputs need Python spglib, or an explicit --lattice.") from None
         group = params["space_group"]
+        symbol = group.get("symbol")
+        if symbol is not None and not isinstance(symbol, str):
+            raise ValueError("space_group.symbol must be a string.")
+        # The Hall settings of the symbol; like SCFT, a symbol with several needs the hall_number
+        key = None if symbol is None else symbol.replace(" ", "").replace("_", "")
+        settings = [] if key is None else [h for h in range(1, 531) if spglib_call(
+            spglib, spglib.get_spacegroup_type, h).international_short.replace("_", "") == key]
         hall = group.get("hall_number")
         if hall is not None:
             numbers = vector(hall, "hall_number", integer=True)
             if len(numbers) != 1 or numbers[0] > 530:
                 raise ValueError("hall_number must be an integer between 1 and 530.")
             hall = numbers[0]
+            if key is not None and hall not in settings:
+                raise ValueError(f"space_group.hall_number {hall} is a setting of "
+                                 f"{spglib_call(spglib, spglib.get_spacegroup_type, hall).international_short}, "
+                                 f"not of {symbol}.")
+        elif len(settings) > 1:
+            raise ValueError(f"space_group.symbol {symbol} has several Hall settings ({', '.join(map(str, settings))}); "
+                             "give space_group.hall_number, as SCFT requires, or --lattice.")
         else:
-            symbol = group.get("symbol", "")
-            if not isinstance(symbol, str):
-                raise ValueError("space_group.symbol must be a string.")
-            symbol = symbol.replace(" ", "")
-            hall = next((h for h in range(1, 531) if spglib_call(spglib, spglib.get_spacegroup_type, h)
-                         .international_short.replace("_", "") == symbol.replace("_", "")), None)
+            hall = settings[0] if settings else None
         if hall is None:
             raise ValueError("Could not identify the space group. Specify --lattice explicitly.")
         sg = spglib_call(spglib, spglib.get_spacegroup_type, hall)
