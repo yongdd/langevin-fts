@@ -27,6 +27,15 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     The current coexistence helper varies composition only and explicitly rejects
     `zeta_n`; compressible CE SCFT itself is already supported. Validate homogeneous
     analytical limits, the incompressible limit and coexistence conditions.
+36. Box relaxation with rhombohedral-axes settings of trigonal space groups (found
+    2026-10-29). The R-centered trigonal groups (R3, R-3, R32, R3m, R3c, R-3m, R-3c) can be
+    written on two cells of the same lattice: hexagonal axes (a = b, gamma = 120 degrees,
+    c along the threefold axis; a cell three times as large with three lattice points; Hall
+    settings "H", e.g. 458 for R-3m) or rhombohedral axes (the primitive cell, a = b = c and
+    alpha = beta = gamma; Hall settings "R", e.g. 459 for R-3m). SCFT relaxes the
+    hexagonal-axes cell but runs the rhombohedral-axes cell only fixed, because relaxing it
+    needs a = b = c and alpha = beta = gamma to move together. Explain the two settings and
+    the need for the relaxation to the maintainer before implementing it.
 
 ## Numerical methods and performance
 
@@ -44,6 +53,13 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     irreducible and a reduced array is wrong (Pmmm, 16^3: 4.48 instead of -5.11). SCFT
     keeps every array in the irreducible basis and is not affected. Take the basis as an
     argument, or accept only the reduced basis and convert in SCFT.
+35. CUDA absorbing walls are limited to 6142 grid points along the wall axis (2D/3D;
+    found 2026-10-29). The CUDA sine transforms (DST-II/III) give one block to each line
+    of the grid and stage the nx + 2 values of the line in the 48 KB of shared memory of
+    the block, so a longer line does not fit; `platform="auto"` runs such inputs on the
+    CPU. Lifting the limit needs another kernel layout (for example lines split across
+    blocks, or the staging in global memory). Explain the layout, its cost and the
+    alternatives to the maintainer before changing it.
 
 ## Tests
 
@@ -101,12 +117,6 @@ Open items, grouped by area. Numbers are stable identifiers for discussion; new 
     keep the localization, though not the positivity argument; non-orthogonal cells and
     the stress would keep the FFT. Offer it as an optional method, not the default, and
     pass the checks listed above before using it.
-
-34. Unresolved differences of the CL-FTS comparisons with other codes and papers (2026-10-29):
-    the pressure of charged systems against BioFTS (0.7 % lower, 3 standard errors), the
-    time-step dependent excess pressure of the Lequieu polyampholyte and the dense branch of
-    the Danielsen A50C50 binodal (4 % below). Data, numbers and the limits of CL-FTS found in
-    the same comparisons: docs/internals/NumericalValidation.md, "Open differences and limits".
 
 ## Done (removed from the list above)
 
