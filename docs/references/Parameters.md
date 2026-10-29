@@ -374,7 +374,7 @@ WTMD requires a 3D grid (`nx` with three entries) and a real auxiliary (exchange
 
 ### Electrostatics
 
-CL-FTS samples the electrostatic potential; SCFT takes its saddle point ([Electrostatics (Mean Field)](#electrostatics-mean-field)). Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$, or the screened kernel $`E/(k^2 + \kappa^2)`$ with `screening_length` ([model](../theory/PolymerFieldTheory.md#5-electrostatic-interactions)). CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([sampling](../theory/ComplexLangevinSimulation.md#6-charged-systems)). Small ions are either molecules of one segment in `polymers`, which take volume like the other species, or point ions (`ions`), which have no volume and no $`\chi`$ ([model](../theory/PolymerFieldTheory.md#55-point-ions)).
+CL-FTS samples the electrostatic potential; SCFT takes its saddle point ([Electrostatics (Mean Field)](#electrostatics-mean-field)). Charged monomer types interact through the smeared charge density $`c = \sum_i z_i\,(\Gamma_i * \phi_i)`$ with the Coulomb kernel $`E/k^2`$, or the screened kernel $`E/(k^2 + \kappa^2)`$ with `screening_length` ([model](../theory/PolymerFieldTheory.md#5-electrostatic-interactions)). CL-FTS decouples the interaction with a fluctuating electrostatic potential $`\psi`$ ([sampling](../theory/ComplexLangevinSimulation.md#6-charged-systems)). Small ions are either molecules of one segment in `polymers`, which take volume like the other species, or point ions (`ions`), which have no volume and no $`\chi`$ ([model](../theory/PolymerFieldTheory.md#55-point-ions)). Ions that interact with the monomers through $`\chi`$, for example a salt that one block solvates, are therefore molecules of one segment: with discrete chains, a polymer of one block of length `ds` whose monomer type has a valence in `charges` and its pairs in `chi_n` (example below).
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
@@ -414,6 +414,19 @@ params["electrostatics"] = {"charges": {"A": 0.2}, "bjerrum_length": 0.01,
 ```
 
 The point ions add one chemical potential each to `chemical_potential_history`, after the polymers. [SaltReservoir.py](../../examples/charged/clfts/SaltReservoir.py) runs a charged melt in contact with a salt reservoir.
+
+A salt that the B block of an AB diblock solvates (discrete chains with $`N = 50`$): the cation `P` and the anion `M` are molecules of one segment with their own $`\chi`$, and the diblock takes the remaining volume.
+
+```python
+params["segment_lengths"].update({"P": 1.0, "M": 1.0})
+params["chi_n"].update({"A,P": 100.0, "A,M": 25.0})   # both prefer B, the cation more
+params["polymers"] = [{"volume_fraction": 0.96, "blocks": [{"type": "A", "length": 0.5}, {"type": "B", "length": 0.5}]},
+                      {"volume_fraction": 0.02, "blocks": [{"type": "P", "length": 1 / 50}]},
+                      {"volume_fraction": 0.02, "blocks": [{"type": "M", "length": 1 / 50}]}]
+params["electrostatics"] = {"charges": {"P": 1.0, "M": -1.0}, "coupling": 1e5}
+```
+
+[SaltDopedLamella.py](../../examples/charged/scft/SaltDopedLamella.py) relaxes such a lamella in SCFT.
 
 ### Gibbs Ensemble
 

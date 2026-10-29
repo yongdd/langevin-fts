@@ -50,6 +50,13 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   of a run prints its smallest value and the fractions of steps below 0.1 and 0.01,
   `scripts/analysis/drift_tail.py` summarizes the records, and checkpoints keep the pending
   steps (NaN for the steps of a checkpoint without the record).
+- `examples/charged/scft/SaltDopedLamella.py` (2026-10-29): a salt that the B block of a lamella
+  solvates, with the ions as molecules of one segment that carry their own chi, and the
+  Coulomb interaction dragging the weakly selective anion after the cation.
+  docs/references/Parameters.md and the theory pages describe how ions get chi this way
+  (point ions have none). docs/internals/ExampleValidation.md records the check against the
+  locally neutral limit: as E grows, the lamella approaches that of one neutral salt molecule
+  with the mean chi, linearly in 1/E.
 - Reproductions of published results as examples and validation records (2026-10-28):
   `examples/charged/scft/CounterionsBetweenPlates.py` (Netz 2001, Poisson-Boltzmann between plates),
   `examples/charged/clfts/CounterionsBetweenPlates.py` (Netz's loop expansion at weak coupling),
@@ -263,6 +270,11 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
   10.3 to 0.013 in the homopolymer solution of `HomopolymerSolutionBook.py` at L = 1.6 R_g with
   16³ grid points), so `GibbsEnsemble` and the examples that average the pressure need fewer
   samples.
+- With `recording.pressure` and `numerical_method: "rk2"`, `CLFTS` warns when the contour step
+  b sqrt(ds) R0 of a monomer type exceeds its smearing length, or with no smearing (2026-10-29).
+  The O(ds²) contour error of the `rk2` pressure is then large: 0.05 to 0.07 per C/R0³ in the
+  coacervate of Danielsen et al. at ds = 0.01. `TestClftsThermodynamics` checks when the warning
+  appears.
 - The examples are grouped by physical system and then by simulation method (2026-10-28):
   `examples/block_copolymer/`, `examples/blend/` and `examples/charged/`, each with `scft/`,
   `lfts/` and `clfts/` as available, and `examples/tools/` for the Fourier transform and the

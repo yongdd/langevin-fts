@@ -23,12 +23,15 @@ CLFTS.pressure_virial).
 5. Restart: a continued run reproduces the pending records bit for bit; a checkpoint without
    them (earlier versions) gives NaN for its pending samples.
 6. Input checks: recording.pressure must be a bool, is CL-FTS only and needs free chains in a
-   periodic box.
+   periodic box; with continuous chains and rk2 it warns about the monomer types whose contour
+   step b sqrt(ds) exceeds their smearing length, and only then (a random block with its
+   effective segment length).
 """
 import contextlib
 import io
 import os
 import tempfile
+import warnings
 from pathlib import Path
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -308,6 +311,30 @@ def input_checks(root):
     lfts["saddle"] = {"max_iter": 10, "tolerance": 1e-4}
     lfts["compressor"] = {"name": "am", "max_hist": 5, "start_error": 0.5, "mix_min": 0.01, "mix_init": 0.01}
     expect_validation_error(lambda: LFTS(lfts), "CL-FTS only")
+
+    # rk2 warns about the pressure where one contour step b sqrt(ds) exceeds the smearing length: with
+    # ds = 1/50 the steps of A, B and C are 0.141, 0.184 and 0.141 against the lengths 0.12, 0.15 and 0.2
+    def rk2_warnings(change, **options):
+        params = parameters(root / "inputs", chain_model="continuous", **options)
+        params["numerical_method"] = "rk2"
+        change(params)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            quiet(lambda: CLFTS(params))
+        return [str(w.message) for w in caught if "rk2" in str(w.message)]
+    messages = rk2_warnings(lambda p: None)
+    assert len(messages) == 1 and "A: step" in messages[0] and "B: step" in messages[0] and "C: step" not in messages[0], messages
+    assert len(rk2_warnings(lambda p: None, charged=False, smearing=None)) == 1
+    assert not rk2_warnings(lambda p: p["smearing"].update(a_int=0.2))
+    assert not rk2_warnings(lambda p: p.update(numerical_method="rqm4"))
+    assert not rk2_warnings(lambda p: p["recording"].update(pressure=False))
+    # A random block of C (1.0) and D (1.5) has the step 1.27 sqrt(ds) = 0.180 < 0.19, while D alone would
+    # have 0.212: only the effective segment length counts
+    def random_block(p):
+        p["segment_lengths"].update(D=1.5)
+        p["polymers"][1]["blocks"] = [{"type": "R", "length": 1.0, "monomer_fractions": {"C": 0.5, "D": 0.5}}]
+        p["smearing"] = {"type": "gaussian", "a_int": 0.19}
+    assert not rk2_warnings(random_block, charged=False)
 
 
 def main():

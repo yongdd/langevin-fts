@@ -324,6 +324,28 @@ class CLFTS:
                 raise ValidationError("'recording.pressure' needs free chains (no initial_conditions)")
             if any(b != "periodic" for b in self.prop_solver.bc):
                 raise ValidationError("'recording.pressure' needs a periodic box")
+            # The O(ds²) contour error of rk2 in the stress, and so in the pressure, is large where one
+            # contour step b √ds spans more than the smearing length, the shortest length on which the
+            # smeared fields vary (docs/theory/ComplexLangevinSimulation.md, Section 7); without smearing
+            # they vary down to the grid. The types are those of the blocks, so a random block counts
+            # with its effective segment length
+            if self.chain_model.lower() == "continuous" and self.prop_solver.numerical_method == "rk2":
+                coarse = []
+                for name in sorted({block["type"] for polymer in self.polymers for block in polymer["blocks"]}):
+                    if not self.smearing.enabled:
+                        length = 0.0
+                    elif self.smearing.type == "gaussian":
+                        a_int = self.smearing.params["a_int"]
+                        length = a_int.get(name, 0.0) if isinstance(a_int, dict) else a_int
+                    else:
+                        length = 1.0 / self.smearing.params["k_int"]
+                    step = self.segment_lengths[name] * np.sqrt(self.ds)
+                    if step > length:
+                        coarse.append(f"{name}: step {step:.3g} > smearing length {length:.3g}")
+                if coarse:
+                    warnings.warn("With rk2 the recorded pressure carries an O(ds^2) contour error that is large "
+                                  "when one contour step b sqrt(ds) exceeds the smearing length ("
+                                  + ", ".join(coarse) + ", in R0); use numerical_method 'rqm4' or a smaller ds")
         # Canonical single-site species, discrete chains of one segment and point ions, whose ratio
         # |Q_s|/<|e^(-u_s)|> is recorded every step (partition_ratios())
         self._single_site_polymers = [

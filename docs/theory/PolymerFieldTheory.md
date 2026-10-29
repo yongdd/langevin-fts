@@ -325,7 +325,7 @@ Smearing also enters the structure functions, whose recorded values are divided 
 
 ## 5. Electrostatic Interactions
 
-Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment, which count in the total density like the other species, or point ions without volume (Section 5.5). The charges add a Coulomb interaction to the interactions of Sections 2 and 3. `electrostatics.py` implements it; CL-FTS samples the electrostatic potential ([CL-FTS, Section 6](ComplexLangevinSimulation.md#6-charged-systems)), and SCFT takes its saddle point ([SCFT, Section 2.5](SelfConsistentFieldTheory.md#25-charged-systems)).
+Monomer type $`i`$ may carry the valence $`z_i`$ per segment (`electrostatics`). Small ions are molecules of one segment, which count in the total density and interact through $`\chi`$ like the other species, or point ions without volume and without $`\chi`$ (Section 5.5). The charges add a Coulomb interaction to the interactions of Sections 2 and 3. `electrostatics.py` implements it; CL-FTS samples the electrostatic potential ([CL-FTS, Section 6](ComplexLangevinSimulation.md#6-charged-systems)), and SCFT takes its saddle point ([SCFT, Section 2.5](SelfConsistentFieldTheory.md#25-charged-systems)).
 
 ### 5.1 Coulomb Interaction
 

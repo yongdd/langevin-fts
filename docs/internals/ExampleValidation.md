@@ -19,6 +19,7 @@ Each example lists under these labels:
 | `blend/clfts/GibbsEnsemble.py` | Flory-Huggins binodal; canonical CL-FTS at N̄ = 10⁴ | Agrees: 0.92928 in the mean-field limit, 0.91497 ± 0.0001 against 0.91497 ± 0.00013 at N̄ = 10⁴ |
 | `blend/clfts/HomopolymerSolutionBook.py` | Fredrickson and Delaney 2023 | Agrees within the reading precision (0.1–0.2 %) |
 | `charged/scft/ChargedDiblockLamella.py` | Strong-screening limit, grid convergence | Checked; the unscreened lamellae not compared |
+| `charged/scft/SaltDopedLamella.py` | Locally neutral limit (a neutral salt molecule), grid convergence | Checked; published salt-doped lamellae not compared |
 | `charged/scft/PolyelectrolyteBrush.py` | Independent Poisson-Boltzmann solution, Δx and Δs convergence | Checked; brush theory not compared |
 | `charged/scft/CounterionsBetweenPlates.py` | Poisson-Boltzmann of Netz 2001 | Agrees: profile within 10⁻³, pressure within 3×10⁻⁵ |
 | `charged/clfts/CounterionsBetweenPlates.py` | Netz's loop expansion, exact lattice Monte Carlo | Agrees up to Ξ ≈ 0.6; wrong at Ξ ≥ 0.85 (limit of CL-FTS) |
@@ -104,6 +105,10 @@ Paths are relative to `examples/charged/`. SCFT solves a deterministic mean-fiel
 ![Free energy and period of a charged lamella under strong screening](../figures/charged_lamella_screening.png)
 
 Strong screening: blocks with valences +0.5 and −0.5, continuous chains (Δs = 1/50), 64 grid points, χN = 25 and E = 10/λ² for screening lengths λ = 1/κ = 0.02 to 0.005 R₀. The Coulomb term then acts as the contact interaction −E (z_A − z_B)²/(2κ²) = −5, and the free energy and the relaxed period approach those of the neutral diblock at χ_eff N = 20 linearly in λ² (the ratio of the differences at λ = 0.01 and 0.005 is 3.99).
+
+- **`scft/SaltDopedLamella.py`**
+  - Checked (validation runs, tolerance 10⁻⁹): (a) the strong-coupling limit, at φ_s = 0.02 with 256 and 512 grid points. When the Debye length is much shorter than the domains, the cation and the anion have the same concentration everywhere, and the salt acts as one neutral molecule of one segment with the volume fraction 2φ_s and χN = (χ_AP N + χ_AM N)/2 = 62.5. As E doubles from 10⁵ to 6.4×10⁶ (Debye length 0.11 to 0.014 R₀), the differences of the free energy and of the relaxed period from those of this neutral salt shrink by the factors 1.79, 1.88, 1.93, 1.96, 1.98, 1.99 and 1.56, 1.75, 1.86, 1.92, 1.96, 1.98, so they vanish linearly in 1/E. At E = 6.4×10⁶ they are −2.0×10⁻⁴ and −3.6×10⁻⁴ R₀, the partitions are 2.998 (P) and 2.991 (M) against 2.994 of the neutral salt, and the largest local charge is 6×10⁻⁵. The free energies and periods of the 256- and 512-point runs agree to nine digits. (b) The periods that the example prints (128 points) agree with 64 and 256 points to eight digits: 4.70783, 4.72989, 4.77735 and 4.87378 R₀ for φ_s = 0.005, 0.01, 0.02 and 0.04. (c) At the relaxed period of φ_s = 0.04 (64 points), the central difference of F over L(1 ± h) falls as h²: −2.0×10⁻⁵, −3.2×10⁻⁶ and −7.8×10⁻⁷ for h = 1 %, 0.4 % and 0.2 %. (d) In every run of (b), the mean ion concentrations equal φ_s, and the mean charge vanishes to 10⁻¹⁷.
+  - Not checked: the periods and ion partitions against published SCFT of salt-doped block copolymers or another code.
 
 - **`scft/PolyelectrolyteBrush.py`**
   - Checked (`TestConfinedElectrostatics`, with discrete chains and pseudo-spectral propagators): ψ in a closed box against an independent Poisson-Boltzmann solution between fixed charge layers (10⁻⁹); the closed-box stress against dF/dL; charged chains grafted to a wall converge to the Poisson equation.
