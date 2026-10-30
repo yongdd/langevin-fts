@@ -53,6 +53,9 @@ def test_mixture_export(mode, tmp_path, monkeypatch):
 @pytest.mark.parametrize("dim, shape, lengths, angles", (
     (1, "line", [3], [90, 90, 90]), (2, "square", [3, 3], [90, 90, 90]),
     (2, "rectangle", [3, 4], [90, 90, 90]), (3, "cubic", [3, 3, 3], [90, 90, 90]),
+    (2, "hexagonal", [3, 3], [90, 90, 120]), (2, "oblique", [3, 4], [90, 90, 75]),
+    (3, "tetragonal", [3, 3, 5], [90, 90, 90]),
+    (3, "monoclinic", [3, 4, 5], [90, 105, 90]),
     (3, "hexagonal", [3, 3, 4], [90, 90, 120]),
     (3, "triclinic", [3, 4, 5], [85, 80, 70]),
 ))
@@ -69,8 +72,33 @@ def test_box_exports(dim, shape, lengths, angles, tmp_path, monkeypatch):
     calls = CHECKS["execute_export"](form, tmp_path, monkeypatch)
     assert calls["params"]["lx"] == lengths
     assert calls["params"].get("angles", [90, 90, 90]) == angles
-    assert calls["params"]["crystal_system"] == (shape.title() if dim == 3 else "Orthorhombic")
+    expected_system = (shape.title() if dim == 3 else
+                       {"hexagonal": "Hexagonal2D", "oblique": "Oblique2D"}.get(shape, "Orthorhombic"))
+    assert calls["params"]["crystal_system"] == expected_system
     assert calls["fields"]["A"].shape == (8,) * dim
+
+
+@pytest.mark.parametrize("dim, shape, lengths, angles, message", (
+    (3, "tetragonal", [3, 4, 5], [90, 90, 90], "equal first two lengths"),
+    (3, "tetragonal", [3, 3, 5], [90, 100, 90], "box angles"),
+    (3, "monoclinic", [3, 4, 5], [80, 105, 90], "box angles"),
+    (3, "monoclinic", [3, 4, 5], [90, 105, 80], "box angles"),
+    (2, "hexagonal", [3, 4], [90, 90, 120], "equal first two lengths"),
+    (2, "hexagonal", [3, 3], [90, 90, 90], "box angles"),
+    (2, "oblique", [3, 4], [80, 90, 75], "box angles"),
+    (2, "oblique", [3, 4], [90, 80, 75], "box angles"),
+    (2, "oblique", [3, 4], [90, 90, 5], "volume at least"),
+    (3, "monoclinic", [3, 4, 5], [90, 5, 90], "volume at least"),
+    (2, "tetragonal", [3, 3], [90, 90, 90], "matching the dimension"),
+    (2, "monoclinic", [3, 4], [90, 105, 90], "matching the dimension"),
+    (3, "oblique", [3, 4, 5], [90, 90, 75], "matching the dimension"),
+))
+def test_invalid_crystal_cell_geometry(dim, shape, lengths, angles, message):
+    form = values()
+    form["model"]["box"] = {"dimension": dim, "shape": shape, "nx": ["8"] * dim,
+                             "lx": lengths, "angles": angles}
+    with pytest.raises(ValueError, match=message):
+        BUILDER["build_script"](form)
 
 
 def test_three_monomer_mat_fields(tmp_path, monkeypatch):

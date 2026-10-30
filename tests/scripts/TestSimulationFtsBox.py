@@ -31,6 +31,7 @@ def test_fts_rejects_lower_dimensions(mode, dimension):
 @pytest.mark.parametrize("mode", ("L-FTS", "CL-FTS"))
 @pytest.mark.parametrize("shape, lengths, angles", (
     ("hexagonal", ["3", "3", "4"], ["90", "90", "120"]),
+    ("monoclinic", ["3", "4", "5"], ["90", "105", "90"]),
     ("triclinic", ["3", "4", "5"], ["85", "80", "70"]),
     ("triclinic", ["3", "4", "5"], ["90", "90", "90.000001"]),
 ))

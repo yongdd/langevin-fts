@@ -74,6 +74,15 @@ def test_space_group_is_ignored_by_fts(mode, selection, tmp_path, monkeypatch):
     assert "space_group" not in calls["params"]
 
 
+@pytest.mark.parametrize("hall, shape", ((419, "tetragonal"), (81, "monoclinic")))
+def test_dedicated_cell_shapes_with_space_groups(hall, shape):
+    form = values(hall)
+    form["model"]["box"]["shape"] = shape
+    params = parameters(BUILDER["build_script"](form))
+    assert params["space_group"]["hall_number"] == hall
+    assert "crystal_system" not in params
+
+
 @pytest.mark.parametrize("problem, message", (
     ("2d", "requires a 3D"), ("lengths", "a = b = c"),
     ("angles", "angles"), ("grid_axes", "nx = ny"),

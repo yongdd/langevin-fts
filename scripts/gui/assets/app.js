@@ -21,7 +21,7 @@ const sections = [
   {id: "scft", title: "SCFT", help: "Set the stopping criteria for the self-consistent field calculation.", fields: [
     ["max_iter", "Maximum iterations"],
     ["tolerance", "Convergence tolerance"],
-    ["relax_cell", "Relax cell lengths and allowed angles", "checkbox", "Uses the selected cell shape, or the space group's crystal system. 2D Square cells require a fixed cell; choose Rectangle for 2D relaxation."]
+    ["relax_cell", "Relax cell lengths and allowed angles", "checkbox", "Uses the selected cell shape, or the space group's crystal system. 2D Square cells require a fixed cell."]
   ]},
   {id: "lfts", title: "Dynamics", help: "Set Langevin dynamics and recording intervals for L-FTS or CL-FTS. Results are saved under data/ in the output directory.", fields: [
     ["max_step", "Final Langevin step · max_step", null, "Final step number, including resumed steps. Loading initial fields starts a new run."], ["dt", "Langevin time step · dt"],
@@ -172,10 +172,10 @@ function updateConditionalFields() {
     groupHint.textContent = "Choose None to use the full grid. Hall numbers distinguish settings of the same space group.";
   } else {
     const cell = group.crystal_system === "Cubic" ? "a = b = c; angles 90°" :
-      group.crystal_system === "Tetragonal" ? "a = b; angles 90° (use Orthorhombic with a = b)" :
+      group.crystal_system === "Tetragonal" ? "a = b; angles 90° (choose Tetragonal)" :
       group.crystal_system === "Orthorhombic" ? "angles 90°" :
       group.crystal_system === "Monoclinic" ? `${["α", "β", "γ"].filter((_, i) => i !== group.unique_axis).join(" = ")} = 90°, ` +
-        `${["α", "β", "γ"][group.unique_axis]} free (unique axis ${"abc"[group.unique_axis]}; use Triclinic)` :
+        `${["α", "β", "γ"][group.unique_axis]} free (unique axis ${"abc"[group.unique_axis]}; use ${group.unique_axis === 1 ? "Monoclinic" : "Triclinic"})` :
       group.crystal_system === "Triclinic" ? "any cell (use Triclinic)" :
       group.hexagonal_axes ? "a = b; angles 90°, 90°, 120° (choose Hexagonal)" :
       "a = b = c; equal angles; disable box relaxation (use Triclinic)";

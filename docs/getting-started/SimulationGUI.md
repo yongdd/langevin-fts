@@ -76,15 +76,27 @@ match and open the URL that this run prints (each run prints a new token).
 
 The editor opens with a **3D Cubic** box, `nx = [64, 64, 64]` and
 `lx = [4.0, 4.0, 4.0]`. SCFT also supports 1D and 2D boxes; the ABA lamella
-template explicitly uses 1D. The 3D shape choices are Cubic, Orthorhombic,
-Hexagonal and Triclinic. Boundaries are periodic.
+template explicitly uses 1D. The 3D shape choices are Cubic, Tetragonal,
+Orthorhombic, Hexagonal, Monoclinic and Triclinic. The 2D choices are Square,
+Rectangle, Hexagonal and Oblique. Boundaries are periodic.
 
 For SCFT without a space group, the selected 3D shape is exported as
-`crystal_system`: Cubic keeps `a = b = c`, Orthorhombic frees the three lengths,
-Hexagonal keeps `a = b` and fixed angles, and Triclinic frees all lengths and
-angles when `relax_cell` is enabled. With a space group, its crystal system
-determines the constraints instead. A 2D Square cell currently requires fixed-cell
-SCFT; the relaxation checkbox is disabled. Choose Rectangle to relax a 2D cell.
+`crystal_system`. With `relax_cell` enabled, it determines the constraints:
+
+| Shape | Lengths | Angles |
+|-------|---------|--------|
+| Cubic | `a = b = c` | All fixed at 90° |
+| Tetragonal | `a = b`, independent `c` | All fixed at 90° |
+| Orthorhombic | All independent | All fixed at 90° |
+| Hexagonal | `a = b`, independent `c` | α = β = 90°, γ = 120° |
+| Monoclinic | All independent | α = γ = 90°, adjustable β (unique axis b) |
+| Triclinic | All independent | All adjustable |
+
+In 2D, Rectangle exports `Orthorhombic` with independent lengths and γ = 90°. Hexagonal exports
+`Hexagonal2D`, keeping `a = b` and γ = 120°; Oblique exports `Oblique2D` with
+independent lengths and adjustable γ. A 2D Square cell currently requires
+fixed-cell SCFT; the relaxation checkbox is disabled. With a space group, its
+crystal system determines the relaxation constraints instead.
 
 **L-FTS and CL-FTS are restricted to 3D orthogonal (non-skewed) boxes in this
 editor.** Choose Cubic or Orthorhombic; all angles are fixed at 90°. Switching
@@ -166,11 +178,12 @@ the International space group number.
 
 Space group symmetry requires 3D. The editor checks cell lengths, angles,
 equal-grid constraints and translation divisors before exporting both the
-`symbol` and `hall_number`. For tetragonal groups, use Orthorhombic with `a = b`.
+`symbol` and `hall_number`. For tetragonal groups, choose Tetragonal.
 For rhombohedral-axis settings, use Triclinic with equal lengths and equal angles,
-and disable box relaxation. Monoclinic groups need the unique axis of their setting
-perpendicular to the other two (for the unique axis b, α = γ = 90°) and triclinic
-groups accept any cell; use Triclinic for oblique angles. Box relaxation varies the
+and disable box relaxation. Trigonal groups with hexagonal axes use the Hexagonal
+cell shape. Monoclinic groups need the unique axis of their setting perpendicular
+to the other two: choose Monoclinic for unique axis b (α = γ = 90°), or Triclinic
+for unique axis a or c. Triclinic groups accept any cell. Box relaxation varies the
 angle between the axes perpendicular to the unique axis, or all three angles of a
 triclinic group. The selected group's requirements appear below the
 selector. Initial fields are projected onto the selected symmetry by SCFT.

@@ -4,6 +4,8 @@ import ast
 import json
 from pathlib import Path
 import runpy
+import shutil
+import subprocess
 import threading
 
 import pytest
@@ -40,6 +42,8 @@ def test_exports_use_canonical_parameter_names(mode):
 @pytest.mark.parametrize("shape, lengths, system", (
     ("cubic", ["3", "3", "3"], "Cubic"),
     ("orthorhombic", ["3", "4", "5"], "Orthorhombic"),
+    ("tetragonal", ["3", "3", "5"], "Tetragonal"),
+    ("monoclinic", ["3", "4", "5"], "Monoclinic"),
     ("hexagonal", ["3", "3", "5"], "Hexagonal"),
     ("triclinic", ["3", "4", "5"], "Triclinic"),
 ))
@@ -50,8 +54,32 @@ def test_scft_preserves_selected_relaxation_constraints(shape, lengths, system):
     params = parameters(form)
     assert params["relax_cell"] is True
     assert params["crystal_system"] == system
-    # A triclinic cell must retain free angles even when it starts orthogonal.
+    # Cells with free angles must retain them even when they start orthogonal.
     assert params.get("angles", [90, 90, 90]) == [int(a) for a in angles]
+
+
+def test_2d_oblique_retains_free_gamma_when_starting_orthogonal():
+    form = MODEL["values"]()
+    form["model"]["box"].update(dimension=2, shape="oblique", nx=["8", "8"], lx=["3", "4"])
+    params = parameters(form)
+    assert params["relax_cell"] is True
+    assert params["crystal_system"] == "Oblique2D"
+    assert params.get("angles", [90, 90, 90]) == [90, 90, 90]
+
+
+def test_browser_cell_controls_and_export():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed to exercise the browser event handlers")
+    result = subprocess.run([node, str(Path(__file__).with_name("check_simulation_cells.cjs"))],
+                            check=True, capture_output=True, text=True, timeout=20)
+    for exported in json.loads(result.stdout):
+        form = MODEL["values"]()
+        form["model"] = exported["model"]
+        params = parameters(form)
+        assert params["crystal_system"] == exported["system"]
+        assert params["relax_cell"] is True
+        assert params["lx"][0] == 3.5
 
 
 @pytest.mark.parametrize("mode", ("L-FTS", "CL-FTS"))

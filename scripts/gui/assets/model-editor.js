@@ -2,8 +2,10 @@
 
 const ModelEditor = (() => {
   const palette = ["#238474", "#d49a46", "#7771b9", "#cb6a73", "#518bb3", "#9b9e46", "#b076a5", "#66895e"];
-  const shapes = {1: [["line", "Line"]], 2: [["square", "Square"], ["rectangle", "Rectangle"]],
-    3: [["cubic", "Cubic"], ["orthorhombic", "Orthorhombic"], ["hexagonal", "Hexagonal"], ["triclinic", "Triclinic"]]};
+  const shapes = {1: [["line", "Line"]],
+    2: [["square", "Square"], ["rectangle", "Rectangle"], ["hexagonal", "Hexagonal"], ["oblique", "Oblique"]],
+    3: [["cubic", "Cubic"], ["tetragonal", "Tetragonal"], ["orthorhombic", "Orthorhombic"],
+      ["hexagonal", "Hexagonal"], ["monoclinic", "Monoclinic"], ["triclinic", "Triclinic"]]};
   let model, moleculesPanel, boxPanel, notify, serial = 0, uniform = true, mode = "SCFT";
   let yaw = .65, pitch = -.45, drag = null;
   const uid = () => `row-${++serial}`;
@@ -358,7 +360,7 @@ const ModelEditor = (() => {
     shape.addEventListener("change", () => {
       model.box.shape = shape.value;
       if (["square", "cubic"].includes(shape.value)) model.box.lx = Array(3).fill(model.box.lx[0]);
-      if (shape.value === "hexagonal") model.box.lx[1] = model.box.lx[0];
+      if (["tetragonal", "hexagonal"].includes(shape.value)) model.box.lx[1] = model.box.lx[0];
       model.box.angles = shape.value === "hexagonal" ? ["90", "90", "120"] : ["90", "90", "90"];
       renderBox(); notify();
     });
@@ -390,7 +392,7 @@ const ModelEditor = (() => {
       const length = input(model.box.lx[axis], `Box length ${"abc"[axis]}`, value => {
         model.box.lx[axis] = value;
         const lockAll = ["square", "cubic"].includes(model.box.shape);
-        if (lockAll || model.box.shape === "hexagonal" && axis === 0) {
+        if (lockAll || ["tetragonal", "hexagonal"].includes(model.box.shape) && axis === 0) {
           const count = lockAll ? 3 : 2;
           for (let i = 0; i < count; i++) {
             model.box.lx[i] = value;
@@ -399,21 +401,30 @@ const ModelEditor = (() => {
           }
         }
       }, `box-lx-${axis}`);
-      length.disabled = axis > 0 && (["square", "cubic"].includes(model.box.shape) || model.box.shape === "hexagonal" && axis === 1);
+      length.disabled = axis > 0 && (["square", "cubic"].includes(model.box.shape) ||
+        ["tetragonal", "hexagonal"].includes(model.box.shape) && axis === 1);
       row.append(node("span", "axis-name", "abc"[axis]), grid, length);
       boxPanel.append(row);
     }
-    if (model.box.shape === "triclinic") {
+    const freeAngles = {monoclinic: [1], triclinic: [0, 1, 2], oblique: [2]}[model.box.shape] || [];
+    if (freeAngles.length) {
       const angleGrid = node("div", "angle-grid");
-      ["Alpha (b,c)", "Beta (a,c)", "Gamma (a,b)"].forEach((name, i) => {
+      freeAngles.forEach(i => {
+        const name = ["Alpha (b,c)", "Beta (a,c)", "Gamma (a,b)"][i];
         const label = node("label", "", `${name} · degrees`);
         label.append(input(model.box.angles[i], name, value => { model.box.angles[i] = value; }, `box-angle-${i}`));
         angleGrid.append(label);
       });
       boxPanel.append(angleGrid);
     }
-    boxPanel.append(node("p", "field-hint", fts ? "All box angles are fixed at 90°. All box boundaries are periodic." :
-      "Hexagonal cells use a = b and gamma = 120°. All box boundaries are periodic."));
+    const hint = {
+      tetragonal: "Tetragonal cells use a = b and all angles fixed at 90°.",
+      hexagonal: "Hexagonal cells use a = b, alpha = beta = 90° and gamma = 120°.",
+      monoclinic: "Monoclinic cells use unique axis b: alpha = gamma = 90°; beta is adjustable.",
+      triclinic: "All three cell angles are adjustable.",
+      oblique: "The angle gamma between a and b is adjustable."
+    }[model.box.shape] || "All box angles are fixed at 90°.";
+    boxPanel.append(node("p", "field-hint", `${hint} All box boundaries are periodic.`));
   }
 
   function svg(tag, attrs = {}, text) {

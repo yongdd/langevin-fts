@@ -43,6 +43,9 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
 
 ### Added
 
+- The simulation GUI exposes Tetragonal and Monoclinic 3D cells, and Hexagonal
+  and Oblique 2D cells, with their length/angle constraints and the corresponding
+  SCFT `crystal_system` in exported scripts (2026-10-30).
 - CL-FTS records the partition ratio |Q_s|/<|e^(-u_s)|> of every step for each canonical
   single-site species, discrete chains of one segment and point ions
   (`partition_ratio_step_history`, columns named by `partition_ratio_species_json`; 2026-10-29).

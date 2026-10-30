@@ -58,7 +58,7 @@ def apply_space_group(params, selection, relax_cell):
         need = "a = b = c and angles [90, 90, 90]"
     elif system == "Tetragonal":
         valid = same(lx[0], lx[1]) and orthogonal
-        need = "a = b and angles [90, 90, 90] (use an Orthorhombic box with a = b)"
+        need = "a = b and angles [90, 90, 90] (choose Tetragonal in Box)"
     elif system == "Orthorhombic":
         valid, need = orthogonal, "angles [90, 90, 90]"
     elif system == "Monoclinic":
@@ -66,8 +66,9 @@ def apply_space_group(params, selection, relax_cell):
         unique = group["unique_axis"]
         names = ("alpha", "beta", "gamma")
         valid = all(abs(angles[i] - 90) < 1e-8 for i in range(3) if i != unique)
+        shape = "Monoclinic" if unique == 1 else "Triclinic"
         need = (f"the unique axis {'abc'[unique]} perpendicular to the other two, "
-                + " = ".join(names[i] for i in range(3) if i != unique) + " = 90 (use a Triclinic box)")
+                + " = ".join(names[i] for i in range(3) if i != unique) + f" = 90 (use a {shape} box)")
     elif system == "Triclinic":
         valid, need = True, "any cell"
     elif group["hexagonal_axes"]:
@@ -186,8 +187,8 @@ def model_parameters(model):
     box = model["box"]
     row(box, "dimension shape nx lx angles", "Box")
     dim = box["dimension"]
-    shapes = {1: ("line",), 2: ("square", "rectangle"),
-              3: ("cubic", "orthorhombic", "hexagonal", "triclinic")}
+    shapes = {1: ("line",), 2: ("square", "rectangle", "hexagonal", "oblique"),
+              3: ("cubic", "tetragonal", "orthorhombic", "hexagonal", "monoclinic", "triclinic")}
     if type(dim) is not int or dim not in shapes or box["shape"] not in shapes[dim]:
         raise ValueError("Choose a box shape matching the dimension.")
     for key in ("nx", "lx"):
@@ -201,12 +202,14 @@ def model_parameters(model):
     if any(a >= 180 for a in angles):
         raise ValueError("Box angles must be between 0 and 180 degrees.")
     shape = box["shape"]
-    equal = lx if shape in ("square", "cubic") else lx[:2] if shape == "hexagonal" else []
+    equal = lx if shape in ("square", "cubic") else lx[:2] if shape in ("tetragonal", "hexagonal") else []
     if equal and not all(math.isclose(a, equal[0], rel_tol=1e-10) for a in equal):
-        raise ValueError(f"{shape.title()} boxes require equal {'first two ' if shape == 'hexagonal' else ''}lengths.")
-    expected = [90, 90, 120] if shape == "hexagonal" else [90, 90, 90]
-    if shape != "triclinic" and angles != expected:
-        raise ValueError(f"{shape.title()} box angles must be {expected} degrees.")
+        raise ValueError(f"{shape.title()} boxes require equal {'first two ' if shape in ('tetragonal', 'hexagonal') else ''}lengths.")
+    expected = {"hexagonal": [90, 90, 120], "monoclinic": [90, None, 90],
+                "oblique": [90, 90, None], "triclinic": [None, None, None]}.get(shape, [90, 90, 90])
+    if any(fixed is not None and angle != fixed for angle, fixed in zip(angles, expected)):
+        required = ", ".join("free" if a is None else str(a) for a in expected)
+        raise ValueError(f"{shape.title()} box angles must be [{required}] degrees.")
     ca, cb, cg = [math.cos(math.radians(a)) for a in angles]
     # The solver rejects cells flatter than V = 0.1 abc; the small margin keeps
     # rounding from letting through a cell that it rejects
@@ -409,7 +412,8 @@ def build_script(values):
                 raise ValueError("2D Square cells require fixed-cell SCFT. Disable cell relaxation or choose Rectangle.")
             # A space group determines its own crystal system. Otherwise preserve
             # the cell constraints selected in the editor during SCFT relaxation.
-            params["crystal_system"] = (shape.title() if len(nx) == 3 else "Orthorhombic")
+            params["crystal_system"] = (shape.title() if len(nx) == 3 else
+                                        {"hexagonal": "Hexagonal2D", "oblique": "Oblique2D"}.get(shape, "Orthorhombic"))
     else:
         params.update(
             langevin=dict(max_step=num("max_step", integer=True), dt=num("dt"), nbar=num("nbar")),
