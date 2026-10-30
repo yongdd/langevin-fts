@@ -383,9 +383,14 @@ Commit hashes refer to the `main`/`devel` history on GitHub.
     discrete block lengths is normalized to the global step; SCFT and L-FTS use these
     native lengths for composition means and chemical-potential field shifts. Charge
     validation, counterion concentrations and Gibbs ensemble amounts, charges and exchange
-    potentials use the same native canonicalizer. Gibbs histories record their effective
-    block lengths; older histories with materially different input lengths require a fresh
-    run, while ordinary legacy histories remain compatible.
+    potentials follow the native canonicalization rules. Standalone input validation
+    applies these rules without importing the compiled backend, including before a build;
+    parity tests cover native rounding and acceptance boundaries. Gibbs histories record
+    their effective block lengths; older histories with materially different input lengths
+    require a fresh run, while ordinary legacy histories remain compatible.
+  - Gibbs chain charges use the same relative cancellation check as charge validation.
+    Roundoff in neutral chains no longer activates a constraint that blocks their exchange;
+    small charges without cancellation remain nonzero.
   - Oblique-cell smearing and WTMD use the native exact minimal-alias search, including
     tied-alias derivatives for smearing stress. An anisotropic grid could previously give
     an asymmetric kernel and a CL-FTS force inconsistent with its Hamiltonian.

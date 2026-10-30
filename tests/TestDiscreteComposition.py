@@ -244,7 +244,42 @@ def check_invalid_discrete_length():
     assert params == original
 
 
+def check_native_length_agreement():
+    """Standalone validation and the native solver must accept exactly the same lengths."""
+    from polymerfts import _core
+
+    cases = [(0.0, 0.1), (-1.0, 0.1), (np.nan, 0.1), (np.inf, 0.1),
+             (0.1, 0.0), (0.1, -1.0), (0.1, np.nan), (0.1, np.inf),
+             (1e308, 1e-308), (1.5e308, 1e308),
+             (np.nextafter(0.0, 1.0), np.nextafter(0.0, 1.0))]
+    for ds in (1.0, 0.1, 1e-6, 1e-9, 1e-12, 1e-300):
+        for ratio in (0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 10.0, 2**31 - 1):
+            for offset in (-2e-9, -0.5e-9, 0.0, 0.5e-9, 2e-9):
+                length = (ratio + offset) * ds
+                cases.extend((value, ds) for value in (np.nextafter(length, 0.0), length,
+                                                       np.nextafter(length, np.inf)))
+        for edge in (ds - 1e-9, ds + 1e-9):
+            cases.extend((value, ds) for value in (np.nextafter(edge, -np.inf), edge,
+                                                   np.nextafter(edge, np.inf)))
+    for length, ds in cases:
+        polymer = {"blocks": [{"type": "A", "length": length}]}
+        params = {"chain_model": "discrete", "ds": ds, "polymers": [polymer]}
+        try:
+            expected = _core._discrete_contour_length(length, ds)
+        except (RuntimeError, TypeError, ValueError):
+            try:
+                polymer_block_lengths(params, polymer)
+            except ValidationError as error:
+                assert "polymers[0].blocks[0].length" in str(error), error
+            else:
+                raise AssertionError(f"Python accepted a native-rejected length: {length=}, {ds=}")
+        else:
+            assert polymer_block_lengths(params, polymer) == (expected,), (length, ds, expected)
+    print(f"Python/native contour-length agreement: {len(cases)} cases passed")
+
+
 if __name__ == "__main__":
+    check_native_length_agreement()
     check_invalid_discrete_length()
     for platform in PlatformSelector.avail_platforms():
         for name, ds, segments, chi_n, polymers, mean, mu, shifted in cases():

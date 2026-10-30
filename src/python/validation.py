@@ -5,6 +5,7 @@ The checks raise ValidationError (never assert, which disappears under
 """
 
 import copy
+import math
 from typing import Any, Dict
 from os import PathLike
 
@@ -73,21 +74,45 @@ def _integer(value, name, minimum=1):
         raise ValidationError(f"'{name}' must be an integer >= {minimum}, got {value!r}")
 
 
+def _discrete_contour_length(contour_length: float, ds: float) -> float:
+    """Mirror ContourLengthMapping::discrete_contour_length without a compiled backend.
+
+    Standalone script tools load this module before the package is built. Keep
+    the half-integer snapping, positive tie rounding and segment limit identical
+    to the native implementation; TestDiscreteComposition checks their agreement.
+    """
+    contour_length, ds = float(contour_length), float(ds)
+    if not (contour_length > 0 and math.isfinite(contour_length) and ds > 0 and math.isfinite(ds)):
+        raise ValueError("Contour length and contour step must be positive and finite.")
+    ratio = contour_length / ds
+    # Native segment counts use a 32-bit signed int on the supported platforms.
+    if not math.isfinite(ratio) or ratio > 2**31 - 1:
+        raise ValueError("The block contour length requires more segments than supported.")
+    rounded_to_half = math.floor(2 * ratio + 0.5) / 2
+    if abs(ratio - rounded_to_half) < 1e-9:
+        ratio = rounded_to_half
+    # Python round() uses ties-to-even; native std::lround rounds positive ties up.
+    n_segment = max(1, math.floor(ratio + 0.5))
+    expected_length = n_segment * ds
+    if abs(contour_length - expected_length) > 1e-9:
+        raise ValueError(f"For discrete chain model, block contour_length ({contour_length:g}) must be an integer "
+                         f"multiple of ds ({ds:g}). Closest valid value: {expected_length:g}")
+    return expected_length
+
+
 def polymer_block_lengths(params: Dict[str, Any], polymer: Dict[str, Any]) -> tuple:
     """Effective contour lengths in input block order, without changing input metadata.
 
-    Continuous chains retain their lengths. Discrete chains use the same native
-    acceptance and snapping to integer multiples of ds as Molecules.add_polymer.
+    Continuous chains retain their lengths. Discrete chains follow the native
+    acceptance and snapping rules of Molecules.add_polymer without importing it.
     """
     if str(params["chain_model"]).lower() != "discrete":
         return tuple(block["length"] for block in polymer["blocks"])
-    from . import _core
-
     lengths = []
     for j, block in enumerate(polymer["blocks"]):
         try:
-            lengths.append(_core._discrete_contour_length(block["length"], params["ds"]))
-        except (RuntimeError, TypeError, ValueError) as exc:
+            lengths.append(_discrete_contour_length(block["length"], params["ds"]))
+        except (OverflowError, TypeError, ValueError) as exc:
             index = next((i for i, candidate in enumerate(params.get("polymers", ()))
                           if candidate is polymer), None)
             path = f"polymers[{index}]." if index is not None else ""

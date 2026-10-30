@@ -352,6 +352,68 @@ def snapped_charges(root, platform):
             np.testing.assert_allclose(amounts @ expected_charges, 0.0, rtol=0, atol=2e-9)
 
 
+def neutral_chain_exchange(root, platform):
+    """Neutral polyampholytes exchange freely despite roundoff in their native lengths."""
+    def parameters(directory, cycles, lengths=(0.2, 0.3, 0.5)):
+        return {"nx": [4], "lx": [2.0], "chain_model": "discrete", "ds": 0.1,
+                "segment_lengths": {"A": 1.0, "B": 1.0, "C": 1.0},
+                "chi_n": {"A,B": 1.0, "A,C": 2.0, "B,C": 2.0}, "zeta_n": 100.0,
+                "polymers": [{"volume_fraction": 0.5,
+                              "blocks": [{"type": monomer, "length": length}
+                                         for monomer, length in zip(("A", "A", "B"), lengths)]},
+                             {"volume_fraction": 0.5, "blocks": [{"type": "C", "length": 1.0}]}],
+                "smearing": {"type": "gaussian", "a_int": 0.1},
+                "electrostatics": {"charges": {"A": 1.0, "B": -1.0}, "coupling": 100.0},
+                "platform": platform, "verbose_level": 0,
+                "langevin": {"nbar": 1e28, "dt": 0.01, "max_step": 1},
+                "recording": {"dir": str(directory), "checkpoint_interval": 1,
+                              "sample_interval": 1, "statistics_save_interval": 1},
+                "gibbs_ensemble": {"boxes": [{"lx": [2.0], "volume_fractions": [0.7, 0.3]},
+                                             {"lx": [2.0], "volume_fractions": [0.3, 0.7]}],
+                                   "cycles": cycles, "cycle_steps": 1, "exchange_rate": 0.1}}
+
+    def make(directory, cycles, lengths=(0.2, 0.3, 0.5)):
+        return quiet(lambda: GibbsEnsemble(parameters(directory, cycles, lengths), random_seed=31))
+
+    # Both have equal numbers of positive and negative beads. The residual depends
+    # on Python's summation algorithm, so cover ordinary and compensated sums.
+    for lengths in ((0.2, 0.3, 0.5), (0.2, 0.5, 0.7)):
+        gibbs = make(root / "neutral_input", 1, lengths)
+        np.testing.assert_array_equal(gibbs.charges, [0.0, 0.0])
+        assert not gibbs.neutral, "Roundoff enabled a spurious constraint on neutral chains"
+
+    # The zero-charge decision is relative to cancellation, not an absolute cutoff:
+    # genuinely small charges of one sign must survive. Screening permits their net charge.
+    small = parameters(root / "small_charge", 1)
+    small["electrostatics"].update(charges={"A": 1e-16}, screening_length=1.0)
+    gibbs = quiet(lambda: GibbsEnsemble(small, random_seed=31))
+    np.testing.assert_allclose(gibbs.charges, [5e-16, 0.0], rtol=2e-14, atol=0)
+
+    full = make(root / "neutral_full", 2)
+    quiet(full.run)
+    for cycle in full.history["cycles"]:
+        before, after = (np.asarray(cycle[key]) for key in ("amounts_before", "amounts_after"))
+        difference = np.subtract(*(box["exchange_potentials"] for box in cycle["boxes"]))
+        # With neutral species the stated Gibbs mobility applies to each species independently.
+        expected = -full.exchange_rate * before[0] * before[1] / before.sum(axis=0) * difference
+        assert np.max(np.abs(expected) / before.min(axis=0)) < 0.5, "Unexpected step limiter in this case"
+        assert abs(expected[0]) > 1e-4, "This case must actually exchange polyampholytes"
+        np.testing.assert_allclose(after[0] - before[0], expected, rtol=2e-12, atol=2e-15)
+        np.testing.assert_allclose(after.sum(axis=0), before.sum(axis=0), rtol=0, atol=5e-16)
+
+    part = make(root / "neutral_part", 1)
+    quiet(part.run)
+    part = make(root / "neutral_part", 2)
+    quiet(part.continue_run)
+    assert part.history["cycles"] == full.history["cycles"], "Neutral-chain continuation differs"
+    for box in ("box0", "box1"):
+        a = loadmat(root / "neutral_full" / box / "fields_000002.mat", squeeze_me=True)
+        b = loadmat(root / "neutral_part" / box / "fields_000002.mat", squeeze_me=True)
+        keys = [key for key in a if key.startswith(("w_", "psi_"))]
+        keys += ["normal_noise_prev", "rng_state_json"]
+        assert keys and all(np.array_equal(a[key], b[key]) for key in keys), box
+
+
 def main():
     if not any(p.startswith("cpu") for p in PlatformSelector.avail_platforms()):
         return 77
@@ -362,7 +424,8 @@ def main():
             check(root)
             print(f"[PASS] {name}")
         for platform in PlatformSelector.avail_platforms():
-            for name, check in (("snapped chain lengths", snapped_lengths), ("snapped chain charges", snapped_charges)):
+            for name, check in (("snapped chain lengths", snapped_lengths), ("snapped chain charges", snapped_charges),
+                                ("neutral chain exchange", neutral_chain_exchange)):
                 check(root / platform, platform)
                 print(f"[PASS] {platform}: {name}")
     return int(cuda_part_missing())

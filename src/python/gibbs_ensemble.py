@@ -53,7 +53,7 @@ from scipy.io import loadmat
 from .clfts import CLFTS
 from .electrostatics import homogeneous_potential, point_ions
 from .utils import json_ready, input_hash
-from .validation import (ValidationError, normalize_params, open_charges, parse_chi_n, point_ion_concentrations,
+from .validation import (ValidationError, _chain_charge, normalize_params, open_charges, parse_chi_n, point_ion_concentrations,
                          polymer_block_lengths, validate_gibbs_params, validate_lfts_params)
 
 
@@ -124,9 +124,9 @@ class GibbsEnsemble:
         # Charge of a chain, N Σ_i z_i (length of type i), in the units of the ion valences
         n_segments = (round(1.0 / params["ds"]) if str(params["chain_model"]).lower() == "discrete"
                       else (es or {}).get("n_segments", 1.0))
-        chain_charges = [n_segments * sum(charges.get(block["type"], 0.0) * length
-                                         for block, length in zip(polymer["blocks"], lengths))
-                         for polymer, lengths in zip(params["polymers"], self.block_lengths)]
+        # Cancellation roundoff must not turn a neutral chain into a charged species:
+        # the exchange projection would constrain it regardless of how small its charge is.
+        chain_charges = [n_segments * _chain_charge(params, polymer, charges) for polymer in params["polymers"]]
         self.charges = np.array(chain_charges + [float(ions[name]["valence"]) for name in self.ion_names])
         # Charged grand-canonical ions fix the uniform potential of each box (Donnan): then all species move
         self.neutral = (es is not None and es.get("screening_length") is None and not open_charges(params)
